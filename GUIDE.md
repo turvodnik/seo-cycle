@@ -164,6 +164,24 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 
 ---
 
+## <a id="модульность"></a>6b. Модульная архитектура (фазовые скиллы + state)
+
+`seo-cycle` — **диспетчер**. Фазы постепенно выносятся в самостоятельные **фазовые скиллы** (каждый — папка `SKILL.md` + README, можно дёргать независимо, шарить и продавать отдельно). Координация — через единый файл состояния `seo/cycles/<тема>/_state.json` (контракт `cycle-state.py`). Это «цепочка передачи»: фазовый скилл читает state → делает своё → обновляет state → разблокирует следующую фазу.
+
+**Вынесено:** `seo-keywords` (Phase 2-3). **По плану:** `seo-entity-map`, `seo-writing`, `seo-publishing`, `seo-monitoring`.
+
+```bash
+python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py init --topic "минвата"
+python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py next      # разблокированные фазы
+# → вызвать соответствующий фазовый скилл (seo-keywords и т.д.)
+python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py gate keywords
+python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогресс
+```
+
+Преимущества дробления: переиспользование (фаза вне цикла), ясность/контроль (видно прогресс и gate'ы), параллельность (независимые фазы разом), продажа (модуль = отдельный продукт). «Улучшение» — на данных (`source-attribution.py` + `triggers-eval.py`), без авто-переписывания кода.
+
+---
+
 ## <a id="инструменты"></a>7. Инструменты (что делает · команда · результат)
 
 > Все скрипты лежат в `~/.claude/skills/seo-cycle/scripts/`. Запуск: `python3 <script>.py` или `bash <script>.sh`.
@@ -174,6 +192,7 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 | `validate-config.py` | Проверяет `seo-cycle.yaml`, env, делегатов | `python3 validate-config.py` | Список активных источников, недостающие ключи, ✓/ошибки |
 | `resolve-sources.py` | Разворачивает `region_profile` + override в список активных источников | `python3 resolve-sources.py` | Активные/пропущенные источники с причиной + `seo/cycles/<date>/active-sources.json` |
 | `init-project.sh` | Мастер нового проекта | `bash init-project.sh` | `seo-cycle.yaml`, `.env.example`, запись в реестр |
+| `cycle-state.py` | Контракт состояния цикла (handoff между фазовыми скиллами) | `python3 cycle-state.py init --topic "X"` / `next` / `set <фаза> --status done --gate-passed` / `show` | `_state.json` с DAG фаз; «цепочка передачи» |
 
 ### 7.2 Сбор семантики
 | Скрипт | Что делает | Команда | Результат |
@@ -484,6 +503,24 @@ Full mapping — [docs/codex-runtime.md](docs/codex-runtime.md).
 
 ---
 
+## <a id="en-modularity"></a>6b. Modular architecture (phase skills + state)
+
+`seo-cycle` is a **dispatcher**. Phases are gradually extracted into standalone **phase skills** (each a `SKILL.md` + README folder — invokable independently, shareable, sellable separately). Coordination is via a single state file `seo/cycles/<topic>/_state.json` (the `cycle-state.py` contract). This is the "handoff chain": a phase skill reads state → does its job → updates state → unblocks the next phase.
+
+**Extracted:** `seo-keywords` (Phase 2-3). **Planned:** `seo-entity-map`, `seo-writing`, `seo-publishing`, `seo-monitoring`.
+
+```bash
+python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py init --topic "mineral wool"
+python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py next      # unblocked phases
+# → invoke the matching phase skill (seo-keywords, etc.)
+python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py gate keywords
+python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # progress
+```
+
+Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible progress and gates), parallelism (independent phases at once), sale (a module is a separate product). "Improvement" is data-driven (`source-attribution.py` + `triggers-eval.py`), no code self-rewriting.
+
+---
+
 ## <a id="en-tools"></a>7. Tools (what · command · output)
 
 > All scripts live in `~/.claude/skills/seo-cycle/scripts/`. Run via `python3 <script>.py` or `bash <script>.sh`.
@@ -494,6 +531,7 @@ Full mapping — [docs/codex-runtime.md](docs/codex-runtime.md).
 | `validate-config.py` | Validates config, env, delegates | `python3 validate-config.py` | Active sources, missing keys, ✓/errors |
 | `resolve-sources.py` | Expands `region_profile` + overrides into active sources | `python3 resolve-sources.py` | Active/skipped sources with reason + `active-sources.json` |
 | `init-project.sh` | New-project wizard | `bash init-project.sh` | `seo-cycle.yaml`, `.env.example`, registry entry |
+| `cycle-state.py` | Cycle state contract (handoff between phase skills) | `python3 cycle-state.py init --topic "X"` / `next` / `set <phase> --status done --gate-passed` / `show` | `_state.json` with phase DAG; the "handoff chain" |
 
 ### 7.2 Keyword research
 | Script | What | Command | Output |
