@@ -1,0 +1,52 @@
+# =============================================================================
+# region-profile: eu — Европа (Google-приоритет, полный западный SaaS-стек)
+# =============================================================================
+# Для проектов на европейский рынок. Подключение:  region_profile: eu
+#
+# Логика: Google — единственный значимый движок (Яндекс-стек выключен целиком).
+# Доступны западные SEO-сервисы (Ahrefs, SEMrush, DataForSEO) — никаких
+# гео-ограничений. AnswerThePublic работает на родном языке без перевода.
+#
+# Язык конкретного проекта задаётся в locale.language (de, fr, es, …);
+# здесь только дефолт для промптов LLM-CLI.
+
+id: eu
+title: "Европа — Google-приоритет"
+language_default: en
+
+engines:
+  - { name: google, priority: 1 }
+
+sources_enable:
+  - google_search_console
+  - google_trends
+  - google_suggest
+  - dataforseo
+  - ahrefs
+  - semrush
+  - serpstat
+  - spyfu                 # GB/DE/FR/... competitor + PPC аналитика
+  - neuronwriter
+  - llm_cli
+  - answerthepublic
+  - perplexity
+
+# Яндекс-экосистема нерелевантна для EU — выключаем целиком
+sources_disable:
+  - yandex_wordstat
+  - yandex_wordstat_deep
+  - yandex_suggest
+  - yandex_serp_blocks
+  - yandex_images_suggest
+  - yandex_q
+  - yandex_business_maps
+  - yandex_webmaster_history
+
+sources_proxy: []
+
+# ATP работает на родном языке рынка — перевод не нужен
+atp_translate: false
+atp_lang: en          # переопредели под язык проекта (de/fr/es)
+atp_region: gb
+
+neuronwriter_engine: google.com

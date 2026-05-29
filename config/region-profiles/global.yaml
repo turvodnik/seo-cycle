@@ -1,0 +1,43 @@
+# =============================================================================
+# region-profile: global — мультирегион / международный (без гео-ограничений)
+# =============================================================================
+# Для международных проектов или когда регион не определён. Подключение:
+#   region_profile: global
+#
+# Включает максимум источников. Яндекс остаётся опцией (priority 2) — если
+# среди рынков есть РФ/СНГ; иначе проект выключит yandex_* локальным override.
+# Все западные SaaS включены. Применять осознанно — это самый "тяжёлый" профиль.
+
+id: global
+title: "Международный — все источники"
+language_default: en
+
+engines:
+  - { name: google, priority: 1 }
+  - { name: yandex, priority: 2 }    # убери override-ом если РФ/СНГ нет в рынках
+
+sources_enable:
+  - google_search_console
+  - google_trends
+  - google_suggest
+  - dataforseo
+  - ahrefs
+  - semrush
+  - serpstat
+  - spyfu                 # западные рынки (US/UK/EU); РФ не покрывает
+  - yandex_wordstat
+  - yandex_suggest
+  - neuronwriter
+  - llm_cli
+  - answerthepublic
+  - perplexity
+
+sources_disable: []
+
+sources_proxy: []
+
+atp_translate: false
+atp_lang: en
+atp_region: us
+
+neuronwriter_engine: google.com

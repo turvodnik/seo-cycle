@@ -1,0 +1,473 @@
+---
+name: seo-cycle
+description: Универсальный SEO/контент-цикл оркестратор для любого проекта — от стратегии и сбора семантики до публикации, fact-check, мониторинга и итераций. Используй когда пользователь просит «запусти SEO-цикл», «полная SEO-стратегия с нуля», «продвинь раздел X», «семантическое ядро + контент-план + публикация», «расширь блог под кластер», «мониторинг и обновления», «универсальный SEO под мой проект». Адаптируется под конкретный сайт через `seo-cycle.yaml` (язык, регион, поисковики, тип проекта, CMS, источники данных, tone of voice). Поддерживает 10 фаз: discovery → audit → multi-source keyword research (Яндекс Wordstat/Suggest/SERP/Я.Вебмастер + Google GSC/Trends/Suggest + NeuronWriter + LLM CLI Antigravity/Codex + AnswerThePublic + Perplexity Pro) → cluster + intent → Entity Map (методика Шестакова) → content plan → writing → publishing (CMS-aware) → JSON-LD schema → monitoring → iteration. Все шаги config-driven: пропускает источники/фазы, которых нет в проекте. При первом запуске без `seo-cycle.yaml` — запускает install wizard. НЕ для одношаговых задач — для них вызывай конкретный субскилл/агент напрямую.
+---
+
+# Универсальный SEO-цикл (`seo-cycle`)
+
+Скилл-оркестратор полного SEO-цикла для **любого проекта**. Все решения config-driven: один и тот же фреймворк работает для интернет-магазина в РФ, англоязычного блога, локального бизнеса в Германии или SaaS-стартапа в США — отличия задаются в `seo-cycle.yaml` проекта.
+
+> **Рантайм.** Этот файл — точка входа для Claude Code. Если основной мозг — **Codex CLI**, точка входа `AGENTS.md` (симлинк на этот файл); отличия запуска — в `docs/codex-runtime.md`. Логика фаз ниже одинакова для обоих.
+
+## Когда запускать
+
+Триггеры:
+- «запусти полный SEO-цикл / SEO-стратегию для X»
+- «продвинь раздел / категорию / тему Y с нуля»
+- «семантическое ядро + контент-план + публикация»
+- «расширь блог под кластер»
+- «мониторинг и план итераций»
+- «универсальный SEO под мой проект»
+- «настрой seo-cycle для нового проекта»
+
+## Когда НЕ запускать
+
+- Одношаговые задачи — напрямую к скиллам:
+  - Только Entity Map → `emwoody-semantic-brief` (или универсальный fallback)
+  - Только публикация одного готового материала → `emwoody-publish-*` или CMS-специфичный скилл
+  - Только аудит → агент `seo-auditor`
+  - Только проверка стоп-слов → `scripts/check-stop-words.py`
+- Если пользователь даёт уже готовый Entity Map / contentbrief — переходи сразу на нужную фазу.
+
+---
+
+## Архитектура
+
+```
+Phase 0  Discovery & Project Setup    (читает seo-cycle.yaml; install wizard если конфига нет)
+Phase 1  Site Audit                   (config-driven — какие тулы, какой CMS)
+Phase 2  Keyword Research             (multi-source: только enabled-источники из config)
+Phase 3  Cluster + Intent Mapping
+Phase 4  Entity Map (Шестаков)        (универсальный шаблон, адаптирован под industry)
+Phase 5  Content Plan                 (hub-and-spoke, учёт project_type)
+Phase 6  Writing                      (tone of voice, stop-words, stock-first, fact-check)
+Phase 7  Publishing                   (CMS-aware: WordPress / Shopify / static / ...)
+Phase 8  JSON-LD & Schema             (тип схемы по project_type)
+Phase 9  Monitoring                   (GSC + Я.Вебмастер + Метрика + GA — по enabled-источникам)
+Phase 10 Iteration                    (cycle continues)
+```
+
+Каждый запуск создаёт каталог `<cycles_root>/<topic>-<YYYY-Qx>/` с артефактами по фазам.
+
+---
+
+## Phase 0 — Discovery & Project Setup
+
+**Цель:** загрузить конфиг проекта или запустить install wizard.
+
+**Шаги:**
+1. Найти `seo-cycle.yaml` в проекте (поиск: `./seo-cycle.yaml` → `./.seo-cycle.yaml` → `./seo/seo-cycle.yaml` → `./.claude/seo-cycle.yaml`).
+2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard, 7 вопросов → готовый yaml + .env.example).
+3. Если **найден** — провалидировать: `python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <path>`.
+4. Прочитать `context_files` из конфига (обычно `CLAUDE.md`, brand guidelines).
+5. Определить **режим цикла** (`mode` в конфиге, default `standard`):
+   - `standard` — обычный цикл по всем 10 фазам
+   - `migration` — миграция домена/CMS (см. `docs/migration-planner.md`, расширяет Phase 0/1)
+   - `programmatic` — массовая генерация страниц по шаблону (Phase 4 заменяется на Phase 4P, см. `templates/programmatic-page.template.md`)
+6. Уточнить у пользователя цель текущего цикла (1-3 вопроса):
+   - Что продвигаем: категорию / кластер блога / тему / весь сайт?
+   - Сроки: разовая кампания или регулярный цикл?
+   - Глубина: только семантика, до publish, или до monitoring?
+
+**Выход:** `<cycles_root>/<topic>/00-discovery.md` с зафиксированными целями и snapshot config.
+
+---
+
+## Phase 1 — Site Audit
+
+**Цель:** понять текущее состояние сайта по выбранным поисковикам.
+
+**Делегировать:** `delegate.audit` из config (по умолчанию `seo-auditor` агент).
+
+Доп. техн. аудит (если включено): `delegate.technical_audit` (`claude-seo:seo-technical`).
+
+**Что проверять (универсально):**
+- Индексация (XML sitemap, robots.txt, canonical)
+- Шаблонные следы (демо-контент, пустые `href="#"`, lorem ipsum)
+- Служебные страницы в индексе (cart, checkout, my-account для ecommerce)
+- Скорость / Core Web Vitals
+- Существующий контент: какие страницы есть, какие пустые
+- Schema markup: что уже стоит
+
+**Project-type-specific:**
+- `ecommerce` → проверка карточек товара, категорий, фильтров
+- `blog` → структура архивов, тегов, авторов
+- `local_business` → LocalBusiness schema, NAP-консистентность
+- `saas` → лендинги фич, документация, /pricing
+
+**Выход:** `01-audit.md` со списком проблем по приоритетам (P0/P1/P2).
+
+---
+
+## Phase 2 — Keyword Research (Multi-source, config-driven)
+
+**Цель:** собрать полное семантическое ядро под тему **из всех активных источников региона**.
+
+**Шаг 0 — развернуть источники региона (обязательно, один раз):**
+```bash
+python3 ~/.claude/skills/seo-cycle/scripts/resolve-sources.py
+```
+Скрипт читает `region_profile` из конфига (`ru`/`eu`/`us`/`global`), мёрджит с локальными `sources.*` override и печатает финальный список активных источников + пропущенных с причиной (напр. «ahrefs недоступно в регионе», «dataforseo через прокси»). Артефакт: `seo/cycles/<date>/active-sources.json`. **Запускай только источники из этого списка** — это и экономит токены, и не даёт дёрнуть инструмент, недоступный в регионе. Если в конфиге нет `region_profile` (legacy) — скрипт отдаёт `sources.*.enabled` как есть.
+
+**Экономия токенов (обязательные правила Phase 2):**
+- **Кэш:** дорогой сбор (Wordstat/NW/LLM-CLI/suggest/ATP) не перезапускай, если свежий результат (< `research_cache_ttl_days`, дефолт 14) уже лежит в `seo/research/.../results/`. `llm-cli-collect.sh` проверяет это автоматически через `research-cache.py`.
+- **Сырьё — на диск, дистиллят — в контекст.** В свой контекст подтягивай **только** сведённый `*-merged-*.md` (и итоговый `02-keywords.md`), а НЕ исходные `*-antigravity-*.md` / `*-codex-*.md` / сырые CSV. Скрипты сами пишут сырьё на диск и возвращают сжатый top-N.
+
+### Универсальные источники
+
+#### Group A — Search engines (Яндекс)
+*(Только если `yandex` в `engines`)*
+
+| Источник | Тип | Когда |
+|---|---|---|
+| Wordstat (core) | агент | Всегда — `delegate.yandex_specialist` |
+| Wordstat правая колонка + сезонность | browser_mcp | Для сезонных тем |
+| Yandex Suggest | script | Long-tail без частот, `scripts/yandex-suggest.py` |
+| Yandex SERP blocks | browser_mcp | Related, PAA, Колдунщик |
+| Я.Вебмастер «История запросов» | browser_mcp | Реальные данные по сайту (после верификации) |
+| Yandex.Картинки suggest | browser_mcp | Image-SEO |
+| Я.Бизнес/Карты «запросы для перехода» | dashboard | Локальный бизнес |
+| Яндекс.Кью | browser_mcp | PAA-аналог для info-тем |
+
+#### Group B — Search engines (Google)
+*(Только если `google` в `engines`)*
+
+| Источник | Тип | Когда |
+|---|---|---|
+| Google Search Console | API | После 30 дней с публикации |
+| Google Trends | script | Сезонность |
+| Google Suggest | script | Long-tail |
+| DataForSEO | paid API | Опционально |
+| **Serpstat** | API | Volume/KD/CPC + конкуренты. **Работает с РФ/СНГ** (`g_ru`) — замена Ahrefs/SEMrush там, где они заблокированы. `scripts/serpstat-fetch.py` |
+| **SpyFu** | API | Competitor/PPC/SEO домен-аналитика. **Только US/UK/EU — НЕ РФ.** Профили us/eu/global. `scripts/spyfu-fetch.py` |
+
+> **Serpstat — беречь кредиты** (план Appsumo: 1000/мес, 1 req/sec): точечно — KD/volume по главным ключам кластера (`keywords-info`) и competitor gap по hub-категориям (`competitors`, `domain-keywords`). Массовый long-tail — через Wordstat/suggest/LLM-CLI, не через Serpstat. Скрипт сам проверяет остаток (getStats, бесплатно) и кэширует на 30 дней. `stats` — посмотреть остаток в любой момент.
+
+> **SpyFu — беречь бюджет** (Pro: $40 кредита/мес, pay-as-you-go по строкам): дешёвые эндпоинты `domain-stats` (latest, 1 строка) и competitors ($0.20–0.50 CPM); дорогие top-pages ($5 CPM) — избегать. Локальный usage-трекер блокирует при достижении `--budget`. `usage` — сколько потрачено за месяц. Применять для анализа западных конкурентов; для РФ-проектов бесполезен (RU не покрывается).
+
+#### Group C — SERP analysis
+| Источник | Тип | Когда |
+|---|---|---|
+| NeuronWriter | API | SERP terms (если `sources.neuronwriter.enabled`) |
+
+#### Group D — LLM CLI (универсально)
+| Источник | Тип | Когда |
+|---|---|---|
+| **Antigravity** (`agy`) | CLI | Быстрый brainstorm, локальный контекст |
+| **Codex** (`codex exec`) | CLI | С URL для fact-check, web search |
+| **Параллельный запуск + merge** | script | `scripts/llm-cli-collect.sh "<тема>"` |
+
+#### Group E — Public APIs
+| Источник | Тип | Когда |
+|---|---|---|
+| AnswerThePublic | API | Универсальные шаблоны вопросов (для не-RU рынков работает напрямую; для RU — переводим en/us шаблоны) |
+| Perplexity Pro | browser_mcp | Сущности с источниками, Deep Research |
+
+### Сведение в единое ядро
+
+После сбора — слить в `02-keywords.md`:
+
+```markdown
+| Ключ | Wordstat | GSC impressions | NW priority | Intent | Cluster | Source |
+|---|---|---|---|---|---|---|
+| ... |
+```
+
+**Делегировать:** `delegate.keyword_research` (по умолчанию `seo-keyword-researcher`).
+
+**Веди лог источников:** добавляй ключи в `seo/source-attribution.csv` (`keyword,source,date_added,cluster,target_url`) с пометкой источника. Через 30-60 дней это даст замер эффективности источников в Phase 10 (`source-attribution.py`) — какие источники реально приносят топ, а какие отключить ради экономии.
+
+**Выход:** `02-keywords.md` + raw-экспорты в подкаталогах `02a-...` / `02b-...`.
+
+---
+
+## Phase 3 — Cluster + Intent Mapping
+
+**Цель:** сгруппировать ключи в кластеры под отдельные страницы.
+
+**Делегировать:** `delegate.cluster_analysis` (по умолчанию `claude-seo:seo-cluster`) + `delegate.keyword_research`.
+
+**Intent типы (универсально):**
+- Commercial — «купить X», «X цена», «X сравнить»
+- Informational — «как», «что такое», «почему»
+- Navigational — «бренд X», «адрес склада»
+- Transactional — «доставка X», «заказать X»
+
+**Hub-and-spoke:**
+- **Hub** — главная страница темы (для ecommerce: категория; для blog: pillar-статья; для SaaS: фич-лендинг)
+- **Spokes** — info-страницы под long-tail (статьи блога, FAQ-страницы)
+
+**Выход:** `03-clusters.md` — таблица: cluster / intent / тип страницы / целевой URL.
+
+---
+
+## Phase 4 — Entity Map (методика Шестакова)
+
+**Цель:** для каждой страницы из кластера — Entity Map (entities → relations → intents → structure → keys).
+
+**Делегировать:** `delegate.semantic_brief` (`emwoody-semantic-brief` если есть, иначе универсальный шаблон `templates/entity-map.template.md`).
+
+**Универсальная структура (17 разделов):**
+1. Центральная сущность (AEO-цитата 2-3 предложения)
+2. Атрибуты (таблица)
+3. Связанные сущности (15-20)
+4. Тройки отношений (≥12)
+5. Явные интенты
+6. Скрытые интенты (≥5 страхов/сомнений)
+7. PAA вопросы (≥15)
+8. Конкуренты (топ-10 SERP)
+9. Граф сущностей (визуализация)
+10. SERP-фичи (Featured Snippet, Колдунщик, AEO)
+11. Структура страницы
+12. FAQ (явные + скрытые)
+13. Внутренние ссылки
+14. Meta-теги (title/description)
+15. JSON-LD plan
+16. Чек-лист готовности
+17. NW evaluate plan
+
+**Frontmatter обязательно (extends по проектам):**
+```yaml
+target_url:
+created:
+status: pilot | active | archived
+neuronwriter_query_id:
+stock_skus: []                  # для ecommerce
+fact_check_log: []              # если content_rules.fact_check.enabled
+last_fact_check:
+```
+
+**Выход:** `04-entity-maps/<slug>.entity-map.md` для каждой страницы.
+
+---
+
+## Phase 5 — Content Plan
+
+**Цель:** roadmap публикаций с приоритетами.
+
+**Делегировать:** `delegate.content_strategy` (по умолчанию `seo-content-strategist`).
+
+**Структура плана:**
+- Что: тип страницы (hub/spoke), URL, главный ключ
+- Когда: дата, статус (TODO/Drafting/QA/Published)
+- Зависимости: какие entity-maps готовы, какие источники собраны
+- KPI: целевые impressions / clicks через 90 дней
+- Bandwidth: блог N статей/неделю, категории M/месяц
+
+**Выход:** `05-content-plan.md`.
+
+---
+
+## Phase 6 — Writing
+
+**Цель:** написать тексты под Entity Map'ы.
+
+**Делегировать:** `delegate.content_writer` (по умолчанию `seo-content-writer`).
+
+**Универсальные правила (config-driven):**
+- Tone of voice — из `tone.*` config
+- Stop-words check — если `quality_gates.stop_words_check.enabled`
+- AEO абзац в первые 400 символов — если `content_rules.aeo.enabled`
+- Stock-first — если `content_rules.stock_first.enabled`
+- Brand name discipline (user-facing vs technical) — `project.brand_name_*`
+- Локальные сигналы ≥ `content_rules.local_signals.min_per_page`
+
+**QA после написания (обязательная последовательность):**
+1. **Stop-words check** (`scripts/check-stop-words.py`)
+2. **Fact-check** (если `content_rules.fact_check.enabled`) — через Perplexity prompts (режим **Deep Research**) или вручную. Результаты записывай в `fact_check_log` frontmatter (claim/source/url/verdict/checked).
+3. **Stock-first проверка** (если ecommerce)
+4. **NW evaluate** (если `sources.neuronwriter.enabled`) — target `quality_gates.neuronwriter_score.min_score`
+
+**E-E-A-T trust-блок (если есть `fact_check_log`):** сгенерируй видимый блок «Источники» в конец статьи —
+```bash
+python3 ~/.claude/skills/seo-cycle/scripts/eeat-render.py 06-drafts/<name>.publish.md
+```
+Рендерятся только источники с verdict достоверно/частично; спорные — править формулировку в тексте, а не «подтверждать». Это прямой Trust-сигнал.
+
+Публикация только после прохождения всех гейтов.
+
+**Выход:** `06-drafts/` — `*.publish.md`.
+
+---
+
+## Phase 7 — Publishing (CMS-aware)
+
+**Цель:** залить контент на сайт.
+
+Делегирование зависит от `publishing.cms` и `publishing.publish_skills`:
+
+| CMS | Скилл / подход |
+|---|---|
+| WordPress | `emwoody-publish-*` или аналог; REST API + ACF + SEOPress meta |
+| Shopify | (TBD — Liquid + Storefront API) |
+| Webflow | (TBD — CMS Collections API) |
+| Next.js/static | git commit в content/ + redeploy |
+| custom | по обстоятельствам |
+
+**Универсальный шаги:**
+1. Парсинг `publish.md`
+2. Backup текущих значений
+3. POST в CMS endpoint
+4. Featured image / OG картинка (если `images.generator != none`)
+5. Schema/meta через SEO plugin endpoint
+6. Verify через GET
+7. Лог в `artifacts.publish_log`
+
+**Выход:** `07-published.md` — URL + дата каждой публикации.
+
+---
+
+## Phase 8 — JSON-LD & Schema
+
+**Цель:** структурированные данные под выбранные типы страниц.
+
+**Делегировать:** `delegate.schema_markup` (по умолчанию `claude-seo:seo-schema`).
+
+**Типы по `project_type`:**
+- `ecommerce`: Product, Offer, AggregateRating (только реальные!), BreadcrumbList
+- `local_business`: LocalBusiness + Service + AggregateRating
+- `blog`: Article, FAQPage, HowTo, BreadcrumbList
+- `saas`: SoftwareApplication, Product, Organization
+- Везде: WebSite, Organization, FAQPage (где есть FAQ)
+
+**E-E-A-T: канонический узел организации (обязательно).** Не оставляй `author`/`publisher` голым `{"@type":"Organization","name":...}`. Собери единый узел из `business_profile` и ссылайся на него через `@id`:
+```bash
+python3 ~/.claude/skills/seo-cycle/scripts/schema-org-build.py build              # посмотреть узел
+python3 ~/.claude/skills/seo-cycle/scripts/schema-org-build.py inject schema/*.json  # вставить + переписать author/publisher на @id
+```
+Узел несёт trust-сигналы (address, telephone, openingHours, areaServed, knowsAbout, sameAs) — это то, что связывает контент с реальным бизнесом и усиливает Authoritativeness/Trust. Инжект идемпотентен. Требует секцию `business_profile` в конфиге.
+
+**Запрет:** фейковые рейтинги и отзывы. Если нет реальных — не делай AggregateRating. `same_as` — только подтверждённые профили.
+
+**Выход:** `08-schema.md`.
+
+---
+
+## Phase 9 — Monitoring
+
+**Цель:** регулярные снапшоты позиций / трафика / поведения.
+
+**Делегировать:**
+- `delegate.google_data` (`claude-seo:seo-google`) — GSC + GA4 + CrUX (если включено)
+- `delegate.yandex_specialist` — Я.Вебмастер + Метрика (если включено)
+
+**Cadence:** 2-недельные снапшоты в `09-monitoring/YYYY-MM-DD-snapshot.json` + markdown-надстройка `*.md` по `templates/monitoring-report.template.md`.
+
+**Pipeline (observability hub):**
+
+```
+delegate(claude-seo:seo-google) → GSC/GA4 JSON ┐
+delegate(yandex-seo-specialist) → Webmaster/   ├→ snapshot-build.py --source X
+  Metrika данные                               │   (нормализация в единую schema)
+psi-fetch.py URL → PSI JSON                    ┘                  ↓
+                                                    09-monitoring/YYYY-MM-DD-snapshot.json
+```
+
+**Единая schema `snapshot.json`:** см. `scripts/snapshot-build.py --help`. Поля: `queries[]`, `pages[]`, `cwv{}`, `behavior{}`, `sources[]`. Скрипт умеет мердж нескольких источников в один snapshot через `--merge`.
+
+**Что собирать:**
+- Топ-100 запросов: impressions, clicks, CTR, position, дельты
+- Топ-страниц: то же + behavior (bounce, time, conversions)
+- CWV per URL (PSI) с статусом good/needs_improvement/poor
+- Изменения vs прошлый снапшот
+- Сезонные сравнения (если есть данные за прошлый период)
+
+**Выход:** `09-monitoring/YYYY-MM-DD-snapshot.json` + `*.md` отчёт по шаблону.
+
+---
+
+## Phase 10 — Iteration (actionable feedback engine)
+
+**Цель:** действовать по данным через декларативные правила.
+
+### Pipeline
+
+```
+09-monitoring/YYYY-MM-DD-snapshot.json ┐
+config/triggers.yaml                   ├→ triggers-eval.py → 10-iterations.md
+(+ опц. project-override triggers)     ┘    (markdown action list по P0/P1/P2
+                                             с конкретными URL и запросами)
+```
+
+### Команда
+
+```bash
+python3 ~/.claude/skills/seo-cycle/scripts/triggers-eval.py \
+    09-monitoring/YYYY-MM-DD-snapshot.json \
+    ~/.claude/skills/seo-cycle/config/triggers.yaml \
+    --output 10-iterations.md \
+    --project-yaml ./seo-cycle.yaml   # для project-override правил
+```
+
+### Правила в `config/triggers.yaml`
+
+Декларативные `when → action → priority → delegate`. Текущий набор покрывает:
+
+- **Запросы:** low_ctr_in_top_positions, striking_distance, position_drop, high_impressions_no_clicks, new_emerging_query
+- **Страницы:** high_bounce_low_engagement, low_engagement_time, high_traffic_no_conversions, orphan_page_low_clicks
+- **CWV:** cwv_poor, cwv_needs_improvement, lcp_critical
+- **Поведение:** bounce_spike_site_wide
+- **Контент-гигиена:** fact_check_stale, page_unchanged_long
+- **Бэклинки:** lost_top_backlink, gained_top_backlink
+
+Расширить можно копированием правил в `<project>/seo-triggers.yaml` и указанием `monitoring.triggers_file` в проектном `seo-cycle.yaml`.
+
+### Source attribution (обратная связь по источникам семантики)
+
+Замыкает петлю «откуда брали ключи → что сработало». Раз в квартал (когда накопились данные ≥30-60 дней) сопоставь лог источников со snapshot:
+```bash
+python3 ~/.claude/skills/seo-cycle/scripts/source-attribution.py \
+    --csv seo/source-attribution.csv \
+    --snapshot 09-monitoring/<date>-snapshot.json
+```
+Скрипт покажет, какие источники дают ключи в топ-10, а какие — пустую породу, и пометит кандидатов на снижение приоритета/отключение. Малоэффективный источник → убери из `region_profile` override или `sources_disable`. **Это прямая экономия токенов/времени на следующих циклах.**
+
+> Предусловие: в Phase 2 веди `seo/source-attribution.csv` — помечай, из какого источника пришёл каждый ключ (`keyword,source,date_added,cluster,target_url`).
+
+**Выход:** `10-iterations.md` — приоритизированный action list со ссылками на конкретные URL/запросы + рекомендуемыми делегатами для каждого пункта.
+
+---
+
+## Установка под новый проект
+
+Полная инструкция в `INSTALL.md` рядом с этим файлом. Кратко:
+
+1. Скопировать `~/.claude/skills/seo-cycle/config/project.template.yaml` в корень проекта как `seo-cycle.yaml`.
+2. Заполнить под свой сайт (язык, регион, поисковики, CMS, источники).
+3. Запустить валидатор: `python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py`.
+4. Подключить API-ключи в `.env` проекта по списку, который выдаст валидатор.
+5. (Опционально) Создать проектные скиллы для специфичных задач (custom publishing, brand-specific entity map) и прописать в `delegate.*`.
+6. Запустить: «давай запустим SEO-цикл для категории X».
+
+## Кастомизация под нишу
+
+Адаптация под конкретный проект через:
+
+- **`seo-cycle.yaml`** — основной механизм (язык, поисковики, project_type, источники, tone, content_rules)
+- **`content_rules.fact_check`** — отключи для не-технических ниш
+- **`content_rules.stock_first`** — только для ecommerce с инвентарём
+- **`content_rules.local_signals`** — отключи для глобального B2B SaaS
+- **`tone.stop_words_extra`** — добавляй свои запреты
+- **Custom prompts** — клонируй `~/.claude/skills/seo-cycle/prompts/*` в `<project>/seo/prompts/` и переопредели
+- **Custom delegate** — создавай проектные субскиллы и прописывай в `delegate.*`
+
+См. `docs/adapt.md` для подробной инструкции по адаптации.
+
+## Источники истины (универсальные)
+
+1. `seo-cycle.yaml` — конфиг проекта
+2. `<project>/CLAUDE.md` — правила проекта (если есть)
+3. `<project>/seo/entities/entities.yaml` — реестр сущностей проекта
+4. `~/.claude/skills/seo-cycle/prompts/` — универсальные промпт-шаблоны
+5. `<artifacts.research_root>` — результаты исследований (ATP, Perplexity, LLM CLI)
+
+## Lessons learned (пополняется)
+
+- *Заполняется по ходу реальных запусков на разных проектах.*
+- Первый запуск на новом проекте — пройти Phase 0 (wizard) и Phase 1 (audit) полностью, прежде чем приступать к контенту.
+- Не включай все источники сразу. Включай постепенно — после подключения каждого API/доступа.
+- LLM CLI (Antigravity + Codex) **не заменяют** Wordstat/GSC — они дополняют их идеями и URL-ями для fact-check.
+
+## Версионирование
+
+См. `CHANGELOG.md` рядом с этим файлом.

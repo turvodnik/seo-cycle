@@ -1,0 +1,147 @@
+# =============================================================================
+# triggers.yaml — декларативные правила Phase 10 (actionable feedback engine)
+# =============================================================================
+# Каждое правило: when (условие) → action (что делать) → priority → delegate
+#
+# Условия используют упрощённый DSL: имя_поля операторы число/строка
+# с поддержкой AND. Доступные scope: queries | pages | cwv | behavior | backlinks
+#
+# Поля в queries: impressions, clicks, ctr, position, query, url, delta_impr, delta_pos
+# Поля в pages: url, impressions, clicks, sessions, behavior.bounce,
+#               behavior.time_on_page, behavior.conversions, last_fact_check
+# Поля в cwv: lcp_p75, inp_p75, cls_p75, status (good|needs_improvement|poor)
+# Поля в behavior: sessions, bounce_rate, conversions
+#
+# Операторы: <, <=, >, >=, ==, !=, contains
+# Спец.: "older than N (days|months)" — для дат
+#
+# triggers-eval.py загружает этот файл, применяет к snapshot.json,
+# выводит markdown action list с приоритетами.
+#
+# Кастомизация: проекты могут переопределить, скопировав в
+# <project>/seo-triggers.yaml — скилл проверит оба.
+
+triggers:
+  # ------- Запросы -------
+  - id: low_ctr_in_top_positions
+    when: "position >= 5 AND position <= 20 AND ctr < 0.02 AND impressions > 100"
+    scope: queries
+    action: "Доработать meta_title + meta_description + AEO-абзац (первые 400 символов)"
+    priority: P1
+    delegate: content_writer
+
+  - id: striking_distance
+    when: "position >= 11 AND position <= 20 AND impressions > 50"
+    scope: queries
+    action: "Расширить FAQ под этот запрос, добавить отдельный H2, либо создать spoke-статью"
+    priority: P0
+    delegate: content_strategist
+
+  - id: position_drop
+    when: "delta_pos > 3 AND impressions > 100"
+    scope: queries
+    action: "Падение позиций — проверь алгоритмические обновления (Яндекс Палех/Королёв/Y1, Google Core Update) + сверь с конкурентами"
+    priority: P0
+    delegate: technical_audit
+
+  - id: high_impressions_no_clicks
+    when: "impressions > 500 AND clicks == 0"
+    scope: queries
+    action: "Нерелевантный snippet — переписать title+description под точный intent запроса"
+    priority: P1
+    delegate: content_writer
+
+  - id: new_emerging_query
+    when: "impressions > 100 AND delta_impr > 50 AND clicks == 0"
+    scope: queries
+    action: "Новый растущий интент — рассмотреть spoke-статью или расширение существующей"
+    priority: P2
+    delegate: content_strategist
+
+  # ------- Страницы -------
+  - id: high_bounce_low_engagement
+    when: "behavior.bounce > 0.75 AND impressions > 500"
+    scope: pages
+    action: "UX-проблемы: разбить контент на H2, добавить таблицы, FAQ, jump links, проверь above-the-fold"
+    priority: P1
+    delegate: content_writer
+
+  - id: low_engagement_time
+    when: "behavior.time_on_page < 30 AND impressions > 200"
+    scope: pages
+    action: "Контент не удерживает — проверь intent match, переработай вводный абзац, добавь визуал"
+    priority: P1
+    delegate: content_writer
+
+  - id: high_traffic_no_conversions
+    when: "sessions > 100 AND behavior.conversions == 0"
+    scope: pages
+    action: "Конверсионный gap — пересмотри CTA, формы, trust-сигналы, цены"
+    priority: P1
+    delegate: content_strategist
+
+  - id: orphan_page_low_clicks
+    when: "impressions < 10"
+    scope: pages
+    action: "Страница не находится — проверь индексацию, внутренние ссылки, sitemap"
+    priority: P2
+    delegate: technical_audit
+
+  # ------- Core Web Vitals -------
+  - id: cwv_poor
+    when: "cwv.status == 'poor'"
+    scope: cwv
+    action: "Технический аудит CWV: optimize images (WebP+lazy), defer JS, preload critical fonts, minify CSS"
+    priority: P0
+    delegate: technical_audit
+
+  - id: cwv_needs_improvement
+    when: "cwv.status == 'needs_improvement'"
+    scope: cwv
+    action: "Подтянуть CWV до зелёной зоны (LCP<2.5s, INP<200ms, CLS<0.1)"
+    priority: P1
+    delegate: technical_audit
+
+  - id: lcp_critical
+    when: "cwv.lcp_p75 > 4000"
+    scope: cwv
+    action: "LCP > 4s — приоритет №1: preload hero image, server response time, defer non-critical CSS"
+    priority: P0
+    delegate: technical_audit
+
+  # ------- Поведение в целом -------
+  - id: bounce_spike_site_wide
+    when: "behavior.bounce_rate > 0.70"
+    scope: behavior
+    action: "Высокий общий bounce — проверь UX, скорость, intent match по топ-страницам"
+    priority: P1
+
+  # ------- Контент-гигиена -------
+  - id: fact_check_stale
+    when: "last_fact_check older than 6 months"
+    scope: pages
+    action: "Перепроверь фактические утверждения (правило №11) через Perplexity/Codex с URL-источниками"
+    priority: P2
+    delegate: content_writer
+
+  - id: page_unchanged_long
+    when: "last_updated older than 12 months AND impressions > 100"
+    scope: pages
+    action: "Refresh: обновить даты, добавить новые секции, переписать вступление"
+    priority: P2
+    delegate: content_writer
+
+  # ------- Бэклинки (требует Phase 9 backlinks data) -------
+  - id: lost_top_backlink
+    when: "backlinks.lost contains domain_rating >= 50"
+    scope: backlinks
+    action: "Потеря авторитетной ссылки — outreach для восстановления или замены"
+    priority: P1
+    delegate: link_building
+
+  - id: gained_top_backlink
+    when: "backlinks.gained contains domain_rating >= 50"
+    scope: backlinks
+    action: "Новая авторитетная ссылка — закрепить (благодарность, доп. контент, упоминание)"
+    priority: P2
+    delegate: link_building

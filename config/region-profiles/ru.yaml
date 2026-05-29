@@ -1,0 +1,55 @@
+# =============================================================================
+# region-profile: ru — Россия (Яндекс-приоритет)
+# =============================================================================
+# Пресет источников для проектов, работающих на российский рынок.
+# Проект подключает его одной строкой:  region_profile: ru
+# resolve-sources.py мёрджит этот профиль с локальными sources.* override.
+#
+# Логика: Яндекс — движок №1 (часто даёт больше трафика в B2C/B2B по РФ).
+# Google-инструменты, доступные из РФ (Trends, Suggest, GSC/GA4 через OAuth),
+# — включены. Западные SaaS (Ahrefs, SEMrush) гео-ограничены — выключены.
+# DataForSEO технически работает, но из РФ стабильнее через прокси.
+
+id: ru
+title: "Россия — Яндекс-приоритет"
+language_default: ru
+
+engines:
+  - { name: yandex, priority: 1 }
+  - { name: google, priority: 2 }
+
+# Источники, включаемые по умолчанию для региона
+sources_enable:
+  - yandex_wordstat
+  - yandex_wordstat_deep
+  - yandex_suggest
+  - yandex_serp_blocks
+  - yandex_images_suggest
+  - yandex_q
+  - yandex_business_maps        # если есть офлайн-точка (склад/офис)
+  - google_search_console
+  - google_trends
+  - google_suggest
+  - serpstat              # даёт Google-РФ (g_ru) volume/KD/конкурентов — закрывает дыру Ahrefs/SEMrush
+  - neuronwriter
+  - llm_cli
+  - answerthepublic
+  - perplexity
+
+# Источники, которые НЕ работают из РФ (гео-ограничены) — принудительно off
+sources_disable:
+  - ahrefs
+  - semrush
+  - spyfu        # SpyFu не покрывает РФ/Яндекс (countryCode RU отвергается API)
+
+# Работают, но из РФ стабильнее через прокси — resolve-sources пометит warning
+sources_proxy:
+  - dataforseo
+
+# AnswerThePublic не знает русский → собираем по en-шаблонам и переводим
+atp_translate: true
+atp_lang: en
+atp_region: us
+
+# NeuronWriter движок выдачи для региона
+neuronwriter_engine: google.ru

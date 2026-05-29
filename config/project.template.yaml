@@ -1,0 +1,590 @@
+# =============================================================================
+# seo-cycle: project configuration template (schema v1.1)
+# =============================================================================
+# Скопируй этот файл в корень своего проекта как `seo-cycle.yaml` (или
+# `.seo-cycle.yaml`) и заполни под конкретный сайт. Все поля с примерами —
+# подставь свои значения. Закомментированные блоки можно удалить если не
+# нужны (например, отключаешь Яндекс если работаешь только на западный рынок).
+#
+# Скилл seo-cycle ищет конфиг в таком порядке:
+#   1. ./seo-cycle.yaml
+#   2. ./.seo-cycle.yaml
+#   3. ./seo/seo-cycle.yaml
+#   4. ./.claude/seo-cycle.yaml
+#
+# Валидация: `python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py`
+
+# -----------------------------------------------------------------------------
+# 1. Identity — кто мы
+# -----------------------------------------------------------------------------
+project:
+  name: "Example Shop"                    # человеческое имя проекта
+  domain: "example.com"
+  brand_name_user_facing: "Example Shop"  # как пишем в текстах (важно для кириллических брендов)
+  brand_name_technical: "example"         # для URL, slug, кода — латиница
+  description: |
+    Краткое описание проекта в 1-3 предложения. Кто целевая аудитория,
+    что продаём, какая ниша. Используется как контекст для LLM-промптов.
+
+# -----------------------------------------------------------------------------
+# 2. Geo & Locale — где работаем
+# -----------------------------------------------------------------------------
+locale:
+  language: ru                  # ISO 639-1 — основной язык контента
+  country: RU                   # ISO 3166-1 alpha-2
+  region: "Москва и Московская область"  # человеческое название региона
+  city: "Москва"
+  locale_iso: ru-RU
+  # Yandex region code: 213=Москва, 1=МО, 225=Россия, и т.д.
+  yandex_region_code: 213
+  # Google: gl + hl
+  google_gl: ru
+  google_hl: ru
+  # Часовой пояс (для cron, мониторинга, контент-плана)
+  timezone: "Europe/Moscow"
+
+# -----------------------------------------------------------------------------
+# 3. Search engines — куда оптимизируем
+# -----------------------------------------------------------------------------
+# Если в списке нет — соответствующая фаза скилла пропускается.
+# Порядок = приоритет (первый важнее).
+engines:
+  - name: yandex
+    priority: 1
+  - name: google
+    priority: 2
+  # - name: bing
+  # - name: baidu
+
+# Региональный профиль источников: ru | eu | us | global.
+# Одной строкой задаёт, какие источники применимы для региона (Яндекс-стек для ru,
+# западные SaaS для eu/us и т.д.) и какие недоступны/нужен прокси. Развернётся
+# через scripts/resolve-sources.py; секция sources ниже хранит только параметры
+# исполнения и явные override. Профили: config/region-profiles/*.yaml.
+region_profile: ru
+
+# Кэш ресёрча: не перезапускать дорогой сбор, если свежий результат моложе N дней.
+research_cache_ttl_days: 14
+
+# -----------------------------------------------------------------------------
+# 4. Project type & mode — что это за сайт и какой режим цикла
+# -----------------------------------------------------------------------------
+project_type: ecommerce         # ecommerce | blog | saas | local_business | corporate | media | portfolio
+cms: wordpress                  # wordpress | shopify | webflow | nextjs | static | custom
+
+# Режим цикла:
+#   standard      — обычный цикл по 10 фазам (default)
+#   migration     — миграция домена/CMS (см. docs/migration-planner.md)
+#   programmatic  — массовая генерация страниц по шаблону (см. docs/programmatic-seo.md)
+mode: standard
+
+business_model:                 # массив тегов
+  - retail
+  - wholesale
+  # - subscription
+  # - marketplace
+  # - lead_generation
+
+sales_channels:
+  - online
+  - offline_warehouse
+  # - retail_stores
+  # - distributors
+
+target_audiences:
+  - private_customers
+  - construction_crews
+  - wholesale_buyers
+
+# -----------------------------------------------------------------------------
+# 5. Industry & niche
+# -----------------------------------------------------------------------------
+industry:
+  name: "Building Materials"
+  tags: [construction, b2c, b2b]
+  # Ключевые товарные группы или сервисные направления
+  primary_categories:
+    - "Минеральная вата"
+    - "Плиточный клей"
+    - "ОСП и ДВП"
+  # Утверждённый H1 главной (если есть)
+  homepage_h1: |
+    Строительные материалы оптом и в розницу с доставкой по Москве и Московской области
+
+# -----------------------------------------------------------------------------
+# 5b. Business profile — реальные NAP/E-E-A-T данные для schema.
+# Питает scripts/schema-org-build.py (Organization/LocalBusiness узел с @id,
+# на который ссылаются author/publisher всех Article/Product).
+# Заполняй ТОЛЬКО проверяемыми фактами. Удали блок, если бизнес чисто онлайн
+# без адреса (тогда schema_type: Organization без address/openingHours).
+# -----------------------------------------------------------------------------
+business_profile:
+  legal_name: "Example Shop"
+  url: "https://example.com/"
+  logo: "https://example.com/wp-content/uploads/logo.png"
+  telephone: "+7-000-000-00-00"
+  schema_type: LocalBusiness        # LocalBusiness | Organization | Store
+  address:                          # удали для чисто онлайн-бизнеса
+    street: "ул. Примерная, 1"
+    locality: "Город"
+    region: "Регион"
+    country: RU
+  opening_hours: "Mo-Su 09:00-18:00"
+  area_served:
+    - "Город"
+    - "Регион"
+  knows_about:                      # экспертные темы (E-E-A-T)
+    - "Тема 1"
+    - "Тема 2"
+  services:
+    - "Доставка"
+    - "Самовывоз"
+  same_as: []                       # только подтверждённые профили (карты, соцсети)
+
+# -----------------------------------------------------------------------------
+# 6. Tone of voice — как пишем
+# -----------------------------------------------------------------------------
+tone:
+  formal_level: 2               # 1=very informal, 5=very formal
+  style_keywords:
+    - factual
+    - concrete
+    - local
+  # Запреты на эпитеты (стоп-слова детектятся скриптом check-stop-words.py)
+  avoid_epithets: true
+  avoid_marketing_fluff: true
+  stop_words_extra:             # доп. слова поверх дефолтных
+    - "уникальный"
+    - "лучший"
+    - "качественный"
+  description: |
+    Деловой, конкретный, без маркетинговой воды. Только факты:
+    что есть, сколько стоит, как быстро, кому подходит.
+
+# -----------------------------------------------------------------------------
+# 7. Data sources — что подключено
+# -----------------------------------------------------------------------------
+# Каждый источник enabled: true/false. Скилл показывает в Phase 2 только
+# enabled-источники. Можно постепенно включать по мере подключения API/доступов.
+sources:
+
+  # === Yandex ecosystem ===
+  yandex_wordstat:
+    enabled: true
+    method: agent               # agent | manual | api
+    delegate_to: yandex-seo-specialist
+  yandex_wordstat_deep:
+    enabled: true
+    method: browser_mcp         # парсинг правой колонки + сезонности
+  yandex_suggest:
+    enabled: true
+    script: ~/.claude/skills/seo-cycle/scripts/yandex-suggest.py
+  yandex_serp_blocks:
+    enabled: true
+    method: browser_mcp
+    captures: [related, paa, koldunshchik]
+  yandex_webmaster_history:
+    enabled: false              # включи после верификации сайта в Я.Вебмастере
+    method: browser_mcp
+  yandex_images_suggest:
+    enabled: true
+    method: browser_mcp
+  yandex_business_maps:
+    enabled: false              # для локального бизнеса с офлайн-точкой
+    method: browser_mcp
+  yandex_q:
+    enabled: true               # PAA-аналог для информационных тем
+    method: browser_mcp
+
+  # === Google ecosystem ===
+  google_search_console:
+    enabled: true
+    method: skill
+    delegate_to: "claude-seo:seo-google"
+    min_days_after_publish: 30
+  google_trends:
+    enabled: true
+    script: ~/.claude/skills/seo-cycle/scripts/google-trends.py
+  google_suggest:
+    enabled: true
+    script: ~/.claude/skills/seo-cycle/scripts/google-suggest.py
+  dataforseo:
+    enabled: false
+    requires_paid_subscription: true
+    delegate_to: "claude-seo:seo-dataforseo"
+  serpstat:
+    # Вкл/выкл — из region_profile (поддерживает g_ru/g_ua/g_us/... включая РФ).
+    api_key_env: SERPSTAT_API_KEY
+    se: g_ru                      # search engine: g_ru | g_us | g_uk | g_de | g_ua ...
+    helper_script: ~/.claude/skills/seo-cycle/scripts/serpstat-fetch.py
+    monthly_credit_limit: 1000    # ⚠ бережём кредиты: точечно KD/volume + competitor gap
+    min_credits_guard: 50
+    cache_ttl_days: 30
+  spyfu:
+    # Вкл/выкл — из region_profile (us/eu/global). ⚠ НЕ покрывает РФ/Яндекс.
+    # Ключи: API_SpyFu_ID + API_SpyFu_secret_key. Competitor/PPC/SEO US/UK/EU.
+    country_code: US             # US | GB | CA | DE | FR | AU ... (НЕ RU)
+    helper_script: ~/.claude/skills/seo-cycle/scripts/spyfu-fetch.py
+    monthly_budget_usd: 40       # Pro = $40 кредита/мес, pay-as-you-go по строкам
+    cache_ttl_days: 30
+
+  # === SERP optimization tools ===
+  neuronwriter:
+    enabled: false
+    api_key_env: NEURON_API_KEY
+    project_id: null            # NW project ID (создаётся в их dashboard)
+    engine: google.ru           # google.ru | google.com | google.uk | ...
+    target_score: 65            # минимум для зелёной зоны
+    helper_script: "./seo/scripts/nw.sh"
+
+  # === LLM CLI sources ===
+  llm_cli:
+    antigravity:
+      enabled: true             # `agy` CLI установлен?
+      cmd: agy
+    codex:
+      enabled: true             # `codex` CLI установлен?
+      cmd: codex
+    parallel_collect_script: ~/.claude/skills/seo-cycle/scripts/llm-cli-collect.sh
+    merge_script: ~/.claude/skills/seo-cycle/scripts/llm-cli-merge.py
+
+  # === AnswerThePublic ===
+  answerthepublic:
+    enabled: false
+    api_key_env: TOKEN_ANSWERTHEPUBLIC
+    note: "Не поддерживает регион RU — используется en/us для шаблонов вопросов с переводом"
+    default_lang: en
+    default_region: us
+    default_provider: gweb
+
+  # === Perplexity Pro через браузер ===
+  perplexity:
+    enabled: false              # включи после установки Claude for Chrome
+    method: browser_mcp
+    setup_doc: "./seo/research/perplexity/SETUP.md"
+    prompts_dir: ~/.claude/skills/seo-cycle/prompts/perplexity/
+
+# -----------------------------------------------------------------------------
+# 8. Publishing (CMS-specific) — куда заливаем контент
+# -----------------------------------------------------------------------------
+# Эта секция используется только если есть CMS-интеграция.
+# Для блогов на статике (Next.js, Hugo) можно убрать или оставить пустой.
+publishing:
+  enabled: true
+  cms: wordpress
+
+  # Environment variables — где лежат креды (никогда не храним прямо в yaml)
+  env_vars:
+    base_url: WP_BASE_URL
+    user: WP_USER
+    app_password: WP_APP_PASSWORD
+    woo_rest_key: WOO_REST_API_KEY
+    woo_rest_secret: WOO_REST_API_SECRET
+
+  # Какие типы контента публикуем
+  post_types:
+    blog: blog                  # CPT для блога (или 'post' для стандартного)
+    catalog_categories: product_cat
+    brands: product_brand
+    static_pages: page
+
+  # ACF field mapping для категорий (если используете)
+  acf_fields:
+    h1: h1_title_category_product
+    description: product_category_description
+    faq: faq_product_category
+    cta: cta_text_category_product
+
+  # SEO plugin meta через REST
+  seo_plugin: seopress          # seopress | yoast | rankmath | none
+  seopress_term_meta_via_rest: true   # требует PHP snippet — см. seo/wp-snippets/
+
+  # Делегирование на конкретные скиллы публикации
+  publish_skills:
+    blog: emwoody-publish-post      # или твой кастомный
+    category: emwoody-publish-taxonomy
+    brand: emwoody-publish-taxonomy
+    page: emwoody-publish-page
+
+# -----------------------------------------------------------------------------
+# 9. Images — генерация и оптимизация
+# -----------------------------------------------------------------------------
+images:
+  generator: codex_cli          # codex_cli | dalle | midjourney | manual | none
+  generator_script: "./seo/scripts/publish/img-generate.sh"
+  optimize_script: "./seo/scripts/publish/img-optimize.sh"
+  output_format: webp
+
+  aspect_ratios:
+    hero: "4:3"                 # для блог-постов
+    icon: "1:1"                 # для категорий (300×300)
+    og: "1.91:1"                # OpenGraph (1200×630)
+    article_inline: "16:9"
+
+  brand_palette:
+    primary: forest_green
+    secondary: kraft_beige
+    accent: mustard
+    tertiary: [terracotta, dusty_teal, cream]
+    avoid:
+      - bright_red
+      - neon_blue
+      - neon_green
+      - pastel_washed_out
+
+  alt_text_pattern: "{category_name} — {city} | {brand_name}"
+
+# -----------------------------------------------------------------------------
+# 10. Content rules — обязательные правила
+# -----------------------------------------------------------------------------
+content_rules:
+  # Stock-first: приоритет товарам на складе
+  stock_first:
+    enabled: true               # релевантно для ecommerce
+    stocked_skus_source: "manual"   # manual | woocommerce_api | csv
+
+  # Fact-check обязателен для технических тем
+  fact_check:
+    enabled: true
+    required_for: [technical_specs, norms, brands, prices, claims]
+    max_age_months: 6
+    workflow_doc: "{{prompts_dir}}/fact-check.md"
+    results_dir: "./seo/research/perplexity/results"   # или другой fact-check storage
+
+  # Локальные сигналы
+  local_signals:
+    min_per_page: 3
+    examples:
+      - "Москва"
+      - "Московская область"
+      - "Мытищи"
+
+  # Внутренняя перелинковка
+  internal_linking:
+    min_links_per_article: 5
+    require_category_links: true
+
+  # AEO (Answer Engine Optimization)
+  aeo:
+    enabled: true
+    answer_first_sentences: 3   # прямой ответ в первых N предложениях
+    faq_required: true
+
+# -----------------------------------------------------------------------------
+# 11. Quality gates — что блокирует публикацию
+# -----------------------------------------------------------------------------
+quality_gates:
+  stop_words_check:
+    enabled: true
+    script: ~/.claude/skills/seo-cycle/scripts/check-stop-words.py
+    fail_on_match: true
+
+  neuronwriter_score:
+    enabled: false              # автоматически true если sources.neuronwriter.enabled
+    min_score: 65
+
+  fact_check_log_present:
+    enabled: true               # требовать поле fact_check_log в frontmatter
+
+  word_count_min:
+    enabled: true
+    blog_post: 1500
+    category: 800
+    landing: 1200
+
+# -----------------------------------------------------------------------------
+# 12. Artifacts — где храним результаты цикла
+# -----------------------------------------------------------------------------
+artifacts:
+  cycles_root: "./seo/cycles"             # снапшоты циклов
+  entities_root: "./seo/entities"         # реестр сущностей (entities.yaml)
+  research_root: "./seo/research"         # ATP, Perplexity, LLM CLI результаты
+  drafts_root: "./blog"                   # черновики статей
+  categories_root: "./categories"         # черновики категорий
+  publish_log: "./seo/publish-log.csv"    # лог публикаций (URL, дата, тип)
+
+# -----------------------------------------------------------------------------
+# 13. Memory & external docs — что подгружать в контекст
+# -----------------------------------------------------------------------------
+context_files:
+  # Главные документы проекта, которые скилл всегда читает в Phase 0
+  - path: "./CLAUDE.md"
+    role: "project rules"
+  # - path: "./brand-guidelines.md"
+  # - path: "./content-strategy.md"
+  # Опционально — базовые пакеты SEO/UX
+  # - path: "./emwoody-seo-geo-ux-package-2026-04-23.md"
+  #   role: "base SEO/GEO/UX package"
+
+# -----------------------------------------------------------------------------
+# 14. Sub-skills delegation map — куда делегируем
+# -----------------------------------------------------------------------------
+# Маппинг универсальных шагов на конкретные скиллы/агенты проекта.
+# Если у тебя есть проектные скиллы — указывай их здесь, иначе используются
+# универсальные fallback'и из ~/.claude/skills/seo-cycle/.
+delegate:
+  semantic_brief: emwoody-semantic-brief    # или null → fallback на универсальный шаблон
+  audit: seo-auditor                         # ~/.claude/agents/seo-auditor.md
+  keyword_research: seo-keyword-researcher
+  content_writer: seo-content-writer
+  content_strategy: seo-content-strategist
+  yandex_specialist: yandex-seo-specialist
+  link_building: seo-linkbuilder
+  google_data: "claude-seo:seo-google"
+  schema_markup: "claude-seo:seo-schema"
+  cluster_analysis: "claude-seo:seo-cluster"
+  technical_audit: "claude-seo:seo-technical"
+
+# -----------------------------------------------------------------------------
+# 14b. Data store + Notifications (Этап 1 автоматизации, опционально)
+# -----------------------------------------------------------------------------
+# Единая SQLite-БД из CSV/JSON-артефактов — фундамент дашбордов/алертов.
+data_store:
+  enabled: false                        # opt-in
+  path: "seo/seo.db"
+  sync_script: "~/.claude/skills/seo-cycle/scripts/db-sync.py"
+
+# Лёгкие алерты через Telegram (без n8n). Без ключей в .env — graceful no-op.
+notifications:
+  enabled: false                        # opt-in
+  channel: telegram
+  script: "~/.claude/skills/seo-cycle/scripts/notify.py"
+  events: [approval_ticket_created, automation_error, low_api_credits, position_drop]
+  bot_token_env: TELEGRAM_BOT_TOKEN
+  chat_id_env: TELEGRAM_CHAT_ID
+
+# -----------------------------------------------------------------------------
+# 15. Obsidian vault (опционально) — зеркало контента + граф связей
+# -----------------------------------------------------------------------------
+# Включи, если хочешь визуализировать граф сущностей, использовать backlinks,
+# вести Dataview-дашборды по контенту, складу и качеству.
+#
+# Vault = зеркало артефактов проекта. Source of truth остаётся в файлах
+# проекта (entities.yaml, stock-inventory.yaml, blog/, categories/).
+# Обновление по запросу: python3 ~/.claude/skills/seo-cycle/scripts/obsidian-sync.py
+obsidian:
+  enabled: false                        # opt-in
+  # Два варианта расположения vault:
+  #
+  # Вариант A — отдельный vault для проекта (по умолчанию):
+  vault_root: "./obsidian-vault"
+  #
+  # Вариант B — централизованный vault для всех проектов:
+  # Указываешь путь к общему vault (например, в OneDrive/iCloud для синка
+  # между устройствами) и имя подпапки для текущего проекта. Скрипт
+  # создаёт vault внутри <central_vault>/<project_subfolder>/.
+  # Если оба варианта заданы — приоритет у central_vault.
+  # central_vault: "/Users/<you>/Library/CloudStorage/OneDrive-Личная/Obsidian/<MyVault>"
+  # project_subfolder: "myproject"
+  #
+  generate_links: true                  # оборачивать упоминания сущностей в [[wiki-links]]
+  daily_notes: false                    # (для будущего) генерировать daily notes по cycle progress
+  dashboards: true                      # создавать Dataview-дашборды
+  sync_on_publish: false                # (для будущего) автосинк после каждой публикации
+
+# -----------------------------------------------------------------------------
+# 16. Stock inventory (для ecommerce / local business)
+# -----------------------------------------------------------------------------
+# Реестр складских позиций. Используется правилом content_rules.stock_first.
+# Шаблон: ~/.claude/skills/seo-cycle/scripts/stock-inventory.template.yaml
+stock_inventory:
+  enabled: false                        # включить если ecommerce/локальный бизнес с инвентарём
+  file: "./seo/stock-inventory.yaml"   # путь к реестру в проекте
+  source: manual                        # manual | woocommerce_api | shopify_api | csv
+  # Если source != manual — настройки API:
+  # woocommerce_api:
+  #   base_url_env: WP_BASE_URL
+  #   consumer_key_env: WOO_REST_API_KEY
+  #   consumer_secret_env: WOO_REST_API_SECRET
+  #   fetch_categories: true
+  #   fetch_brands: true
+  #   fetch_products: false             # SKU-уровень — обычно не нужен для контента
+
+# -----------------------------------------------------------------------------
+# 17. Monitoring & feedback (Phase 9 + Phase 10)
+# -----------------------------------------------------------------------------
+# Конфигурация observability hub и actionable feedback engine.
+monitoring:
+  cadence: "2 weeks"                          # как часто делаем снапшоты
+  snapshot_format: json                        # JSON по схеме snapshot-build.py
+  retention_months: 12                         # сколько месяцев храним снапшоты
+  # Кастомные триггеры проекта (опц.) — перезаписывают/расширяют дефолтные из
+  # ~/.claude/skills/seo-cycle/config/triggers.yaml. Merge by id.
+  # triggers_file: "./seo-triggers.yaml"
+  pagespeed_insights:
+    enabled: false                             # PSI fetcher для CWV (free, API key опционален)
+    api_key_env: PSI_API_KEY                   # без ключа — rate limit ~25 req/day
+    strategy: mobile                           # mobile | desktop | both
+    urls_to_track: []                          # список URL для регулярного PSI
+
+# -----------------------------------------------------------------------------
+# 18. E-E-A-T audit (опционально, см. docs/eeat-audit.md в Сессии 3)
+# -----------------------------------------------------------------------------
+eeat:
+  enabled: false
+  author_bio_required: true                    # для статей блога
+  credentials_min: 1                           # минимум подтверждённых сертификатов/опыта
+  cite_sources: true                           # обязательные ссылки на ГОСТ/нормативы
+
+# -----------------------------------------------------------------------------
+# 19. Migration mode (опц., только если mode: migration)
+# -----------------------------------------------------------------------------
+migration:
+  enabled: false
+  old_domain: null
+  new_domain: null
+  launch_date: null
+  redirects_file: "./redirects.csv"            # CSV: old_url,new_url,status_code
+  monitoring_window_days: 90
+
+# -----------------------------------------------------------------------------
+# 20. Backlinks (опционально)
+# -----------------------------------------------------------------------------
+backlinks:
+  enabled: false
+  source: manual                               # manual | ahrefs | semrush | search_atlas
+  file: "./backlinks.csv"                      # CSV экспорт от провайдера
+  min_dr_for_alerts: 30                        # уведомлять о потерях ссылок с DR >= N
+
+# -----------------------------------------------------------------------------
+# 21. Monthly automation (Step 10) — 4-system workflow с approval gates
+# -----------------------------------------------------------------------------
+# Активируется через mode: automated_monthly.
+# Cron / scheduled запуски через системный cron, Claude Code schedule skill,
+# или Codex CLI schedule (если есть). Скрипт monthly-runner.sh — entry point.
+monthly_automation:
+  enabled: false                              # opt-in
+  schedule:
+    timezone: "Europe/Moscow"
+    # Cron expressions (для системного cron)
+    content_writer: "0 9 * * 1"               # Mon 9am — System 2
+    audit: "0 14 * * 3"                       # Wed 2pm — System 3 (только week 2 — runner проверит)
+    refresh: "0 14 * * 3"                     # Wed 2pm — System 4 (только week 3)
+    keyword_replenish: "0 16 * * 5"           # Fri 4pm — System 1 (week 4)
+    deindex_check: "0 17 * * 5"               # Fri 5pm — System 4 deindex (week 4)
+  keyword_queue:
+    file: "./seo/keyword-queue.csv"
+    min_queue_depth: 4                        # триггер replenish если < N approved+pending
+    auto_approve_threshold: null              # null = всегда manual approval
+  approval_gates:
+    keyword_research: required                # required | optional | skip
+    content_pre_publish: required             # каждый пост перед публикацией
+    audit_fixes: required                     # критические fixes
+    refresh_recommendation: required
+    deindex_rewrite: required
+  refresh:
+    triggers:                                 # какие правила Phase 10 используем
+      - last_updated_months: 12
+      - fact_check_months: 6
+      - impressions_drop_pct: -30
+      - position_drop_min: 5
+    max_pages_per_month: 5                    # лимит refresh на месяц (баланс с new content)
+  deindexation:
+    enabled: false                            # Full Step 10 feature, MVP — placeholder
+    check_sitemap_vs_gsc: true
+    rewrite_threshold: lost                   # lost | drop_in_index | manual
+    archive_dir: "./seo/deindexed/"
+  dashboard:                                  # будущая фича — monthly status dashboard
+    file: "./seo/monthly-dashboard.md"
+    auto_update: true
+    notify_email: null                        # опц., для P0 audit findings

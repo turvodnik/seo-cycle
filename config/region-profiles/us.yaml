@@ -1,0 +1,46 @@
+# =============================================================================
+# region-profile: us — США (Google-приоритет, полный западный SaaS-стек)
+# =============================================================================
+# Для проектов на рынок США. Подключение:  region_profile: us
+#
+# Идентичен eu по составу источников (Google-моноэкосистема + западные SaaS),
+# отличается дефолтами локали и движком NeuronWriter.
+
+id: us
+title: "США — Google-приоритет"
+language_default: en
+
+engines:
+  - { name: google, priority: 1 }
+
+sources_enable:
+  - google_search_console
+  - google_trends
+  - google_suggest
+  - dataforseo
+  - ahrefs
+  - semrush
+  - serpstat
+  - spyfu                 # US/UK competitor + PPC аналитика (родной рынок SpyFu)
+  - neuronwriter
+  - llm_cli
+  - answerthepublic
+  - perplexity
+
+sources_disable:
+  - yandex_wordstat
+  - yandex_wordstat_deep
+  - yandex_suggest
+  - yandex_serp_blocks
+  - yandex_images_suggest
+  - yandex_q
+  - yandex_business_maps
+  - yandex_webmaster_history
+
+sources_proxy: []
+
+atp_translate: false
+atp_lang: en
+atp_region: us
+
+neuronwriter_engine: google.com

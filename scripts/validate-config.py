@@ -1,0 +1,370 @@
+#!/usr/bin/env python3
+"""
+validate-config.py — валидатор seo-cycle.yaml.
+
+Проверяет:
+- Обязательные поля заполнены
+- ISO-коды валидны (language, country)
+- Для каждого `enabled: true` источника — есть ли необходимые env-vars в .env проекта
+- delegate-цели существуют (предупреждение если нет)
+- Пути в artifacts.* — существуют или создаются автоматом
+
+Выдаёт:
+- ✓ если всё ок
+- список предупреждений (warnings) — не блокеры
+- список ошибок (errors) — блокеры
+- чек-лист «что подключить»
+
+Использование:
+    python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py [path-to-config]
+
+Если путь не указан — ищет в 4 стандартных локациях.
+"""
+
+from __future__ import annotations
+import argparse, os, pathlib, sys
+
+try:
+    import yaml
+except ImportError:
+    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
+    sys.exit(2)
+
+
+CONFIG_SEARCH_PATHS = [
+    "seo-cycle.yaml",
+    ".seo-cycle.yaml",
+    "seo/seo-cycle.yaml",
+    ".claude/seo-cycle.yaml",
+]
+
+
+def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
+    for rel in CONFIG_SEARCH_PATHS:
+        p = start_dir / rel
+        if p.exists():
+            return p
+    return None
+
+
+def load_env(project_root: pathlib.Path) -> dict[str, str]:
+    env = dict(os.environ)
+    envf = project_root / ".env"
+    if envf.exists():
+        for line in envf.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            env.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    return env
+
+
+# Простейшие справочники для валидации
+ISO_LANGUAGES = {"ru","en","de","fr","es","pt","it","tr","ar","zh","ja","ko","uk","pl","nl","sv","fi","no","da","cs"}
+ISO_COUNTRIES = {"RU","US","GB","DE","FR","ES","PT","IT","TR","UA","PL","NL","SE","FI","NO","DK","CZ","JP","KR","CN","IN","BR","AU","CA"}
+
+
+def check_required(cfg: dict, errors: list, warnings: list):
+    for key in ("project", "locale", "engines", "project_type"):
+        if key not in cfg:
+            errors.append(f"Missing required top-level key: {key}")
+    if "project" in cfg:
+        for k in ("name", "domain"):
+            if not cfg["project"].get(k):
+                errors.append(f"project.{k} is required")
+    if "locale" in cfg:
+        lang = cfg["locale"].get("language")
+        cty = cfg["locale"].get("country")
+        if lang and lang not in ISO_LANGUAGES:
+            warnings.append(f"locale.language={lang!r} — не в стандартном списке ISO 639-1 (возможно опечатка)")
+        if cty and cty not in ISO_COUNTRIES:
+            warnings.append(f"locale.country={cty!r} — не в стандартном списке ISO 3166-1 (возможно опечатка)")
+    if "engines" in cfg and not isinstance(cfg["engines"], list):
+        errors.append("engines must be a list of {name, priority}")
+
+
+def load_region_profile(profile_id: str) -> dict | None:
+    prof_path = (pathlib.Path(__file__).resolve().parent.parent
+                 / "config" / "region-profiles" / f"{profile_id}.yaml")
+    if not prof_path.exists():
+        return None
+    with prof_path.open(encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def check_sources(cfg: dict, env: dict, checklist: list, warnings: list):
+    sources = cfg.get("sources", {})
+    if not sources:
+        warnings.append("Секция sources пуста — Phase 2 не сможет собрать данные")
+        return
+
+    profile_id = cfg.get("region_profile")
+
+    # === Профиль-режим: активность источника берётся из region-profile ===
+    if profile_id:
+        profile = load_region_profile(profile_id)
+        if profile is None:
+            warnings.append(f"region_profile={profile_id!r} — файл профиля не найден в config/region-profiles/")
+            return
+        active = (set(profile.get("sources_enable", [])) | set(profile.get("sources_proxy", []))) - set(profile.get("sources_disable", []))
+        # Локальные override: enabled:false убирает, enabled:true добавляет
+        for name, scfg in sources.items():
+            if isinstance(scfg, dict) and "enabled" in scfg:
+                if scfg["enabled"]:
+                    active.add(name)
+                else:
+                    active.discard(name)
+        if not active:
+            warnings.append(f"Профиль {profile_id} + override не дали ни одного активного источника")
+        for name in sorted(active):
+            merged = sources.get(name, {}) if isinstance(sources.get(name), dict) else {}
+            check_one_source(name, merged, env, checklist, warnings)
+        return
+
+    # === Legacy-режим: активность по локальному enabled ===
+    enabled_count = 0
+    for src_name, src_cfg in sources.items():
+        if not isinstance(src_cfg, dict):
+            continue
+
+        # Вложенные источники (llm_cli.antigravity, llm_cli.codex)
+        if "enabled" not in src_cfg:
+            for sub_name, sub_cfg in src_cfg.items():
+                if isinstance(sub_cfg, dict) and sub_cfg.get("enabled"):
+                    enabled_count += 1
+                    check_one_source(f"{src_name}.{sub_name}", sub_cfg, env, checklist, warnings)
+            continue
+
+        if src_cfg.get("enabled"):
+            enabled_count += 1
+            check_one_source(src_name, src_cfg, env, checklist, warnings)
+
+    if enabled_count == 0:
+        warnings.append("Ни один источник в sources не enabled — Phase 2 будет пустой")
+
+
+def check_one_source(name: str, cfg: dict, env: dict, checklist: list, warnings: list):
+    # API key check
+    api_env = cfg.get("api_key_env")
+    if api_env and not env.get(api_env):
+        checklist.append(f"Добавить в .env: {api_env}= (для источника {name})")
+
+    # Script existence check
+    for key in ("script", "helper_script", "generator_script", "optimize_script"):
+        path = cfg.get(key)
+        if path:
+            expanded = pathlib.Path(os.path.expanduser(path))
+            if not expanded.exists():
+                warnings.append(f"{name}.{key} → {path} не существует (либо создай, либо отключи источник)")
+
+    # CLI existence check
+    cmd = cfg.get("cmd")
+    if cmd:
+        from shutil import which
+        if not which(cmd):
+            checklist.append(f"Установить CLI `{cmd}` (для источника {name})")
+
+    # delegate_to skill/agent check (warning only)
+    delegate = cfg.get("delegate_to")
+    if delegate:
+        # Простая эвристика: ищем в ~/.claude/agents/ и ~/.claude/skills/
+        home = pathlib.Path.home() / ".claude"
+        possible = [
+            home / "agents" / f"{delegate}.md",
+            home / "skills" / delegate / "SKILL.md",
+            home / "plugins" / delegate.split(":")[0] / "skills" / delegate.split(":")[-1] / "SKILL.md" if ":" in delegate else None,
+        ]
+        if not any(p and p.exists() for p in possible):
+            warnings.append(f"{name}.delegate_to={delegate} — не найден в ~/.claude/agents/ или ~/.claude/skills/")
+
+
+def check_publishing(cfg: dict, env: dict, checklist: list, warnings: list):
+    pub = cfg.get("publishing", {})
+    if not pub.get("enabled"):
+        return
+    env_vars = pub.get("env_vars", {})
+    for label, env_name in env_vars.items():
+        if env_name and not env.get(env_name):
+            checklist.append(f"Добавить в .env: {env_name}= (publishing.{label})")
+
+
+def check_content_rules(cfg: dict, warnings: list):
+    rules = cfg.get("content_rules", {})
+    if rules.get("stock_first", {}).get("enabled") and cfg.get("project_type") not in ("ecommerce", "local_business"):
+        warnings.append(f"content_rules.stock_first.enabled=true, но project_type={cfg.get('project_type')!r} — обычно stock-first нужен только для ecommerce")
+    if rules.get("fact_check", {}).get("enabled"):
+        results_dir = rules["fact_check"].get("results_dir")
+        if results_dir:
+            p = pathlib.Path(results_dir)
+            if not p.exists():
+                warnings.append(f"content_rules.fact_check.results_dir={results_dir} не существует — будет создан автоматом при первом fact-check")
+
+
+def check_artifacts(cfg: dict, project_root: pathlib.Path, warnings: list):
+    arts = cfg.get("artifacts", {})
+    for key, path in arts.items():
+        if path:
+            p = pathlib.Path(path)
+            if not p.is_absolute():
+                p = project_root / p
+            if not p.exists():
+                warnings.append(f"artifacts.{key}={path} не существует — будет создан автоматом")
+
+
+def check_observability_env(cfg: dict, env: dict, checklist: list, warnings: list):
+    """Проверка env vars для observability hub (Phase 9 fetchers)."""
+    sources = cfg.get("sources", {}) or {}
+    mon = cfg.get("monitoring", {}) or {}
+
+    # GSC (через делегат `claude-seo:seo-google`, но если хочется напрямую — gsc-fetch.py)
+    gsc = sources.get("google_search_console", {})
+    if gsc.get("enabled"):
+        if not env.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            checklist.append("Опц. в .env: GOOGLE_APPLICATION_CREDENTIALS=<path> (для gsc-fetch.py / ga4-fetch.py прямого вызова)")
+        if not env.get("GSC_SITE_URL"):
+            checklist.append("Опц. в .env: GSC_SITE_URL=sc-domain:example.com (для gsc-fetch.py)")
+
+    # GA4
+    if mon.get("google_analytics_4", {}).get("enabled") or sources.get("google_analytics_4", {}).get("enabled"):
+        if not env.get("GA4_PROPERTY_ID"):
+            checklist.append("Опц. в .env: GA4_PROPERTY_ID=<numeric_id> (для ga4-fetch.py)")
+
+    # PSI
+    psi = mon.get("pagespeed_insights", {})
+    if psi.get("enabled"):
+        # API key опционален — без него работает с rate limit
+        pass
+
+    # Яндекс (если yandex в engines)
+    yandex_engines = any(e.get("name") == "yandex" for e in cfg.get("engines", []))
+    if yandex_engines:
+        for src_name in ("yandex_metrika", "yandex_webmaster_history"):
+            s = sources.get(src_name, {})
+            if s.get("enabled"):
+                if not env.get("YANDEX_OAUTH_TOKEN"):
+                    checklist.append(f"Опц. в .env: YANDEX_OAUTH_TOKEN=<oauth_token> (для {src_name})")
+                    break
+        if sources.get("yandex_metrika", {}).get("enabled") and not env.get("YANDEX_METRIKA_COUNTER_ID"):
+            checklist.append("Опц. в .env: YANDEX_METRIKA_COUNTER_ID=<id> (для metrika-fetch.py)")
+        if sources.get("yandex_webmaster_history", {}).get("enabled"):
+            if not env.get("YANDEX_USER_ID"):
+                checklist.append("Опц. в .env: YANDEX_USER_ID=<id> (для webmaster-fetch.py)")
+            if not env.get("YANDEX_WEBMASTER_HOST_ID"):
+                checklist.append("Опц. в .env: YANDEX_WEBMASTER_HOST_ID=https:example.com:443 (для webmaster-fetch.py)")
+
+
+def check_v11_extensions(cfg: dict, env: dict, checklist: list, warnings: list):
+    """Опц. проверки для секций schema v1.1: mode, monitoring, eeat, migration, backlinks."""
+    mode = cfg.get("mode", "standard")
+    if mode not in ("standard", "migration", "programmatic"):
+        warnings.append(f"mode={mode!r} — неизвестное значение (ожидаем standard|migration|programmatic)")
+
+    if mode == "migration":
+        mig = cfg.get("migration", {})
+        if not mig.get("enabled"):
+            warnings.append("mode=migration, но migration.enabled=false — включи блок migration")
+        for f in ("old_domain", "new_domain", "redirects_file"):
+            if not mig.get(f):
+                warnings.append(f"migration.{f} не заполнено — обязательно для mode=migration")
+
+    mon = cfg.get("monitoring", {})
+    if mon.get("pagespeed_insights", {}).get("enabled"):
+        api_env = mon["pagespeed_insights"].get("api_key_env")
+        if api_env and not env.get(api_env):
+            checklist.append(f"Опц. в .env: {api_env}= (для PSI без ключа — rate limit ~25 req/day)")
+
+    eeat = cfg.get("eeat", {})
+    if eeat.get("enabled") and cfg.get("project_type") not in ("blog", "media", "ecommerce", "saas"):
+        warnings.append(f"eeat.enabled=true для project_type={cfg.get('project_type')!r} — обычно EEAT критичнее для blog/media/ecommerce")
+
+    bl = cfg.get("backlinks", {})
+    if bl.get("enabled") and bl.get("source") == "manual" and not pathlib.Path(bl.get("file","")).exists():
+        warnings.append(f"backlinks.enabled=true с source=manual, но файл {bl.get('file')} не существует")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("config", nargs="?", help="Путь к seo-cycle.yaml (по умолчанию — поиск в текущей директории)")
+    ap.add_argument("--quiet", action="store_true")
+    args = ap.parse_args()
+
+    if args.config:
+        cfg_path = pathlib.Path(args.config).resolve()
+        if not cfg_path.exists():
+            print(f"ERROR: {cfg_path} не найден", file=sys.stderr)
+            sys.exit(2)
+    else:
+        cfg_path = find_config(pathlib.Path.cwd())
+        if not cfg_path:
+            print(f"ERROR: seo-cycle.yaml не найден в {pathlib.Path.cwd()}", file=sys.stderr)
+            print(f"  Ожидаемые имена/места:", file=sys.stderr)
+            for p in CONFIG_SEARCH_PATHS:
+                print(f"    {p}", file=sys.stderr)
+            print(f"\n  Скопируй шаблон:", file=sys.stderr)
+            print(f"    cp ~/.claude/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml", file=sys.stderr)
+            sys.exit(2)
+
+    project_root = cfg_path.parent
+    if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
+        project_root = cfg_path.parent
+    elif "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
+        project_root = cfg_path.parent.parent
+
+    try:
+        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"ERROR: не могу распарсить YAML: {e}", file=sys.stderr)
+        sys.exit(2)
+
+    if not isinstance(cfg, dict):
+        print(f"ERROR: конфиг не является словарём", file=sys.stderr)
+        sys.exit(2)
+
+    env = load_env(project_root)
+
+    errors: list[str] = []
+    warnings: list[str] = []
+    checklist: list[str] = []
+
+    check_required(cfg, errors, warnings)
+    check_sources(cfg, env, checklist, warnings)
+    check_publishing(cfg, env, checklist, warnings)
+    check_content_rules(cfg, warnings)
+    check_artifacts(cfg, project_root, warnings)
+    check_v11_extensions(cfg, env, checklist, warnings)
+    check_observability_env(cfg, env, checklist, warnings)
+
+    print(f"== seo-cycle config validation ==")
+    print(f"  Config: {cfg_path}")
+    print(f"  Project root: {project_root}")
+    print(f"  Project: {cfg.get('project',{}).get('name','?')} ({cfg.get('project',{}).get('domain','?')})")
+    print(f"  Locale: {cfg.get('locale',{}).get('language','?')}-{cfg.get('locale',{}).get('country','?')} / {cfg.get('locale',{}).get('region','?')}")
+    print(f"  Type: {cfg.get('project_type','?')} on {cfg.get('cms','?')}")
+    print(f"  Engines: {', '.join(e.get('name','?') for e in cfg.get('engines', []))}")
+    print()
+
+    if errors:
+        print(f"❌ ERRORS ({len(errors)}):")
+        for e in errors:
+            print(f"  - {e}")
+        print()
+    if warnings:
+        print(f"⚠  WARNINGS ({len(warnings)}):")
+        for w in warnings:
+            print(f"  - {w}")
+        print()
+    if checklist:
+        print(f"📋 ЧЕК-ЛИСТ что подключить ({len(checklist)}):")
+        for c in checklist:
+            print(f"  [ ] {c}")
+        print()
+
+    if not errors and not warnings and not checklist:
+        print("✓ Конфиг полностью валиден, все источники готовы к запуску.")
+
+    sys.exit(1 if errors else 0)
+
+
+if __name__ == "__main__":
+    main()

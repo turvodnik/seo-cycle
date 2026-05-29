@@ -1,0 +1,21 @@
+# =============================================================================
+# projects-registry.yaml — индекс всех проектов под seo-cycle
+# =============================================================================
+# Один реестр на все проекты пользователя. monthly-runner.sh --all итерирует
+# по нему; init-project.sh дозаписывает сюда новый проект автоматически.
+#
+# Поля проекта:
+#   name           — человеческое имя
+#   path           — абсолютный путь к корню проекта (где лежит seo-cycle.yaml)
+#   region_profile — ru | eu | us | global
+#   cms            — wordpress | shopify | nextjs | static | ...
+#   status         — active | paused | archived
+#   monthly_automation — true/false (участвует ли в monthly-runner --all)
+
+projects:
+  - name: "Эмвуди"
+    path: "/Users/turvodnik/AI/emwoody"
+    region_profile: ru
+    cms: wordpress
+    status: active
+    monthly_automation: true
