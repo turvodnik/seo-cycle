@@ -16,6 +16,8 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
 # дальше в Claude Code / Codex: «запусти SEO-цикл для категории X»
 ```
 
+📖 **Полное руководство (RU + EN, подробно по каждому инструменту, фазе, команде, + инструкции для ИИ-автоустановки): [GUIDE.md](GUIDE.md)**
+
 Подробная установка — [INSTALL.md](INSTALL.md). История изменений — [CHANGELOG.md](CHANGELOG.md).
 
 ---
