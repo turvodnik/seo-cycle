@@ -1,5 +1,18 @@
 # Changelog — seo-cycle
 
+## [1.4.0] — 2026-05-29
+
+### Codex как основной мозг (гибридный двойной рантайм)
+
+Полная адаптация под сценарий, когда оркестратор — Codex CLI, а не Claude. Принцип гибрида: наши скрипты для уникального (РФ-источники, Serpstat/SpyFu, кэш, guard'ы, публикация); нативные Codex-skills для изображений/браузера/делегирования; **без `codex exec` самовызовов**.
+
+- **RUNTIME-режим:** `runtime: auto|claude|codex` в конфиге + env `SEO_RUNTIME`. Авто-детект Codex по env-признакам.
+- **`llm-cli-collect.sh`** — RUNTIME-aware: в codex-режиме запускает только `agy`, печатает промпт для нативного сбора Codex (web_search), без вложенного `codex exec`.
+- **`img-generate.sh`** — перенесён в скилл, RUNTIME-aware: claude → `codex exec` обёртка; codex → вывод `CODEX_NATIVE_IMAGE` для нативного `seo-image-gen`/`image`/`sora`. emwoody-версия стала тонким враппером.
+- **`docs/codex-runtime.md`** — полный маппинг Claude↔Codex (изображения, браузер, делегирование, сбор, фазы) + детект режима.
+- Заполнен `~/.codex/skills/codex-primary-runtime/SKILL.md` — точка входа для Codex-сессии.
+- `runtime` добавлен в `project.template.yaml`; секция RUNTIME в `SKILL.md`.
+
 ## [1.3.0] — 2026-05-29
 
 ### Слой данных + уведомления (Этап 1 автоматизации — без n8n/Next.js)

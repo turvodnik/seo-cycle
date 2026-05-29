@@ -1,6 +1,6 @@
 # seo-cycle
 
-**Версия 1.3.0** · универсальный SEO/контент-цикл-оркестратор для Claude Code и Codex CLI.
+**Версия 1.4.0** · универсальный SEO/контент-цикл-оркестратор для Claude Code и Codex CLI.
 
 Полный цикл продвижения сайта — от стратегии и сбора семантики до публикации, fact-check, мониторинга и итераций — управляемый через декларативный конфиг `seo-cycle.yaml`. Адаптируется под любой проект: язык, регион, поисковики, тип сайта, CMS, набор источников.
 
@@ -76,12 +76,12 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
 
 ## Runtime: Claude и Codex (двойной режим)
 
-Скилл рассчитан на **любой из двух «мозгов»**:
+Скилл рассчитан на **любой из двух «мозгов»** (`runtime: auto|claude|codex` / env `SEO_RUNTIME`):
 
-- **Claude Code** — точка входа `SKILL.md` (Skill tool распознаёт по frontmatter). Делегирование — через subagents.
-- **Codex CLI** — точка входа `AGENTS.md` (симлинк на `SKILL.md` — один и тот же контент). Отличия запуска (codex exec, делегирование, headless) — в [docs/codex-runtime.md](docs/codex-runtime.md).
+- **Claude Code** — точка входа `SKILL.md`. Делегирование — subagents; изображения/браузер — через `codex exec`-обёртки и Claude in Chrome MCP.
+- **Codex CLI** — точка входа `AGENTS.md` (симлинк на `SKILL.md`). **Гибрид:** наши скрипты для уникального (РФ-источники, Serpstat/SpyFu, кэш, публикация) + нативные Codex-skills для изображений (`seo-image-gen`/`image`/`sora`), браузера (`browser`/`playwright`) и делегирования (`dispatching-parallel-agents`). Без `codex exec` самовызовов.
 
-Логика фаз идентична; различается только механика вызова инструментов. Один источник правды, без дублирования.
+Логика 10 фаз идентична; различается механика вызова инструментов. Маппинг и детали — [docs/codex-runtime.md](docs/codex-runtime.md). Один источник правды, без дублирования.
 
 ---
 
