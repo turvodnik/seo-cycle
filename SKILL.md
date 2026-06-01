@@ -117,7 +117,15 @@ Phase 10 Iteration                    (cycle continues)
 - `local_business` → LocalBusiness schema, NAP-консистентность
 - `saas` → лендинги фич, документация, /pricing
 
-**Выход:** `01-audit.md` со списком проблем по приоритетам (P0/P1/P2).
+**Локальный аудит (если есть `business_profile.gbp_url`/`yandex_business_url` или офлайн-точка):**
+Сравнить с топ-3 конкурентами (`business_profile.competitors`) на **обеих** картах по чек-листу — это быстрые победы локального SEO:
+- **Категории/рубрики** — что есть у конкурентов, но не у нас (Google Categories + рубрики Яндекс.Бизнес/2ГИС).
+- **Отзывы** — число, оценка, скорость (план догона: `scripts/review-velocity.py`).
+- **Публикации** — частота постов конкурентов (GBP Posts + Яндекс.Бизнес Новости).
+- **Фото** — количество/типы/качество.
+Тактики и промпты — `prompts/local/` (`google-maps.md` + `yandex-maps.md`), оба рантайма через браузер. Для РФ приоритет Яндекс.Карты + 2ГИС.
+
+**Выход:** `01-audit.md` (+ `local/` подкаталог при локальном аудите) со списком проблем по приоритетам (P0/P1/P2).
 
 ---
 
@@ -374,6 +382,8 @@ python3 ~/.claude/skills/seo-cycle/scripts/schema-org-build.py inject schema/*.j
 - `delegate.yandex_specialist` — Я.Вебмастер + Метрика (если включено)
 
 **Cadence:** 2-недельные снапшоты в `09-monitoring/YYYY-MM-DD-snapshot.json` + markdown-надстройка `*.md` по `templates/monitoring-report.template.md`.
+
+**Локальный мониторинг (если локальный бизнес):** раз в месяц снимать прогресс vs конкуренты на обеих картах — скорость отзывов (`review-velocity.py`), новые категории/рубрики, частота постов, прирост фото. Промпты — `prompts/local/`. Отставание → задача в Phase 10.
 
 **Pipeline (observability hub):**
 

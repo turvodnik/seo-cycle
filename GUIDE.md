@@ -248,6 +248,15 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 | `obsidian-sync.py` | Зеркалирование артефактов в Obsidian | `python3 obsidian-sync.py` | заметки в vault |
 | `monthly-dashboard.py` | Markdown-дашборд статуса | `python3 monthly-dashboard.py` | отчёт |
 
+### 7.7 Локальное SEO (карты: Google + Яндекс/2ГИС)
+Тактики локального доминирования — парно для обеих карт-экосистем (для РФ приоритет Яндекс.Карты + 2ГИС). Промпты: `prompts/local/google-maps.md` + `prompts/local/yandex-maps.md` (категории/рубрики, скорость отзывов, календарь постов, визуальное доминирование, локальная видимость). Источник бизнеса/конкурентов — `business_profile` (`gbp_url`, `yandex_business_url`, `2gis_url`, `competitors[]`). Выполняются через браузер (Chrome MCP / browser-skill).
+
+| Скрипт | Что делает | Команда | Результат |
+|---|---|---|---|
+| `review-velocity.py` | План догона лидера по отзывам (Google/Яндекс/2ГИС) | `python3 review-velocity.py --my-total N --leader-total M --leader-30d X --my-target-30d Y` | сколько отзывов/мес нужно + срок догона |
+
+Уже покрыто другими инструментами: keyword gap → `serpstat-fetch competitors`/SpyFu; позиции 11-20 → `triggers-eval` (striking_distance); бэклинки → `seo-backlinks`/`seo-ahrefs`; общий GBP/NAP → плагин `seo-maps`/`seo-local`.
+
 ---
 
 ## <a id="фазы"></a>8. 10 фаз — что происходит по шагам
@@ -586,6 +595,15 @@ Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible
 | `deindex-detect.py` | Deindexation (sitemap vs GSC) | `python3 deindex-detect.py ...` | dropped URLs |
 | `obsidian-sync.py` | Mirror artifacts to Obsidian | `python3 obsidian-sync.py` | vault notes |
 | `monthly-dashboard.py` | Markdown status dashboard | `python3 monthly-dashboard.py` | report |
+
+### 7.7 Local SEO (maps: Google + Yandex/2GIS)
+Local-dominance tactics — paired for both map ecosystems (in Russia, Yandex.Maps + 2GIS take priority). Prompts: `prompts/local/google-maps.md` + `prompts/local/yandex-maps.md` (categories/rubrics, review velocity, posts calendar, visual dominance, local visibility). Business/competitor source — `business_profile` (`gbp_url`, `yandex_business_url`, `2gis_url`, `competitors[]`). Run via browser (Chrome MCP / browser-skill).
+
+| Script | What | Command | Output |
+|---|---|---|---|
+| `review-velocity.py` | Catch-up plan vs leader by reviews (Google/Yandex/2GIS) | `python3 review-velocity.py --my-total N --leader-total M --leader-30d X --my-target-30d Y` | reviews/month needed + catch-up time |
+
+Already covered elsewhere: keyword gap → `serpstat-fetch competitors`/SpyFu; positions 11-20 → `triggers-eval` (striking_distance); backlinks → `seo-backlinks`/`seo-ahrefs`; general GBP/NAP → `seo-maps`/`seo-local` plugins.
 
 ---
 
