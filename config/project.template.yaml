@@ -225,6 +225,12 @@ sources:
     enabled: false
     requires_paid_subscription: true
     delegate_to: "claude-seo:seo-dataforseo"
+  keyso:
+    # Keys.so — Яндекс/РФ-данные (Wordstat-частоты, видимость, конкуренты, lost).
+    # Вкл/выкл — из region_profile (ru/global). Лимит 10 запросов/10сек.
+    api_key_env: KEYSO_API_TOKEN
+    base: msk                     # региональная база (msk = Яндекс Москва)
+    helper_script: ~/.claude/skills/seo-cycle/scripts/keyso-fetch.py
   serpstat:
     # Вкл/выкл — из region_profile (поддерживает g_ru/g_ua/g_us/... включая РФ).
     api_key_env: SERPSTAT_API_KEY

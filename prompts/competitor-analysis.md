@@ -13,7 +13,9 @@ Ease). Метод — 7 шагов (адаптировано из практик
 1. **Цель и сегмент.** Что приоритетно (трафик / опт / локальные заявки), под какой сегмент (частник / бригада / закупщик).
 2. **Список конкурентов (10-15).** Из `business_profile.competitors` + выдача по `target_local_keywords`. Для РФ — и органика, и Яндекс.Карты/2ГИС.
 3. **Источники данных** (используем уже имеющиеся, бережём лимиты):
-   - Keyword gap: `serpstat-fetch.py competitors "<ключ>"` / `domain-keywords` (РФ, `g_ru`); SpyFu для запада; Keys.so (когда подключишь).
+   - Keyword gap: `serpstat-fetch.py competitors "<ключ>"` / `domain-keywords` (РФ Google `g_ru`); **`keyso-fetch.py competitors <домен>`** (Яндекс-данные РФ: видимость, топ-10, конкуренты); SpyFu для запада.
+   - Яндекс-частоты/ключи: `keyso-fetch.py keyword-info "<ключ>"` (ws/wsk/kei/cpc) и `keyso-fetch.py keywords <домен>`.
+   - Потерянные ключи: `keyso-fetch.py lost <домен>` (Яндекс) + `lost-keywords.py` (по снапшотам GSC).
    - Позиции 11-20: `gsc-fetch.py` + `triggers-eval.py` (striking_distance).
    - Бэклинки: плагины `seo-backlinks` / `seo-ahrefs`.
    - Локальное (карты): `prompts/local/` (категории, отзывы, посты, фото).

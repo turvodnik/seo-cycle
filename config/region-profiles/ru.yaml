@@ -31,6 +31,7 @@ sources_enable:
   - google_trends
   - google_suggest
   - serpstat              # даёт Google-РФ (g_ru) volume/KD/конкурентов — закрывает дыру Ahrefs/SEMrush
+  - keyso                 # Keys.so — Яндекс-данные РФ (Wordstat-частоты, видимость, конкуренты, lost)
   - neuronwriter
   - llm_cli
   - answerthepublic

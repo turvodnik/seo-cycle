@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.12.0] — 2026-05-30
+
+### Keys.so — Яндекс/РФ источник данных
+
+- **`scripts/keyso-fetch.py`** — клиент Keys.so API (header `X-Keyso-TOKEN`, лимит 10 req/10сек + 429-retry, кэш 30 дней). Подкоманды: `keyword-info` (Wordstat-частоты ws/wsk/kei/cpc), `keywords` (ключи домена + позиции), `competitors` (видимость, топ-10/3, реклама), `lost` (потерянные ключи). Сильная сторона — **Яндекс-данные для РФ**, дополняет Wordstat (частоты) и Serpstat (Google).
+- Добавлен в `region-profiles` ru + global (РФ-сервис; не eu/us), `seo-cycle.yaml` emwoody + `project.template.yaml`, `.env.example` (`KEYSO_API_TOKEN`).
+- В `prompts/competitor-analysis.md` — Keys.so в источниках (конкуренты/частоты/lost).
+- GUIDE.md (RU+EN) + CLAUDE.md emwoody — таблицы источников.
+
 ## [1.11.0] — 2026-05-30
 
 ### Маркетинг-слой: стратегия → результат (замыкает полноценный маркетинг)

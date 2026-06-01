@@ -25,6 +25,7 @@ sources_enable:
   - semrush
   - serpstat
   - spyfu                 # западные рынки (US/UK/EU); РФ не покрывает
+  - keyso                 # Keys.so — Яндекс/РФ-данные (если среди рынков есть РФ/СНГ)
   - yandex_wordstat
   - yandex_suggest
   - neuronwriter
