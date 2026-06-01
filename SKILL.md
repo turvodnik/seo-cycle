@@ -389,6 +389,14 @@ python3 ~/.claude/skills/seo-cycle/scripts/schema-org-build.py inject schema/*.j
 
 **Локальный мониторинг (если локальный бизнес):** раз в месяц снимать прогресс vs конкуренты на обеих картах — скорость отзывов (`review-velocity.py`), новые категории/рубрики, частота постов, прирост фото. Промпты — `prompts/local/`. Отставание → задача в Phase 10.
 
+**Потерянные ключи:** сравнить текущий снапшот с прошлым — `scripts/lost-keywords.py --old <prev> --new <cur>` (выпавшие/просевшие ключи → refresh + перелинковка).
+
+**AI-visibility (GEO):** свод присутствия в Яндекс Нейро / Google AI Overviews / ChatGPT / Perplexity — промпт `prompts/ai-visibility.md` (+ плагины `seo-geo`/`seo-seranking`).
+
+**Медианный бенчмарк по конкурентам:** `scripts/competitor-benchmark.py` — где мы ниже медианы топ-N (ключи/бэклинки/отзывы/посты/фото) → приоритеты в roadmap (ICE).
+
+**Реклама + соцсети:** разведка платной выдачи и соцактивности конкурентов + генерация объявлений/постов (Директ/VK/TG/Дзен) — промпт `prompts/ad-and-social.md`.
+
 **Pipeline (observability hub):**
 
 ```

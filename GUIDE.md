@@ -217,6 +217,8 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 | `webmaster-fetch.py` | Яндекс.Вебмастер запросы | `python3 webmaster-fetch.py ...` |
 | `metrika-fetch.py` | Яндекс.Метрика | `python3 metrika-fetch.py ...` |
 | `snapshot-build.py` | Сводит источники в единый snapshot | `python3 snapshot-build.py ...` → `*-snapshot.json` |
+| `lost-keywords.py` | Потерянные/просевшие ключи между двумя снапшотами | `python3 lost-keywords.py --old O.json --new N.json` |
+| `competitor-benchmark.py` | Медианный бенчмарк по конкурентам (где мы ниже) | `python3 competitor-benchmark.py bench.csv --md` |
 
 ### 7.4 Контент, E-E-A-T, качество
 | Скрипт | Что делает | Команда | Результат |
@@ -569,6 +571,8 @@ Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible
 | `webmaster-fetch.py` | Yandex.Webmaster queries | `python3 webmaster-fetch.py ...` |
 | `metrika-fetch.py` | Yandex.Metrika | `python3 metrika-fetch.py ...` |
 | `snapshot-build.py` | Merges sources into one snapshot | `python3 snapshot-build.py ...` → `*-snapshot.json` |
+| `lost-keywords.py` | Lost/dropped keywords between two snapshots | `python3 lost-keywords.py --old O.json --new N.json` |
+| `competitor-benchmark.py` | Median benchmark vs competitors (where you're below) | `python3 competitor-benchmark.py bench.csv --md` |
 
 ### 7.4 Content, E-E-A-T, quality
 | Script | What | Command | Output |
