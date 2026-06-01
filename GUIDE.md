@@ -204,6 +204,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 | `keyso-fetch.py` | **Keys.so — Яндекс/РФ**: Wordstat-частоты, видимость, конкуренты, потерянные ключи | `python3 keyso-fetch.py competitors <домен>` / `keyword-info "<ключ>"` / `lost <домен>` | md-таблица; кэш; лимит 10/10сек |
 | `competitor-discovery.py` | Поиск **максимально похожих конкурентов** через топ выдачи по коммерч. ключам (Keys.so) | `python3 competitor-discovery.py "ключ1" "ключ2" --exclude-giants` | ранжированный список конкурентов + флаг гигантов |
 | `keyso-save.py` | Сохранить группу доменов (конкуренты) **в кабинет Keys.so** (write-API `/report/group`) | `python3 keyso-save.py group-report --from-config` | rid отчёта в Keys.so |
+| `keyso-clustering-export.py` | Подготовить файл ключей для clustering Keys.so (загрузка — браузером, см. `prompts/keyso-clustering-upload.md`) | `python3 keyso-clustering-export.py --from-keyso-cache <домен> --out keys.txt` | .txt по ключу на строку |
 | `spyfu-fetch.py` | Competitor/PPC US/UK/EU (не РФ) | `python3 spyfu-fetch.py domain-stats <domain> --cc US` | md-таблица; usage-трекер $-бюджета |
 | `atp-fetch.py` | Шаблоны вопросов AnswerThePublic (en/us) | `python3 atp-fetch.py "<en keyword>"` | md с questions/prepositions/comparisons |
 | `nw-cli.sh` | NeuronWriter: SERP terms/entities/score | `bash nw-cli.sh get <query_id>` | terms, entities, competitors, target score |
@@ -572,6 +573,7 @@ Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible
 | `keyso-fetch.py` | **Keys.so — Yandex/RU**: Wordstat volumes, visibility, competitors, lost keywords | `python3 keyso-fetch.py competitors <domain>` / `keyword-info "<kw>"` / `lost <domain>` | md table; cache; 10/10s limit |
 | `competitor-discovery.py` | Find **closest competitors** via SERP top of commercial keywords (Keys.so) | `python3 competitor-discovery.py "kw1" "kw2" --exclude-giants` | ranked competitor list + giants flag |
 | `keyso-save.py` | Save a domain group (competitors) **into the Keys.so account** (write-API `/report/group`) | `python3 keyso-save.py group-report --from-config` | report rid in Keys.so |
+| `keyso-clustering-export.py` | Prepare keyword file for Keys.so clustering (upload via browser, see `prompts/keyso-clustering-upload.md`) | `python3 keyso-clustering-export.py --from-keyso-cache <domain> --out keys.txt` | .txt one keyword per line |
 | `spyfu-fetch.py` | Competitor/PPC US/UK/EU (not RU) | `python3 spyfu-fetch.py domain-stats <domain> --cc US` | md table; $-budget tracker |
 | `atp-fetch.py` | AnswerThePublic question templates (en/us) | `python3 atp-fetch.py "<en keyword>"` | md questions/prepositions/comparisons |
 | `nw-cli.sh` | NeuronWriter: SERP terms/entities/score | `bash nw-cli.sh get <query_id>` | terms, entities, competitors, target score |
