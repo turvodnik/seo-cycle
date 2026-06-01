@@ -467,6 +467,18 @@ notifications:
   chat_id_env: TELEGRAM_CHAT_ID
 
 # -----------------------------------------------------------------------------
+# 14c. Marketing — мостики к плагину marketing-skills (опционально).
+# seo-cycle = органика/контент; marketing-skills = платный трафик/CRO/удержание.
+# Маппинг и РФ-адаптация — docs/marketing-bridges.md.
+# -----------------------------------------------------------------------------
+marketing:
+  enabled: false                      # opt-in (нужен установленный плагин marketing-skills)
+  plugin: marketing-skills
+  bridges_doc: "~/.claude/skills/seo-cycle/docs/marketing-bridges.md"
+  rf_adaptation: false                # true для РФ → РФ-каналы (Директ/VK/Метрика/2ГИС)
+  relevant_skills: [page-cro, form-cro, copywriting, customer-research, pricing-strategy]
+
+# -----------------------------------------------------------------------------
 # 15. Obsidian vault (опционально) — зеркало контента + граф связей
 # -----------------------------------------------------------------------------
 # Включи, если хочешь визуализировать граф сущностей, использовать backlinks,

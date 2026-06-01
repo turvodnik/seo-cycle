@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.8.0] — 2026-05-30
+
+### Маркетинговые мостики (marketing-skills) + РФ-адаптация каналов
+
+Связка с плагином `marketing-skills` (Corey Haines) — без дублирования его кода.
+- **`docs/marketing-bridges.md`** — карта «фаза seo-cycle → релевантный marketing-skill» + **таблица РФ-замен каналов** (Google Ads→Яндекс.Директ, Meta→VK/Telegram, GA→Метрика, каталоги→2ГИС/Яндекс.Бизнес, Stripe→ЮKassa, отзывы→Яндекс.Карты/2ГИС, +RuStore). Что НЕ дублировать (SEO-скиллы плагина).
+- **Секция `marketing`** в `seo-cycle.yaml` (emwoody: enabled + rf_adaptation + rf_channel_map + relevant_skills) и в `project.template.yaml` (opt-in).
+- **Мостик в Phase 7** SKILL.md: после публикации → CRO через marketing-skills с РФ-адаптацией каналов.
+- GUIDE.md (RU+EN): раздел 7.8.
+
 ## [1.7.0] — 2026-05-30
 
 ### Локальный SEO-модуль (карты: Google + Яндекс/2ГИС)

@@ -343,6 +343,8 @@ python3 ~/.claude/skills/seo-cycle/scripts/eeat-render.py 06-drafts/<name>.publi
 6. Verify через GET
 7. Лог в `artifacts.publish_log`
 
+**Маркетинговый мостик (если `marketing.enabled`):** после публикации — поднять конверсию страницы через плагин `marketing-skills` (`page-cro` / `form-cro` / `popup-cro`). Каналы привлечения/удержания (`paid-ads`, `social-content`, `email-sequence`, `referral-program`) — **с РФ-адаптацией** (Яндекс.Директ / VK / Telegram / Метрика / 2ГИС вместо западных). Карта мостиков и замен каналов — `docs/marketing-bridges.md`.
+
 **Выход:** `07-published.md` — URL + дата каждой публикации.
 
 ---
