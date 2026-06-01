@@ -1,5 +1,13 @@
 # Changelog — seo-cycle
 
+## [1.14.0] — 2026-05-30
+
+### keyso-save.py — сохранение конкурентов в кабинет Keys.so (write-API)
+
+- **`scripts/keyso-save.py`** — `group-report`: сохраняет группу доменов (свой + конкуренты) в кабинет Keys.so через `POST /report/group` (рабочий write-эндпоинт). `--from-config` берёт домены из `business_profile.competitors`. Возвращает rid отчёта.
+- Разведка write-API Keys.so: реально доступен только групповой отчёт; `clustering/my_projects/position-monitoring` через API отвечают "Method not allowed" (только UI). Поэтому **семантика и кластеризация хранятся у нас** (seo/cycles + seo.db + Obsidian), в Keys.so сохраняется групповой отчёт конкурентов.
+- GUIDE.md (RU+EN) — keyso-save в таблицах.
+
 ## [1.13.0] — 2026-05-30
 
 ### competitor-discovery.py — поиск максимально похожих конкурентов
