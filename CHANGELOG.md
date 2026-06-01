@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.16.0] — 2026-05-30
+
+### Оптимизация расхода Keys.so (Professional-тариф)
+
+- **Кэш TTL 30→60 дней** в `keyso-fetch.py` и `competitor-discovery.py` — повторный сбор темы в пределах 60д = 0 обращений к API (главная экономия лимита).
+- **Usage-трекер** в `keyso-fetch.py` — счётчик реальных запросов за месяц в `seo/research/keyso/_usage.json` (cache-hit не считается); печатает расход в stderr.
+- Секция `keyso` в конфиге расширена: `plan: professional`, `cache_ttl_days: 60`, `rate_limit`, `monthly_request_budget` (впиши лимит из кабинета для guard).
+- Принципы экономии задокументированы (keyword-info — 1 запрос/ключ без batch; competitor-discovery агрегирует топы за немного запросов; крупный per_page = больше данных за проверку).
+- GUIDE.md (RU+EN) — обновлены ячейки Keys.so.
+
 ## [1.15.0] — 2026-05-30
 
 ### Кластеризация в Keys.so через браузер (clustering API закрыт)

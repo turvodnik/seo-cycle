@@ -15,8 +15,9 @@ Endpoint Keys.so, auth X-Keyso-TOKEN (env KEYSO_API_TOKEN), лимит 10/10се
   python3 competitor-discovery.py --file seeds.txt --md
   (--file — по ключу на строку)
 
-Опции: --base msk | --top N (глубина топа на ключ, default 20) | --ttl 30 | --md
+Опции: --base msk | --top N (глубина топа на ключ, default 20) | --ttl 60 | --md
         --exclude-giants (скрыть известные маркетплейсы/сети из вывода)
+Расход: кэш TTL 60д — повторный прогон тех же ключей не тратит лимит Keys.so.
 """
 
 from __future__ import annotations
@@ -80,7 +81,7 @@ def main() -> int:
     ap.add_argument("--file", help="файл с ключами (по одному на строку)")
     ap.add_argument("--base", default="msk")
     ap.add_argument("--top", type=int, default=20, help="глубина топа на ключ")
-    ap.add_argument("--ttl", type=float, default=30)
+    ap.add_argument("--ttl", type=float, default=60)
     ap.add_argument("--exclude-giants", action="store_true")
     ap.add_argument("--md", action="store_true")
     args = ap.parse_args()

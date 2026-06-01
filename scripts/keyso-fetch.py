@@ -14,7 +14,9 @@ Endpoint: https://api.keys.so · Auth: header X-Keyso-TOKEN (env KEYSO_API_TOKEN
   competitors  DOMAIN           — домены-конкуренты (видимость, топ-10, реклама)
   lost         DOMAIN           — потерянные ключи домена
 
-Опции: --base msk (региональная база) | --per-page 50 | --ttl 30 | --out DIR | --md
+Опции: --base msk (региональная база) | --per-page 50 | --ttl 60 | --out DIR | --md
+Расход: кэш на диск (TTL 60д) + локальный счётчик запросов (_usage.json). Повторный
+запрос той же темы в пределах TTL = 0 обращений к API (экономия лимита Pro-тарифа).
 
 Пример:
   python3 keyso-fetch.py keyword-info "минеральная вата"
@@ -51,6 +53,25 @@ def load_token() -> str:
     sys.exit("ERROR: KEYSO_API_TOKEN не найден (env или .env)")
 
 
+def bump_usage(out_dir, n=1):
+    """Локальный счётчик реальных запросов Keys.so (месячный сброс) — визибилити расхода."""
+    import datetime
+    f = pathlib.Path(out_dir) / "_usage.json"
+    month = datetime.date.today().strftime("%Y-%m")
+    u = {"month": month, "requests": 0}
+    if f.exists():
+        try:
+            old = json.loads(f.read_text())
+            if old.get("month") == month:
+                u = old
+        except Exception:
+            pass
+    u["requests"] = u.get("requests", 0) + n
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(u, ensure_ascii=False, indent=2), encoding="utf-8")
+    return u["requests"]
+
+
 def call(token: str, path: str, params: dict, _retry=True):
     wait = RATE_DELAY - (time.time() - _LAST[0])
     if wait > 0:
@@ -61,7 +82,10 @@ def call(token: str, path: str, params: dict, _retry=True):
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             _LAST[0] = time.time()
-            return json.loads(r.read())
+            data = json.loads(r.read())
+            cnt = bump_usage(CACHE_DIR := pathlib.Path("./seo/research/keyso"))
+            print(f"  [keyso usage: {cnt} запросов за месяц]", file=sys.stderr)
+            return data
     except urllib.error.HTTPError as e:
         _LAST[0] = time.time()
         if e.code == 429 and _retry:
@@ -107,7 +131,7 @@ def main() -> int:
     ap.add_argument("arg", help="keyword или domain")
     ap.add_argument("--base", default="msk", help="региональная база Keys.so (msk=Яндекс Москва)")
     ap.add_argument("--per-page", type=int, default=50)
-    ap.add_argument("--ttl", type=float, default=30)
+    ap.add_argument("--ttl", type=float, default=60, help="кэш в днях (дефолт 60 — экономия лимита)")
     ap.add_argument("--out", default="./seo/research/keyso")
     ap.add_argument("--md", action="store_true")
     args = ap.parse_args()
