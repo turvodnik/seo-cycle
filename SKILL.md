@@ -125,7 +125,9 @@ Phase 10 Iteration                    (cycle continues)
 - **Фото** — количество/типы/качество.
 Тактики и промпты — `prompts/local/` (`google-maps.md` + `yandex-maps.md`), оба рантайма через браузер. Для РФ приоритет Яндекс.Карты + 2ГИС.
 
-**Выход:** `01-audit.md` (+ `local/` подкаталог при локальном аудите) со списком проблем по приоритетам (P0/P1/P2).
+**Конкурентный анализ + ICE:** свести данные конкурентов (Serpstat/SpyFu/Keys.so/local/GSC) в приоритизированный список быстрых побед — метод `prompts/competitor-analysis.md` (7 шагов) + `scripts/ice-score.py` (Impact×Confidence×Ease). Топ quick-wins → в roadmap (Phase 3/5) и `keyword-queue`.
+
+**Выход:** `01-audit.md` (+ `local/` подкаталог при локальном аудите, `competitor-analysis.md` при конкурентном) со списком проблем по приоритетам (P0/P1/P2 или ICE).
 
 ---
 

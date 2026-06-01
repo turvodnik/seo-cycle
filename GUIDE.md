@@ -226,6 +226,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 | `eeat-render.py` | Trust-блок «Источники» из `fact_check_log` | `python3 eeat-render.py <publish.md>` | HTML-блок источников |
 | `schema-validate.py` | Валидация JSON-LD | `python3 schema-validate.py <file>` | ошибки/предупреждения |
 | `source-attribution.py` | Какой источник дал ключи в топ | `python3 source-attribution.py --csv ... --snapshot ...` | таблица отдачи + рекомендации отключить слабые |
+| `ice-score.py` | ICE-приоритизация находок (конкурентный анализ/аудит) | `python3 ice-score.py findings.csv --md` | список по ICE (Impact×Confidence×Ease) с зонами 🔥/✅/⏳ |
 | `programmatic-template-gen.py` | Программатик-страницы (город×категория) | `python3 programmatic-template-gen.py ...` | шаблоны страниц |
 | `validate-entities.py` | Проверка реестра сущностей | `python3 validate-entities.py` | кросс-ссылки/ошибки |
 
@@ -577,6 +578,7 @@ Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible
 | `eeat-render.py` | "Sources" trust-block from `fact_check_log` | `python3 eeat-render.py <publish.md>` | HTML sources block |
 | `schema-validate.py` | JSON-LD validation | `python3 schema-validate.py <file>` | errors/warnings |
 | `source-attribution.py` | Which source produced top-ranking keywords | `python3 source-attribution.py --csv ... --snapshot ...` | yield table + disable-weak recommendations |
+| `ice-score.py` | ICE prioritization of findings (competitor analysis/audit) | `python3 ice-score.py findings.csv --md` | list by ICE (Impact×Confidence×Ease) with zones 🔥/✅/⏳ |
 | `programmatic-template-gen.py` | Programmatic pages (city×category) | `python3 programmatic-template-gen.py ...` | page templates |
 | `validate-entities.py` | Entity registry check | `python3 validate-entities.py` | cross-links/errors |
 

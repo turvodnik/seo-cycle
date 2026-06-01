@@ -1,5 +1,17 @@
 # Changelog — seo-cycle
 
+## [1.9.0] — 2026-05-30
+
+### Конкурентный анализ + ICE-приоритизация
+
+Из практики РФ-SEO (статья sostav): единый метод свести разрозненные конкурентные данные и приоритизировать находки.
+- **`scripts/ice-score.py`** — приоритизация находок по ICE (Impact×Confidence×Ease, 1..10): сортировка + зоны 🔥 quick-win / ✅ do / ⏳ later. Вход CSV (`finding,impact,confidence,ease,source,note`).
+- **`prompts/competitor-analysis.md`** — 7-шаговый метод: цель → конкуренты → источники (Serpstat/SpyFu/Keys.so/local/GSC, без дублирования сбора) → измерения → ICE → roadmap 1-6 мес → мониторинг. РФ-приоритет (Яндекс + Карты/2ГИС), инсайт «надёжность/экспертиза > цена».
+- Мостик в Phase 1 SKILL.md (audit → конкурентный анализ + ICE → quick-wins в roadmap/keyword-queue).
+- GUIDE.md (RU+EN): `ice-score.py` в таблицах инструментов.
+
+(Остальное из присланного — ruflo/cybersecurity-skills/habr — оценено как оверинжиниринг / вне scope / уже реализовано; не внедрялось.)
+
 ## [1.8.0] — 2026-05-30
 
 ### Маркетинговые мостики (marketing-skills) + РФ-адаптация каналов
