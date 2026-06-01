@@ -1,5 +1,12 @@
 # Changelog — seo-cycle
 
+## [1.17.0] — 2026-05-30
+
+### Установка одной командой (Codex + Claude)
+
+- **`install-codex.sh`** — `curl -sL .../install-codex.sh | bash`: идемпотентно клонирует/обновляет ядро `seo-cycle` (+ `seo-keywords`), ставит зависимости (pyyaml/requests), создаёт симлинк `~/.codex/skills/seo-cycle` для Codex, чинит `AGENTS.md`, печатает следующие шаги (init-project + AGENTS.md + .env + SEO_RUNTIME=codex).
+- README: one-command установка в TL;DR.
+
 ## [1.16.0] — 2026-05-30
 
 ### Оптимизация расхода Keys.so (Professional-тариф)

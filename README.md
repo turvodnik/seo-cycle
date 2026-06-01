@@ -9,12 +9,17 @@
 ## TL;DR
 
 ```bash
-pip3 install pyyaml requests
+# Установка одной командой (Codex + Claude): clone + deps + симлинки
+curl -sL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install-codex.sh | bash
+
+# затем в корне своего проекта:
 cd <свой-проект>
 ~/.claude/skills/seo-cycle/scripts/init-project.sh        # wizard → seo-cycle.yaml
 python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
 # дальше в Claude Code / Codex: «запусти SEO-цикл для категории X»
 ```
+
+Ручная установка и Codex-режим (AGENTS.md, SEO_RUNTIME) — в [INSTALL.md](INSTALL.md) и [docs/codex-runtime.md](docs/codex-runtime.md).
 
 📖 **Полное руководство (RU + EN, подробно по каждому инструменту, фазе, команде, + инструкции для ИИ-автоустановки): [GUIDE.md](GUIDE.md)**
 
