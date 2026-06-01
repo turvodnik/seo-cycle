@@ -202,6 +202,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 | `google-trends.py` | Сезонность/тренды | `python3 google-trends.py "<тема>" --region RU` | markdown с трендом |
 | `serpstat-fetch.py` | Volume/KD/CPC + конкуренты (вкл. РФ `g_ru`) | `python3 serpstat-fetch.py keywords-info "<ключ>" --se g_ru` | md-таблица; кэш; guard кредитов (`stats` — остаток) |
 | `keyso-fetch.py` | **Keys.so — Яндекс/РФ**: Wordstat-частоты, видимость, конкуренты, потерянные ключи | `python3 keyso-fetch.py competitors <домен>` / `keyword-info "<ключ>"` / `lost <домен>` | md-таблица; кэш; лимит 10/10сек |
+| `competitor-discovery.py` | Поиск **максимально похожих конкурентов** через топ выдачи по коммерч. ключам (Keys.so) | `python3 competitor-discovery.py "ключ1" "ключ2" --exclude-giants` | ранжированный список конкурентов + флаг гигантов |
 | `spyfu-fetch.py` | Competitor/PPC US/UK/EU (не РФ) | `python3 spyfu-fetch.py domain-stats <domain> --cc US` | md-таблица; usage-трекер $-бюджета |
 | `atp-fetch.py` | Шаблоны вопросов AnswerThePublic (en/us) | `python3 atp-fetch.py "<en keyword>"` | md с questions/prepositions/comparisons |
 | `nw-cli.sh` | NeuronWriter: SERP terms/entities/score | `bash nw-cli.sh get <query_id>` | terms, entities, competitors, target score |
@@ -568,6 +569,7 @@ Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible
 | `google-trends.py` | Seasonality/trends | `python3 google-trends.py "<topic>" --region RU` | markdown trend |
 | `serpstat-fetch.py` | Volume/KD/CPC + competitors (incl. RU `g_ru`) | `python3 serpstat-fetch.py keywords-info "<kw>" --se g_ru` | md table; cache; credit guard (`stats`) |
 | `keyso-fetch.py` | **Keys.so — Yandex/RU**: Wordstat volumes, visibility, competitors, lost keywords | `python3 keyso-fetch.py competitors <domain>` / `keyword-info "<kw>"` / `lost <domain>` | md table; cache; 10/10s limit |
+| `competitor-discovery.py` | Find **closest competitors** via SERP top of commercial keywords (Keys.so) | `python3 competitor-discovery.py "kw1" "kw2" --exclude-giants` | ranked competitor list + giants flag |
 | `spyfu-fetch.py` | Competitor/PPC US/UK/EU (not RU) | `python3 spyfu-fetch.py domain-stats <domain> --cc US` | md table; $-budget tracker |
 | `atp-fetch.py` | AnswerThePublic question templates (en/us) | `python3 atp-fetch.py "<en keyword>"` | md questions/prepositions/comparisons |
 | `nw-cli.sh` | NeuronWriter: SERP terms/entities/score | `bash nw-cli.sh get <query_id>` | terms, entities, competitors, target score |

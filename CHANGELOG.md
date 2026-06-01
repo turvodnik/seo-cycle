@@ -1,5 +1,13 @@
 # Changelog — seo-cycle
 
+## [1.13.0] — 2026-05-30
+
+### competitor-discovery.py — поиск максимально похожих конкурентов
+
+- **`scripts/competitor-discovery.py`** — находит прямых бизнес-конкурентов через агрегацию топа выдачи Яндекса по коммерческим seed-ключам (Keys.so `keyword_dashboard.top[]`), а не через `concurents` по домену (который врёт, если сайт ранжируется блогом). Ранжирует по числу ключей в топе + видимости, помечает/исключает гигантов (`--exclude-giants`). Кэш, троттлинг 10/10сек.
+- Обкатано на emwoody: топ похожих — shop.tn.ru, strd.ru, tstn.ru, msk.saturn.net; занесены в `business_profile.competitors`.
+- GUIDE.md (RU+EN) — в таблицах источников.
+
 ## [1.12.0] — 2026-05-30
 
 ### Keys.so — Яндекс/РФ источник данных
