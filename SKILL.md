@@ -91,7 +91,9 @@ Phase 10 Iteration                    (cycle continues)
    - Сроки: разовая кампания или регулярный цикл?
    - Глубина: только семантика, до publish, или до monitoring?
 
-**Выход:** `<cycles_root>/<topic>/00-discovery.md` с зафиксированными целями и snapshot config.
+**Маркетинг-стратегия (если `marketing.enabled` и цель шире SEO):** оценить, нужна ли платная реклама или хватит органики+локалки — `prompts/marketing-strategy.md` + `scripts/roi-calc.py` (воронка/ROI/ДРР по каналам). Реклама — только при дефиците объёма с ROI>0. Каналы дистрибуции и маркетплейсы — `prompts/distribution-channels.md`. Единый план — `prompts/marketing-calendar.md`.
+
+**Выход:** `<cycles_root>/<topic>/00-discovery.md` с зафиксированными целями и snapshot config (+ `marketing-strategy.md` при маркетинг-цели).
 
 ---
 

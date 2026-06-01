@@ -229,6 +229,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 | `schema-validate.py` | Валидация JSON-LD | `python3 schema-validate.py <file>` | ошибки/предупреждения |
 | `source-attribution.py` | Какой источник дал ключи в топ | `python3 source-attribution.py --csv ... --snapshot ...` | таблица отдачи + рекомендации отключить слабые |
 | `ice-score.py` | ICE-приоритизация находок (конкурентный анализ/аудит) | `python3 ice-score.py findings.csv --md` | список по ICE (Impact×Confidence×Ease) с зонами 🔥/✅/⏳ |
+| `roi-calc.py` | Воронка и ROI/CAC/ДРР по каналам — «конечный результат» в деньгах | `python3 roi-calc.py funnel.csv --margin 0.3` | таблица каналов + вердикт «что окупается / нужна ли реклама» |
 | `programmatic-template-gen.py` | Программатик-страницы (город×категория) | `python3 programmatic-template-gen.py ...` | шаблоны страниц |
 | `validate-entities.py` | Проверка реестра сущностей | `python3 validate-entities.py` | кросс-ссылки/ошибки |
 
@@ -262,6 +263,16 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 
 ### 7.8 Маркетинговые мостики (marketing-skills + РФ-адаптация)
 Плагин `marketing-skills` (CRO, платный трафик, удержание, монетизация) дополняет seo-cycle. Включается секцией `marketing` в конфиге. Карта «фаза → скилл» и **РФ-замены каналов** (Яндекс.Директ вместо Google Ads, VK/Telegram вместо Meta, Метрика, 2ГИС/Яндекс.Бизнес, ЮKassa) — в `docs/marketing-bridges.md`. Связка: seo-cycle (органика) → `page-cro`/`form-cro` (конверсия) → `referral-program`/`email-sequence` (удержание). SEO-скиллы плагина НЕ дублируем — ведём через seo-cycle.
+
+### 7.9 Маркетинг-слой (стратегия → результат)
+Верхний слой над органикой — стратегия и измерение результата в деньгах:
+- `prompts/marketing-strategy.md` — цели → **нужна ли реклама** (на цифрах через `roi-calc.py`) → медиаплан/бюджет → KPI.
+- `roi-calc.py` — воронка трафик→лиды→заказы→выручка, ROI/CAC/ДРР по каналам, вердикт окупаемости.
+- `prompts/distribution-channels.md` — каналы РФ (email/Telegram/видео) + **товарные фиды/маркетплейсы** (Яндекс.Маркет, Озон, Google Merchant).
+- `prompts/orm.md` — мониторинг отзывов + алерт на негатив (`notify.py`).
+- `prompts/marketing-calendar.md` — единый календарь SEO+соцсети+email+реклама+акции.
+
+Внешнее (подключается отдельно, не код скилла): цели/конверсии в Яндекс.Метрике, коллтрекинг, CRM, кабинеты маркетплейсов, РФ ESP — без них «конечный результат» не измерить.
 
 ---
 
@@ -583,6 +594,7 @@ Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible
 | `schema-validate.py` | JSON-LD validation | `python3 schema-validate.py <file>` | errors/warnings |
 | `source-attribution.py` | Which source produced top-ranking keywords | `python3 source-attribution.py --csv ... --snapshot ...` | yield table + disable-weak recommendations |
 | `ice-score.py` | ICE prioritization of findings (competitor analysis/audit) | `python3 ice-score.py findings.csv --md` | list by ICE (Impact×Confidence×Ease) with zones 🔥/✅/⏳ |
+| `roi-calc.py` | Funnel & ROI/CAC/DRR per channel — the bottom-line result in money | `python3 roi-calc.py funnel.csv --margin 0.3` | per-channel table + verdict "what pays off / is ads needed" |
 | `programmatic-template-gen.py` | Programmatic pages (city×category) | `python3 programmatic-template-gen.py ...` | page templates |
 | `validate-entities.py` | Entity registry check | `python3 validate-entities.py` | cross-links/errors |
 
@@ -616,6 +628,16 @@ Already covered elsewhere: keyword gap → `serpstat-fetch competitors`/SpyFu; p
 
 ### 7.8 Marketing bridges (marketing-skills + RU adaptation)
 The `marketing-skills` plugin (CRO, paid traffic, retention, monetization) complements seo-cycle. Enabled via the `marketing` config section. The "phase → skill" map and **RU channel swaps** (Yandex.Direct instead of Google Ads, VK/Telegram instead of Meta, Yandex.Metrika, 2GIS/Yandex.Business, YooKassa) live in `docs/marketing-bridges.md`. Chain: seo-cycle (organic) → `page-cro`/`form-cro` (conversion) → `referral-program`/`email-sequence` (retention). Don't duplicate the plugin's SEO skills — run SEO through seo-cycle.
+
+### 7.9 Marketing layer (strategy → result)
+Top layer above organic — strategy and measuring the result in money:
+- `prompts/marketing-strategy.md` — goals → **is paid advertising needed** (on numbers via `roi-calc.py`) → media plan/budget → KPIs.
+- `roi-calc.py` — funnel traffic→leads→orders→revenue, ROI/CAC/DRR per channel, payback verdict.
+- `prompts/distribution-channels.md` — RU channels (email/Telegram/video) + **product feeds/marketplaces** (Yandex.Market, Ozon, Google Merchant).
+- `prompts/orm.md` — review monitoring + negative-review alert (`notify.py`).
+- `prompts/marketing-calendar.md` — unified calendar SEO+social+email+ads+promos.
+
+External (connected separately, not skill code): goals/conversions in Yandex.Metrika, call tracking, CRM, marketplace dashboards, RU ESP — without them the bottom-line result can't be measured.
 
 ---
 
