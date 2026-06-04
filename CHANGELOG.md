@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.21.0] — 2026-06-04
+
+### Setup control plane
+
+- Added `scripts/setup-control-plane.py` as the single low-token first-run surface for intake, profile, source resolution, governance, validation, and automation readiness.
+- `--write` refreshes safe generated artifacts and writes `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `latest-validation.txt`, `latest-governance.json`, and `latest-sources.json`.
+- `--apply-profile` remains an explicit opt-in for applying generated profile changes to `seo-cycle.yaml` with backup.
+- `init-project.sh` now creates the setup control-plane report after intake/profile generation, so every new project starts with a compact readiness report and next-action checklist.
+- README, INSTALL, GUIDE, SKILL.md, and Codex runtime docs now include the setup control-plane command as the default post-init review step.
+
 ## [1.20.0] — 2026-06-04
 
 ### Detailed project intake wizard

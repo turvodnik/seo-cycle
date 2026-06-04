@@ -131,6 +131,7 @@ def policy_file_status(cfg: dict[str, Any], project_root: pathlib.Path) -> list[
         "ai_visibility_prompts": "seo/ai-visibility-prompts.csv",
         "tool_budget": "seo/tool-budget.yaml",
         "automation_policy": "seo/automation-policy.yaml",
+        "setup_control_plane": "seo/setup/setup-control-plane.md",
         "project_intake": "seo/project-intake.yaml",
         "project_intake_report": "seo/project-intake-report.md",
         "project_profile": "seo/project-profile.generated.yaml",

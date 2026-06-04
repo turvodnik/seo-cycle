@@ -26,6 +26,7 @@ description: Универсальный SEO/контент-цикл оркест
 - `seo/project-intake.yaml` — детальная карта проекта: страны, регионы, поисковики, local/merchant/ads/video/analytics decisions.
 - `seo/project-intake-report.md` — человекочитаемый отчёт по intake; создаётся `scripts/project-intake-wizard.py`.
 - `seo/project-profile.generated.yaml` и `seo/project-profile-report.md` — сгенерированный overlay/отчёт по intake; применять к `seo-cycle.yaml` только через явный `scripts/project-profile.py --apply`.
+- `seo/setup/setup-control-plane.md` — компактная readiness-сводка intake/profile/sources/governance/validation/automation; создаётся `scripts/setup-control-plane.py --write`.
 
 Если файлы есть, они являются локальным контрактом проекта:
 
@@ -33,6 +34,7 @@ description: Универсальный SEO/контент-цикл оркест
 - Google Cloud Natural Language — только guarded technical entity audit: entity extraction, salience, syntax/category checks, title/H1/schema/text mismatch. Не описывай его как ranking submission или прямой ranking signal.
 - Не запускай whole-site NeuronWriter или Google NLP без конкретной одобренной очереди URL/keywords и достаточного остатка в policy.
 - Перед дорогими или широкими задачами запускай `scripts/governance-report.py --format md`: он показывает active sources, budget caps, token policy, missing policy files и approval gates.
+- Для первого запуска или handoff используй `scripts/setup-control-plane.py --write`: он собирает low-token readiness report и next actions без вывода секретов.
 - Для запланированных автоматизаций используй `scripts/automation-plan.py`: сначала `--write --include-disabled`, затем ручной review `seo/automations/*`; `--install-cron` только если governance и automation-policy разрешают schedules.
 - Для детальной настройки нового проекта используй `scripts/project-intake-wizard.py --interactive --write`; для автозаполнения из `seo-cycle.yaml` — `--defaults --write`.
 - Для точечной настройки нового проекта используй `scripts/project-profile.py --write`: он выводит recommended engines/sources/marketing/governance по `seo/project-intake.yaml`; `--apply` делает backup и обновляет `seo-cycle.yaml`.
@@ -109,7 +111,7 @@ Phase 10 Iteration                    (cycle continues)
 
 **Шаги:**
 1. Найти `seo-cycle.yaml` в проекте (поиск: `./seo-cycle.yaml` → `./.seo-cycle.yaml` → `./seo/seo-cycle.yaml` → `./.claude/seo-cycle.yaml`).
-2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + governance + image workflow + optional detailed intake → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`, а также создать `seo/project-intake.yaml` и `seo/project-intake-report.md`.
+2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + governance + image workflow + optional detailed intake → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`, а также создать `seo/project-intake.yaml`, `seo/project-intake-report.md` и `seo/setup/setup-control-plane.md`.
 3. Если **найден** — провалидировать: `python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <path>`.
 4. Прочитать `context_files` из конфига (обычно `CLAUDE.md`, brand guidelines).
 5. Определить **режим цикла** (`mode` в конфиге, default `standard`):
