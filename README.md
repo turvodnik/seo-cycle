@@ -1,6 +1,6 @@
 # seo-cycle
 
-**Версия 1.17.9** · универсальный SEO/контент-цикл-оркестратор для Claude Code и Codex CLI.
+**Версия 1.18.0** · универсальный SEO/контент-цикл-оркестратор для Claude Code и Codex CLI.
 
 Полный цикл продвижения сайта — от стратегии и сбора семантики до публикации, fact-check, мониторинга и итераций — управляемый через декларативный конфиг `seo-cycle.yaml`. Адаптируется под любой проект: язык, регион, поисковики, тип сайта, CMS, набор источников.
 
@@ -17,6 +17,7 @@ cd <свой-проект>
 ~/.claude/skills/seo-cycle/scripts/init-project.sh        # wizard → seo-cycle.yaml + policy templates
 python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
 python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
+python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
 # дальше в Claude Code / Codex: «запусти SEO-цикл для категории X»
 ```
 
@@ -76,6 +77,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
 | **Источники семантики** | Яндекс (Wordstat/Suggest/SERP/Вебмастер/Кью/Карты/Товары), Google (GSC/Trends/Suggest/Merchant/Business Profile), Bing Webmaster/IndexNow/Bing Places, Serpstat (вкл. РФ `g_ru`), SpyFu (US/UK/EU), NeuronWriter, LLM-CLI, AnswerThePublic, Perplexity. |
 | **Guarded NLP/entity audit** | `google-nlp-audit.py` для Google Cloud Natural Language: entity salience, categories, syntax, moderation/sentiment только по policy, кэш 30 дней и unit caps. |
 | **Token/budget governance** | `governance` в `seo-cycle.yaml` + `governance-report.py`: raw на диск, distillates в контекст, cache-first, лимиты платных API/LLM/браузера/автоматизаций. |
+| **Safe automations** | `automation-plan.py` генерирует `seo/automations/automation-plan.md`, `crontab.txt`, launchd plist templates; реальный install заблокирован без двойного policy-разрешения. |
 | **Project policies** | `seo/neuronwriter-limits.yaml`, `seo/entities/google-nlp-policy.yaml`, `seo/tool-budget.yaml`, `seo/automation-policy.yaml`, `seo/project-intake.yaml`, `seo/seo-data-collection-map.md`, `seo/access-setup-runbook.md`, `seo/ai-visibility-prompts.csv`. |
 | **E-E-A-T** | `schema-org-build.py` — канонический Organization/LocalBusiness узел из `business_profile`; `eeat-render.py` — trust-блок «Источники» из `fact_check_log`; `source-attribution.py` — какой источник даёт топ. |
 | **Экономия** | `research-cache.py` (TTL), дистилляты в контекст, guard'ы кредитов Serpstat/SpyFu. |

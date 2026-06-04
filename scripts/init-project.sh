@@ -281,7 +281,9 @@ echo "  3. Запусти валидатор:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py"
 echo "  4. Посмотри governance report:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md"
-echo "  5. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
+echo "  5. Создай безопасный план автоматизаций:"
+echo "     python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled"
+echo "  6. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
 echo ""
 
 # Сразу прогоняем валидатор

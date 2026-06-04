@@ -347,6 +347,10 @@ def check_governance(cfg: dict, project_root: pathlib.Path, checklist: list, war
         automation_policy = policy_files.get("automation_policy", "seo/automation-policy.yaml")
         if not rel_project_path(project_root, automation_policy).exists():
             checklist.append("Создать seo/automation-policy.yaml перед созданием scheduled automations")
+        planner = automation.get("planner_script") or (cfg.get("monthly_automation", {}) or {}).get("planner_script")
+        if planner and not pathlib.Path(os.path.expanduser(planner)).exists():
+            warnings.append(f"automation planner_script не найден: {planner}")
+        checklist.append("Сгенерировать и проверить schedule artifacts: python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled")
 
 
 def check_content_rules(cfg: dict, warnings: list):

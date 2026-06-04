@@ -233,6 +233,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 | `validate-config.py` | Проверяет `seo-cycle.yaml`, env, делегатов, policy-файлы и governance | `python3 validate-config.py` | Список активных источников, недостающие ключи/policy, ✓/ошибки |
 | `resolve-sources.py` | Разворачивает `region_profile` + override в список активных источников | `python3 resolve-sources.py` | Активные/пропущенные источники с причиной + `seo/cycles/<date>/active-sources.json` |
 | `governance-report.py` | Показывает token/budget/tool/automation policy без секретов | `python3 governance-report.py --format md` | Markdown/JSON отчёт для Phase 0 и approval gates |
+| `automation-plan.py` | Генерирует безопасный schedule plan, cron и launchd templates | `python3 automation-plan.py --write --include-disabled` | `seo/automations/automation-plan.md`, `crontab.txt`, plist-шаблоны; install blocked без policy |
 | `init-project.sh` | Мастер нового проекта | `bash init-project.sh` | `seo-cycle.yaml`, `.env.example`, policy-файлы, запись в реестр |
 | `cycle-state.py` | Контракт состояния цикла (handoff между фазовыми скиллами) | `python3 cycle-state.py init --topic "X"` / `next` / `set <фаза> --status done --gate-passed` / `show` | `_state.json` с DAG фаз; «цепочка передачи» |
 
@@ -645,6 +646,7 @@ Rules:
 | `validate-config.py` | Validates config, env, delegates, policy files, governance | `python3 validate-config.py` | Active sources, missing keys/policies, ✓/errors |
 | `resolve-sources.py` | Expands `region_profile` + overrides into active sources | `python3 resolve-sources.py` | Active/skipped sources with reason + `active-sources.json` |
 | `governance-report.py` | Shows token/budget/tool/automation policy without secrets | `python3 governance-report.py --format md` | Markdown/JSON report for Phase 0 and approval gates |
+| `automation-plan.py` | Generates safe schedule plan, cron, and launchd templates | `python3 automation-plan.py --write --include-disabled` | `seo/automations/automation-plan.md`, `crontab.txt`, plist templates; install blocked without policy |
 | `init-project.sh` | New-project wizard | `bash init-project.sh` | `seo-cycle.yaml`, `.env.example`, policy files, registry entry |
 | `cycle-state.py` | Cycle state contract (handoff between phase skills) | `python3 cycle-state.py init --topic "X"` / `next` / `set <phase> --status done --gate-passed` / `show` | `_state.json` with phase DAG; the "handoff chain" |
 

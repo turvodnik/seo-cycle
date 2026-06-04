@@ -141,6 +141,8 @@ governance:
   automation_policy:
     default_mode: approval_only       # disabled | report_only | approval_only | auto_with_caps
     create_schedules: false
+    planner_script: "~/.claude/skills/seo-cycle/scripts/automation-plan.py"
+    output_dir: "seo/automations"
     allowed_without_approval:
       - cached_fetch
       - robots_sitemap_check
@@ -744,6 +746,8 @@ backlinks:
 # или Codex CLI schedule (если есть). Скрипт monthly-runner.sh — entry point.
 monthly_automation:
   enabled: false                              # opt-in
+  planner_script: "~/.claude/skills/seo-cycle/scripts/automation-plan.py"
+  output_dir: "./seo/automations"
   schedule:
     timezone: "Europe/Moscow"
     # Cron expressions (для системного cron)

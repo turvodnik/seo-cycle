@@ -1,5 +1,16 @@
 # Changelog — seo-cycle
 
+## [1.18.0] — 2026-06-04
+
+### Safe scheduled automation planner
+
+- Added `scripts/automation-plan.py` to generate `seo/automations/automation-plan.md`, `automation-plan.json`, `crontab.txt`, and launchd plist templates from `seo-cycle.yaml` + `seo/automation-policy.yaml`.
+- Schedule installation is blocked unless both governance and automation policy set `create_schedules: true`, and `SEO_CYCLE_ALLOW_SCHEDULE_INSTALL=1` is present.
+- Monthly automation now references the planner script and output directory in `config/project.template.yaml`.
+- `init-project.sh` next steps now include safe automation-plan generation after governance report.
+- `validate-config.py` now reminds projects with enabled schedule creation to generate/review schedule artifacts.
+- Codex runtime docs and SKILL.md now require `automation-plan.py --write --include-disabled` before any real scheduled automation.
+
 ## [1.17.9] — 2026-06-04
 
 ### Token, budget, subscription, and automation governance
