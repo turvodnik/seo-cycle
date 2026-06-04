@@ -326,6 +326,7 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
     intake = policies["intake"]
     caps = governance_caps(cfg, policies["tool_budget"])
     sources_report = run_json([sys.executable, str(skill_root() / "scripts/resolve-sources.py"), str(cfg_path), "--json"], project_root)
+    usage_report = run_json([sys.executable, str(skill_root() / "scripts/usage-ledger.py"), "report", str(cfg_path), "--format", "json"], project_root)
     active_sources = sources_report.get("active", {}) if isinstance(sources_report.get("active"), dict) else {}
     task_type = classify_task(task, explicit_type)
     meta = TASKS[task_type]
@@ -364,6 +365,7 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
     read_first = [
         str(policy_path(cfg, project_root, "setup_control_plane", "seo/setup/setup-control-plane.md")),
         str(policy_path(cfg, project_root, "tool_budget", "seo/tool-budget.yaml")),
+        str(policy_path(cfg, project_root, "latest_usage_report", "seo/setup/latest-usage-ledger.md")),
         str(policy_path(cfg, project_root, "automation_policy", "seo/automation-policy.yaml")),
         str(policy_path(cfg, project_root, "project_intake", "seo/project-intake.yaml")),
     ]
@@ -385,6 +387,12 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
         "sources": source_rows,
         "approval_gates": sorted(approval_gates),
         "blocked_actions": blocked,
+        "usage_ledger": {
+            "status": usage_report.get("evaluation", {}).get("status"),
+            "allowed": usage_report.get("evaluation", {}).get("allowed"),
+            "month": usage_report.get("month"),
+            "ledger_path": usage_report.get("ledger_path"),
+        },
         "automation": automation_status(meta.get("automation"), policies["automation_policy"]),
         "context_contract": {
             "read_first": read_first,
@@ -404,6 +412,7 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
         "commands": [
             "python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write --skip-intake",
             f"python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task {json.dumps(task, ensure_ascii=False)} --write",
+            "python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py report --write",
             "python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md",
         ],
     }
@@ -441,6 +450,18 @@ def render_markdown(route: dict[str, Any]) -> str:
     lines.extend(["", "## Blocked Actions"])
     blocked = route.get("blocked_actions", [])
     lines.extend(f"- {item}" for item in blocked) if blocked else lines.append("No blocked actions detected.")
+
+    usage = route.get("usage_ledger", {})
+    lines.extend(
+        [
+            "",
+            "## Usage Ledger",
+            f"- Status: {usage.get('status')}",
+            f"- Allowed without approval: {usage.get('allowed')}",
+            f"- Month: {usage.get('month')}",
+            f"- Ledger: `{usage.get('ledger_path')}`",
+        ]
+    )
 
     automation = route.get("automation", {})
     lines.extend(

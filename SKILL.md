@@ -23,6 +23,8 @@ description: Универсальный SEO/контент-цикл оркест
 - `seo/ai-visibility-prompts.csv` — стартовая очередь AI visibility запросов и evidence-полей для Google AI/Bing Copilot/Perplexity/OpenAI/Claude/Gemini/DeepSeek.
 - `seo/tool-budget.yaml` — лимиты токенов, paid API, LLM, подписок, кэша и stop-условия по источникам.
 - `seo/automation-policy.yaml` — какие scheduled automations разрешены, какие требуют approval, какие запрещены без явной policy.
+- `seo/usage/usage-ledger.jsonl` — append-only журнал фактического расхода токенов/USD/API/credits/units/requests/browser minutes; создаётся `scripts/usage-ledger.py report --write`.
+- `seo/setup/latest-usage-ledger.md` — текущий месячный отчёт по usage ledger, остаткам и approval/block status.
 - `seo/project-intake.yaml` — детальная карта проекта: страны, регионы, поисковики, local/merchant/ads/video/analytics decisions.
 - `seo/project-intake-report.md` — человекочитаемый отчёт по intake; создаётся `scripts/project-intake-wizard.py`.
 - `seo/project-profile.generated.yaml` и `seo/project-profile-report.md` — сгенерированный overlay/отчёт по intake; применять к `seo-cycle.yaml` только через явный `scripts/project-profile.py --apply`.
@@ -37,6 +39,7 @@ description: Универсальный SEO/контент-цикл оркест
 - Перед дорогими или широкими задачами запускай `scripts/governance-report.py --format md`: он показывает active sources, budget caps, token policy, missing policy files и approval gates.
 - Для первого запуска или handoff используй `scripts/setup-control-plane.py --write`: он собирает low-token readiness report и next actions без вывода секретов.
 - Перед конкретной задачей запускай `scripts/task-router.py --task "<что делаем>" --write` и следуй `seo/setup/latest-task-route.md`; не поднимай полный цикл/сырьё в контекст, если route ограничивает фазы и источники.
+- Перед расходом токенов/paid API/credits/ads запускай `scripts/usage-ledger.py check --service <tool> ... --fail-on-block`; после расхода фиксируй `scripts/usage-ledger.py record --service <tool> ...`. Без ledger-записи нельзя считать лимиты управляемыми.
 - Для запланированных автоматизаций используй `scripts/automation-plan.py`: сначала `--write --include-disabled`, затем ручной review `seo/automations/*`; `--install-cron` только если governance и automation-policy разрешают schedules.
 - Для детальной настройки нового проекта используй `scripts/project-intake-wizard.py --interactive --write`; для автозаполнения из `seo-cycle.yaml` — `--defaults --write`.
 - Для точечной настройки нового проекта используй `scripts/project-profile.py --write`: он выводит recommended engines/sources/marketing/governance по `seo/project-intake.yaml`; `--apply` делает backup и обновляет `seo-cycle.yaml`.
@@ -113,7 +116,7 @@ Phase 10 Iteration                    (cycle continues)
 
 **Шаги:**
 1. Найти `seo-cycle.yaml` в проекте (поиск: `./seo-cycle.yaml` → `./.seo-cycle.yaml` → `./seo/seo-cycle.yaml` → `./.claude/seo-cycle.yaml`).
-2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + governance + image workflow + optional detailed intake → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`, а также создать `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/setup/setup-control-plane.md` и `seo/setup/latest-task-route.md`.
+2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + governance + image workflow + optional detailed intake → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`, а также создать `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/setup/setup-control-plane.md`, `seo/setup/latest-task-route.md` и `seo/setup/latest-usage-ledger.md`.
 3. Если **найден** — провалидировать: `python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <path>`.
 4. Прочитать `context_files` из конфига (обычно `CLAUDE.md`, brand guidelines).
 5. Определить **режим цикла** (`mode` в конфиге, default `standard`):
@@ -129,6 +132,11 @@ Phase 10 Iteration                    (cycle continues)
 python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "<цель пользователя>" --write
 ```
 Затем читать `seo/setup/latest-task-route.md` и запускать только фазы/источники из маршрута, соблюдая approval gates и context caps.
+8. Перед фактическим расходом сделать preflight и после запуска записать расход:
+```bash
+python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py check --service openai --category llm --usd 0.25 --input-tokens 5000 --output-tokens 1000 --fail-on-block
+python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py record --service openai --category llm --usd 0.25 --input-tokens 5000 --output-tokens 1000 --task "<цель пользователя>" --write
+```
 
 **Маркетинг-стратегия (если `marketing.enabled` и цель шире SEO):** оценить, нужна ли платная реклама или хватит органики+локалки — `prompts/marketing-strategy.md` + `scripts/roi-calc.py` (воронка/ROI/ДРР по каналам). Реклама — только при дефиците объёма с ROI>0. Каналы дистрибуции и маркетплейсы — `prompts/distribution-channels.md`. Единый план — `prompts/marketing-calendar.md`.
 

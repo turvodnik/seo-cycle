@@ -1,5 +1,16 @@
 # Changelog — seo-cycle
 
+## [1.23.0] — 2026-06-05
+
+### Usage and budget ledger
+
+- Added `scripts/usage-ledger.py` as the unified project-local ledger for tokens, LLM spend, paid API spend, ad spend, credits, units, rows, browser minutes, and subscription counters.
+- The ledger supports `report`, `check`, and `record`: preflight estimates can block/require approval before spend, and append-only records are written to `seo/usage/usage-ledger.jsonl`.
+- `setup-control-plane.py` now writes `seo/setup/latest-usage-ledger.md/json`, creates an empty ledger on first run, and includes usage status in readiness.
+- `task-router.py` now includes current usage-ledger status and points the route context to `seo/setup/latest-usage-ledger.md`.
+- `db-sync.py` now imports `seo/usage/usage-ledger.jsonl` into `api_usage` for dashboards, alongside older `_usage.json` files.
+- Project templates, validation, governance report, and docs now include usage-ledger artifacts and monthly token/ad caps.
+
 ## [1.22.0] — 2026-06-05
 
 ### Low-token task router

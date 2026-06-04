@@ -115,6 +115,8 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "governance_latest": "seo/setup/latest-governance.json",
         "validation_latest": "seo/setup/latest-validation.txt",
         "active_sources_latest": "seo/setup/latest-sources.json",
+        "usage_ledger": "seo/usage/usage-ledger.jsonl",
+        "latest_usage_report": "seo/setup/latest-usage-ledger.md",
         "automation_plan": "seo/automations/automation-plan.md",
         "automation_plan_json": "seo/automations/automation-plan.json",
         "automation_crontab": "seo/automations/crontab.txt",
@@ -190,6 +192,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     sources = report.get("sources", {})
     automation = report.get("automation", {})
     task_route = report.get("task_route", {})
+    usage = report.get("usage_ledger", {})
     lines = [
         "# seo-cycle setup control plane",
         "",
@@ -205,6 +208,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Active sources: {len(sources.get('active', {}))}",
         f"- Skipped sources: {len(sources.get('skipped', {}))}",
         f"- Paid/quota sources needing env: {len(report.get('paid_missing_env', []))}",
+        f"- Usage ledger status: {usage.get('evaluation', {}).get('status')}",
+        f"- Usage ledger allowed: {usage.get('evaluation', {}).get('allowed')}",
         f"- Automation install allowed: {automation.get('allowed')}",
     ]
     if automation.get("blockers"):
@@ -338,6 +343,13 @@ def main() -> int:
         task_router_command.extend(["--format", "json"])
     steps.append(run_step("task router", task_router_command, project_root))
 
+    usage_command = [sys.executable, str(root / "scripts/usage-ledger.py"), "report", str(cfg_path)]
+    if args.write:
+        usage_command.append("--write")
+    else:
+        usage_command.extend(["--format", "json"])
+    steps.append(run_step("usage ledger", usage_command, project_root))
+
     validation_step = run_step("validate config", [sys.executable, str(root / "scripts/validate-config.py"), str(cfg_path)], project_root)
     steps.append(validation_step)
 
@@ -360,6 +372,11 @@ def main() -> int:
     task_route_file = project_root / "seo" / "setup" / "latest-task-route.json"
     if not task_route and task_route_file.exists():
         task_route = json.loads(task_route_file.read_text(encoding="utf-8"))
+    usage_step = next((step for step in steps if step["name"] == "usage ledger"), {})
+    usage_ledger = load_json_output(usage_step)
+    usage_file = project_root / "seo" / "setup" / "latest-usage-ledger.json"
+    if not usage_ledger and usage_file.exists():
+        usage_ledger = json.loads(usage_file.read_text(encoding="utf-8"))
     validation = parse_validation(validation_step)
     artifacts = artifact_status(project_root, cfg)
     paid_missing = enabled_paid_missing_env(governance)
@@ -376,6 +393,7 @@ def main() -> int:
         "sources": sources,
         "automation": automation,
         "task_route": task_route,
+        "usage_ledger": usage_ledger,
         "paid_missing_env": paid_missing,
         "artifacts": artifacts,
         "steps": [

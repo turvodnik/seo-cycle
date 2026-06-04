@@ -10,6 +10,8 @@ token_budget:
   raw_data_in_context: false
   progressive_disclosure: true
   cache_first: true
+  monthly_input_tokens_cap: 0
+  monthly_output_tokens_cap: 0
   max_context_input_tokens_per_phase: 45000
   max_output_tokens_per_artifact: 7000
   max_raw_rows_loaded: 200
@@ -21,6 +23,7 @@ money_budget:
   monthly_total_usd_cap: 0
   monthly_paid_api_usd_cap: 0
   monthly_llm_usd_cap: 0
+  monthly_ads_usd_cap: 0
   cloud_budget_alert_usd: 5
   require_approval_over_usd: 0
   ads_spend_enabled: false

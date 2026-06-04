@@ -46,6 +46,7 @@
 | **Масштаб на N проектов** | Реестр проектов + `init-project.sh` + `monthly-runner.sh all`. |
 | **Контроль токенов и бюджета** | `governance` + `tool-budget.yaml` + `governance-report.py`: cache-first, raw на диск, distillates в контекст, approval gates. |
 | **Маршрут под задачу** | `task-router.py --task "..."`: выбирает только нужные фазы/источники, показывает approval gates, blocked actions, automation и context caps. |
+| **Фактический расход** | `usage-ledger.py report/check/record`: append-only учёт токенов, USD, requests, credits, units, browser minutes и подписок. |
 | **Прозрачность** | Все артефакты — файлы в репозитории проекта; единая SQLite-БД; Obsidian-дашборд. |
 
 ---
@@ -82,6 +83,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
 Перед дорогим сбором, браузерной сессией, публикацией или schedule:
 ```bash
 python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по теме X" --write
+python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py check --service openai --category llm --usd 0.25 --fail-on-block
 python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
 ```
 
@@ -210,6 +212,8 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 - `seo/ai-visibility-prompts.csv` — стартовая очередь AI visibility запросов и evidence-полей для Google AI/Bing Copilot/Perplexity/OpenAI/Claude/Gemini/DeepSeek.
 - `seo/tool-budget.yaml` — token/API/LLM/subscription caps, cache policy, stop conditions.
 - `seo/automation-policy.yaml` — scheduled automations, approval gates, forbidden actions.
+- `seo/usage/usage-ledger.jsonl` — append-only журнал фактического расхода токенов, USD, credits, units, requests и browser minutes.
+- `seo/setup/latest-usage-ledger.md` — текущий месячный usage report и cap/approval/block status.
 - `seo/setup/setup-control-plane.md` — compact readiness report: intake/profile/sources/governance/validation/automation + next actions.
 - `seo/setup/latest-task-route.md` — low-token route for the latest task: phases, sources, approval gates, blocked actions, automation and context caps.
 - `seo/project-intake.yaml` — детальная карта стран, регионов, поисковиков, рекламы, local/merchant/video/analytics decisions.
@@ -222,6 +226,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 - Whole-site NeuronWriter/Google NLP jobs запрещены без одобренной очереди URL/keywords и достаточного остатка в policy.
 - Перед дорогим сбором или автоматизацией запускай `governance-report.py`; если бюджет/approval не позволяют, делай только report-only/cached/read-only шаг.
 - Перед конкретной задачей запускай `task-router.py --task "..." --write` и следуй `seo/setup/latest-task-route.md`, чтобы не запускать лишние фазы/источники.
+- Перед фактическим расходом запускай `usage-ledger.py check ... --fail-on-block`; после расхода фиксируй `usage-ledger.py record ... --write`.
 - Low-token режим обязателен: raw CSV/JSON/HTML на диск, в контекст только distillates/top-N; не читай весь репозиторий или сырьё без необходимости.
 - Robots/Content-Signal: `search=yes, ai-input=yes, ai-train=no` допустимо как запрет обучения моделей. Публичный `robots.txt` должен быть чистым `text/plain`, без PHP warnings/HTML и editor/preview мусора.
 - Для РФ-проектов не ставь зарубежные analytics/tracking tags или pixels без явного разрешения policy. GSC, Bing Webmaster, PageSpeed/CrUX, sitemap/robots checks и off-site API audits допустимы без установки кода аналитики.
@@ -238,8 +243,9 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 |---|---|---|---|
 | `validate-config.py` | Проверяет `seo-cycle.yaml`, env, делегатов, policy-файлы и governance | `python3 validate-config.py` | Список активных источников, недостающие ключи/policy, ✓/ошибки |
 | `resolve-sources.py` | Разворачивает `region_profile` + override в список активных источников | `python3 resolve-sources.py` | Активные/пропущенные источники с причиной + `seo/cycles/<date>/active-sources.json` |
-| `setup-control-plane.py` | Единый low-token setup/readiness отчёт по intake/profile/sources/governance/validation/automation/task route | `python3 setup-control-plane.py --write` | `seo/setup/setup-control-plane.md/json`, latest validation/governance/sources/task route |
+| `setup-control-plane.py` | Единый low-token setup/readiness отчёт по intake/profile/sources/governance/validation/automation/task route/usage ledger | `python3 setup-control-plane.py --write` | `seo/setup/setup-control-plane.md/json`, latest validation/governance/sources/task route/usage |
 | `task-router.py` | Строит low-token маршрут под конкретную SEO/маркетинг-задачу | `python3 task-router.py --task "аудит индексации" --write` | `seo/setup/latest-task-route.md/json` + archived route |
+| `usage-ledger.py` | Ведёт фактический расход токенов, USD, credits, units, requests, browser minutes и проверяет caps | `python3 usage-ledger.py report --write` / `check --service openai --usd 0.25 --fail-on-block` / `record --service openai --usd 0.25` | `seo/usage/usage-ledger.jsonl`, `seo/setup/latest-usage-ledger.md/json` |
 | `project-intake-wizard.py` | Подробно заполняет `seo/project-intake.yaml` под конкретный проект | `python3 project-intake-wizard.py --interactive --write` / `--defaults --write` | `seo/project-intake.yaml`, `seo/project-intake-report.md` |
 | `project-profile.py` | Строит точечный профиль проекта из `seo/project-intake.yaml` | `python3 project-profile.py --write` / `--apply` | `seo/project-profile.generated.yaml`, report, опц. backup+обновление `seo-cycle.yaml` |
 | `governance-report.py` | Показывает token/budget/tool/automation policy без секретов | `python3 governance-report.py --format md` | Markdown/JSON отчёт для Phase 0 и approval gates |
@@ -477,6 +483,7 @@ are scripts, the "project truth" lives in one config.
 | **Scales to N projects** | Project registry + `init-project.sh` + `monthly-runner.sh all`. |
 | **Token and budget control** | `governance` + `tool-budget.yaml` + `governance-report.py`: cache-first, raw to disk, distillates in context, approval gates. |
 | **Task-level routing** | `task-router.py --task "..."` selects only the needed phases/sources and reports approval gates, blocked actions, automation, and context caps. |
+| **Actual usage ledger** | `usage-ledger.py report/check/record`: append-only tracking for tokens, USD, requests, credits, units, browser minutes, and subscriptions. |
 | **Transparent** | All artifacts are files in the project repo; single SQLite DB; Obsidian dashboard. |
 
 ---
@@ -632,6 +639,8 @@ Before starting phases, making API calls, spending credits, or changing tracking
 - `seo/ai-visibility-prompts.csv` — starter AI visibility query queue and evidence fields for Google AI/Bing Copilot/Perplexity/OpenAI/Claude/Gemini/DeepSeek.
 - `seo/tool-budget.yaml` — token/API/LLM/subscription caps, cache policy, stop conditions.
 - `seo/automation-policy.yaml` — scheduled automations, approval gates, forbidden actions.
+- `seo/usage/usage-ledger.jsonl` — append-only actual usage ledger for tokens, USD, credits, units, requests, and browser minutes.
+- `seo/setup/latest-usage-ledger.md` — current monthly usage report plus cap/approval/block status.
 - `seo/setup/setup-control-plane.md` — compact readiness report: intake/profile/sources/governance/validation/automation + next actions.
 - `seo/setup/latest-task-route.md` — low-token route for the latest task: phases, sources, approval gates, blocked actions, automation, and context caps.
 - `seo/project-intake.yaml` — detailed map of countries, regions, search engines, ads, local/merchant/video/analytics decisions.
@@ -644,6 +653,7 @@ Rules:
 - Whole-site NeuronWriter/Google NLP jobs are forbidden without an approved URL/keyword queue and enough remaining policy budget.
 - Run `governance-report.py` before expensive collection or automation; if budget/approval does not allow it, do only report-only/cached/read-only steps.
 - Before each concrete task, run `task-router.py --task "..." --write` and follow `seo/setup/latest-task-route.md` so unnecessary phases/sources are skipped.
+- Before actual spend, run `usage-ledger.py check ... --fail-on-block`; after spend, record it with `usage-ledger.py record ... --write`.
 - Low-token mode is mandatory: raw CSV/JSON/HTML to disk, only distillates/top-N in context; do not read the whole repository or raw source files without need.
 - Robots/Content-Signal: `search=yes, ai-input=yes, ai-train=no` is acceptable as a model-training opt-out. Public `robots.txt` must be clean `text/plain`, with no PHP warnings/HTML or editor/preview noise.
 - For Russian/RF projects, do not add foreign analytics/tracking tags or pixels without explicit policy approval. GSC, Bing Webmaster, PageSpeed/CrUX, sitemap/robots checks, and off-site API audits are acceptable because they do not install analytics code.
@@ -660,8 +670,9 @@ Rules:
 |---|---|---|---|
 | `validate-config.py` | Validates config, env, delegates, policy files, governance | `python3 validate-config.py` | Active sources, missing keys/policies, ✓/errors |
 | `resolve-sources.py` | Expands `region_profile` + overrides into active sources | `python3 resolve-sources.py` | Active/skipped sources with reason + `active-sources.json` |
-| `setup-control-plane.py` | Single low-token setup/readiness report for intake/profile/sources/governance/validation/automation/task route | `python3 setup-control-plane.py --write` | `seo/setup/setup-control-plane.md/json`, latest validation/governance/sources/task route |
+| `setup-control-plane.py` | Single low-token setup/readiness report for intake/profile/sources/governance/validation/automation/task route/usage ledger | `python3 setup-control-plane.py --write` | `seo/setup/setup-control-plane.md/json`, latest validation/governance/sources/task route/usage |
 | `task-router.py` | Builds a low-token route for one SEO/marketing task | `python3 task-router.py --task "indexation audit" --write` | `seo/setup/latest-task-route.md/json` + archived route |
+| `usage-ledger.py` | Tracks actual tokens, USD, credits, units, requests, browser minutes and checks caps | `python3 usage-ledger.py report --write` / `check --service openai --usd 0.25 --fail-on-block` / `record --service openai --usd 0.25` | `seo/usage/usage-ledger.jsonl`, `seo/setup/latest-usage-ledger.md/json` |
 | `project-intake-wizard.py` | Fills `seo/project-intake.yaml` for a concrete project | `python3 project-intake-wizard.py --interactive --write` / `--defaults --write` | `seo/project-intake.yaml`, `seo/project-intake-report.md` |
 | `project-profile.py` | Builds per-project profile from `seo/project-intake.yaml` | `python3 project-profile.py --write` / `--apply` | `seo/project-profile.generated.yaml`, report, optional backup+`seo-cycle.yaml` update |
 | `governance-report.py` | Shows token/budget/tool/automation policy without secrets | `python3 governance-report.py --format md` | Markdown/JSON report for Phase 0 and approval gates |
