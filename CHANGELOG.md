@@ -1,5 +1,16 @@
 # Changelog — seo-cycle
 
+## [1.20.0] — 2026-06-04
+
+### Detailed project intake wizard
+
+- Added `scripts/project-intake-wizard.py` to create/refine `seo/project-intake.yaml` from `seo-cycle.yaml` in `--defaults` mode or through a detailed `--interactive` wizard.
+- The wizard covers project type, business model, sales channels, priority products/services, audiences, conversion goals, countries, regions, languages, search engines, local platforms, marketing channels, paid ads policy, analytics tracking policy, guarded tools, AI visibility platforms, governance, automation mode, cache-first, and distillate requirements.
+- `init-project.sh` now asks whether to run the detailed intake wizard; otherwise it auto-fills intake defaults from the generated `seo-cycle.yaml`.
+- The setup now writes `seo/project-intake-report.md` before generating `seo/project-profile.generated.yaml` and `seo/project-profile-report.md`.
+- `init-project.sh` now offers an explicit opt-in to apply the generated project profile to the fresh `seo-cycle.yaml` immediately, with the normal backup behavior.
+- README, INSTALL, GUIDE, SKILL.md, and Codex runtime docs now route new-project setup through `project-intake-wizard.py` before `project-profile.py`.
+
 ## [1.19.0] — 2026-06-04
 
 ### Project profile overlay and intake applier

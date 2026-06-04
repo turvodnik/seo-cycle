@@ -15,10 +15,11 @@ description: Точка входа для seo-cycle, когда Codex — осн
 ## Как работать
 
 1. Установи режим: `export SEO_RUNTIME=codex`.
-2. Прочитай `seo-cycle.yaml`, `docs/codex-runtime.md` и локальные policy-файлы проекта, если есть: `seo/neuronwriter-limits.yaml`, `seo/neuronwriter.md`, `seo/entities/google-nlp-policy.yaml`, `seo/seo-data-collection-map.md`, `seo/access-setup-runbook.md`, `seo/ai-visibility-prompts.csv`, `seo/tool-budget.yaml`, `seo/automation-policy.yaml`, `seo/project-intake.yaml`, `seo/project-profile.generated.yaml`.
+2. Прочитай `seo-cycle.yaml`, `docs/codex-runtime.md` и локальные policy-файлы проекта, если есть: `seo/neuronwriter-limits.yaml`, `seo/neuronwriter.md`, `seo/entities/google-nlp-policy.yaml`, `seo/seo-data-collection-map.md`, `seo/access-setup-runbook.md`, `seo/ai-visibility-prompts.csv`, `seo/tool-budget.yaml`, `seo/automation-policy.yaml`, `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/project-profile.generated.yaml`.
 3. Перед дорогим сбором, браузером, публикацией или scheduled automation запусти `python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md`.
-4. Для точечной настройки проекта используй `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review overlay/report.
-5. Веди по фазам из `AGENTS.md`.
+4. Для детального intake используй `python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`.
+5. Для точечной настройки проекта используй `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review overlay/report.
+6. Веди по фазам из `AGENTS.md`.
 
 Правила гибрида:
 

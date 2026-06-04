@@ -30,6 +30,7 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - `seo/tool-budget.yaml`
 - `seo/automation-policy.yaml`
 - `seo/project-intake.yaml`
+- `seo/project-intake-report.md`
 - `seo/project-profile.generated.yaml`
 
 Эти файлы задают локальный контракт по расходу NeuronWriter/Google NLP, tracking/tag policy, разрешённым источникам и подключённым аккаунтам. В Codex-режиме особенно важно:
@@ -37,6 +38,7 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - использовать NeuronWriter как primary SERP/NLP content editor только в пределах limits-файла;
 - использовать Google Cloud Natural Language только как guarded technical entity audit с cache/unit caps;
 - перед дорогим сбором, браузером, публикацией или schedule запускать `python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md`;
+- детальную настройку стран/поисковиков/регионов/ads/local/merchant/tools/governance делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`;
 - точечную настройку проекта делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review generated overlay/report;
 - schedule-артефакты создавать через `python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled`; реальный cron install — только при двойном разрешении governance + `seo/automation-policy.yaml`;
 - держать low-token режим: raw data на диск, в контекст только distillates/top-N, progressive disclosure вместо чтения всего репозитория;

@@ -278,10 +278,13 @@ AGENTS.md -> ~/.claude/skills/seo-cycle/AGENTS.md
 Перед дорогим сбором или schedule запуском:
 
 ```bash
+python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write
 python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
 python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
 ```
+
+`project-intake-wizard.py` создаёт/уточняет `seo/project-intake.yaml` + `seo/project-intake-report.md`: тип проекта, бизнес-модель, каналы продаж, страны/регионы/языки, поисковики, local platforms, merchant feeds, ads policy, analytics tracking policy, guarded tools, AI visibility platforms и governance defaults. После `init-project.sh` можно запускать `--interactive --write`; для автоматического заполнения из `seo-cycle.yaml` используется `--defaults --write`.
 
 `project-profile.py` читает `seo/project-intake.yaml` и создаёт `seo/project-profile.generated.yaml` + `seo/project-profile-report.md`: какие страны/регионы/поисковики/источники/маркетинг/local/merchant/ads/video/analytics применять. `--apply` обновляет `seo-cycle.yaml` только явно и создаёт backup.
 

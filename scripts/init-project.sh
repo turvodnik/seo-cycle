@@ -121,6 +121,14 @@ case "$IMAGE_TEXT_ANSWER" in
     *) IMAGE_ALLOW_VISIBLE_TEXT=false ;;
 esac
 
+echo ""
+echo "Детальный project intake:"
+read -p "22. Запустить подробный wizard стран/движков/маркетинга/tools сейчас? [y/N]: " DETAILED_INTAKE_ANSWER
+case "$DETAILED_INTAKE_ANSWER" in
+    y|Y|yes|YES) RUN_DETAILED_INTAKE=true ;;
+    *) RUN_DETAILED_INTAKE=false ;;
+esac
+
 LANG_CODE="${LOCALE%-*}"   # ru
 CTRY_CODE="${LOCALE#*-}"   # RU
 
@@ -250,15 +258,33 @@ if [ -f "seo/project-intake.yaml" ]; then
 fi
 
 if [ -f "seo/project-intake.yaml" ]; then
+    if [ "$RUN_DETAILED_INTAKE" = "true" ]; then
+        python3 "$SKILL_ROOT/scripts/project-intake-wizard.py" "$TARGET" --interactive --write \
+            && echo "✓ project intake заполнен: seo/project-intake.yaml + seo/project-intake-report.md"
+    else
+        python3 "$SKILL_ROOT/scripts/project-intake-wizard.py" "$TARGET" --defaults --write >/dev/null 2>&1 \
+            && echo "✓ project intake уточнён из $TARGET: seo/project-intake.yaml + seo/project-intake-report.md" \
+            || echo "ℹ project intake не уточнён — запусти scripts/project-intake-wizard.py --interactive --write"
+    fi
     python3 "$SKILL_ROOT/scripts/project-profile.py" "$TARGET" --write >/dev/null 2>&1 \
         && echo "✓ project profile создан: seo/project-profile.generated.yaml + seo/project-profile-report.md" \
         || echo "ℹ project profile не создан — запусти scripts/project-profile.py после заполнения intake"
+    read -p "23. Применить generated project profile к $TARGET сейчас? [y/N]: " APPLY_PROFILE_ANSWER
+    case "$APPLY_PROFILE_ANSWER" in
+        y|Y|yes|YES)
+            python3 "$SKILL_ROOT/scripts/project-profile.py" "$TARGET" --apply \
+                && echo "✓ project profile применён к $TARGET (backup создан рядом)"
+            ;;
+        *) echo "ℹ project profile не применён — после review запусти scripts/project-profile.py --apply" ;;
+    esac
 fi
 
 # Дозапись проекта в общий реестр (идемпотентно — по path)
 REGISTRY="$SKILL_ROOT/config/projects-registry.yaml"
 PROJECT_PATH="$(pwd)"
-if [ -f "$REGISTRY" ]; then
+if [ "${SEO_CYCLE_SKIP_REGISTRY:-0}" = "1" ]; then
+    echo "ℹ Реестр проектов пропущен (SEO_CYCLE_SKIP_REGISTRY=1)"
+elif [ -f "$REGISTRY" ]; then
     if grep -q "path: \"$PROJECT_PATH\"" "$REGISTRY" 2>/dev/null; then
         echo "ℹ Проект уже в реестре ($REGISTRY) — пропускаю"
     else
@@ -285,14 +311,16 @@ echo "  2. Заполни .env с API ключами (см. docs/oauth-setup.md 
 echo "  2b. Обнови policy-файлы в seo/ при подключении NeuronWriter, Google NLP, GSC/Яндекс/Бинг и автоматизаций"
 echo "  3. Запусти валидатор:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py"
-echo "  4. Примени или обнови точечный project profile:"
+echo "  4. При необходимости доуточни подробный intake:"
+echo "     python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write"
+echo "  5. Примени или обнови точечный project profile:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write"
 echo "     # после проверки: python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --apply"
-echo "  5. Посмотри governance report:"
+echo "  6. Посмотри governance report:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md"
-echo "  6. Создай безопасный план автоматизаций:"
+echo "  7. Создай безопасный план автоматизаций:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled"
-echo "  7. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
+echo "  8. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
 echo ""
 
 # Сразу прогоняем валидатор
