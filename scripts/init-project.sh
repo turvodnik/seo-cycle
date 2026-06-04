@@ -280,7 +280,7 @@ if [ -f "seo/project-intake.yaml" ]; then
 fi
 
 python3 "$SKILL_ROOT/scripts/setup-control-plane.py" "$TARGET" --write --skip-intake >/dev/null 2>&1 \
-    && echo "✓ setup control plane создан: seo/setup/setup-control-plane.md + seo/setup/setup-control-plane.json" \
+    && echo "✓ setup control plane создан: seo/setup/setup-control-plane.md/json + seo/setup/latest-task-route.md/json" \
     || echo "ℹ setup control plane не создан — запусти scripts/setup-control-plane.py --write"
 
 # Дозапись проекта в общий реестр (идемпотентно — по path)
@@ -325,9 +325,12 @@ echo "     python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write
 echo "     # после проверки: python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --apply"
 echo "  7. Посмотри governance report:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md"
-echo "  8. Создай безопасный план автоматизаций:"
+echo "  8. Перед конкретной задачей построй low-token task route:"
+echo "     python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task \"аудит индексации и robots\" --write"
+echo "     # результат: seo/setup/latest-task-route.md"
+echo "  9. Создай безопасный план автоматизаций:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled"
-echo "  9. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
+echo "  10. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
 echo ""
 
 # Сразу прогоняем валидатор

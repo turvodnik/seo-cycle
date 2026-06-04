@@ -30,6 +30,7 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - `seo/tool-budget.yaml`
 - `seo/automation-policy.yaml`
 - `seo/setup/setup-control-plane.md`
+- `seo/setup/latest-task-route.md`
 - `seo/project-intake.yaml`
 - `seo/project-intake-report.md`
 - `seo/project-profile.generated.yaml`
@@ -40,6 +41,7 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - использовать Google Cloud Natural Language только как guarded technical entity audit с cache/unit caps;
 - перед дорогим сбором, браузером, публикацией или schedule запускать `python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md`;
 - перед началом большого цикла обновлять compact readiness: `python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write`;
+- перед конкретной задачей строить bounded route: `python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "<цель пользователя>" --write` и запускать только фазы/источники из `seo/setup/latest-task-route.md`;
 - детальную настройку стран/поисковиков/регионов/ads/local/merchant/tools/governance делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`;
 - точечную настройку проекта делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review generated overlay/report;
 - schedule-артефакты создавать через `python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled`; реальный cron install — только при двойном разрешении governance + `seo/automation-policy.yaml`;

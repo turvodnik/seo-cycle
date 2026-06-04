@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.22.0] — 2026-06-05
+
+### Low-token task router
+
+- Added `scripts/task-router.py` to classify a concrete SEO/marketing task and produce a compact execution route: phases, sources, approval gates, blocked actions, automation recommendation, and context/token caps.
+- The router is read-only by default and writes `seo/setup/latest-task-route.md/json` plus archived per-task routes only with `--write`.
+- `setup-control-plane.py` now accepts `--task` and includes the latest task route in the readiness report, so first-run setup and handoffs start from a bounded execution plan.
+- Project templates, validation, governance report, init wizard, README, INSTALL, GUIDE, SKILL.md, and Codex runtime docs now include the task route as part of the standard low-token workflow.
+
 ## [1.21.0] — 2026-06-04
 
 ### Setup control plane

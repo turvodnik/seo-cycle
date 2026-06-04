@@ -15,12 +15,13 @@ description: Точка входа для seo-cycle, когда Codex — осн
 ## Как работать
 
 1. Установи режим: `export SEO_RUNTIME=codex`.
-2. Прочитай `seo-cycle.yaml`, `docs/codex-runtime.md` и локальные policy-файлы проекта, если есть: `seo/setup/setup-control-plane.md`, `seo/neuronwriter-limits.yaml`, `seo/neuronwriter.md`, `seo/entities/google-nlp-policy.yaml`, `seo/seo-data-collection-map.md`, `seo/access-setup-runbook.md`, `seo/ai-visibility-prompts.csv`, `seo/tool-budget.yaml`, `seo/automation-policy.yaml`, `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/project-profile.generated.yaml`.
+2. Прочитай `seo-cycle.yaml`, `docs/codex-runtime.md` и локальные policy-файлы проекта, если есть: `seo/setup/setup-control-plane.md`, `seo/setup/latest-task-route.md`, `seo/neuronwriter-limits.yaml`, `seo/neuronwriter.md`, `seo/entities/google-nlp-policy.yaml`, `seo/seo-data-collection-map.md`, `seo/access-setup-runbook.md`, `seo/ai-visibility-prompts.csv`, `seo/tool-budget.yaml`, `seo/automation-policy.yaml`, `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/project-profile.generated.yaml`.
 3. Перед дорогим сбором, браузером, публикацией или scheduled automation запусти `python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md`.
 4. Для единой readiness-сводки используй `python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write`.
-5. Для детального intake используй `python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`.
-6. Для точечной настройки проекта используй `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review overlay/report.
-7. Веди по фазам из `AGENTS.md`.
+5. Перед конкретной задачей запусти `python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "<цель пользователя>" --write` и следуй `seo/setup/latest-task-route.md`.
+6. Для детального intake используй `python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`.
+7. Для точечной настройки проекта используй `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review overlay/report.
+8. Веди по фазам из `AGENTS.md`, но не шире task route.
 
 Правила гибрида:
 

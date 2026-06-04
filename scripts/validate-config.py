@@ -254,6 +254,7 @@ def check_project_policies(cfg: dict, env: dict, project_root: pathlib.Path, che
         "tool_budget": "seo/tool-budget.yaml",
         "automation_policy": "seo/automation-policy.yaml",
         "setup_control_plane": "seo/setup/setup-control-plane.md",
+        "latest_task_route": "seo/setup/latest-task-route.md",
         "project_intake": "seo/project-intake.yaml",
         "project_intake_report": "seo/project-intake-report.md",
         "project_profile": "seo/project-profile.generated.yaml",

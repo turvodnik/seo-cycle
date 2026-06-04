@@ -280,12 +280,15 @@ AGENTS.md -> ~/.claude/skills/seo-cycle/AGENTS.md
 ```bash
 python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write
+python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "аудит индексации и robots" --write
 python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
 python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
 ```
 
-`setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config и automation plan; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`. `--apply-profile` остаётся отдельным явным действием.
+`setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config, automation plan и стартовый task route; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`, `latest-task-route.md/json`. `--apply-profile` остаётся отдельным явным действием.
+
+`task-router.py` — low-token роутер перед каждой конкретной задачей. Пример: `python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по минеральной вате" --write`. Он классифицирует задачу, выбирает фазы/источники, показывает approval gates, blocked actions, рекомендуемую automation и context caps, чтобы не поднимать весь проект и сырые данные в контекст.
 
 `project-intake-wizard.py` создаёт/уточняет `seo/project-intake.yaml` + `seo/project-intake-report.md`: тип проекта, бизнес-модель, каналы продаж, страны/регионы/языки, поисковики, local platforms, merchant feeds, ads policy, analytics tracking policy, guarded tools, AI visibility platforms и governance defaults. После `init-project.sh` можно запускать `--interactive --write`; для автоматического заполнения из `seo-cycle.yaml` используется `--defaults --write`.
 

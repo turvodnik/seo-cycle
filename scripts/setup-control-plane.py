@@ -3,7 +3,8 @@
 
 This is the low-token "one screen" setup surface: it refreshes or inspects
 intake, profile, source resolution, governance, validation, and automation
-artifacts, then writes a compact report with the next safe actions.
+artifacts plus the latest task route, then writes a compact report with the
+next safe actions.
 
 Default mode is read-only. Use `--write` to refresh generated artifacts under
 `seo/`. Use `--apply-profile` only when you want the generated profile applied
@@ -117,6 +118,7 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "automation_plan": "seo/automations/automation-plan.md",
         "automation_plan_json": "seo/automations/automation-plan.json",
         "automation_crontab": "seo/automations/crontab.txt",
+        "latest_task_route": "seo/setup/latest-task-route.md",
     }
     policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
     rows = []
@@ -187,6 +189,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     governance = report.get("governance", {})
     sources = report.get("sources", {})
     automation = report.get("automation", {})
+    task_route = report.get("task_route", {})
     lines = [
         "# seo-cycle setup control plane",
         "",
@@ -206,6 +209,14 @@ def render_markdown(report: dict[str, Any]) -> str:
     ]
     if automation.get("blockers"):
         lines.append(f"- Automation blockers: {', '.join(automation['blockers'])}")
+
+    if task_route:
+        lines.extend(
+            [
+                f"- Latest task route: {task_route.get('task_type')} ({len(task_route.get('phases', []))} phases)",
+                f"- Latest task approval gates: {', '.join(task_route.get('approval_gates', [])) or 'none'}",
+            ]
+        )
 
     lines.extend(["", "## Artifacts", "| Key | Exists | Path |", "| --- | --- | --- |"])
     for row in report.get("artifacts", []):
@@ -251,6 +262,7 @@ def main() -> int:
     parser.add_argument("--apply-profile", action="store_true", help="Apply generated project profile to seo-cycle.yaml with backup.")
     parser.add_argument("--skip-intake", action="store_true", help="Do not refresh project-intake defaults.")
     parser.add_argument("--skip-automation", action="store_true", help="Do not generate automation plan artifacts.")
+    parser.add_argument("--task", default="first SEO cycle setup", help="Task text for the low-token task router.")
     parser.add_argument("--format", choices=("md", "json"), default="md")
     args = parser.parse_args()
 
@@ -319,6 +331,13 @@ def main() -> int:
             )
         )
 
+    task_router_command = [sys.executable, str(root / "scripts/task-router.py"), str(cfg_path), "--task", args.task]
+    if args.write:
+        task_router_command.append("--write")
+    else:
+        task_router_command.extend(["--format", "json"])
+    steps.append(run_step("task router", task_router_command, project_root))
+
     validation_step = run_step("validate config", [sys.executable, str(root / "scripts/validate-config.py"), str(cfg_path)], project_root)
     steps.append(validation_step)
 
@@ -336,6 +355,11 @@ def main() -> int:
         automation = json.loads((project_root / "seo" / "automations" / "automation-plan.json").read_text(encoding="utf-8")) if (project_root / "seo" / "automations" / "automation-plan.json").exists() else {}
     if "allowed" not in automation and "schedule_install_allowed" in automation:
         automation["allowed"] = automation.get("schedule_install_allowed")
+    task_router_step = next((step for step in steps if step["name"] == "task router"), {})
+    task_route = load_json_output(task_router_step)
+    task_route_file = project_root / "seo" / "setup" / "latest-task-route.json"
+    if not task_route and task_route_file.exists():
+        task_route = json.loads(task_route_file.read_text(encoding="utf-8"))
     validation = parse_validation(validation_step)
     artifacts = artifact_status(project_root, cfg)
     paid_missing = enabled_paid_missing_env(governance)
@@ -351,6 +375,7 @@ def main() -> int:
         "governance": governance,
         "sources": sources,
         "automation": automation,
+        "task_route": task_route,
         "paid_missing_env": paid_missing,
         "artifacts": artifacts,
         "steps": [

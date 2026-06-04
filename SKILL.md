@@ -27,6 +27,7 @@ description: Универсальный SEO/контент-цикл оркест
 - `seo/project-intake-report.md` — человекочитаемый отчёт по intake; создаётся `scripts/project-intake-wizard.py`.
 - `seo/project-profile.generated.yaml` и `seo/project-profile-report.md` — сгенерированный overlay/отчёт по intake; применять к `seo-cycle.yaml` только через явный `scripts/project-profile.py --apply`.
 - `seo/setup/setup-control-plane.md` — компактная readiness-сводка intake/profile/sources/governance/validation/automation; создаётся `scripts/setup-control-plane.py --write`.
+- `seo/setup/latest-task-route.md` — low-token маршрут под последнюю конкретную задачу: фазы, источники, approval gates, blocked actions, automation и context caps; создаётся `scripts/task-router.py --task "..." --write`.
 
 Если файлы есть, они являются локальным контрактом проекта:
 
@@ -35,6 +36,7 @@ description: Универсальный SEO/контент-цикл оркест
 - Не запускай whole-site NeuronWriter или Google NLP без конкретной одобренной очереди URL/keywords и достаточного остатка в policy.
 - Перед дорогими или широкими задачами запускай `scripts/governance-report.py --format md`: он показывает active sources, budget caps, token policy, missing policy files и approval gates.
 - Для первого запуска или handoff используй `scripts/setup-control-plane.py --write`: он собирает low-token readiness report и next actions без вывода секретов.
+- Перед конкретной задачей запускай `scripts/task-router.py --task "<что делаем>" --write` и следуй `seo/setup/latest-task-route.md`; не поднимай полный цикл/сырьё в контекст, если route ограничивает фазы и источники.
 - Для запланированных автоматизаций используй `scripts/automation-plan.py`: сначала `--write --include-disabled`, затем ручной review `seo/automations/*`; `--install-cron` только если governance и automation-policy разрешают schedules.
 - Для детальной настройки нового проекта используй `scripts/project-intake-wizard.py --interactive --write`; для автозаполнения из `seo-cycle.yaml` — `--defaults --write`.
 - Для точечной настройки нового проекта используй `scripts/project-profile.py --write`: он выводит recommended engines/sources/marketing/governance по `seo/project-intake.yaml`; `--apply` делает backup и обновляет `seo-cycle.yaml`.
@@ -111,7 +113,7 @@ Phase 10 Iteration                    (cycle continues)
 
 **Шаги:**
 1. Найти `seo-cycle.yaml` в проекте (поиск: `./seo-cycle.yaml` → `./.seo-cycle.yaml` → `./seo/seo-cycle.yaml` → `./.claude/seo-cycle.yaml`).
-2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + governance + image workflow + optional detailed intake → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`, а также создать `seo/project-intake.yaml`, `seo/project-intake-report.md` и `seo/setup/setup-control-plane.md`.
+2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + governance + image workflow + optional detailed intake → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`, а также создать `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/setup/setup-control-plane.md` и `seo/setup/latest-task-route.md`.
 3. Если **найден** — провалидировать: `python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <path>`.
 4. Прочитать `context_files` из конфига (обычно `CLAUDE.md`, brand guidelines).
 5. Определить **режим цикла** (`mode` в конфиге, default `standard`):
@@ -122,6 +124,11 @@ Phase 10 Iteration                    (cycle continues)
    - Что продвигаем: категорию / кластер блога / тему / весь сайт?
    - Сроки: разовая кампания или регулярный цикл?
    - Глубина: только семантика, до publish, или до monitoring?
+7. Зафиксировать low-token маршрут текущей задачи:
+```bash
+python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "<цель пользователя>" --write
+```
+Затем читать `seo/setup/latest-task-route.md` и запускать только фазы/источники из маршрута, соблюдая approval gates и context caps.
 
 **Маркетинг-стратегия (если `marketing.enabled` и цель шире SEO):** оценить, нужна ли платная реклама или хватит органики+локалки — `prompts/marketing-strategy.md` + `scripts/roi-calc.py` (воронка/ROI/ДРР по каналам). Реклама — только при дефиците объёма с ROI>0. Каналы дистрибуции и маркетплейсы — `prompts/distribution-channels.md`. Единый план — `prompts/marketing-calendar.md`.
 
