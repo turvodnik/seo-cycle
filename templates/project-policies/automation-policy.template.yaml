@@ -33,6 +33,14 @@ forbidden_without_explicit_policy:
   - bulk_noindex_or_robots_change
 
 planned_automations:
+  usage_budget_watch:
+    enabled: false
+    cadence: weekly
+    mode: report_only
+    actions:
+      - usage_ledger_report
+      - budget_cap_watch
+      - approval_queue_summary
   weekly_read_only_health:
     enabled: false
     cadence: weekly

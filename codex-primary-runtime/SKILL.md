@@ -15,14 +15,15 @@ description: Точка входа для seo-cycle, когда Codex — осн
 ## Как работать
 
 1. Установи режим: `export SEO_RUNTIME=codex`.
-2. Прочитай `seo-cycle.yaml`, `docs/codex-runtime.md` и локальные policy-файлы проекта, если есть: `seo/setup/setup-control-plane.md`, `seo/setup/latest-task-route.md`, `seo/setup/latest-usage-ledger.md`, `seo/neuronwriter-limits.yaml`, `seo/neuronwriter.md`, `seo/entities/google-nlp-policy.yaml`, `seo/seo-data-collection-map.md`, `seo/access-setup-runbook.md`, `seo/ai-visibility-prompts.csv`, `seo/tool-budget.yaml`, `seo/automation-policy.yaml`, `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/project-profile.generated.yaml`.
+2. Прочитай `seo-cycle.yaml`, `docs/codex-runtime.md` и локальные policy-файлы проекта, если есть: `seo/setup/setup-control-plane.md`, `seo/setup/latest-task-route.md`, `seo/setup/latest-usage-ledger.md`, `seo/automations/automation-recommendations.md`, `seo/neuronwriter-limits.yaml`, `seo/neuronwriter.md`, `seo/entities/google-nlp-policy.yaml`, `seo/seo-data-collection-map.md`, `seo/access-setup-runbook.md`, `seo/ai-visibility-prompts.csv`, `seo/tool-budget.yaml`, `seo/automation-policy.yaml`, `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/project-profile.generated.yaml`.
 3. Перед дорогим сбором, браузером, публикацией или scheduled automation запусти `python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md`.
 4. Для единой readiness-сводки используй `python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write`.
 5. Перед конкретной задачей запусти `python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "<цель пользователя>" --write` и следуй `seo/setup/latest-task-route.md`.
 6. Перед расходом токенов/API/credits/ads сделай `python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py check --service <tool> ... --fail-on-block`; после расхода запиши `usage-ledger.py record --service <tool> ... --write`.
-7. Для детального intake используй `python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`.
-8. Для точечной настройки проекта используй `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review overlay/report.
-9. Веди по фазам из `AGENTS.md`, но не шире task route и usage ledger.
+7. Для рекомендаций schedule запускай `python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write`; `--apply` только после review, `--allow-schedules` только при явном разрешении.
+8. Для детального intake используй `python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`.
+9. Для точечной настройки проекта используй `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review overlay/report.
+10. Веди по фазам из `AGENTS.md`, но не шире task route и usage ledger.
 
 Правила гибрида:
 

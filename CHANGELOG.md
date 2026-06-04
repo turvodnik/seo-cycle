@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.24.0] — 2026-06-05
+
+### Per-project automation recommender
+
+- Added `scripts/automation-recommender.py` to recommend planned automations from project intake, business type, market, search engines, local/ecommerce decisions, AI visibility tools, and current automation policy.
+- The recommender writes `seo/automations/automation-recommendations.md/json` and `seo/automation-policy.generated.yaml`; `--apply` safely updates `seo/automation-policy.yaml` with backup.
+- Schedule installation remains guarded: `--apply` does not set `create_schedules: true` unless `--allow-schedules` is explicitly passed, and `automation-plan.py --install-cron` still requires governance + policy + env gates.
+- Added `usage_budget_watch` as a first-class safe report-only automation and wired it into `automation-plan.py`.
+- `setup-control-plane.py`, project templates, validation, governance report, init wizard, README, INSTALL, GUIDE, SKILL.md, and Codex runtime docs now include automation recommendations as part of first-run setup.
+
 ## [1.23.0] — 2026-06-05
 
 ### Usage and budget ledger

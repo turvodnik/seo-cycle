@@ -117,6 +117,8 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "active_sources_latest": "seo/setup/latest-sources.json",
         "usage_ledger": "seo/usage/usage-ledger.jsonl",
         "latest_usage_report": "seo/setup/latest-usage-ledger.md",
+        "automation_recommendations": "seo/automations/automation-recommendations.md",
+        "automation_policy_generated": "seo/automation-policy.generated.yaml",
         "automation_plan": "seo/automations/automation-plan.md",
         "automation_plan_json": "seo/automations/automation-plan.json",
         "automation_crontab": "seo/automations/crontab.txt",
@@ -191,6 +193,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     governance = report.get("governance", {})
     sources = report.get("sources", {})
     automation = report.get("automation", {})
+    automation_recommendations = report.get("automation_recommendations", {})
     task_route = report.get("task_route", {})
     usage = report.get("usage_ledger", {})
     lines = [
@@ -210,6 +213,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Paid/quota sources needing env: {len(report.get('paid_missing_env', []))}",
         f"- Usage ledger status: {usage.get('evaluation', {}).get('status')}",
         f"- Usage ledger allowed: {usage.get('evaluation', {}).get('allowed')}",
+        f"- Recommended automations: {len((automation_recommendations.get('policy_overlay') or {}).get('planned_automations', {}))}",
         f"- Automation install allowed: {automation.get('allowed')}",
     ]
     if automation.get("blockers"):
@@ -350,6 +354,13 @@ def main() -> int:
         usage_command.extend(["--format", "json"])
     steps.append(run_step("usage ledger", usage_command, project_root))
 
+    automation_recommender_command = [sys.executable, str(root / "scripts/automation-recommender.py"), str(cfg_path)]
+    if args.write:
+        automation_recommender_command.append("--write")
+    else:
+        automation_recommender_command.extend(["--format", "json"])
+    steps.append(run_step("automation recommender", automation_recommender_command, project_root))
+
     validation_step = run_step("validate config", [sys.executable, str(root / "scripts/validate-config.py"), str(cfg_path)], project_root)
     steps.append(validation_step)
 
@@ -377,6 +388,11 @@ def main() -> int:
     usage_file = project_root / "seo" / "setup" / "latest-usage-ledger.json"
     if not usage_ledger and usage_file.exists():
         usage_ledger = json.loads(usage_file.read_text(encoding="utf-8"))
+    automation_recommender_step = next((step for step in steps if step["name"] == "automation recommender"), {})
+    automation_recommendations = load_json_output(automation_recommender_step)
+    automation_recommendations_file = project_root / "seo" / "automations" / "automation-recommendations.json"
+    if not automation_recommendations and automation_recommendations_file.exists():
+        automation_recommendations = json.loads(automation_recommendations_file.read_text(encoding="utf-8"))
     validation = parse_validation(validation_step)
     artifacts = artifact_status(project_root, cfg)
     paid_missing = enabled_paid_missing_env(governance)
@@ -394,6 +410,7 @@ def main() -> int:
         "automation": automation,
         "task_route": task_route,
         "usage_ledger": usage_ledger,
+        "automation_recommendations": automation_recommendations,
         "paid_missing_env": paid_missing,
         "artifacts": artifacts,
         "steps": [

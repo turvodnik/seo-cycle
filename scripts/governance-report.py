@@ -133,6 +133,8 @@ def policy_file_status(cfg: dict[str, Any], project_root: pathlib.Path) -> list[
         "automation_policy": "seo/automation-policy.yaml",
         "usage_ledger": "seo/usage/usage-ledger.jsonl",
         "latest_usage_report": "seo/setup/latest-usage-ledger.md",
+        "automation_recommendations": "seo/automations/automation-recommendations.md",
+        "automation_policy_generated": "seo/automation-policy.generated.yaml",
         "setup_control_plane": "seo/setup/setup-control-plane.md",
         "latest_task_route": "seo/setup/latest-task-route.md",
         "project_intake": "seo/project-intake.yaml",

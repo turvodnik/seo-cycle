@@ -33,6 +33,8 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - `seo/setup/latest-task-route.md`
 - `seo/setup/latest-usage-ledger.md`
 - `seo/usage/usage-ledger.jsonl`
+- `seo/automations/automation-recommendations.md`
+- `seo/automation-policy.generated.yaml`
 - `seo/project-intake.yaml`
 - `seo/project-intake-report.md`
 - `seo/project-profile.generated.yaml`
@@ -45,6 +47,7 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - перед началом большого цикла обновлять compact readiness: `python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write`;
 - перед конкретной задачей строить bounded route: `python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "<цель пользователя>" --write` и запускать только фазы/источники из `seo/setup/latest-task-route.md`;
 - перед расходом токенов/API/credits/ads делать preflight `python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py check --service <tool> ... --fail-on-block`, после расхода фиксировать `usage-ledger.py record --service <tool> ... --write`;
+- рекомендации schedule строить через `python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write`; применять через `--apply` только после review, `--allow-schedules` только по явному разрешению;
 - детальную настройку стран/поисковиков/регионов/ads/local/merchant/tools/governance делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`;
 - точечную настройку проекта делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review generated overlay/report;
 - schedule-артефакты создавать через `python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled`; реальный cron install — только при двойном разрешении governance + `seo/automation-policy.yaml`;

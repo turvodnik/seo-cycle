@@ -41,6 +41,7 @@ RUNNER_COMMANDS = {
 }
 
 DEFAULT_AUTOMATION_CRON = {
+    "usage_budget_watch": "0 7 * * 1",
     "weekly_read_only_health": "0 8 * * 1",
     "monthly_keyword_refresh": "0 10 1 * *",
     "monthly_ai_visibility": "0 11 2 * *",
@@ -118,6 +119,12 @@ def governance_allows_schedules(cfg: dict[str, Any], policy: dict[str, Any]) -> 
 
 def command_for_policy_task(project_root: pathlib.Path, task_id: str, mode: str) -> str:
     root = skill_root()
+    if task_id == "usage_budget_watch":
+        return (
+            f"cd {shell_quote(project_root)} && "
+            f"python3 {shell_quote(root / 'scripts/usage-ledger.py')} report --write && "
+            f"python3 {shell_quote(root / 'scripts/governance-report.py')} --format md > seo/automations/latest-governance.md"
+        )
     if task_id == "weekly_read_only_health":
         return (
             f"cd {shell_quote(project_root)} && "
