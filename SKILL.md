@@ -24,6 +24,7 @@ description: Универсальный SEO/контент-цикл оркест
 - `seo/tool-budget.yaml` — лимиты токенов, paid API, LLM, подписок, кэша и stop-условия по источникам.
 - `seo/automation-policy.yaml` — какие scheduled automations разрешены, какие требуют approval, какие запрещены без явной policy.
 - `seo/project-intake.yaml` — детальная карта проекта: страны, регионы, поисковики, local/merchant/ads/video/analytics decisions.
+- `seo/project-profile.generated.yaml` и `seo/project-profile-report.md` — сгенерированный overlay/отчёт по intake; применять к `seo-cycle.yaml` только через явный `scripts/project-profile.py --apply`.
 
 Если файлы есть, они являются локальным контрактом проекта:
 
@@ -32,6 +33,7 @@ description: Универсальный SEO/контент-цикл оркест
 - Не запускай whole-site NeuronWriter или Google NLP без конкретной одобренной очереди URL/keywords и достаточного остатка в policy.
 - Перед дорогими или широкими задачами запускай `scripts/governance-report.py --format md`: он показывает active sources, budget caps, token policy, missing policy files и approval gates.
 - Для запланированных автоматизаций используй `scripts/automation-plan.py`: сначала `--write --include-disabled`, затем ручной review `seo/automations/*`; `--install-cron` только если governance и automation-policy разрешают schedules.
+- Для точечной настройки нового проекта используй `scripts/project-profile.py --write`: он выводит recommended engines/sources/marketing/governance по `seo/project-intake.yaml`; `--apply` делает backup и обновляет `seo-cycle.yaml`.
 - Оптимизация токенов обязательна: сырьё сохраняй на диск, в контекст загружай только distillates/top-N; не читай raw CSV/JSON целиком, если `governance.token_policy.raw_data_in_context=false`.
 - Robots/Content-Signal — отдельная техническая политика: `search=yes, ai-input=yes, ai-train=no` означает "можно показывать в поиске и AI-ответах, нельзя использовать для обучения". Если SEO plugin ломает `robots.txt` PHP warning'ом, сначала отключи/почини источник генерации, затем проверь чистый публичный `robots.txt`.
 - Для РФ/российских проектов не добавляй зарубежные analytics/tracking tags или pixels без явного разрешения в policy. GSC, Bing Webmaster, PageSpeed/CrUX, sitemap/robots checks и off-site API audits допустимы, потому что не требуют установки аналитического кода на сайт.

@@ -132,6 +132,7 @@ def policy_file_status(cfg: dict[str, Any], project_root: pathlib.Path) -> list[
         "tool_budget": "seo/tool-budget.yaml",
         "automation_policy": "seo/automation-policy.yaml",
         "project_intake": "seo/project-intake.yaml",
+        "project_profile": "seo/project-profile.generated.yaml",
     }
     configured = cfg.get("policy_files", {}) or {}
     rows = []

@@ -249,6 +249,12 @@ if [ -f "seo/project-intake.yaml" ]; then
     sed_in_place "s|default_automation_mode: approval_only|default_automation_mode: $AUTOMATION_MODE|" "seo/project-intake.yaml"
 fi
 
+if [ -f "seo/project-intake.yaml" ]; then
+    python3 "$SKILL_ROOT/scripts/project-profile.py" "$TARGET" --write >/dev/null 2>&1 \
+        && echo "✓ project profile создан: seo/project-profile.generated.yaml + seo/project-profile-report.md" \
+        || echo "ℹ project profile не создан — запусти scripts/project-profile.py после заполнения intake"
+fi
+
 # Дозапись проекта в общий реестр (идемпотентно — по path)
 REGISTRY="$SKILL_ROOT/config/projects-registry.yaml"
 PROJECT_PATH="$(pwd)"
@@ -279,11 +285,14 @@ echo "  2. Заполни .env с API ключами (см. docs/oauth-setup.md 
 echo "  2b. Обнови policy-файлы в seo/ при подключении NeuronWriter, Google NLP, GSC/Яндекс/Бинг и автоматизаций"
 echo "  3. Запусти валидатор:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py"
-echo "  4. Посмотри governance report:"
+echo "  4. Примени или обнови точечный project profile:"
+echo "     python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write"
+echo "     # после проверки: python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --apply"
+echo "  5. Посмотри governance report:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md"
-echo "  5. Создай безопасный план автоматизаций:"
+echo "  6. Создай безопасный план автоматизаций:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled"
-echo "  6. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
+echo "  7. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
 echo ""
 
 # Сразу прогоняем валидатор

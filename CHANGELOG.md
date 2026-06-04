@@ -1,5 +1,16 @@
 # Changelog — seo-cycle
 
+## [1.19.0] — 2026-06-04
+
+### Project profile overlay and intake applier
+
+- Added `scripts/project-profile.py` to read `seo/project-intake.yaml` and generate project-specific engines, region profile, source overrides, marketing decisions, and governance recommendations.
+- Default mode writes `seo/project-profile.generated.yaml` and `seo/project-profile-report.md`; `--apply` updates `seo-cycle.yaml` only after explicit review and creates a timestamped backup.
+- `init-project.sh` now generates the initial project profile report/overlay after creating policy templates.
+- `policy_files` now includes `project_profile`, and governance/Codex docs mention the generated overlay.
+- Codex entrypoint and SKILL.md now route detailed per-project setup through `project-profile.py --write` before optional `--apply`.
+- `docs/oauth-setup.md` now covers the broader access matrix from the setup work: Google NLP/Merchant/Business/YouTube, Bing Webmaster/IndexNow/Places, Yandex Merchant/Direct, and RF tracking-tag restrictions.
+
 ## [1.18.0] — 2026-06-04
 
 ### Safe scheduled automation planner

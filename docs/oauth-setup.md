@@ -1,17 +1,20 @@
-# OAuth Setup — подключение аналитики
+# OAuth Setup — подключение аналитики и webmaster/API источников
 
-Разовая настройка API-доступа к Google Search Console, Google Analytics 4, PageSpeed Insights и Яндекс.Метрика/Вебмастер для observability hub (Phase 9).
+Разовая настройка API-доступа к Google Search Console, PageSpeed Insights, Яндекс.Вебмастер/Метрика, Bing Webmaster/IndexNow и optional Google/Yandex/Microsoft сервисам для observability hub (Phase 9).
 
 После настройки скрипты `gsc-fetch.py`, `ga4-fetch.py`, `psi-fetch.py`, `metrika-fetch.py`, `webmaster-fetch.py` будут вызывать API напрямую и выдавать JSON для `snapshot-build.py`.
+
+Для РФ-проектов не ставь зарубежные analytics/tracking tags или pixels без явного разрешения в `seo/seo-data-collection-map.md`. GSC, Bing Webmaster, PageSpeed/CrUX, sitemap/robots checks, Google NLP audit и кабинеты без кода на сайте допустимы как off-site/read-only источники.
 
 ## TL;DR — что надо
 
 1. **GCP project** + service account JSON ключ → `GOOGLE_APPLICATION_CREDENTIALS`
 2. **Search Console**: добавить service account email как пользователя сайта
-3. **GA4**: добавить service account email как Viewer на property
+3. **GA4**: добавлять только если проект разрешает счетчик/аналитику; для РФ по умолчанию не ставим новый tag
 4. **Яндекс OAuth токен** → `YANDEX_OAUTH_TOKEN`
 5. **PSI** — без авторизации работает, опц. API key для повышенного rate limit
-6. Скопировать `.env.example` → `.env`, заполнить, добавить в `.gitignore`
+6. **Bing Webmaster API key** и **IndexNow key** — без установки analytics tag
+7. Скопировать `.env.example` → `.env`, заполнить, добавить в `.gitignore`
 
 ## 1. Google Cloud Platform setup (одноразово)
 
@@ -170,25 +173,105 @@ python3 ~/.claude/skills/seo-cycle/scripts/metrika-fetch.py --days 7 --limit 5
 python3 ~/.claude/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 10
 ```
 
-## 6. Полная таблица env vars
+## 6. Google Cloud Natural Language
+
+Используй только как guarded entity audit: сущности, salience, категории, syntax и moderation/sentiment только в рамках `seo/entities/google-nlp-policy.yaml`. Это не "передача сущностей в Google для ранжирования".
+
+1. В GCP включить **Cloud Natural Language API** (`language.googleapis.com`).
+2. Подключить billing и создать budget alert, обычно `$5/month`.
+3. Включить локальные guards:
+   ```bash
+   GOOGLE_NLP_ENABLED=1
+   GOOGLE_NLP_BILLING_APPROVED=1
+   GOOGLE_NLP_CLOUD_BUDGET_USD=5
+   GOOGLE_NLP_CACHE_DAYS=30
+   GOOGLE_NLP_POLICY_FILE=seo/entities/google-nlp-policy.yaml
+   ```
+4. Запускать только важные URL и кэшировать результаты:
+   ```bash
+   python3 ~/.claude/skills/seo-cycle/scripts/google-nlp-audit.py --help
+   ```
+
+## 7. Google Merchant, Business Profile и YouTube
+
+Эти сервисы подключаются только когда нужны проекту и не требуют установки аналитического кода:
+
+- **Google Merchant Center**: добавить service account/user туда, где API поддержан аккаунтом; в `.env` указать `GOOGLE_MERCHANT_ACCOUNT_ID`.
+- **Google Business Profile / Maps**: OAuth/user access; в `.env` указать `GOOGLE_BUSINESS_ACCOUNT_ID` и `GOOGLE_BUSINESS_LOCATION_ID`.
+- **YouTube Data API**: включить в GCP, OAuth нужен для публикации/управления; API key обычно достаточно только для публичного чтения. В `.env`: `YOUTUBE_CHANNEL_ID`.
+
+Платные кампании Google Ads не запускать без `governance.budget_policy.ads_spend_enabled=true`, бюджета и отдельного approval.
+
+## 8. Bing / Microsoft
+
+### 8.1. Bing Webmaster
+
+1. Открыть [bing.com/webmasters](https://www.bing.com/webmasters/).
+2. Добавить сайт или импортировать из GSC.
+3. Получить API key в настройках Bing Webmaster.
+4. В `.env`:
+   ```bash
+   BING_WEBMASTER_API_KEY=...
+   BING_SITE_URL=https://example.com/
+   ```
+
+### 8.2. IndexNow
+
+1. Сгенерировать ключ.
+2. Разместить файл `<key>.txt` в корне сайта или через CMS/plugin.
+3. В `.env`:
+   ```bash
+   INDEXNOW_KEY=...
+   INDEXNOW_KEY_LOCATION=https://example.com/<indexnow-key>.txt
+   ```
+
+### 8.3. Bing Places и Microsoft Ads
+
+- **Bing Places** обычно ведётся через кабинет; публичный API ограничен trusted partner program. Для агентства можно вести клиентские карточки в агентском кабинете, если регион/сервис принимает бизнес.
+- **Microsoft Ads** пропускать, если требуется биллинг. Включать только для чтения/настройки после approval.
+
+## 9. Яндекс дополнительные сервисы
+
+В одном Яндекс OAuth приложении добавляй только нужные доступы:
+
+- Яндекс.Вебмастер: индексация, диагностика, поисковые запросы.
+- Яндекс.Метрика: только если проект разрешает счетчик/аналитику и счетчик уже легален для сайта.
+- Яндекс.Товары / Merchant: фиды, ошибки товаров, категории; `.env`: `YANDEX_MERCHANT_BUSINESS_ID`.
+- Яндекс.Директ: семантика/отчеты/настройки без расходов; `.env`: `YANDEX_DIRECT_CLIENT_LOGIN`.
+
+Яндекс Алису пока не подключаем: для SEO нет прямого API, который "передаёт сайт в ранжирование Алисы". Возвращаемся к ней только если появится конкретный сценарий навыка/каталога/контента.
+
+## 10. Полная таблица env vars
 
 | Переменная | Источник | Тип | Обязательность |
 |---|---|---|---|
 | `GOOGLE_APPLICATION_CREDENTIALS` | путь к service account JSON | path | для GSC/GA4 |
 | `GSC_SITE_URL` | `sc-domain:example.com` или URL | string | для GSC |
-| `GA4_PROPERTY_ID` | Property ID (числовой) | string | для GA4 |
+| `GA4_PROPERTY_ID` | Property ID (числовой) | string | для GA4, если разрешено policy |
 | `PSI_API_KEY` | PageSpeed API key | string | опц. (без — rate limit 25/день) |
+| `GOOGLE_MERCHANT_ACCOUNT_ID` | Merchant account ID | string | опц. |
+| `GOOGLE_BUSINESS_ACCOUNT_ID` | GBP account ID | string | опц. |
+| `GOOGLE_BUSINESS_LOCATION_ID` | GBP location ID | string | опц. |
+| `YOUTUBE_CHANNEL_ID` | YouTube channel ID | string | опц. |
+| `GOOGLE_NLP_*` | NLP local guards/cache/budget | string | опц., billing-gated |
 | `YANDEX_OAUTH_TOKEN` | OAuth токен Яндекса | string | для Метрики + Вебмастера |
 | `YANDEX_METRIKA_COUNTER_ID` | Counter ID Метрики | string | для Метрики |
 | `YANDEX_USER_ID` | Yandex user ID | string | для Вебмастера |
 | `YANDEX_WEBMASTER_HOST_ID` | `https:example.com:443` | string | для Вебмастера |
+| `YANDEX_MERCHANT_BUSINESS_ID` | ID бизнеса Яндекс.Товаров/Маркет | string | опц. |
+| `YANDEX_DIRECT_CLIENT_LOGIN` | логин клиента Директа | string | опц., без расходов без approval |
+| `BING_WEBMASTER_API_KEY` | Bing Webmaster API key | string | опц. |
+| `BING_SITE_URL` | verified Bing site URL | string | опц. |
+| `INDEXNOW_KEY` | IndexNow key | string | опц. |
+| `INDEXNOW_KEY_LOCATION` | URL key-файла | string | опц. |
+| `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` | Microsoft OAuth app | string | опц., если нужен Graph/Ads OAuth |
 | `NEURON_API_KEY` | NeuronWriter | string | для NW evaluate/import |
 | `TOKEN_ANSWERTHEPUBLIC` | ATP | string | опц. (только en/us) |
 | `WP_BASE_URL`, `WP_USER`, `WP_APP_PASSWORD` | WordPress REST | string | для WP publishing |
 | `WOO_REST_API_KEY`, `WOO_REST_API_SECRET` | WooCommerce REST | string | для WooCommerce |
 | `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` | DataForSEO | string | опц. (платная подписка) |
 
-## 7. Безопасность
+## 11. Безопасность
 
 - **`.env` в `.gitignore`** — никогда не коммить
 - Service account JSON — `chmod 600`, не публиковать
@@ -196,6 +279,6 @@ python3 ~/.claude/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 1
 - В CI/CD — использовать secret manager (GitHub Secrets, GCP Secret Manager)
 - Rate limits: GSC ~1200 запросов/мин, GA4 ~120 req/min/property, PSI без ключа — 25/день
 
-## 8. Troubleshooting
+## 12. Troubleshooting
 
 См. `docs/troubleshooting.md` для типичных ошибок (`403 PERMISSION_DENIED`, `401 Unauthorized`, expired tokens).

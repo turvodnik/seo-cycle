@@ -82,6 +82,7 @@ policy_files:
   tool_budget: seo/tool-budget.yaml
   automation_policy: seo/automation-policy.yaml
   project_intake: seo/project-intake.yaml
+  project_profile: seo/project-profile.generated.yaml
 
 # -----------------------------------------------------------------------------
 # 3b. Governance — лимиты токенов, денег, подписок и автоматизаций
