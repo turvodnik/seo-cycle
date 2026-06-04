@@ -79,6 +79,86 @@ policy_files:
   data_collection_map: seo/seo-data-collection-map.md
   access_setup_runbook: seo/access-setup-runbook.md
   ai_visibility_prompts: seo/ai-visibility-prompts.csv
+  tool_budget: seo/tool-budget.yaml
+  automation_policy: seo/automation-policy.yaml
+  project_intake: seo/project-intake.yaml
+
+# -----------------------------------------------------------------------------
+# 3b. Governance — лимиты токенов, денег, подписок и автоматизаций
+# -----------------------------------------------------------------------------
+# Это верхний контракт для "мега-мозга": максимум качества при управляемом
+# расходе токенов/API/подписок. Перед платными источниками, большими браузерными
+# сессиями, публикацией или scheduled automation сверяйся с этим блоком и
+# policy-файлами выше.
+governance:
+  profile: lean_quality              # lean_quality | balanced_growth | aggressive_growth | custom
+  objective: max_quality_under_budget
+
+  token_policy:
+    raw_data_in_context: false       # сырьё на диск, в контекст только distillate
+    progressive_disclosure: true     # читать только нужные docs/templates/scripts
+    require_distillate_before_synthesis: true
+    max_context_input_tokens_per_phase: 45000
+    max_output_tokens_per_artifact: 7000
+    max_raw_rows_loaded: 200
+    distillate_max_lines: 220
+    cache_first: true                # перед дорогим сбором проверять cache/TTL
+    browser_session_budget_minutes: 20
+    browser_pages_per_phase_cap: 20
+
+  budget_policy:
+    monthly_total_usd_cap: 0         # 0 = no paid spend by default
+    monthly_paid_api_usd_cap: 0
+    monthly_llm_usd_cap: 0
+    require_approval_over_usd: 0
+    cloud_budget_alert_usd: 5
+    ads_spend_enabled: false
+    paid_tools_default: approval_only # disabled | approval_only | enabled_with_caps
+
+  subscriptions:
+    neuronwriter:
+      enabled: false
+      plan: not_configured
+      limits_file: seo/neuronwriter-limits.yaml
+    google_cloud_nlp:
+      enabled: false
+      budget_file: seo/entities/google-nlp-policy.yaml
+    keys_so:
+      enabled: false
+      monthly_request_cap: 0
+      reserve_requests: 0
+    serpstat:
+      enabled: false
+      monthly_credit_cap: 0
+      reserve_credits: 0
+    spyfu:
+      enabled: false
+      monthly_usd_cap: 0
+    dataforseo:
+      enabled: false
+      monthly_usd_cap: 0
+
+  automation_policy:
+    default_mode: approval_only       # disabled | report_only | approval_only | auto_with_caps
+    create_schedules: false
+    allowed_without_approval:
+      - cached_fetch
+      - robots_sitemap_check
+      - public_pagespeed_check
+      - read_only_index_status
+    approval_required:
+      - publishing
+      - index_submission
+      - paid_api_run
+      - browser_mass_collection
+      - content_rewrite
+      - schema_change
+    forbidden_without_explicit_policy:
+      - paid_ads_launch
+      - tracking_tag_install
+      - whole_site_paid_nlp
+      - whole_catalog_generation
+      - destructive_indexing_change
 
 # -----------------------------------------------------------------------------
 # 4. Project type & mode — что это за сайт и какой режим цикла

@@ -21,12 +21,17 @@ description: Универсальный SEO/контент-цикл оркест
 - `seo/seo-data-collection-map.md` — разрешённые источники данных, AI visibility checks, ecommerce/product sources, политика tracking/tag.
 - `seo/access-setup-runbook.md` — подключённые аккаунты, пропущенные платные сервисы, API notes, операционные ограничения.
 - `seo/ai-visibility-prompts.csv` — стартовая очередь AI visibility запросов и evidence-полей для Google AI/Bing Copilot/Perplexity/OpenAI/Claude/Gemini/DeepSeek.
+- `seo/tool-budget.yaml` — лимиты токенов, paid API, LLM, подписок, кэша и stop-условия по источникам.
+- `seo/automation-policy.yaml` — какие scheduled automations разрешены, какие требуют approval, какие запрещены без явной policy.
+- `seo/project-intake.yaml` — детальная карта проекта: страны, регионы, поисковики, local/merchant/ads/video/analytics decisions.
 
 Если файлы есть, они являются локальным контрактом проекта:
 
 - NeuronWriter — основной SERP/NLP редактор для content briefs, terms, entities, questions, competitor scores и финального content scoring, если есть `NEURON_API_KEY`, `seo/scripts/nw.sh` и limits-файл.
 - Google Cloud Natural Language — только guarded technical entity audit: entity extraction, salience, syntax/category checks, title/H1/schema/text mismatch. Не описывай его как ranking submission или прямой ranking signal.
 - Не запускай whole-site NeuronWriter или Google NLP без конкретной одобренной очереди URL/keywords и достаточного остатка в policy.
+- Перед дорогими или широкими задачами запускай `scripts/governance-report.py --format md`: он показывает active sources, budget caps, token policy, missing policy files и approval gates.
+- Оптимизация токенов обязательна: сырьё сохраняй на диск, в контекст загружай только distillates/top-N; не читай raw CSV/JSON целиком, если `governance.token_policy.raw_data_in_context=false`.
 - Robots/Content-Signal — отдельная техническая политика: `search=yes, ai-input=yes, ai-train=no` означает "можно показывать в поиске и AI-ответах, нельзя использовать для обучения". Если SEO plugin ломает `robots.txt` PHP warning'ом, сначала отключи/почини источник генерации, затем проверь чистый публичный `robots.txt`.
 - Для РФ/российских проектов не добавляй зарубежные analytics/tracking tags или pixels без явного разрешения в policy. GSC, Bing Webmaster, PageSpeed/CrUX, sitemap/robots checks и off-site API audits допустимы, потому что не требуют установки аналитического кода на сайт.
 - Никогда не выводи API keys, OAuth tokens, service-account JSON или значения `.env`; используй только имена переменных и пути к файлам.

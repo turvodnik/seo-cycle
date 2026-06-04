@@ -44,6 +44,7 @@
 | **Двойной рантайм** | Работает и под Claude Code, и под Codex CLI (гибрид: наши скрипты + нативные skills). |
 | **E-E-A-T из коробки** | Канонический Organization/LocalBusiness-узел, trust-блок источников, атрибуция источник→топ. |
 | **Масштаб на N проектов** | Реестр проектов + `init-project.sh` + `monthly-runner.sh all`. |
+| **Контроль токенов и бюджета** | `governance` + `tool-budget.yaml` + `governance-report.py`: cache-first, raw на диск, distillates в контекст, approval gates. |
 | **Прозрачность** | Все артефакты — файлы в репозитории проекта; единая SQLite-БД; Obsidian-дашборд. |
 
 ---
@@ -60,7 +61,7 @@ pip3 install pyyaml requests pillow beautifulsoup4 google-auth
 # 3. В корне СВОЕГО проекта — мастер настройки
 cd /path/to/your-project
 ~/.claude/skills/seo-cycle/scripts/init-project.sh
-#   → базовые вопросы + image workflow →
+#   → базовые вопросы + governance + image workflow →
 #   → создаёт seo-cycle.yaml, .env.example, AGENTS.md и policy-файлы
 #   → регистрирует проект в реестре
 
@@ -75,7 +76,12 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
 # 6. Готово. В Claude Code / Codex: «запусти SEO-цикл для категории X»
 ```
 
-**Что выдаёт `validate-config.py`:** список активных источников (с учётом `region_profile`), список недостающих env-переменных, предупреждения о несуществующих делегатах/путях/policy-файлах, итог ✓/ошибки.
+**Что выдаёт `validate-config.py`:** список активных источников (с учётом `region_profile`), список недостающих env-переменных, предупреждения о несуществующих делегатах/путях/policy-файлах/governance, итог ✓/ошибки.
+
+Перед дорогим сбором, браузерной сессией, публикацией или schedule:
+```bash
+python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
+```
 
 ---
 
@@ -99,8 +105,9 @@ test -f seo-cycle.yaml || cp ~/.claude/skills/seo-cycle/config/project.template.
 #   project_type, cms, business_profile и images.*. Для РФ: region_profile: ru.
 
 # Альтернатива: интерактивный wizard сразу спросит базовые поля + image workflow
-# (featured/inline ratios, WebP width/quality, source policy, captions, lazy policy)
-# и создаст AGENTS.md + policy-шаблоны для NeuronWriter/Google NLP/data access.
+# (governance profile, paid API/LLM budget, automation mode,
+# featured/inline ratios, WebP width/quality, source policy, captions, lazy policy)
+# и создаст AGENTS.md + policy-шаблоны для NeuronWriter/Google NLP/data access/budgets/automations.
 ~/.claude/skills/seo-cycle/scripts/init-project.sh
 
 # Шаг 4. Создать .env (попросить у человека только значения ключей)
@@ -199,12 +206,17 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 - `seo/seo-data-collection-map.md` — разрешённые источники данных, AI visibility checks, ecommerce/product sources, tracking/tag policy.
 - `seo/access-setup-runbook.md` — подключённые аккаунты, пропущенные платные сервисы, API notes, операционные ограничения.
 - `seo/ai-visibility-prompts.csv` — стартовая очередь AI visibility запросов и evidence-полей для Google AI/Bing Copilot/Perplexity/OpenAI/Claude/Gemini/DeepSeek.
+- `seo/tool-budget.yaml` — token/API/LLM/subscription caps, cache policy, stop conditions.
+- `seo/automation-policy.yaml` — scheduled automations, approval gates, forbidden actions.
+- `seo/project-intake.yaml` — детальная карта стран, регионов, поисковиков, рекламы, local/merchant/video/analytics decisions.
 
 Правила:
 
 - NeuronWriter — primary SERP/NLP редактор контента для briefs, terms, entities, questions, competitor scores и финального scoring, если есть `NEURON_API_KEY`, helper и limits-файл.
 - Google Cloud Natural Language — guarded technical entity audit: entities, salience, syntax/category, mismatch `title/H1/schema/text`. Это не ranking submission и не прямой ranking signal.
 - Whole-site NeuronWriter/Google NLP jobs запрещены без одобренной очереди URL/keywords и достаточного остатка в policy.
+- Перед дорогим сбором или автоматизацией запускай `governance-report.py`; если бюджет/approval не позволяют, делай только report-only/cached/read-only шаг.
+- Low-token режим обязателен: raw CSV/JSON/HTML на диск, в контекст только distillates/top-N; не читай весь репозиторий или сырьё без необходимости.
 - Robots/Content-Signal: `search=yes, ai-input=yes, ai-train=no` допустимо как запрет обучения моделей. Публичный `robots.txt` должен быть чистым `text/plain`, без PHP warnings/HTML и editor/preview мусора.
 - Для РФ-проектов не ставь зарубежные analytics/tracking tags или pixels без явного разрешения policy. GSC, Bing Webmaster, PageSpeed/CrUX, sitemap/robots checks и off-site API audits допустимы без установки кода аналитики.
 - Никогда не выводи API keys, OAuth tokens, service-account JSON или значения `.env`; только имена переменных и пути.
@@ -218,9 +230,10 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 ### 7.1 Управление источниками и конфигом
 | Скрипт | Что делает | Команда | Результат |
 |---|---|---|---|
-| `validate-config.py` | Проверяет `seo-cycle.yaml`, env, делегатов и policy-файлы | `python3 validate-config.py` | Список активных источников, недостающие ключи/policy, ✓/ошибки |
+| `validate-config.py` | Проверяет `seo-cycle.yaml`, env, делегатов, policy-файлы и governance | `python3 validate-config.py` | Список активных источников, недостающие ключи/policy, ✓/ошибки |
 | `resolve-sources.py` | Разворачивает `region_profile` + override в список активных источников | `python3 resolve-sources.py` | Активные/пропущенные источники с причиной + `seo/cycles/<date>/active-sources.json` |
-| `init-project.sh` | Мастер нового проекта | `bash init-project.sh` | `seo-cycle.yaml`, `.env.example`, запись в реестр |
+| `governance-report.py` | Показывает token/budget/tool/automation policy без секретов | `python3 governance-report.py --format md` | Markdown/JSON отчёт для Phase 0 и approval gates |
+| `init-project.sh` | Мастер нового проекта | `bash init-project.sh` | `seo-cycle.yaml`, `.env.example`, policy-файлы, запись в реестр |
 | `cycle-state.py` | Контракт состояния цикла (handoff между фазовыми скиллами) | `python3 cycle-state.py init --topic "X"` / `next` / `set <фаза> --status done --gate-passed` / `show` | `_state.json` с DAG фаз; «цепочка передачи» |
 
 ### 7.2 Сбор семантики
@@ -451,6 +464,7 @@ are scripts, the "project truth" lives in one config.
 | **Dual runtime** | Runs under both Claude Code and Codex CLI (hybrid: our scripts + native skills). |
 | **E-E-A-T built-in** | Canonical Organization/LocalBusiness node, source trust-block, source→top attribution. |
 | **Scales to N projects** | Project registry + `init-project.sh` + `monthly-runner.sh all`. |
+| **Token and budget control** | `governance` + `tool-budget.yaml` + `governance-report.py`: cache-first, raw to disk, distillates in context, approval gates. |
 | **Transparent** | All artifacts are files in the project repo; single SQLite DB; Obsidian dashboard. |
 
 ---
@@ -467,7 +481,7 @@ pip3 install pyyaml requests pillow beautifulsoup4 google-auth
 # 3. In YOUR project root — setup wizard
 cd /path/to/your-project
 ~/.claude/skills/seo-cycle/scripts/init-project.sh
-#   → base questions + image workflow → seo-cycle.yaml + .env.example + AGENTS.md + policy files
+#   → base questions + governance + image workflow → seo-cycle.yaml + .env.example + AGENTS.md + policy files
 #   → registers the project
 
 # 4. Fill keys (only sources you use)
@@ -503,8 +517,9 @@ test -f seo-cycle.yaml || cp ~/.claude/skills/seo-cycle/config/project.template.
 #   For Russia: region_profile: ru.
 
 # Alternative: the interactive wizard asks for base fields + image workflow
-# (featured/inline ratios, WebP width/quality, source policy, captions, lazy policy)
-# and creates AGENTS.md + policy templates for NeuronWriter/Google NLP/data access.
+# (governance profile, paid API/LLM budget, automation mode,
+# featured/inline ratios, WebP width/quality, source policy, captions, lazy policy)
+# and creates AGENTS.md + policy templates for NeuronWriter/Google NLP/data access/budgets/automations.
 ~/.claude/skills/seo-cycle/scripts/init-project.sh
 
 # Step 4. .env (ask the human only for key values)
@@ -603,12 +618,17 @@ Before starting phases, making API calls, spending credits, or changing tracking
 - `seo/seo-data-collection-map.md` — approved data sources, AI visibility checks, ecommerce/product sources, tracking/tag policy.
 - `seo/access-setup-runbook.md` — connected accounts, skipped paid services, API notes, operational constraints.
 - `seo/ai-visibility-prompts.csv` — starter AI visibility query queue and evidence fields for Google AI/Bing Copilot/Perplexity/OpenAI/Claude/Gemini/DeepSeek.
+- `seo/tool-budget.yaml` — token/API/LLM/subscription caps, cache policy, stop conditions.
+- `seo/automation-policy.yaml` — scheduled automations, approval gates, forbidden actions.
+- `seo/project-intake.yaml` — detailed map of countries, regions, search engines, ads, local/merchant/video/analytics decisions.
 
 Rules:
 
 - NeuronWriter is the primary SERP/NLP content editor for briefs, terms, entities, questions, competitor scores, and final scoring when `NEURON_API_KEY`, the helper, and a limits file are present.
 - Google Cloud Natural Language is a guarded technical entity audit layer for entities, salience, syntax/category, and `title/H1/schema/text` mismatches. It is not a ranking submission mechanism or direct ranking signal.
 - Whole-site NeuronWriter/Google NLP jobs are forbidden without an approved URL/keyword queue and enough remaining policy budget.
+- Run `governance-report.py` before expensive collection or automation; if budget/approval does not allow it, do only report-only/cached/read-only steps.
+- Low-token mode is mandatory: raw CSV/JSON/HTML to disk, only distillates/top-N in context; do not read the whole repository or raw source files without need.
 - Robots/Content-Signal: `search=yes, ai-input=yes, ai-train=no` is acceptable as a model-training opt-out. Public `robots.txt` must be clean `text/plain`, with no PHP warnings/HTML or editor/preview noise.
 - For Russian/RF projects, do not add foreign analytics/tracking tags or pixels without explicit policy approval. GSC, Bing Webmaster, PageSpeed/CrUX, sitemap/robots checks, and off-site API audits are acceptable because they do not install analytics code.
 - Never print API keys, OAuth tokens, service-account JSON, or `.env` values; use variable names and paths only.
@@ -622,9 +642,10 @@ Rules:
 ### 7.1 Source & config management
 | Script | What | Command | Output |
 |---|---|---|---|
-| `validate-config.py` | Validates config, env, delegates, policy files | `python3 validate-config.py` | Active sources, missing keys/policies, ✓/errors |
+| `validate-config.py` | Validates config, env, delegates, policy files, governance | `python3 validate-config.py` | Active sources, missing keys/policies, ✓/errors |
 | `resolve-sources.py` | Expands `region_profile` + overrides into active sources | `python3 resolve-sources.py` | Active/skipped sources with reason + `active-sources.json` |
-| `init-project.sh` | New-project wizard | `bash init-project.sh` | `seo-cycle.yaml`, `.env.example`, registry entry |
+| `governance-report.py` | Shows token/budget/tool/automation policy without secrets | `python3 governance-report.py --format md` | Markdown/JSON report for Phase 0 and approval gates |
+| `init-project.sh` | New-project wizard | `bash init-project.sh` | `seo-cycle.yaml`, `.env.example`, policy files, registry entry |
 | `cycle-state.py` | Cycle state contract (handoff between phase skills) | `python3 cycle-state.py init --topic "X"` / `next` / `set <phase> --status done --gate-passed` / `show` | `_state.json` with phase DAG; the "handoff chain" |
 
 ### 7.2 Keyword research

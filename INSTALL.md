@@ -8,7 +8,7 @@
 # Вариант A — интерактивный wizard (рекомендуется)
 cd <project-root>
 bash ~/.claude/skills/seo-cycle/scripts/init-project.sh
-# базовые вопросы + image workflow → seo-cycle.yaml + .env.example + policy-файлы + валидация
+# базовые вопросы + governance + image workflow → seo-cycle.yaml + .env.example + policy-файлы + валидация
 
 # Вариант B — ручная установка
 # 1. Скопируй шаблон конфига в корень проекта
@@ -28,7 +28,7 @@ $EDITOR <project-root>/.env
 # «давай запустим SEO-цикл для категории X»
 ```
 
-`install-codex.sh` ставит ядро в `~/.claude/skills/seo-cycle`, создаёт симлинки `~/.codex/skills/seo-cycle` и `~/.codex/skills/codex-primary-runtime`, а `init-project.sh` создаёт проектный `AGENTS.md` если его ещё нет.
+`install-codex.sh` ставит ядро в `~/.claude/skills/seo-cycle`, создаёт симлинки `~/.codex/skills/seo-cycle` и `~/.codex/skills/codex-primary-runtime`, а `init-project.sh` создаёт проектный `AGENTS.md` если его ещё нет. Wizard также спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
 
 **OAuth setup для GSC/GA4/PSI/Метрики/Яндекса** → см. `docs/oauth-setup.md`.
 
@@ -53,7 +53,7 @@ cp ~/.claude/skills/seo-cycle/config/project.template.yaml \
 
 ## Шаг 2. Заполнить конфиг
 
-Открой `seo-cycle.yaml` и пройдись по 14 секциям. Минимально нужно заполнить **первые 7**:
+Открой `seo-cycle.yaml` и пройдись по секциям. Минимально нужно заполнить identity, locale, engines, governance, project type, business profile и sources:
 
 ### Секция 1 — Identity
 ```yaml
@@ -94,6 +94,24 @@ engines:
 ```
 
 Удали то, что не нужно. Скилл пропустит фазы для удалённых движков.
+
+### Секция 3b — Governance
+```yaml
+governance:
+  profile: lean_quality
+  token_policy:
+    raw_data_in_context: false
+    cache_first: true
+  budget_policy:
+    monthly_paid_api_usd_cap: 0
+    monthly_llm_usd_cap: 0
+    paid_tools_default: approval_only
+  automation_policy:
+    default_mode: approval_only
+    create_schedules: false
+```
+
+Для новых проектов оставляй `lean_quality` и нулевой бюджет, пока не подключены реальные лимиты. Платные API, публикация, index submission, массовый браузерный сбор и schedule-автоматизации должны идти через approval gates.
 
 ### Секция 4 — Project type
 ```yaml
@@ -184,6 +202,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo
 - delegate-цели существуют (скиллы / агенты)
 - Пути в `artifacts.*` существуют или создаются автоматом
 - policy-файлы проекта для NeuronWriter, Google NLP, data collection/access и RF tracking guard
+- governance sanity: raw data не грузится в контекст, cache-first включён, paid sources не активны при нулевом бюджете, schedules не создаются без automation policy
 
 Выдаёт **чек-лист** что нужно подключить:
 ```
@@ -248,10 +267,19 @@ seo/entities/google-nlp-policy.yaml
 seo/seo-data-collection-map.md
 seo/access-setup-runbook.md
 seo/ai-visibility-prompts.csv
+seo/tool-budget.yaml
+seo/automation-policy.yaml
+seo/project-intake.yaml
 AGENTS.md -> ~/.claude/skills/seo-cycle/AGENTS.md
 ```
 
-В этих файлах фиксируются подключённые аккаунты, пропущенные платные сервисы, лимиты NeuronWriter/Google NLP, policy по robots/Content-Signal и запрет зарубежных tracking tags/pixels для РФ-проектов без отдельного разрешения.
+В этих файлах фиксируются подключённые аккаунты, пропущенные платные сервисы, лимиты NeuronWriter/Google NLP/Keys.so/Serpstat/LLM, policy по robots/Content-Signal, запрет зарубежных tracking tags/pixels для РФ-проектов без отдельного разрешения и правила автоматизаций.
+
+Перед дорогим сбором или schedule запуском:
+
+```bash
+python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
+```
 
 ---
 

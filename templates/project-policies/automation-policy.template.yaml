@@ -1,0 +1,82 @@
+version: 1
+updated: __DATE__
+project: __PROJECT_NAME__
+domain: __DOMAIN__
+
+default_mode: approval_only   # disabled | report_only | approval_only | auto_with_caps
+create_schedules: false
+timezone: Europe/Moscow
+
+allowed_without_approval:
+  - cached_fetch
+  - robots_sitemap_check
+  - public_pagespeed_check
+  - read_only_index_status
+  - cache_usage_report
+
+approval_required:
+  - publishing
+  - index_submission
+  - paid_api_run
+  - browser_mass_collection
+  - content_rewrite
+  - schema_change
+  - merchant_feed_change
+  - local_business_profile_change
+
+forbidden_without_explicit_policy:
+  - paid_ads_launch
+  - tracking_tag_install
+  - whole_site_paid_nlp
+  - whole_catalog_generation
+  - destructive_indexing_change
+  - bulk_noindex_or_robots_change
+
+planned_automations:
+  weekly_read_only_health:
+    enabled: false
+    cadence: weekly
+    mode: report_only
+    actions:
+      - robots_sitemap_check
+      - public_pagespeed_check
+      - read_only_index_status
+      - cache_usage_report
+  monthly_keyword_refresh:
+    enabled: false
+    cadence: monthly
+    mode: approval_only
+    actions:
+      - cached_fetch
+      - keyword_gap_report
+      - content_refresh_candidates
+  monthly_ai_visibility:
+    enabled: false
+    cadence: monthly
+    mode: report_only
+    actions:
+      - ai_visibility_prompts_check
+      - cited_competitors_report
+  ecommerce_feed_quality:
+    enabled: false
+    cadence: weekly
+    mode: approval_only
+    actions:
+      - merchant_feed_errors_report
+      - product_schema_mismatch_report
+  local_seo_reputation:
+    enabled: false
+    cadence: weekly
+    mode: report_only
+    actions:
+      - maps_profile_check
+      - reviews_velocity_report
+
+notification_policy:
+  channel: telegram_or_file
+  notify_on:
+    - automation_error
+    - approval_required
+    - budget_cap_near
+    - indexation_drop
+    - critical_technical_issue

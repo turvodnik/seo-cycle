@@ -1,9 +1,9 @@
 #!/bin/bash
 # init-project.sh — интерактивный wizard для нового проекта seo-cycle.
 #
-# Задаёт базовые вопросы + блок image workflow → генерирует seo-cycle.yaml,
-# .env.example, AGENTS.md и policy-шаблоны в текущей директории → запускает
-# validate-config.py.
+# Задаёт базовые вопросы + governance + image workflow → генерирует
+# seo-cycle.yaml, .env.example, AGENTS.md и policy-шаблоны в текущей директории
+# → запускает validate-config.py.
 #
 # Идемпотентный: если seo-cycle.yaml уже существует, спрашивает подтверждение
 # перед перезаписью.
@@ -65,36 +65,57 @@ read -p "7. Язык/Регион [ru-RU/en-US/en-GB/de-DE] (default: ru-RU): " 
 LOCALE="${LOCALE:-ru-RU}"
 
 echo ""
+echo "Блок управления бюджетами и автоматизациями:"
+
+read -p "8. Governance profile [lean_quality/balanced_growth/aggressive_growth/custom] (default: lean_quality): " GOVERNANCE_PROFILE
+GOVERNANCE_PROFILE="${GOVERNANCE_PROFILE:-lean_quality}"
+
+read -p "9. Monthly paid API budget USD (0 = без платных расходов, default: 0): " PAID_API_BUDGET
+PAID_API_BUDGET="${PAID_API_BUDGET:-0}"
+
+read -p "10. Monthly LLM/token budget USD (0 = без отдельного бюджета, default: 0): " LLM_BUDGET
+LLM_BUDGET="${LLM_BUDGET:-0}"
+
+read -p "11. Automation mode [disabled/report_only/approval_only/auto_with_caps] (default: approval_only): " AUTOMATION_MODE
+AUTOMATION_MODE="${AUTOMATION_MODE:-approval_only}"
+
+read -p "12. Создавать scheduled automations сейчас? [y/N]: " CREATE_SCHEDULES_ANSWER
+case "$CREATE_SCHEDULES_ANSWER" in
+    y|Y|yes|YES) CREATE_SCHEDULES=true ;;
+    *) CREATE_SCHEDULES=false ;;
+esac
+
+echo ""
 echo "Блок изображений для SEO-публикаций:"
 
-read -p "8. Пропорция featured/hero изображений (default: 16:9): " IMAGE_FEATURED_RATIO
+read -p "13. Пропорция featured/hero изображений (default: 16:9): " IMAGE_FEATURED_RATIO
 IMAGE_FEATURED_RATIO="${IMAGE_FEATURED_RATIO:-16:9}"
 
-read -p "9. Пропорция inline изображений в статьях (default: 16:9): " IMAGE_INLINE_RATIO
+read -p "14. Пропорция inline изображений в статьях (default: 16:9): " IMAGE_INLINE_RATIO
 IMAGE_INLINE_RATIO="${IMAGE_INLINE_RATIO:-16:9}"
 
-read -p "10. Ширина WebP в px (default: 1200): " IMAGE_WIDTH
+read -p "15. Ширина WebP в px (default: 1200): " IMAGE_WIDTH
 IMAGE_WIDTH="${IMAGE_WIDTH:-1200}"
 
-read -p "11. WebP quality 1-100 (default: 86): " IMAGE_QUALITY
+read -p "16. WebP quality 1-100 (default: 86): " IMAGE_QUALITY
 IMAGE_QUALITY="${IMAGE_QUALITY:-86}"
 
-read -p "12. Источник фото [thematic_photos_first/product_photos_first/generate_if_missing/manual_only] (default: thematic_photos_first): " IMAGE_SOURCE_POLICY
+read -p "17. Источник фото [thematic_photos_first/product_photos_first/generate_if_missing/manual_only] (default: thematic_photos_first): " IMAGE_SOURCE_POLICY
 IMAGE_SOURCE_POLICY="${IMAGE_SOURCE_POLICY:-thematic_photos_first}"
 
-read -p "13. Визуальный стиль [clean_topical_photo/editorial_photo/product_context_photo] (default: clean_topical_photo): " IMAGE_VISUAL_STYLE
+read -p "18. Визуальный стиль [clean_topical_photo/editorial_photo/product_context_photo] (default: clean_topical_photo): " IMAGE_VISUAL_STYLE
 IMAGE_VISUAL_STYLE="${IMAGE_VISUAL_STYLE:-clean_topical_photo}"
 
-read -p "14. Минимум inline-изображений на пост (default: 2): " IMAGE_INLINE_MIN
+read -p "19. Минимум inline-изображений на пост (default: 2): " IMAGE_INLINE_MIN
 IMAGE_INLINE_MIN="${IMAGE_INLINE_MIN:-2}"
 
-read -p "15. Caption под inline-картинками обязателен? [Y/n]: " IMAGE_CAPTIONS_ANSWER
+read -p "20. Caption под inline-картинками обязателен? [Y/n]: " IMAGE_CAPTIONS_ANSWER
 case "$IMAGE_CAPTIONS_ANSWER" in
     n|N|no|NO) IMAGE_CAPTIONS_REQUIRED=false; IMAGE_CAPTION_MODE=none ;;
     *) IMAGE_CAPTIONS_REQUIRED=true; IMAGE_CAPTION_MODE=short_editorial ;;
 esac
 
-read -p "16. Разрешать видимый текст на изображениях? [y/N]: " IMAGE_TEXT_ANSWER
+read -p "21. Разрешать видимый текст на изображениях? [y/N]: " IMAGE_TEXT_ANSWER
 case "$IMAGE_TEXT_ANSWER" in
     y|Y|yes|YES) IMAGE_ALLOW_VISIBLE_TEXT=true ;;
     *) IMAGE_ALLOW_VISIBLE_TEXT=false ;;
@@ -118,46 +139,57 @@ echo "Создаю $TARGET..."
 # Копируем шаблон и подменяем ключевые поля через sed
 cp "$TEMPLATE" "$TARGET"
 
-# macOS / Linux compatible sed -i (GNU sed: -i; BSD sed: -i '')
-if [ "$(uname)" = "Darwin" ]; then
-    SED_I="sed -i ''"
-else
-    SED_I="sed -i"
-fi
+# macOS / Linux compatible in-place sed. Keep this as a function;
+# putting `sed -i ''` into a string variable creates backup files named *'' on macOS.
+sed_in_place() {
+    if [ "$(uname)" = "Darwin" ]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
 
 # Surgical замены — только в первой секции project: и locale:
-$SED_I "s|name: \"Example Shop\"|name: \"$PROJECT_NAME\"|" "$TARGET"
-$SED_I "s|domain: \"example.com\"|domain: \"$DOMAIN\"|" "$TARGET"
-$SED_I "s|brand_name_user_facing: \"Example Shop\"|brand_name_user_facing: \"$BRAND_UF\"|" "$TARGET"
-$SED_I "s|brand_name_technical: \"example\"|brand_name_technical: \"$BRAND_TECH\"|" "$TARGET"
-$SED_I "s|^project_type: ecommerce|project_type: $PROJECT_TYPE|" "$TARGET"
-$SED_I "s|^cms: wordpress|cms: $CMS|" "$TARGET"
-$SED_I "s|  language: ru|  language: $LANG_CODE|" "$TARGET"
-$SED_I "s|  country: RU|  country: $CTRY_CODE|" "$TARGET"
-$SED_I "s|  region: \"Москва и Московская область\"|  region: \"$REGION_TEXT\"|" "$TARGET"
-$SED_I "s|  city: \"Москва\"|  city: \"$CITY\"|" "$TARGET"
-$SED_I "s|  locale_iso: ru-RU|  locale_iso: $LOCALE|" "$TARGET"
-$SED_I "s|  yandex_region_code: 213|  yandex_region_code: $YANDEX_RC|" "$TARGET"
-$SED_I "s|  google_gl: ru|  google_gl: $(echo $CTRY_CODE | tr A-Z a-z)|" "$TARGET"
-$SED_I "s|  google_hl: ru|  google_hl: $LANG_CODE|" "$TARGET"
-$SED_I "s|  timezone: \"Europe/Moscow\"|  timezone: \"$TZ\"|" "$TARGET"
+sed_in_place "s|name: \"Example Shop\"|name: \"$PROJECT_NAME\"|" "$TARGET"
+sed_in_place "s|domain: \"example.com\"|domain: \"$DOMAIN\"|" "$TARGET"
+sed_in_place "s|brand_name_user_facing: \"Example Shop\"|brand_name_user_facing: \"$BRAND_UF\"|" "$TARGET"
+sed_in_place "s|brand_name_technical: \"example\"|brand_name_technical: \"$BRAND_TECH\"|" "$TARGET"
+sed_in_place "s|^project_type: ecommerce|project_type: $PROJECT_TYPE|" "$TARGET"
+sed_in_place "s|^cms: wordpress|cms: $CMS|" "$TARGET"
+sed_in_place "s|  language: ru|  language: $LANG_CODE|" "$TARGET"
+sed_in_place "s|  country: RU|  country: $CTRY_CODE|" "$TARGET"
+sed_in_place "s|  region: \"Москва и Московская область\"|  region: \"$REGION_TEXT\"|" "$TARGET"
+sed_in_place "s|  city: \"Москва\"|  city: \"$CITY\"|" "$TARGET"
+sed_in_place "s|  locale_iso: ru-RU|  locale_iso: $LOCALE|" "$TARGET"
+sed_in_place "s|  yandex_region_code: 213|  yandex_region_code: $YANDEX_RC|" "$TARGET"
+sed_in_place "s|  google_gl: ru|  google_gl: $(echo $CTRY_CODE | tr A-Z a-z)|" "$TARGET"
+sed_in_place "s|  google_hl: ru|  google_hl: $LANG_CODE|" "$TARGET"
+sed_in_place "s|  timezone: \"Europe/Moscow\"|  timezone: \"$TZ\"|" "$TARGET"
+
+# Governance defaults
+sed_in_place "s|  profile: lean_quality|  profile: $GOVERNANCE_PROFILE|" "$TARGET"
+sed_in_place "s|    monthly_total_usd_cap: 0|    monthly_total_usd_cap: $PAID_API_BUDGET|" "$TARGET"
+sed_in_place "s|    monthly_paid_api_usd_cap: 0|    monthly_paid_api_usd_cap: $PAID_API_BUDGET|" "$TARGET"
+sed_in_place "s|    monthly_llm_usd_cap: 0|    monthly_llm_usd_cap: $LLM_BUDGET|" "$TARGET"
+sed_in_place "s|    default_mode: approval_only|    default_mode: $AUTOMATION_MODE|" "$TARGET"
+sed_in_place "s|    create_schedules: false|    create_schedules: $CREATE_SCHEDULES|" "$TARGET"
 
 # Image workflow defaults
-$SED_I "s|  workflow: photo_first|  workflow: photo_first|" "$TARGET"
-$SED_I "s|  source_policy: thematic_photos_first|  source_policy: $IMAGE_SOURCE_POLICY|" "$TARGET"
-$SED_I "s|  visual_style: clean_topical_photo|  visual_style: $IMAGE_VISUAL_STYLE|" "$TARGET"
-$SED_I "s|  allow_visible_text: false|  allow_visible_text: $IMAGE_ALLOW_VISIBLE_TEXT|" "$TARGET"
-$SED_I "s|    width: 1200|    width: $IMAGE_WIDTH|" "$TARGET"
-$SED_I "s|    quality: 86|    quality: $IMAGE_QUALITY|" "$TARGET"
-$SED_I "s|    inline_required: true|    inline_required: $IMAGE_CAPTIONS_REQUIRED|" "$TARGET"
-$SED_I "s|    mode: short_editorial|    mode: $IMAGE_CAPTION_MODE|" "$TARGET"
-$SED_I "s|  inline_min_per_post: 2|  inline_min_per_post: $IMAGE_INLINE_MIN|" "$TARGET"
-$SED_I "s|    featured: \"16:9\"|    featured: \"$IMAGE_FEATURED_RATIO\"|" "$TARGET"
-$SED_I "s|    hero: \"16:9\"|    hero: \"$IMAGE_FEATURED_RATIO\"|" "$TARGET"
-$SED_I "s|    article_inline: \"16:9\"|    article_inline: \"$IMAGE_INLINE_RATIO\"|" "$TARGET"
+sed_in_place "s|  workflow: photo_first|  workflow: photo_first|" "$TARGET"
+sed_in_place "s|  source_policy: thematic_photos_first|  source_policy: $IMAGE_SOURCE_POLICY|" "$TARGET"
+sed_in_place "s|  visual_style: clean_topical_photo|  visual_style: $IMAGE_VISUAL_STYLE|" "$TARGET"
+sed_in_place "s|  allow_visible_text: false|  allow_visible_text: $IMAGE_ALLOW_VISIBLE_TEXT|" "$TARGET"
+sed_in_place "s|    width: 1200|    width: $IMAGE_WIDTH|" "$TARGET"
+sed_in_place "s|    quality: 86|    quality: $IMAGE_QUALITY|" "$TARGET"
+sed_in_place "s|    inline_required: true|    inline_required: $IMAGE_CAPTIONS_REQUIRED|" "$TARGET"
+sed_in_place "s|    mode: short_editorial|    mode: $IMAGE_CAPTION_MODE|" "$TARGET"
+sed_in_place "s|  inline_min_per_post: 2|  inline_min_per_post: $IMAGE_INLINE_MIN|" "$TARGET"
+sed_in_place "s|    featured: \"16:9\"|    featured: \"$IMAGE_FEATURED_RATIO\"|" "$TARGET"
+sed_in_place "s|    hero: \"16:9\"|    hero: \"$IMAGE_FEATURED_RATIO\"|" "$TARGET"
+sed_in_place "s|    article_inline: \"16:9\"|    article_inline: \"$IMAGE_INLINE_RATIO\"|" "$TARGET"
 
 # Региональный профиль источников (управляет вкл/выкл Яндекс/Google/SaaS)
-$SED_I "s|^region_profile: ru|region_profile: $REGION_PROFILE|" "$TARGET"
+sed_in_place "s|^region_profile: ru|region_profile: $REGION_PROFILE|" "$TARGET"
 echo "ℹ region_profile: $REGION_PROFILE (для $CTRY_CODE) — источники развернутся через resolve-sources.py"
 
 # Копируем .env.example если есть
@@ -188,9 +220,9 @@ copy_policy_template() {
         return 0
     fi
     cp "$src" "$dest"
-    $SED_I "s|__DATE__|$TODAY|g" "$dest"
-    $SED_I "s|__PROJECT_NAME__|$PROJECT_NAME|g" "$dest"
-    $SED_I "s|__DOMAIN__|$DOMAIN|g" "$dest"
+    sed_in_place "s|__DATE__|$TODAY|g" "$dest"
+    sed_in_place "s|__PROJECT_NAME__|$PROJECT_NAME|g" "$dest"
+    sed_in_place "s|__DOMAIN__|$DOMAIN|g" "$dest"
     echo "✓ policy создан: $dest"
 }
 
@@ -199,6 +231,23 @@ copy_policy_template "$POLICY_TEMPLATE_DIR/google-nlp-policy.template.yaml" "seo
 copy_policy_template "$POLICY_TEMPLATE_DIR/seo-data-collection-map.template.md" "seo/seo-data-collection-map.md"
 copy_policy_template "$POLICY_TEMPLATE_DIR/access-setup-runbook.template.md" "seo/access-setup-runbook.md"
 copy_policy_template "$POLICY_TEMPLATE_DIR/ai-visibility-prompts.template.csv" "seo/ai-visibility-prompts.csv"
+copy_policy_template "$POLICY_TEMPLATE_DIR/tool-budget.template.yaml" "seo/tool-budget.yaml"
+copy_policy_template "$POLICY_TEMPLATE_DIR/automation-policy.template.yaml" "seo/automation-policy.yaml"
+copy_policy_template "$POLICY_TEMPLATE_DIR/project-intake.template.yaml" "seo/project-intake.yaml"
+
+if [ -f "seo/tool-budget.yaml" ]; then
+    sed_in_place "s|monthly_total_usd_cap: 0|monthly_total_usd_cap: $PAID_API_BUDGET|" "seo/tool-budget.yaml"
+    sed_in_place "s|monthly_paid_api_usd_cap: 0|monthly_paid_api_usd_cap: $PAID_API_BUDGET|" "seo/tool-budget.yaml"
+    sed_in_place "s|monthly_llm_usd_cap: 0|monthly_llm_usd_cap: $LLM_BUDGET|" "seo/tool-budget.yaml"
+fi
+if [ -f "seo/automation-policy.yaml" ]; then
+    sed_in_place "s|default_mode: approval_only|default_mode: $AUTOMATION_MODE|" "seo/automation-policy.yaml"
+    sed_in_place "s|create_schedules: false|create_schedules: $CREATE_SCHEDULES|" "seo/automation-policy.yaml"
+fi
+if [ -f "seo/project-intake.yaml" ]; then
+    sed_in_place "s|default_governance_profile: lean_quality|default_governance_profile: $GOVERNANCE_PROFILE|" "seo/project-intake.yaml"
+    sed_in_place "s|default_automation_mode: approval_only|default_automation_mode: $AUTOMATION_MODE|" "seo/project-intake.yaml"
+fi
 
 # Дозапись проекта в общий реестр (идемпотентно — по path)
 REGISTRY="$SKILL_ROOT/config/projects-registry.yaml"
@@ -227,10 +276,12 @@ echo ""
 echo "Следующие шаги:"
 echo "  1. Открой $TARGET и доуточни секции (sources, content_rules, publishing)"
 echo "  2. Заполни .env с API ключами (см. docs/oauth-setup.md в скилле)"
-echo "  2b. Обнови policy-файлы в seo/ при подключении NeuronWriter, Google NLP, GSC/Яндекс/Бинг"
+echo "  2b. Обнови policy-файлы в seo/ при подключении NeuronWriter, Google NLP, GSC/Яндекс/Бинг и автоматизаций"
 echo "  3. Запусти валидатор:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py"
-echo "  4. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
+echo "  4. Посмотри governance report:"
+echo "     python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md"
+echo "  5. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
 echo ""
 
 # Сразу прогоняем валидатор

@@ -1,5 +1,16 @@
 # Changelog — seo-cycle
 
+## [1.17.9] — 2026-06-04
+
+### Token, budget, subscription, and automation governance
+
+- Added `governance` to `config/project.template.yaml`: token policy, cache-first rules, monthly paid API/LLM caps, subscription caps, and automation approval gates.
+- Added project-local policy templates: `seo/tool-budget.yaml`, `seo/automation-policy.yaml`, and `seo/project-intake.yaml`.
+- Added `scripts/governance-report.py` to print active token/budget/tool/automation policy without exposing secrets.
+- `init-project.sh` now asks for governance profile, paid API budget, LLM budget, automation mode, and schedule creation before image workflow questions.
+- `validate-config.py` now checks governance sanity: raw data in context, cache-first, oversized phase context, active paid sources with zero budget, invalid automation modes, and missing automation policy.
+- SKILL.md, Codex runtime docs, and Codex entrypoint now require governance report before expensive collection, browser work, publishing, or scheduled automations.
+
 ## [1.17.8] — 2026-06-04
 
 ### Project policy intake for paid/API SEO tools

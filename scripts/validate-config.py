@@ -237,6 +237,13 @@ def rel_project_path(project_root: pathlib.Path, raw_path: str) -> pathlib.Path:
     return path
 
 
+def numeric_value(value, default: float = 0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def check_project_policies(cfg: dict, env: dict, project_root: pathlib.Path, checklist: list, warnings: list):
     defaults = {
         "neuronwriter_limits": "seo/neuronwriter-limits.yaml",
@@ -244,6 +251,9 @@ def check_project_policies(cfg: dict, env: dict, project_root: pathlib.Path, che
         "data_collection_map": "seo/seo-data-collection-map.md",
         "access_setup_runbook": "seo/access-setup-runbook.md",
         "ai_visibility_prompts": "seo/ai-visibility-prompts.csv",
+        "tool_budget": "seo/tool-budget.yaml",
+        "automation_policy": "seo/automation-policy.yaml",
+        "project_intake": "seo/project-intake.yaml",
     }
     configured = cfg.get("policy_files", {}) or {}
     if not isinstance(configured, dict):
@@ -275,6 +285,68 @@ def check_project_policies(cfg: dict, env: dict, project_root: pathlib.Path, che
     country = (cfg.get("locale", {}) or {}).get("country")
     if country == "RU" and not rel_project_path(project_root, policy_paths["data_collection_map"]).exists():
         warnings.append("RU-проект без seo/seo-data-collection-map.md — зафиксируй tracking policy перед аналитикой")
+
+
+def check_governance(cfg: dict, project_root: pathlib.Path, checklist: list, warnings: list):
+    gov = cfg.get("governance", {})
+    if not isinstance(gov, dict) or not gov:
+        checklist.append("Добавить governance: token_policy, budget_policy, automation_policy")
+        return
+
+    token_policy = gov.get("token_policy", {}) if isinstance(gov.get("token_policy"), dict) else {}
+    if token_policy.get("raw_data_in_context") is True:
+        warnings.append("governance.token_policy.raw_data_in_context=true — это резко увеличит расход токенов")
+    if token_policy.get("progressive_disclosure") is False:
+        warnings.append("governance.token_policy.progressive_disclosure=false — скилл будет читать лишний контекст")
+    if token_policy.get("cache_first") is False:
+        warnings.append("governance.token_policy.cache_first=false — дорогие источники могут запускаться повторно")
+    if numeric_value(token_policy.get("max_context_input_tokens_per_phase")) > 90000:
+        warnings.append("max_context_input_tokens_per_phase > 90000 — проверь, действительно ли нужен такой большой контекст")
+
+    budget_policy = gov.get("budget_policy", {}) if isinstance(gov.get("budget_policy"), dict) else {}
+    paid_api_cap = numeric_value(budget_policy.get("monthly_paid_api_usd_cap"))
+    paid_default = budget_policy.get("paid_tools_default", "approval_only")
+    sources = cfg.get("sources", {}) if isinstance(cfg.get("sources", {}), dict) else {}
+    paid_source_names = {
+        "neuronwriter",
+        "google_cloud_nlp",
+        "keyso",
+        "keys_so",
+        "serpstat",
+        "spyfu",
+        "dataforseo",
+    }
+    active_by_profile: set[str] = set()
+    profile_id = cfg.get("region_profile")
+    if profile_id:
+        profile = load_region_profile(profile_id) or {}
+        active_by_profile = (set(profile.get("sources_enable", [])) | set(profile.get("sources_proxy", []))) - set(profile.get("sources_disable", []))
+        for name, src in sources.items():
+            if isinstance(src, dict) and "enabled" in src:
+                if src["enabled"]:
+                    active_by_profile.add(name)
+                else:
+                    active_by_profile.discard(name)
+    active_paid = [
+        name
+        for name, src in sources.items()
+        if name in paid_source_names and isinstance(src, dict) and (src.get("enabled") or name in active_by_profile)
+    ]
+    if active_paid and paid_api_cap <= 0 and paid_default != "enabled_with_caps":
+        checklist.append(f"Утвердить budget_policy.monthly_paid_api_usd_cap для активных paid/quota sources: {', '.join(active_paid)}")
+    if budget_policy.get("ads_spend_enabled") and numeric_value(budget_policy.get("monthly_total_usd_cap")) <= 0:
+        warnings.append("ads_spend_enabled=true, но monthly_total_usd_cap=0")
+
+    automation = gov.get("automation_policy", {}) if isinstance(gov.get("automation_policy"), dict) else {}
+    valid_modes = {"disabled", "report_only", "approval_only", "auto_with_caps"}
+    mode = automation.get("default_mode")
+    if mode and mode not in valid_modes:
+        warnings.append(f"governance.automation_policy.default_mode={mode!r} — ожидалось {sorted(valid_modes)}")
+    if automation.get("create_schedules"):
+        policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files", {}), dict) else {}
+        automation_policy = policy_files.get("automation_policy", "seo/automation-policy.yaml")
+        if not rel_project_path(project_root, automation_policy).exists():
+            checklist.append("Создать seo/automation-policy.yaml перед созданием scheduled automations")
 
 
 def check_content_rules(cfg: dict, warnings: list):
@@ -420,6 +492,7 @@ def main():
     check_publishing(cfg, env, checklist, warnings)
     check_images(cfg, env, project_root, checklist, warnings)
     check_project_policies(cfg, env, project_root, checklist, warnings)
+    check_governance(cfg, project_root, checklist, warnings)
     check_content_rules(cfg, warnings)
     check_artifacts(cfg, project_root, warnings)
     check_v11_extensions(cfg, env, checklist, warnings)

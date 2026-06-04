@@ -1,0 +1,77 @@
+version: 1
+updated: __DATE__
+project: __PROJECT_NAME__
+domain: __DOMAIN__
+
+business:
+  project_type: not_configured
+  business_model: []
+  sales_channels: []
+  priority_products_or_services: []
+  target_audiences: []
+  conversion_goals: []
+  forbidden_claims_or_topics: []
+
+markets:
+  primary_country: not_configured
+  primary_region: not_configured
+  primary_city: not_configured
+  languages: []
+  search_engines:
+    yandex: true
+    google: true
+    bing: false
+  local_platforms:
+    yandex_business: false
+    google_business_profile: false
+    bing_places: false
+    two_gis: false
+
+marketing:
+  organic_seo: true
+  content_marketing: true
+  local_seo: false
+  ecommerce_feeds: false
+  email_or_messenger: false
+  video_youtube: false
+  paid_ads:
+    google_ads: approval_only
+    yandex_direct: approval_only
+    microsoft_ads: skipped_if_billing_required
+  analytics_tags:
+    google_analytics: approval_required_for_rf
+    microsoft_clarity: approval_required_for_rf
+    yandex_metrika: project_policy_required
+
+tools:
+  free_first:
+    - robots_sitemap
+    - search_console
+    - yandex_webmaster
+    - bing_webmaster
+    - pagespeed_crux
+    - suggest_sources
+    - schema_crawl
+  paid_or_quota_guarded:
+    - neuronwriter
+    - google_cloud_nlp
+    - keys_so
+    - serpstat
+    - spyfu
+    - dataforseo
+  ai_visibility:
+    - google_ai_overview
+    - bing_copilot
+    - perplexity
+    - openai_chatgpt
+    - claude
+    - gemini
+    - deepseek
+
+setup_decisions:
+  default_governance_profile: lean_quality
+  default_automation_mode: approval_only
+  allow_paid_spend_without_explicit_approval: false
+  allow_foreign_tracking_tags_for_rf_project: false
+  require_cache_for_expensive_sources: true
+  require_distillate_before_llm_synthesis: true

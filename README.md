@@ -1,6 +1,6 @@
 # seo-cycle
 
-**Версия 1.17.8** · универсальный SEO/контент-цикл-оркестратор для Claude Code и Codex CLI.
+**Версия 1.17.9** · универсальный SEO/контент-цикл-оркестратор для Claude Code и Codex CLI.
 
 Полный цикл продвижения сайта — от стратегии и сбора семантики до публикации, fact-check, мониторинга и итераций — управляемый через декларативный конфиг `seo-cycle.yaml`. Адаптируется под любой проект: язык, регион, поисковики, тип сайта, CMS, набор источников.
 
@@ -16,10 +16,11 @@ curl -sL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install-code
 cd <свой-проект>
 ~/.claude/skills/seo-cycle/scripts/init-project.sh        # wizard → seo-cycle.yaml + policy templates
 python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
+python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
 # дальше в Claude Code / Codex: «запусти SEO-цикл для категории X»
 ```
 
-Установщик создаёт каноническое ядро в `~/.claude/skills/seo-cycle`, симлинки `~/.codex/skills/seo-cycle` и `~/.codex/skills/codex-primary-runtime`, а проектный wizard создаёт `AGENTS.md` и безопасные policy-файлы для NeuronWriter, Google NLP, tracking/data access и robots/Content-Signal.
+Установщик создаёт каноническое ядро в `~/.claude/skills/seo-cycle`, симлинки `~/.codex/skills/seo-cycle` и `~/.codex/skills/codex-primary-runtime`, а проектный wizard создаёт `AGENTS.md` и безопасные policy-файлы для NeuronWriter, Google NLP, tracking/data access, robots/Content-Signal, token/budget governance и автоматизаций.
 
 Ручная установка и Codex-режим (AGENTS.md, SEO_RUNTIME) — в [INSTALL.md](INSTALL.md) и [docs/codex-runtime.md](docs/codex-runtime.md).
 
@@ -74,7 +75,8 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
 | **Региональные профили** | `config/region-profiles/{ru,eu,us,global}.yaml` — пресет источников + флаги доступности. `resolve-sources.py` разворачивает в активный список. |
 | **Источники семантики** | Яндекс (Wordstat/Suggest/SERP/Вебмастер/Кью/Карты/Товары), Google (GSC/Trends/Suggest/Merchant/Business Profile), Bing Webmaster/IndexNow/Bing Places, Serpstat (вкл. РФ `g_ru`), SpyFu (US/UK/EU), NeuronWriter, LLM-CLI, AnswerThePublic, Perplexity. |
 | **Guarded NLP/entity audit** | `google-nlp-audit.py` для Google Cloud Natural Language: entity salience, categories, syntax, moderation/sentiment только по policy, кэш 30 дней и unit caps. |
-| **Project policies** | `seo/neuronwriter-limits.yaml`, `seo/entities/google-nlp-policy.yaml`, `seo/seo-data-collection-map.md`, `seo/access-setup-runbook.md`, `seo/ai-visibility-prompts.csv`: лимиты, доступы, RF tracking guard, robots/Content-Signal, AI evidence queue. |
+| **Token/budget governance** | `governance` в `seo-cycle.yaml` + `governance-report.py`: raw на диск, distillates в контекст, cache-first, лимиты платных API/LLM/браузера/автоматизаций. |
+| **Project policies** | `seo/neuronwriter-limits.yaml`, `seo/entities/google-nlp-policy.yaml`, `seo/tool-budget.yaml`, `seo/automation-policy.yaml`, `seo/project-intake.yaml`, `seo/seo-data-collection-map.md`, `seo/access-setup-runbook.md`, `seo/ai-visibility-prompts.csv`. |
 | **E-E-A-T** | `schema-org-build.py` — канонический Organization/LocalBusiness узел из `business_profile`; `eeat-render.py` — trust-блок «Источники» из `fact_check_log`; `source-attribution.py` — какой источник даёт топ. |
 | **Экономия** | `research-cache.py` (TTL), дистилляты в контекст, guard'ы кредитов Serpstat/SpyFu. |
 | **Слой данных** | `db-sync.py` → `seo.db` (SQLite) из всех CSV/JSON. Фундамент дашбордов. |
