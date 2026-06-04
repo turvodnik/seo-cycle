@@ -117,6 +117,9 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "active_sources_latest": "seo/setup/latest-sources.json",
         "usage_ledger": "seo/usage/usage-ledger.jsonl",
         "latest_usage_report": "seo/setup/latest-usage-ledger.md",
+        "tool_stack_generated": "seo/tool-stack.generated.yaml",
+        "tool_stack_report": "seo/setup/tool-stack-report.md",
+        "latest_tool_stack": "seo/setup/latest-tool-stack.md",
         "automation_recommendations": "seo/automations/automation-recommendations.md",
         "automation_policy_generated": "seo/automation-policy.generated.yaml",
         "automation_plan": "seo/automations/automation-plan.md",
@@ -150,6 +153,7 @@ def next_actions(
     validation: dict[str, int],
     governance: dict[str, Any],
     sources: dict[str, Any],
+    tool_stack: dict[str, Any],
     automation: dict[str, Any],
     artifacts: list[dict[str, Any]],
     apply_profile: bool,
@@ -171,6 +175,14 @@ def next_actions(
 
     if sources and not sources.get("active"):
         actions.append("Resolve active sources: region profile and source overrides currently produce no active source.")
+
+    approval_tools = [
+        tool_id
+        for tool_id, row in (tool_stack.get("decisions") or {}).items()
+        if isinstance(row, dict) and row.get("decision") == "approval_required"
+    ]
+    if approval_tools:
+        actions.append(f"Review tool-stack approval gates before use: {', '.join(sorted(approval_tools))}.")
 
     if automation.get("blockers"):
         actions.append("Automation files were generated for review; install remains blocked until policy gates allow schedules.")
@@ -194,8 +206,10 @@ def render_markdown(report: dict[str, Any]) -> str:
     sources = report.get("sources", {})
     automation = report.get("automation", {})
     automation_recommendations = report.get("automation_recommendations", {})
+    tool_stack = report.get("tool_stack", {})
     task_route = report.get("task_route", {})
     usage = report.get("usage_ledger", {})
+    tool_summary = tool_stack.get("summary", {}).get("by_decision", {}) if isinstance(tool_stack.get("summary"), dict) else {}
     lines = [
         "# seo-cycle setup control plane",
         "",
@@ -213,6 +227,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Paid/quota sources needing env: {len(report.get('paid_missing_env', []))}",
         f"- Usage ledger status: {usage.get('evaluation', {}).get('status')}",
         f"- Usage ledger allowed: {usage.get('evaluation', {}).get('allowed')}",
+        f"- Tool stack enabled/report-only/approval: {tool_summary.get('enabled', 0)}/{tool_summary.get('report_only', 0)}/{tool_summary.get('approval_required', 0)}",
         f"- Recommended automations: {len((automation_recommendations.get('policy_overlay') or {}).get('planned_automations', {}))}",
         f"- Automation install allowed: {automation.get('allowed')}",
     ]
@@ -361,6 +376,13 @@ def main() -> int:
         automation_recommender_command.extend(["--format", "json"])
     steps.append(run_step("automation recommender", automation_recommender_command, project_root))
 
+    tool_stack_command = [sys.executable, str(root / "scripts/tool-stack-recommender.py"), str(cfg_path)]
+    if args.write:
+        tool_stack_command.append("--write")
+    else:
+        tool_stack_command.extend(["--format", "json"])
+    steps.append(run_step("tool stack recommender", tool_stack_command, project_root))
+
     validation_step = run_step("validate config", [sys.executable, str(root / "scripts/validate-config.py"), str(cfg_path)], project_root)
     steps.append(validation_step)
 
@@ -393,6 +415,11 @@ def main() -> int:
     automation_recommendations_file = project_root / "seo" / "automations" / "automation-recommendations.json"
     if not automation_recommendations and automation_recommendations_file.exists():
         automation_recommendations = json.loads(automation_recommendations_file.read_text(encoding="utf-8"))
+    tool_stack_step = next((step for step in steps if step["name"] == "tool stack recommender"), {})
+    tool_stack = load_json_output(tool_stack_step)
+    tool_stack_file = project_root / "seo" / "setup" / "tool-stack-report.json"
+    if not tool_stack and tool_stack_file.exists():
+        tool_stack = json.loads(tool_stack_file.read_text(encoding="utf-8"))
     validation = parse_validation(validation_step)
     artifacts = artifact_status(project_root, cfg)
     paid_missing = enabled_paid_missing_env(governance)
@@ -411,6 +438,7 @@ def main() -> int:
         "task_route": task_route,
         "usage_ledger": usage_ledger,
         "automation_recommendations": automation_recommendations,
+        "tool_stack": tool_stack,
         "paid_missing_env": paid_missing,
         "artifacts": artifacts,
         "steps": [
@@ -422,7 +450,7 @@ def main() -> int:
             for step in steps
         ],
     }
-    report["next_actions"] = next_actions(validation, governance, sources, automation, artifacts, args.apply_profile)
+    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, automation, artifacts, args.apply_profile)
 
     if args.write:
         out_dir = write_report(project_root, report)

@@ -1,5 +1,16 @@
 # Changelog — seo-cycle
 
+## [1.25.0] — 2026-06-05
+
+### Per-project tool stack recommender
+
+- Added `scripts/tool-stack-recommender.py` to recommend a concrete Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking tool stack from country, engines, project type, local/ecommerce flags, budget caps, subscriptions, and RF tracking policy.
+- The recommender writes `seo/tool-stack.generated.yaml`, `seo/setup/tool-stack-report.md/json`, and `seo/setup/latest-tool-stack.md/json`; default mode is non-destructive and secret-free.
+- `--apply` creates a backup and only applies conservative source flags: free/read-only applicable sources may be enabled, region-inapplicable/disabled sources may be disabled, and paid/quota/LLM/index-submission/ads/tracking tools remain review/approval-gated.
+- The catalog captures the setup work for Google Search Console/GA4/Merchant/Business Profile/YouTube/Gemini/NLP, Yandex Webmaster/Merchant/Metrica/Direct/Maps, Bing Webmaster/IndexNow/Places, Microsoft Clarity/Ads, NeuronWriter, Keys.so, Serpstat, DataForSEO, Perplexity, OpenAI/Claude/Gemini/DeepSeek, and robots AI Content-Signal checks.
+- `setup-control-plane.py`, project templates, validation, governance report, init wizard, README, INSTALL, GUIDE, SKILL.md, and Codex runtime docs now include tool-stack recommendations as part of first-run setup and handoff.
+- Added smoke tests for RU ecommerce and US local-business projects to prove RF foreign tracking stays disabled, paid NLP/content tools stay approval-gated by default, and relevant Bing/Google/Yandex/local/merchant tools are selected.
+
 ## [1.24.0] — 2026-06-05
 
 ### Per-project automation recommender

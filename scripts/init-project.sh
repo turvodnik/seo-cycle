@@ -280,7 +280,7 @@ if [ -f "seo/project-intake.yaml" ]; then
 fi
 
 python3 "$SKILL_ROOT/scripts/setup-control-plane.py" "$TARGET" --write --skip-intake >/dev/null 2>&1 \
-    && echo "✓ setup control plane создан: setup/task-route/usage-ledger + automation recommendations" \
+    && echo "✓ setup control plane создан: setup/task-route/usage-ledger/tool-stack + automation recommendations" \
     || echo "ℹ setup control plane не создан — запусти scripts/setup-control-plane.py --write"
 
 # Дозапись проекта в общий реестр (идемпотентно — по path)
@@ -334,9 +334,12 @@ echo "     python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py check --se
 echo "  10. Сгенерируй и проверь рекомендации автоматизаций:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write"
 echo "     # после review: python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --apply"
-echo "  11. Создай безопасный план автоматизаций:"
+echo "  11. Проверь рекомендуемый stack инструментов/доступов:"
+echo "     python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write"
+echo "     # после review: python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --apply"
+echo "  12. Создай безопасный план автоматизаций:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled"
-echo "  12. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
+echo "  13. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
 echo ""
 
 # Сразу прогоняем валидатор
