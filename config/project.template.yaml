@@ -71,6 +71,15 @@ research_cache_ttl_days: 14
 # и делегирование идут через нативные Codex-skills, а не codex exec обёртки.
 runtime: auto
 
+# Локальные policy-файлы проекта: бюджет/лимиты API, tracking policy, доступы.
+# init-project.sh создаёт безопасные шаблоны, validate-config.py проверяет наличие.
+policy_files:
+  neuronwriter_limits: seo/neuronwriter-limits.yaml
+  google_nlp_policy: seo/entities/google-nlp-policy.yaml
+  data_collection_map: seo/seo-data-collection-map.md
+  access_setup_runbook: seo/access-setup-runbook.md
+  ai_visibility_prompts: seo/ai-visibility-prompts.csv
+
 # -----------------------------------------------------------------------------
 # 4. Project type & mode — что это за сайт и какой режим цикла
 # -----------------------------------------------------------------------------
@@ -205,9 +214,30 @@ sources:
   yandex_business_maps:
     enabled: false              # для локального бизнеса с офлайн-точкой
     method: browser_mcp
+  yandex_merchant:
+    enabled: false
+    method: oauth_or_cabinet
+    business_id_env: YANDEX_MERCHANT_BUSINESS_ID
+    note: "Фиды/товары/ошибки для РФ e-commerce."
   yandex_q:
     enabled: true               # PAA-аналог для информационных тем
     method: browser_mcp
+
+  # === Bing / Microsoft ecosystem ===
+  bing_webmaster:
+    enabled: false
+    api_key_env: BING_WEBMASTER_API_KEY
+    site_url_env: BING_SITE_URL
+    note: "Индексация, backlinks, keywords, crawl errors; полезно для Bing/Copilot."
+  indexnow:
+    enabled: false
+    api_key_env: INDEXNOW_KEY
+    key_location_env: INDEXNOW_KEY_LOCATION
+    note: "Отправка новых/изменённых URL после публикации."
+  bing_places:
+    enabled: false
+    method: browser_cabinet
+    note: "Обычно через кабинет; API ограничен trusted partner program."
 
   # === Google ecosystem ===
   google_search_console:
@@ -221,6 +251,25 @@ sources:
   google_suggest:
     enabled: true
     script: ~/.claude/skills/seo-cycle/scripts/google-suggest.py
+  google_cloud_nlp:
+    enabled: false
+    api_key_env: GOOGLE_APPLICATION_CREDENTIALS
+    helper_script: ~/.claude/skills/seo-cycle/scripts/google-nlp-audit.py
+    policy_file: seo/entities/google-nlp-policy.yaml
+    cache_ttl_days: 30
+    requires_billing_budget: true
+    note: "Только guarded entity/content audit; не сигнал ранжирования и не массовый whole-site прогон."
+  google_merchant:
+    enabled: false
+    api_key_env: GOOGLE_APPLICATION_CREDENTIALS
+    account_id_env: GOOGLE_MERCHANT_ACCOUNT_ID
+    note: "Фиды/качество товаров; платные кампании только после approval."
+  google_business_profile:
+    enabled: false
+    api_key_env: GOOGLE_APPLICATION_CREDENTIALS
+    account_id_env: GOOGLE_BUSINESS_ACCOUNT_ID
+    location_id_env: GOOGLE_BUSINESS_LOCATION_ID
+    note: "Local SEO без analytics tag."
   dataforseo:
     enabled: false
     requires_paid_subscription: true
@@ -329,13 +378,43 @@ publishing:
 # 9. Images — генерация и оптимизация
 # -----------------------------------------------------------------------------
 images:
-  generator: codex_cli          # codex_cli | dalle | midjourney | manual | none
+  workflow: photo_first         # photo_first | generated | manual
+  tool: wp-photo-image          # штатный инструмент: scripts/wp-photo-image.py
+  tool_script: "~/.claude/skills/seo-cycle/scripts/wp-photo-image.py"
+  generator: manual             # codex_cli | dalle | midjourney | manual | none
   generator_script: "./seo/scripts/publish/img-generate.sh"
-  optimize_script: "./seo/scripts/publish/img-optimize.sh"
+  optimize_script: "~/.claude/skills/seo-cycle/scripts/wp-photo-image.py"
   output_format: webp
+  output:
+    width: 1200
+    quality: 86
+    dir: "./seo/generated-images"
+
+  source_policy: thematic_photos_first   # thematic_photos_first | product_photos_first | generate_if_missing | manual_only
+  visual_style: clean_topical_photo      # без текста на картинке, без служебных схем/дисклеймеров
+  allow_visible_text: false
+  product_visuals:
+    main_background: thematic_photo
+    product_cards: corner_or_none        # none | corner_or_none | allowed_if_user_asks
+    product_collages_as_main_visual: false
+  captions:
+    inline_required: true
+    mode: short_editorial                # short_editorial | none
+  inline_min_per_post: 2
+  alt:
+    required: true
+    mode: natural_entity                 # natural_entity | template
+  lazy_loading:
+    first_inline: eager_skip_lazy_if_above_fold
+    below_fold_inline: lazy
+  upload:
+    method: ssh_wp_cli                   # ssh_wp_cli | rest_api | manual
+    env_file: ".env"
+    remote_root_env: WP_REMOTE_ROOT
 
   aspect_ratios:
-    hero: "4:3"                 # для блог-постов
+    featured: "16:9"
+    hero: "16:9"                # для блог-постов
     icon: "1:1"                 # для категорий (300×300)
     og: "1.91:1"                # OpenGraph (1200×630)
     article_inline: "16:9"

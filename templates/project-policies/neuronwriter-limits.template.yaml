@@ -1,0 +1,70 @@
+version: 1
+updated: __DATE__
+plan: not_configured
+reset_at_utc: null
+
+monthly_limits:
+  content_writer_analyses:
+    used: 0
+    limit: 0
+    remaining: 0
+    reserved_until_reset: 0
+    automation_available_until_reset: 0
+  ai_credits:
+    used: 0
+    limit: 0
+    remaining: 0
+  plagiarism_checks:
+    used: 0
+    limit: 0
+    remaining: 0
+  projects:
+    used: 0
+    limit: 0
+    remaining: 0
+  monitored_prompts:
+    used: 0
+    limit: 0
+    remaining: 0
+
+spend_policy:
+  content_writer_analyses:
+    use_for:
+      - priority_category_pages
+      - important_product_pages
+      - commercial_blog_articles
+      - pages_with_gsc_impressions_low_ctr
+      - pages_missing_entities_or_descriptions
+    avoid_for:
+      - tiny_text_edits
+      - duplicate_low_priority_products
+      - whole_catalog_runs_without_approved_queue
+  ai_credits:
+    use_for:
+      - outlines
+      - draft_sections
+      - faq_blocks
+      - title_description_variants
+      - entity_coverage_rewrites
+    approval_required_for:
+      - auto_publish
+      - mass_generation
+  plagiarism_checks:
+    use_for:
+      - final_commercial_pages
+      - final_blog_articles
+      - outsourced_or_ai_heavy_texts
+  monitored_prompts:
+    use_for:
+      - ai_visibility_brand_queries
+      - priority_product_queries
+      - local_commercial_queries
+
+integration_notes:
+  default_project: __PROJECT_NAME__
+  default_domain: __DOMAIN__
+  google_nlp_role: technical_entity_api_audit
+  neuronwriter_role: serp_based_content_editor_and_competitor_nlp
+  default_engine: google.ru
+  default_language: Russian
+  default_competitors_mode: top-intent

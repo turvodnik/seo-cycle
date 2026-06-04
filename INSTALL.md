@@ -8,7 +8,7 @@
 # Вариант A — интерактивный wizard (рекомендуется)
 cd <project-root>
 bash ~/.claude/skills/seo-cycle/scripts/init-project.sh
-# 7 вопросов → готовый seo-cycle.yaml + .env.example + валидация
+# базовые вопросы + image workflow → seo-cycle.yaml + .env.example + policy-файлы + валидация
 
 # Вариант B — ручная установка
 # 1. Скопируй шаблон конфига в корень проекта
@@ -24,11 +24,13 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo
 # 4. Добавь API-ключи в .env по списку из валидатора
 $EDITOR <project-root>/.env
 
-# 5. Готово — спрашивай Клода:
+# 5. Готово — спрашивай Claude/Codex:
 # «давай запустим SEO-цикл для категории X»
 ```
 
-**OAuth setup для GSC/GA4/PSI/Метрики** → см. `docs/oauth-setup.md` (раздел добавится в Сессии 2).
+`install-codex.sh` ставит ядро в `~/.claude/skills/seo-cycle`, создаёт симлинки `~/.codex/skills/seo-cycle` и `~/.codex/skills/codex-primary-runtime`, а `init-project.sh` создаёт проектный `AGENTS.md` если его ещё нет.
+
+**OAuth setup для GSC/GA4/PSI/Метрики/Яндекса** → см. `docs/oauth-setup.md`.
 
 ---
 
@@ -181,6 +183,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo
 - Для каждого `enabled: true` источника — есть ли необходимые env-vars в `.env`
 - delegate-цели существуют (скиллы / агенты)
 - Пути в `artifacts.*` существуют или создаются автоматом
+- policy-файлы проекта для NeuronWriter, Google NLP, data collection/access и RF tracking guard
 
 Выдаёт **чек-лист** что нужно подключить:
 ```
@@ -201,6 +204,11 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo
 
 # NeuronWriter
 NEURON_API_KEY=your_key_here
+NEURON_LIMITS_FILE=seo/neuronwriter-limits.yaml
+
+# Google Cloud Natural Language (только после budget + local guards)
+GOOGLE_NLP_ENABLED=0
+GOOGLE_NLP_POLICY_FILE=seo/entities/google-nlp-policy.yaml
 
 # AnswerThePublic
 TOKEN_ANSWERTHEPUBLIC=atp_pk_live_...
@@ -232,6 +240,19 @@ mkdir -p blog categories pages-service
 touch seo/entities/entities.yaml
 ```
 
+Wizard также создаёт безопасные шаблоны:
+
+```
+seo/neuronwriter-limits.yaml
+seo/entities/google-nlp-policy.yaml
+seo/seo-data-collection-map.md
+seo/access-setup-runbook.md
+seo/ai-visibility-prompts.csv
+AGENTS.md -> ~/.claude/skills/seo-cycle/AGENTS.md
+```
+
+В этих файлах фиксируются подключённые аккаунты, пропущенные платные сервисы, лимиты NeuronWriter/Google NLP, policy по robots/Content-Signal и запрет зарубежных tracking tags/pixels для РФ-проектов без отдельного разрешения.
+
 ---
 
 ## Шаг 6. (Опционально) Создать проектные суб-скиллы
@@ -251,7 +272,7 @@ delegate:
 
 ## Шаг 7. Готово — запускаем цикл
 
-В любой Claude Code сессии в этом проекте:
+В любой Claude Code или Codex сессии в этом проекте:
 
 ```
 давай запустим SEO-цикл для категории «минеральная вата»
@@ -370,6 +391,8 @@ sources:
 
 ~/.claude/skills/seo-cycle/              # глобальный универсальный скилл
 ├── SKILL.md                             # этот скилл
+├── AGENTS.md                            # Codex entrypoint, симлинк → SKILL.md
+├── codex-primary-runtime/               # отдельный Codex-first entrypoint skill
 ├── INSTALL.md                           # этот файл
 ├── CHANGELOG.md                         # история версий
 ├── .env.example                         # шаблон ключей
@@ -381,7 +404,7 @@ sources:
 ├── prompts/                             # универсальные промпты
 ├── scripts/                             # переносимые скрипты (resolve-sources, db-sync,
 │                                        #   notify, serpstat/spyfu-fetch, schema-org-build, ...)
-├── templates/                           # шаблоны artifacts
+├── templates/                           # шаблоны artifacts + project-policies
 └── docs/                                # архитектура + adapt + migration
 ```
 
@@ -417,12 +440,12 @@ sources:
 
 **Получатель после установки:**
 ```bash
-pip3 install pyyaml requests                     # зависимости
+pip3 install pyyaml requests pillow beautifulsoup4 google-auth
 cd <свой-проект>
 ~/.claude/skills/seo-cycle/scripts/init-project.sh   # wizard → seo-cycle.yaml
 # заполнить .env своими ключами (см. .env.example)
 python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
 ```
-Дальше — в Claude Code: «запусти SEO-цикл для категории X».
+Дальше — в Claude Code или Codex: «запусти SEO-цикл для категории X».
 
 **Проектные суб-скиллы** (`emwoody-*`) — это пример кастомизации под конкретный сайт; они НЕ шарятся как часть универсального скилла (содержат специфику проекта). Для нового проекта создаются свои тонкие wrapper-скиллы по образцу `emwoody-seo-cycle` (см. `docs/architecture.md`).

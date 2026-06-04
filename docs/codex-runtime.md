@@ -17,6 +17,25 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
   "Прочитай AGENTS.md и seo-cycle.yaml. Запусти SEO-цикл Phase 2 для кластера 'минеральная вата'."
 ```
 
+## Project policy intake в Codex
+
+Перед запуском фаз Codex должен прочитать не только `seo-cycle.yaml`, но и локальные policy-файлы проекта, если они есть:
+
+- `seo/neuronwriter-limits.yaml`
+- `seo/neuronwriter.md`
+- `seo/entities/google-nlp-policy.yaml`
+- `seo/seo-data-collection-map.md`
+- `seo/access-setup-runbook.md`
+- `seo/ai-visibility-prompts.csv`
+
+Эти файлы задают локальный контракт по расходу NeuronWriter/Google NLP, tracking/tag policy, разрешённым источникам и подключённым аккаунтам. В Codex-режиме особенно важно:
+
+- использовать NeuronWriter как primary SERP/NLP content editor только в пределах limits-файла;
+- использовать Google Cloud Natural Language только как guarded technical entity audit с cache/unit caps;
+- проверять robots/Content-Signal policy: `search=yes, ai-input=yes, ai-train=no` допустимо как запрет обучения, но публичный `robots.txt` не должен содержать PHP warnings/HTML или editor preview мусор;
+- не ставить зарубежные tracking tags/pixels на РФ-проекты без явного разрешения policy;
+- не печатать секреты из `.env`, OAuth, API keys или service-account JSON.
+
 ## Гибрид: что наше, что нативное Codex
 
 Принцип: **наши скрипты — для уникального** (РФ-источники, кэш, guard'ы кредитов, региональные профили, публикация); **нативные Codex-skills — для того, что в Claude-режиме шло через `codex exec`-обёртки, Claude in Chrome MCP и Claude subagents**. Никаких `codex exec` самовызовов изнутри Codex-сессии.

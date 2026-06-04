@@ -150,6 +150,12 @@ def check_one_source(name: str, cfg: dict, env: dict, checklist: list, warnings:
     if api_env and not env.get(api_env):
         checklist.append(f"Добавить в .env: {api_env}= (для источника {name})")
 
+    for cfg_key, env_name in cfg.items():
+        if cfg_key == "api_key_env":
+            continue
+        if cfg_key.endswith("_env") and isinstance(env_name, str) and env_name and not env.get(env_name):
+            checklist.append(f"Добавить в .env: {env_name}= (для источника {name}.{cfg_key})")
+
     # Script existence check
     for key in ("script", "helper_script", "generator_script", "optimize_script"):
         path = cfg.get(key)
@@ -187,6 +193,88 @@ def check_publishing(cfg: dict, env: dict, checklist: list, warnings: list):
     for label, env_name in env_vars.items():
         if env_name and not env.get(env_name):
             checklist.append(f"Добавить в .env: {env_name}= (publishing.{label})")
+
+
+def check_images(cfg: dict, env: dict, project_root: pathlib.Path, checklist: list, warnings: list):
+    images = cfg.get("images", {})
+    if not isinstance(images, dict) or not images:
+        return
+
+    for key in ("tool_script", "generator_script", "optimize_script"):
+        path = images.get(key)
+        if not path:
+            continue
+        if key == "generator_script" and images.get("generator") in ("manual", "none"):
+            continue
+        expanded = pathlib.Path(os.path.expanduser(path))
+        if not expanded.is_absolute():
+            expanded = project_root / expanded
+        if not expanded.exists():
+            warnings.append(f"images.{key} → {path} не существует (создай скрипт или поправь путь)")
+
+    ratios = images.get("aspect_ratios", {})
+    if isinstance(ratios, dict):
+        for key in ("featured", "article_inline"):
+            if key not in ratios:
+                warnings.append(f"images.aspect_ratios.{key} не задан — wp-photo-image будет использовать fallback")
+
+    upload = images.get("upload", {})
+    cms = (cfg.get("publishing", {}) or {}).get("cms") or cfg.get("cms")
+    if isinstance(upload, dict) and upload.get("method") == "ssh_wp_cli" and cms == "wordpress":
+        remote_root_env = upload.get("remote_root_env", "WP_REMOTE_ROOT")
+        env_file = upload.get("env_file", ".env")
+        if not env.get(remote_root_env):
+            checklist.append(f"Добавить в {env_file}: {remote_root_env}=<remote WordPress root> (images.upload.remote_root_env)")
+        for env_name in ("SSH_HOST", "SSH_USER"):
+            if not env.get(env_name):
+                checklist.append(f"Добавить в {env_file}: {env_name}= (для scripts/wp-photo-image.py upload)")
+
+
+def rel_project_path(project_root: pathlib.Path, raw_path: str) -> pathlib.Path:
+    path = pathlib.Path(raw_path)
+    if not path.is_absolute():
+        path = project_root / path
+    return path
+
+
+def check_project_policies(cfg: dict, env: dict, project_root: pathlib.Path, checklist: list, warnings: list):
+    defaults = {
+        "neuronwriter_limits": "seo/neuronwriter-limits.yaml",
+        "google_nlp_policy": "seo/entities/google-nlp-policy.yaml",
+        "data_collection_map": "seo/seo-data-collection-map.md",
+        "access_setup_runbook": "seo/access-setup-runbook.md",
+        "ai_visibility_prompts": "seo/ai-visibility-prompts.csv",
+    }
+    configured = cfg.get("policy_files", {}) or {}
+    if not isinstance(configured, dict):
+        warnings.append("policy_files должен быть словарём путей")
+        configured = {}
+
+    policy_paths = {key: configured.get(key, default) for key, default in defaults.items()}
+    for key, raw_path in policy_paths.items():
+        path = rel_project_path(project_root, raw_path)
+        if not path.exists():
+            checklist.append(f"Создать policy-файл: {raw_path} ({key})")
+
+    neuron = cfg.get("sources", {}).get("neuronwriter", {}) if isinstance(cfg.get("sources", {}), dict) else {}
+    if (neuron.get("enabled") or env.get("NEURON_API_KEY")) and not rel_project_path(project_root, policy_paths["neuronwriter_limits"]).exists():
+        warnings.append("NeuronWriter включён/настроен, но нет seo/neuronwriter-limits.yaml — нельзя безопасно тратить лимиты")
+
+    google_nlp = cfg.get("sources", {}).get("google_cloud_nlp", {}) if isinstance(cfg.get("sources", {}), dict) else {}
+    nlp_enabled = google_nlp.get("enabled") or env.get("GOOGLE_NLP_ENABLED") == "1"
+    if nlp_enabled:
+        if not rel_project_path(project_root, policy_paths["google_nlp_policy"]).exists():
+            warnings.append("Google Cloud NLP включён, но нет seo/entities/google-nlp-policy.yaml")
+        if env.get("GOOGLE_NLP_BILLING_APPROVED") == "1":
+            budget_status = env.get("GOOGLE_NLP_BUDGET_STATUS", "")
+            if not budget_status or budget_status.startswith("disabled"):
+                checklist.append("Обновить GOOGLE_NLP_BUDGET_STATUS после создания Cloud budget alert")
+        if env.get("GOOGLE_NLP_CACHE_DIR") and not env.get("GOOGLE_NLP_CACHE_DAYS"):
+            checklist.append("Добавить GOOGLE_NLP_CACHE_DAYS=30 для кэширования Google NLP")
+
+    country = (cfg.get("locale", {}) or {}).get("country")
+    if country == "RU" and not rel_project_path(project_root, policy_paths["data_collection_map"]).exists():
+        warnings.append("RU-проект без seo/seo-data-collection-map.md — зафиксируй tracking policy перед аналитикой")
 
 
 def check_content_rules(cfg: dict, warnings: list):
@@ -330,6 +418,8 @@ def main():
     check_required(cfg, errors, warnings)
     check_sources(cfg, env, checklist, warnings)
     check_publishing(cfg, env, checklist, warnings)
+    check_images(cfg, env, project_root, checklist, warnings)
+    check_project_policies(cfg, env, project_root, checklist, warnings)
     check_content_rules(cfg, warnings)
     check_artifacts(cfg, project_root, warnings)
     check_v11_extensions(cfg, env, checklist, warnings)

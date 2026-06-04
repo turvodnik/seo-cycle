@@ -1,8 +1,9 @@
 #!/bin/bash
 # init-project.sh — интерактивный wizard для нового проекта seo-cycle.
 #
-# Задаёт 7 базовых вопросов → генерирует seo-cycle.yaml и .env.example
-# в текущей директории → запускает validate-config.py.
+# Задаёт базовые вопросы + блок image workflow → генерирует seo-cycle.yaml,
+# .env.example, AGENTS.md и policy-шаблоны в текущей директории → запускает
+# validate-config.py.
 #
 # Идемпотентный: если seo-cycle.yaml уже существует, спрашивает подтверждение
 # перед перезаписью.
@@ -15,6 +16,7 @@ set -e
 SKILL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TEMPLATE="$SKILL_ROOT/config/project.template.yaml"
 ENV_TEMPLATE="$SKILL_ROOT/.env.example"
+POLICY_TEMPLATE_DIR="$SKILL_ROOT/templates/project-policies"
 TARGET="seo-cycle.yaml"
 TARGET_ENV=".env.example"
 
@@ -38,7 +40,7 @@ if [ ! -f "$TEMPLATE" ]; then
     exit 2
 fi
 
-echo "Отвечай на 7 вопросов (Enter — взять default в скобках):"
+echo "Отвечай на базовые вопросы (Enter — взять default в скобках):"
 echo ""
 
 read -p "1. Имя проекта (human-readable, например «Эмвуди»): " PROJECT_NAME
@@ -61,6 +63,42 @@ CMS="${CMS:-wordpress}"
 
 read -p "7. Язык/Регион [ru-RU/en-US/en-GB/de-DE] (default: ru-RU): " LOCALE
 LOCALE="${LOCALE:-ru-RU}"
+
+echo ""
+echo "Блок изображений для SEO-публикаций:"
+
+read -p "8. Пропорция featured/hero изображений (default: 16:9): " IMAGE_FEATURED_RATIO
+IMAGE_FEATURED_RATIO="${IMAGE_FEATURED_RATIO:-16:9}"
+
+read -p "9. Пропорция inline изображений в статьях (default: 16:9): " IMAGE_INLINE_RATIO
+IMAGE_INLINE_RATIO="${IMAGE_INLINE_RATIO:-16:9}"
+
+read -p "10. Ширина WebP в px (default: 1200): " IMAGE_WIDTH
+IMAGE_WIDTH="${IMAGE_WIDTH:-1200}"
+
+read -p "11. WebP quality 1-100 (default: 86): " IMAGE_QUALITY
+IMAGE_QUALITY="${IMAGE_QUALITY:-86}"
+
+read -p "12. Источник фото [thematic_photos_first/product_photos_first/generate_if_missing/manual_only] (default: thematic_photos_first): " IMAGE_SOURCE_POLICY
+IMAGE_SOURCE_POLICY="${IMAGE_SOURCE_POLICY:-thematic_photos_first}"
+
+read -p "13. Визуальный стиль [clean_topical_photo/editorial_photo/product_context_photo] (default: clean_topical_photo): " IMAGE_VISUAL_STYLE
+IMAGE_VISUAL_STYLE="${IMAGE_VISUAL_STYLE:-clean_topical_photo}"
+
+read -p "14. Минимум inline-изображений на пост (default: 2): " IMAGE_INLINE_MIN
+IMAGE_INLINE_MIN="${IMAGE_INLINE_MIN:-2}"
+
+read -p "15. Caption под inline-картинками обязателен? [Y/n]: " IMAGE_CAPTIONS_ANSWER
+case "$IMAGE_CAPTIONS_ANSWER" in
+    n|N|no|NO) IMAGE_CAPTIONS_REQUIRED=false; IMAGE_CAPTION_MODE=none ;;
+    *) IMAGE_CAPTIONS_REQUIRED=true; IMAGE_CAPTION_MODE=short_editorial ;;
+esac
+
+read -p "16. Разрешать видимый текст на изображениях? [y/N]: " IMAGE_TEXT_ANSWER
+case "$IMAGE_TEXT_ANSWER" in
+    y|Y|yes|YES) IMAGE_ALLOW_VISIBLE_TEXT=true ;;
+    *) IMAGE_ALLOW_VISIBLE_TEXT=false ;;
+esac
 
 LANG_CODE="${LOCALE%-*}"   # ru
 CTRY_CODE="${LOCALE#*-}"   # RU
@@ -104,6 +142,20 @@ $SED_I "s|  google_gl: ru|  google_gl: $(echo $CTRY_CODE | tr A-Z a-z)|" "$TARGE
 $SED_I "s|  google_hl: ru|  google_hl: $LANG_CODE|" "$TARGET"
 $SED_I "s|  timezone: \"Europe/Moscow\"|  timezone: \"$TZ\"|" "$TARGET"
 
+# Image workflow defaults
+$SED_I "s|  workflow: photo_first|  workflow: photo_first|" "$TARGET"
+$SED_I "s|  source_policy: thematic_photos_first|  source_policy: $IMAGE_SOURCE_POLICY|" "$TARGET"
+$SED_I "s|  visual_style: clean_topical_photo|  visual_style: $IMAGE_VISUAL_STYLE|" "$TARGET"
+$SED_I "s|  allow_visible_text: false|  allow_visible_text: $IMAGE_ALLOW_VISIBLE_TEXT|" "$TARGET"
+$SED_I "s|    width: 1200|    width: $IMAGE_WIDTH|" "$TARGET"
+$SED_I "s|    quality: 86|    quality: $IMAGE_QUALITY|" "$TARGET"
+$SED_I "s|    inline_required: true|    inline_required: $IMAGE_CAPTIONS_REQUIRED|" "$TARGET"
+$SED_I "s|    mode: short_editorial|    mode: $IMAGE_CAPTION_MODE|" "$TARGET"
+$SED_I "s|  inline_min_per_post: 2|  inline_min_per_post: $IMAGE_INLINE_MIN|" "$TARGET"
+$SED_I "s|    featured: \"16:9\"|    featured: \"$IMAGE_FEATURED_RATIO\"|" "$TARGET"
+$SED_I "s|    hero: \"16:9\"|    hero: \"$IMAGE_FEATURED_RATIO\"|" "$TARGET"
+$SED_I "s|    article_inline: \"16:9\"|    article_inline: \"$IMAGE_INLINE_RATIO\"|" "$TARGET"
+
 # Региональный профиль источников (управляет вкл/выкл Яндекс/Google/SaaS)
 $SED_I "s|^region_profile: ru|region_profile: $REGION_PROFILE|" "$TARGET"
 echo "ℹ region_profile: $REGION_PROFILE (для $CTRY_CODE) — источники развернутся через resolve-sources.py"
@@ -113,6 +165,40 @@ if [ -f "$ENV_TEMPLATE" ] && [ ! -f "$TARGET_ENV" ]; then
     cp "$ENV_TEMPLATE" "$TARGET_ENV"
     echo "✓ $TARGET_ENV скопирован (заполни перед использованием API-источников)"
 fi
+
+# Codex entrypoint for project root (do not overwrite an existing AGENTS.md)
+if [ ! -e "AGENTS.md" ]; then
+    ln -sf "$SKILL_ROOT/AGENTS.md" "AGENTS.md"
+    echo "✓ AGENTS.md → $SKILL_ROOT/AGENTS.md (точка входа Codex)"
+else
+    echo "ℹ AGENTS.md уже существует — не трогаю"
+fi
+
+# Project policy templates: safe defaults, no secrets
+TODAY="$(date +%F)"
+mkdir -p seo/entities
+copy_policy_template() {
+    local src="$1"
+    local dest="$2"
+    if [ ! -f "$src" ]; then
+        return 0
+    fi
+    if [ -f "$dest" ]; then
+        echo "ℹ $dest уже существует — не трогаю"
+        return 0
+    fi
+    cp "$src" "$dest"
+    $SED_I "s|__DATE__|$TODAY|g" "$dest"
+    $SED_I "s|__PROJECT_NAME__|$PROJECT_NAME|g" "$dest"
+    $SED_I "s|__DOMAIN__|$DOMAIN|g" "$dest"
+    echo "✓ policy создан: $dest"
+}
+
+copy_policy_template "$POLICY_TEMPLATE_DIR/neuronwriter-limits.template.yaml" "seo/neuronwriter-limits.yaml"
+copy_policy_template "$POLICY_TEMPLATE_DIR/google-nlp-policy.template.yaml" "seo/entities/google-nlp-policy.yaml"
+copy_policy_template "$POLICY_TEMPLATE_DIR/seo-data-collection-map.template.md" "seo/seo-data-collection-map.md"
+copy_policy_template "$POLICY_TEMPLATE_DIR/access-setup-runbook.template.md" "seo/access-setup-runbook.md"
+copy_policy_template "$POLICY_TEMPLATE_DIR/ai-visibility-prompts.template.csv" "seo/ai-visibility-prompts.csv"
 
 # Дозапись проекта в общий реестр (идемпотентно — по path)
 REGISTRY="$SKILL_ROOT/config/projects-registry.yaml"
@@ -141,9 +227,10 @@ echo ""
 echo "Следующие шаги:"
 echo "  1. Открой $TARGET и доуточни секции (sources, content_rules, publishing)"
 echo "  2. Заполни .env с API ключами (см. docs/oauth-setup.md в скилле)"
+echo "  2b. Обнови policy-файлы в seo/ при подключении NeuronWriter, Google NLP, GSC/Яндекс/Бинг"
 echo "  3. Запусти валидатор:"
 echo "     python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py"
-echo "  4. В Claude Code: «давай запустим SEO-цикл для категории X»"
+echo "  4. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
 echo ""
 
 # Сразу прогоняем валидатор

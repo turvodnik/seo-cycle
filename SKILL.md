@@ -11,6 +11,26 @@ description: Универсальный SEO/контент-цикл оркест
 
 > **Рантайм (Claude / Codex).** Этот файл — точка входа Claude Code. Если основной мозг — **Codex CLI**, точка входа `AGENTS.md` (симлинк сюда). Режим: `runtime:` в конфиге или env `SEO_RUNTIME=claude|codex|auto`. Логика фаз одинакова; в codex-режиме генерация изображений, браузер (Perplexity/Wordstat/Вебмастер) и делегирование идут через **нативные Codex-skills**, а не `codex exec`-обёртки/Claude-in-Chrome/subagents. Гибрид и маппинг инструментов — в **`docs/codex-runtime.md`** (читай при работе в Codex).
 
+## Project Policy Intake (локальные правила проекта)
+
+Перед выбором фаз, запуском API, расходом кредитов или изменением индексации/аналитики проверь, есть ли в активном проекте локальные SEO-policy файлы:
+
+- `seo/neuronwriter-limits.yaml` — тариф NeuronWriter, остатки, резерв, reset, разрешённый расход автоматизации.
+- `seo/neuronwriter.md` — workflow NeuronWriter, project ID, helper-команды, target score.
+- `seo/entities/google-nlp-policy.yaml` — статус Google Cloud Natural Language, budget alert, cache TTL, лимиты на запуск, unit caps по функциям, языковые ограничения.
+- `seo/seo-data-collection-map.md` — разрешённые источники данных, AI visibility checks, ecommerce/product sources, политика tracking/tag.
+- `seo/access-setup-runbook.md` — подключённые аккаунты, пропущенные платные сервисы, API notes, операционные ограничения.
+- `seo/ai-visibility-prompts.csv` — стартовая очередь AI visibility запросов и evidence-полей для Google AI/Bing Copilot/Perplexity/OpenAI/Claude/Gemini/DeepSeek.
+
+Если файлы есть, они являются локальным контрактом проекта:
+
+- NeuronWriter — основной SERP/NLP редактор для content briefs, terms, entities, questions, competitor scores и финального content scoring, если есть `NEURON_API_KEY`, `seo/scripts/nw.sh` и limits-файл.
+- Google Cloud Natural Language — только guarded technical entity audit: entity extraction, salience, syntax/category checks, title/H1/schema/text mismatch. Не описывай его как ranking submission или прямой ranking signal.
+- Не запускай whole-site NeuronWriter или Google NLP без конкретной одобренной очереди URL/keywords и достаточного остатка в policy.
+- Robots/Content-Signal — отдельная техническая политика: `search=yes, ai-input=yes, ai-train=no` означает "можно показывать в поиске и AI-ответах, нельзя использовать для обучения". Если SEO plugin ломает `robots.txt` PHP warning'ом, сначала отключи/почини источник генерации, затем проверь чистый публичный `robots.txt`.
+- Для РФ/российских проектов не добавляй зарубежные analytics/tracking tags или pixels без явного разрешения в policy. GSC, Bing Webmaster, PageSpeed/CrUX, sitemap/robots checks и off-site API audits допустимы, потому что не требуют установки аналитического кода на сайт.
+- Никогда не выводи API keys, OAuth tokens, service-account JSON или значения `.env`; используй только имена переменных и пути к файлам.
+
 ## Модульная архитектура (фазовые скиллы + state)
 
 `seo-cycle` — **диспетчер**. Фазы постепенно выносятся в самостоятельные шарибельные фазовые скиллы, координируемые через единый файл состояния `seo/cycles/<тема>/_state.json` (контракт `scripts/cycle-state.py`). Это «цепочка передачи»: каждый фазовый скилл читает state на входе, делает своё, обновляет state на выходе, разблокируя следующую фазу.
@@ -79,7 +99,7 @@ Phase 10 Iteration                    (cycle continues)
 
 **Шаги:**
 1. Найти `seo-cycle.yaml` в проекте (поиск: `./seo-cycle.yaml` → `./.seo-cycle.yaml` → `./seo/seo-cycle.yaml` → `./.claude/seo-cycle.yaml`).
-2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard, 7 вопросов → готовый yaml + .env.example).
+2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + image workflow → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`.
 3. Если **найден** — провалидировать: `python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <path>`.
 4. Прочитать `context_files` из конфига (обычно `CLAUDE.md`, brand guidelines).
 5. Определить **режим цикла** (`mode` в конфиге, default `standard`):
@@ -107,6 +127,7 @@ Phase 10 Iteration                    (cycle continues)
 
 **Что проверять (универсально):**
 - Индексация (XML sitemap, robots.txt, canonical)
+- Чистота `robots.txt`: без PHP warnings/HTML, без случайных Bricks preview/editor URLs, без плагиновых Content-Signal строк, противоречащих policy
 - Шаблонные следы (демо-контент, пустые `href="#"`, lorem ipsum)
 - Служебные страницы в индексе (cart, checkout, my-account для ecommerce)
 - Скорость / Core Web Vitals
@@ -146,6 +167,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/resolve-sources.py
 **Экономия токенов (обязательные правила Phase 2):**
 - **Кэш:** дорогой сбор (Wordstat/NW/LLM-CLI/suggest/ATP) не перезапускай, если свежий результат (< `research_cache_ttl_days`, дефолт 14) уже лежит в `seo/research/.../results/`. `llm-cli-collect.sh` проверяет это автоматически через `research-cache.py`.
 - **Сырьё — на диск, дистиллят — в контекст.** В свой контекст подтягивай **только** сведённый `*-merged-*.md` (и итоговый `02-keywords.md`), а НЕ исходные `*-antigravity-*.md` / `*-codex-*.md` / сырые CSV. Скрипты сами пишут сырьё на диск и возвращают сжатый top-N.
+- **Antigravity + Perplexity обязательны для семантики и сущностей.** При сборе ядра и Entity Map всегда используй Antigravity CLI (`agy`) и Perplexity Pro/Deep Research как отдельные источники идей, интентов, вопросов, сущностей и проверяемых фактов. Если источник недоступен технически, запиши это в артефакт как blocker/exception; не выдавай сбор за полный.
 
 ### Универсальные источники
 
@@ -187,7 +209,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/resolve-sources.py
 #### Group D — LLM CLI (универсально)
 | Источник | Тип | Когда |
 |---|---|---|
-| **Antigravity** (`agy`) | CLI | Быстрый brainstorm, локальный контекст |
+| **Antigravity** (`agy`) | CLI | Обязательно для семантики, интентов, сущностей и альтернативных формулировок |
 | **Codex** (`codex exec`) | CLI | С URL для fact-check, web search |
 | **Параллельный запуск + merge** | script | `scripts/llm-cli-collect.sh "<тема>"` |
 
@@ -195,7 +217,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/resolve-sources.py
 | Источник | Тип | Когда |
 |---|---|---|
 | AnswerThePublic | API | Универсальные шаблоны вопросов (для не-RU рынков работает напрямую; для RU — переводим en/us шаблоны) |
-| Perplexity Pro | browser_mcp | Сущности с источниками, Deep Research |
+| Perplexity Pro | browser_mcp | Обязательно для сущностей с источниками, Deep Research и фактчекинга |
 
 ### Сведение в единое ядро
 
@@ -240,6 +262,8 @@ python3 ~/.claude/skills/seo-cycle/scripts/resolve-sources.py
 **Цель:** для каждой страницы из кластера — Entity Map (entities → relations → intents → structure → keys).
 
 **Делегировать:** `delegate.semantic_brief` (`emwoody-semantic-brief` если есть, иначе универсальный шаблон `templates/entity-map.template.md`).
+
+**Обязательные evidence-источники:** перед фиксацией Entity Map сверяй сущности, интенты, PAA/FAQ и спорные утверждения через Antigravity CLI и Perplexity Deep Research. Сохраняй raw-ответы на диск, а в Entity Map добавляй только дистиллированные сущности с указанием источника. Без этой сверки карта не проходит quality-gate, кроме явно залогированного технического исключения.
 
 **Универсальная структура (17 разделов):**
 1. Центральная сущность (AEO-цитата 2-3 предложения)
@@ -308,9 +332,10 @@ last_fact_check:
 
 **QA после написания (обязательная последовательность):**
 1. **Stop-words check** (`scripts/check-stop-words.py`)
-2. **Fact-check** (если `content_rules.fact_check.enabled`) — через Perplexity prompts (режим **Deep Research**) или вручную. Результаты записывай в `fact_check_log` frontmatter (claim/source/url/verdict/checked).
-3. **Stock-first проверка** (если ecommerce)
-4. **NW evaluate** (если `sources.neuronwriter.enabled`) — target `quality_gates.neuronwriter_score.min_score`
+2. **Fact-check** — обязательно через Perplexity prompts (режим **Deep Research**) + Antigravity CLI cross-check для фактов, сущностей, интентов и спорных формулировок. Результаты записывай в `fact_check_log` frontmatter (claim/source/url/verdict/checked/tool). Если один из инструментов недоступен, не публикуй без записи blocker/exception в лог.
+3. **Image visual + alt/caption check** — изображения создаются config-driven из `images.*`. Для фото-подготовки используй `scripts/wp-photo-image.py`: локальное фото/URL → crop по `images.aspect_ratios.*` → WebP по `images.output.*` → WordPress upload через SSH/WP-CLI при необходимости. Inline images должны быть чистыми тематическими фото/визуалами в `images.visual_style`. Не добавляй видимый текст на изображение, если `images.allow_visible_text=false` (SEO/AEO/GEO, схемы, подписи, описания товаров, дисклеймеры каталога) и не используй товарные карточки/коллажи как основной визуал, если пользователь явно не попросил. У каждого недекоративного изображения должен быть естественный `alt`; inline caption обязателен, если `images.captions.inline_required=true`: featured, inline, OG/schema, product/category visuals. Alt и caption описывают изображение и сущность, без переспама ключами и без служебных объяснений. Изображение без alt или inline image без обязательного caption = публикационный blocker.
+4. **Stock-first проверка** (если ecommerce)
+5. **NW evaluate** (если `sources.neuronwriter.enabled`) — target `quality_gates.neuronwriter_score.min_score`
 
 **E-E-A-T trust-блок (если есть `fact_check_log`):** сгенерируй видимый блок «Источники» в конец статьи —
 ```bash
@@ -332,7 +357,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/eeat-render.py 06-drafts/<name>.publi
 
 | CMS | Скилл / подход |
 |---|---|
-| WordPress | `emwoody-publish-*` или аналог; REST API + ACF + SEOPress meta |
+| WordPress | REST API + Application Password как основной независимый канал; MCP/`emwoody-publish-*` как удобный интерфейс; SSH/WP-CLI fallback для backup/cache/meta/server repairs |
 | Shopify | (TBD — Liquid + Storefront API) |
 | Webflow | (TBD — CMS Collections API) |
 | Next.js/static | git commit в content/ + redeploy |
@@ -342,10 +367,12 @@ python3 ~/.claude/skills/seo-cycle/scripts/eeat-render.py 06-drafts/<name>.publi
 1. Парсинг `publish.md`
 2. Backup текущих значений
 3. POST в CMS endpoint
-4. Featured image / OG картинка (если `images.generator != none`)
+4. Featured image / OG картинка (если `images.generator != none` или `images.workflow=photo_first`) через `scripts/wp-photo-image.py`/CMS media workflow + обязательный alt; inline images по `images.inline_min_per_post` и `images.aspect_ratios.article_inline` + обязательный короткий caption, если включён в `images.captions`
 5. Schema/meta через SEO plugin endpoint
-6. Verify через GET
+6. Verify через GET + браузер: публичный HTML не должен содержать недекоративные `<img>` без `alt`, inline images без caption и запрещённые тексты на/под изображениями. Если кеш/оптимизатор/lazy-load подменяет first-screen/above-the-fold inline image на плейсхолдер в браузере, исключи только это критичное inline image из lazy-load (`skip-lazy`/`data-no-lazy` или CMS-аналог) и перепроверь screenshot. Остальные inline images ниже первого экрана оставляй lazy-loaded.
 7. Лог в `artifacts.publish_log`
+
+**WordPress channel policy:** не завязывай публикацию только на MCP-сервер. Если `publishing.cms=wordpress`, держи REST API publisher через Application Password как основной повторяемый путь; MCP используй когда он доступен в клиенте; SSH/WP-CLI оставляй для восстановления, purge cache, backup, незарегистрированных REST meta и серверных исправлений.
 
 **Маркетинговый мостик (если `marketing.enabled`):** после публикации — поднять конверсию страницы через плагин `marketing-skills` (`page-cro` / `form-cro` / `popup-cro`). Каналы привлечения/удержания (`paid-ads`, `social-content`, `email-sequence`, `referral-program`) — **с РФ-адаптацией** (Яндекс.Директ / VK / Telegram / Метрика / 2ГИС вместо западных). Карта мостиков и замен каналов — `docs/marketing-bridges.md`.
 

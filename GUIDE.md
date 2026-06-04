@@ -12,7 +12,7 @@
 > fact-check, мониторинга и итераций. Адаптируется под любой проект через
 > декларативный конфиг `seo-cycle.yaml`.
 
-Содержание: [Что это](#что-это) · [Преимущества](#преимущества) · [Установка](#установка) · [Для ИИ](#установка-ии) · [Архитектура](#архитектура) · [Рантаймы](#рантаймы) · [Инструменты](#инструменты) · [10 фаз](#фазы) · [Агенты](#агенты) · [Команды](#команды) · [Сценарии](#сценарии) · [Обновление доков](#обновление-доков)
+Содержание: [Что это](#что-это) · [Преимущества](#преимущества) · [Установка](#установка) · [Для ИИ](#установка-ии) · [Архитектура](#архитектура) · [Рантаймы](#рантаймы) · [Политики проекта](#политики-проекта) · [Инструменты](#инструменты) · [10 фаз](#фазы) · [Агенты](#агенты) · [Команды](#команды) · [Сценарии](#сценарии) · [Обновление доков](#обновление-доков)
 
 ---
 
@@ -21,6 +21,7 @@
 `seo-cycle` — это **скилл** (набор инструкций + скриптов), который превращает LLM-ассистента (Claude или Codex) в полноценного SEO-специалиста для конкретного сайта. Он:
 
 - собирает семантику из 10+ источников (Яндекс, Google, Serpstat, SpyFu, NeuronWriter, LLM-CLI, AnswerThePublic, Perplexity);
+- всегда использует Antigravity CLI и Perplexity Deep Research для сбора семантики, сущностей и фактчекинга перед публикацией, если инструменты доступны;
 - строит карту сущностей (методика Шестакова), кластеры, контент-план;
 - пишет тексты с учётом tone of voice, stock-first, локальных сигналов;
 - проверяет факты (fact-check) и формирует E-E-A-T-сигналы;
@@ -54,13 +55,13 @@
 git clone https://github.com/turvodnik/seo-cycle ~/.claude/skills/seo-cycle
 
 # 2. Зависимости Python
-pip3 install pyyaml requests
+pip3 install pyyaml requests pillow beautifulsoup4 google-auth
 
 # 3. В корне СВОЕГО проекта — мастер настройки
 cd /path/to/your-project
 ~/.claude/skills/seo-cycle/scripts/init-project.sh
-#   → 7 вопросов (имя, домен, бренд, тип, CMS, локаль) →
-#   → создаёт seo-cycle.yaml с region_profile по стране + .env.example
+#   → базовые вопросы + image workflow →
+#   → создаёт seo-cycle.yaml, .env.example, AGENTS.md и policy-файлы
 #   → регистрирует проект в реестре
 
 # 4. Заполнить ключи (только те источники, что используешь)
@@ -74,7 +75,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
 # 6. Готово. В Claude Code / Codex: «запусти SEO-цикл для категории X»
 ```
 
-**Что выдаёт `validate-config.py`:** список активных источников (с учётом `region_profile`), список недостающих env-переменных, предупреждения о несуществующих делегатах/путях, итог ✓/ошибки.
+**Что выдаёт `validate-config.py`:** список активных источников (с учётом `region_profile`), список недостающих env-переменных, предупреждения о несуществующих делегатах/путях/policy-файлах, итог ✓/ошибки.
 
 ---
 
@@ -88,13 +89,19 @@ test -d ~/.claude/skills/seo-cycle || \
   git clone https://github.com/turvodnik/seo-cycle ~/.claude/skills/seo-cycle
 
 # Шаг 2. Зависимости
-python3 -c "import yaml, requests" 2>/dev/null || pip3 install pyyaml requests
+python3 -c "import yaml, requests, PIL, bs4; import google.auth" 2>/dev/null || \
+  pip3 install pyyaml requests pillow beautifulsoup4 google-auth
 
 # Шаг 3. Создать конфиг проекта (неинтерактивно — через шаблон)
 cd <project-root>
 test -f seo-cycle.yaml || cp ~/.claude/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml
 #   затем отредактировать поля: project.name/domain, locale, region_profile,
-#   project_type, cms, business_profile. Для РФ: region_profile: ru.
+#   project_type, cms, business_profile и images.*. Для РФ: region_profile: ru.
+
+# Альтернатива: интерактивный wizard сразу спросит базовые поля + image workflow
+# (featured/inline ratios, WebP width/quality, source policy, captions, lazy policy)
+# и создаст AGENTS.md + policy-шаблоны для NeuronWriter/Google NLP/data access.
+~/.claude/skills/seo-cycle/scripts/init-project.sh
 
 # Шаг 4. Создать .env (попросить у человека только значения ключей)
 test -f .env || cp ~/.claude/skills/seo-cycle/.env.example .env
@@ -182,6 +189,28 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 
 ---
 
+## <a id="политики-проекта"></a>6c. Локальные политики проекта
+
+Перед запуском фаз, API-запросов, расходом кредитов или изменением tracking/indexing поведения прочитай project-local policy файлы, если они есть:
+
+- `seo/neuronwriter-limits.yaml` — тариф NeuronWriter, остатки, резерв, reset, разрешённый расход автоматизации.
+- `seo/neuronwriter.md` — workflow NeuronWriter, project ID, helper-команды и scoring policy.
+- `seo/entities/google-nlp-policy.yaml` — Google Cloud Natural Language: budget alert, cache TTL, per-run limits, unit caps, language restrictions.
+- `seo/seo-data-collection-map.md` — разрешённые источники данных, AI visibility checks, ecommerce/product sources, tracking/tag policy.
+- `seo/access-setup-runbook.md` — подключённые аккаунты, пропущенные платные сервисы, API notes, операционные ограничения.
+- `seo/ai-visibility-prompts.csv` — стартовая очередь AI visibility запросов и evidence-полей для Google AI/Bing Copilot/Perplexity/OpenAI/Claude/Gemini/DeepSeek.
+
+Правила:
+
+- NeuronWriter — primary SERP/NLP редактор контента для briefs, terms, entities, questions, competitor scores и финального scoring, если есть `NEURON_API_KEY`, helper и limits-файл.
+- Google Cloud Natural Language — guarded technical entity audit: entities, salience, syntax/category, mismatch `title/H1/schema/text`. Это не ranking submission и не прямой ranking signal.
+- Whole-site NeuronWriter/Google NLP jobs запрещены без одобренной очереди URL/keywords и достаточного остатка в policy.
+- Robots/Content-Signal: `search=yes, ai-input=yes, ai-train=no` допустимо как запрет обучения моделей. Публичный `robots.txt` должен быть чистым `text/plain`, без PHP warnings/HTML и editor/preview мусора.
+- Для РФ-проектов не ставь зарубежные analytics/tracking tags или pixels без явного разрешения policy. GSC, Bing Webmaster, PageSpeed/CrUX, sitemap/robots checks и off-site API audits допустимы без установки кода аналитики.
+- Никогда не выводи API keys, OAuth tokens, service-account JSON или значения `.env`; только имена переменных и пути.
+
+---
+
 ## <a id="инструменты"></a>7. Инструменты (что делает · команда · результат)
 
 > Все скрипты лежат в `~/.claude/skills/seo-cycle/scripts/`. Запуск: `python3 <script>.py` или `bash <script>.sh`.
@@ -189,7 +218,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 ### 7.1 Управление источниками и конфигом
 | Скрипт | Что делает | Команда | Результат |
 |---|---|---|---|
-| `validate-config.py` | Проверяет `seo-cycle.yaml`, env, делегатов | `python3 validate-config.py` | Список активных источников, недостающие ключи, ✓/ошибки |
+| `validate-config.py` | Проверяет `seo-cycle.yaml`, env, делегатов и policy-файлы | `python3 validate-config.py` | Список активных источников, недостающие ключи/policy, ✓/ошибки |
 | `resolve-sources.py` | Разворачивает `region_profile` + override в список активных источников | `python3 resolve-sources.py` | Активные/пропущенные источники с причиной + `seo/cycles/<date>/active-sources.json` |
 | `init-project.sh` | Мастер нового проекта | `bash init-project.sh` | `seo-cycle.yaml`, `.env.example`, запись в реестр |
 | `cycle-state.py` | Контракт состояния цикла (handoff между фазовыми скиллами) | `python3 cycle-state.py init --topic "X"` / `next` / `set <фаза> --status done --gate-passed` / `show` | `_state.json` с DAG фаз; «цепочка передачи» |
@@ -208,9 +237,12 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 | `spyfu-fetch.py` | Competitor/PPC US/UK/EU (не РФ) | `python3 spyfu-fetch.py domain-stats <domain> --cc US` | md-таблица; usage-трекер $-бюджета |
 | `atp-fetch.py` | Шаблоны вопросов AnswerThePublic (en/us) | `python3 atp-fetch.py "<en keyword>"` | md с questions/prepositions/comparisons |
 | `nw-cli.sh` | NeuronWriter: SERP terms/entities/score | `bash nw-cli.sh get <query_id>` | terms, entities, competitors, target score |
-| `llm-cli-collect.sh` | Параллельный сбор Antigravity + Codex (RUNTIME-aware, deep-режим) | `bash llm-cli-collect.sh "<тема>"` | 2 файла сырья + подсказка merge |
+| `llm-cli-collect.sh` | Параллельный сбор Antigravity + Codex (RUNTIME-aware, deep-режим); Antigravity обязателен для семантики/интентов/сущностей | `bash llm-cli-collect.sh "<тема>"` | 2 файла сырья + подсказка merge |
 | `llm-cli-merge.py` | Слияние+дедуп результатов LLM-CLI | `python3 llm-cli-merge.py a.md b.md -o merged.md` | `*-merged-*.md` (дистиллят) |
 | `research-cache.py` | TTL-кэш дорогого сбора | `python3 research-cache.py check --dir ... --slug ... --source ... --ttl 14` | путь к свежему кэшу (HIT) или код 1 (MISS) |
+| `google-nlp-audit.py` | Guarded Google Cloud NLP entity/category/syntax audit с кэшем и unit caps | `python3 google-nlp-audit.py --project-root . --url https://example.com/ --dry-run` | JSON plan/cache/API results; без публикации и без обхода лимитов |
+
+Обязательное правило: для полного цикла семантика и Entity Map не считаются завершенными без Antigravity CLI и Perplexity Deep Research. Raw-ответы сохраняются на диск; в рабочий контекст подтягивается только merge/distilled artifact. Если Perplexity или Antigravity недоступны, это фиксируется как blocker/exception в артефакте.
 
 ### 7.3 Данные мониторинга (Google/Яндекс)
 | Скрипт | Что делает | Команда |
@@ -241,7 +273,10 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 | Скрипт | Что делает |
 |---|---|
 | `img-generate.sh` | Генерация изображения (RUNTIME-aware: codex exec / нативный image-skill) |
-| (в проекте) `img-optimize.sh`, `wp-image-upload.py`, `wp-*-publish.py` | Оптимизация в WebP, загрузка в Media, публикация постов/категорий/страниц |
+| `wp-photo-image.py` | Детерминированное фото: локальный файл/URL → crop по `images.aspect_ratios.*` → WebP → WordPress upload через SSH/WP-CLI → alt/caption/featured |
+| (в проекте) `wp-*-publish.py` | Публикация постов/категорий/страниц |
+
+Image gate: настройки берутся из `images.*` в `seo-cycle.yaml`: `workflow`, `source_policy`, `visual_style`, `aspect_ratios`, `output`, `captions`, `alt`, `lazy_loading`, `upload`. Для photo-first workflow используй `wp-photo-image.py`, а не ручную нарезку. Inline images должны быть чистыми тематическими фото/визуалами в стиле проекта. Не добавляй видимый текст на изображение (SEO/AEO/GEO, схемы, подписи, описания товаров, дисклеймеры каталога), если `images.allow_visible_text=false`, и не делай товарные карточки/коллажи основным визуалом без явного запроса. У каждого недекоративного изображения должен быть `alt` до публикации: featured, inline, OG/schema, product/category visuals. Inline image также должен иметь короткий редакционный caption, если `images.captions.inline_required=true`. Alt и caption описывают видимый объект и сущность страницы естественно, без набивки ключами и без служебных объяснений. После публикации проверь публичный HTML и браузерный screenshot: `<img>` без `alt`, inline image без обязательного caption, запрещённый текст на/под изображением или lazy-load плейсхолдер вместо first-screen фото = blocker/exception в логе. Если оптимизатор подменяет первое/above-the-fold inline image на плейсхолдер, исключи только это критичное изображение из lazy-load (`skip-lazy`/`data-no-lazy` или CMS-аналог) и перепроверь. Остальные inline images ниже первого экрана оставляй lazy-loaded.
 
 ### 7.6 Данные, автоматизация, уведомления
 | Скрипт | Что делает | Команда | Результат |
@@ -288,10 +323,10 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 | **1 Audit** | Тех/контент-аудит, гэпы | сайт → `01-audit.md` |
 | **2 Keyword research** | Сбор из активных источников (`resolve-sources` → Wordstat/Serpstat/suggest/LLM-CLI/...), кэш, лог источников | тема → `02-keywords.md` (+ raw на диске) |
 | **3 Cluster + Intent** | Группировка в кластеры, hub-and-spoke | ключи → `03-clusters.md` |
-| **4 Entity Map** | Карта сущностей (Шестаков), 17 разделов, fact_check_log, experience-маркеры | кластер → `04-entity-maps/*.md` |
+| **4 Entity Map** | Карта сущностей (Шестаков), 17 разделов, Antigravity+Perplexity evidence, fact_check_log, experience-маркеры | кластер → `04-entity-maps/*.md` |
 | **5 Content plan** | Roadmap, приоритеты, перелинковка, сезонность | карты → `05-content-plan.md` |
-| **6 Writing** | Текст + tone + AEO + stock-first; QA: стоп-слова → fact-check → NW≥65; E-E-A-T trust-блок | бриф → `06-drafts/*.publish.md` |
-| **7 Publishing** | Текст + изображения в CMS | draft → опубликовано + `07-published.md` |
+| **6 Writing** | Текст + tone + AEO + stock-first; QA: стоп-слова → Perplexity+Antigravity fact-check → NW≥65; E-E-A-T trust-блок | бриф → `06-drafts/*.publish.md` |
+| **7 Publishing** | Текст + изображения в CMS; для WordPress основной канал REST API + Application Password, MCP опционален, SSH/WP-CLI fallback; alt обязателен для всех недекоративных изображений | draft → опубликовано + `07-published.md` |
 | **8 Schema** | JSON-LD + канонический org-узел (`schema-org-build inject`) | страница → `08-schema.md` |
 | **9 Monitoring** | Снапшоты GSC/Вебмастер/Метрика | период → `09-monitoring/*-snapshot.json` |
 | **10 Iteration** | `triggers-eval` + `source-attribution` → доработки | снапшот → `10-iterations.md` |
@@ -382,7 +417,7 @@ python3 source-attribution.py --csv seo/source-attribution.csv --snapshot <snap>
 > fact-check, monitoring and iteration. Adapts to any project via the declarative
 > `seo-cycle.yaml` config.
 
-Contents: [What it is](#en-what) · [Benefits](#en-benefits) · [Install](#en-install) · [For AI](#en-ai) · [Architecture](#en-arch) · [Runtimes](#en-runtimes) · [Tools](#en-tools) · [10 phases](#en-phases) · [Agents](#en-agents) · [Commands](#en-commands) · [Scenarios](#en-scenarios) · [Updating docs](#en-docs)
+Contents: [What it is](#en-what) · [Benefits](#en-benefits) · [Install](#en-install) · [For AI](#en-ai) · [Architecture](#en-arch) · [Runtimes](#en-runtimes) · [Project policies](#en-project-policies) · [Tools](#en-tools) · [10 phases](#en-phases) · [Agents](#en-agents) · [Commands](#en-commands) · [Scenarios](#en-scenarios) · [Updating docs](#en-docs)
 
 ---
 
@@ -392,6 +427,7 @@ Contents: [What it is](#en-what) · [Benefits](#en-benefits) · [Install](#en-in
 (Claude or Codex) into a full SEO specialist for a specific site. It:
 
 - collects keywords from 10+ sources (Yandex, Google, Serpstat, SpyFu, NeuronWriter, LLM-CLI, AnswerThePublic, Perplexity);
+- always uses Antigravity CLI and Perplexity Deep Research for semantic collection, entity validation, and fact-checking before publication when the tools are available;
 - builds an entity map (Shestakov method), clusters, content plan;
 - writes copy honoring tone of voice, stock-first, local signals;
 - fact-checks and builds E-E-A-T signals;
@@ -426,12 +462,12 @@ are scripts, the "project truth" lives in one config.
 git clone https://github.com/turvodnik/seo-cycle ~/.claude/skills/seo-cycle
 
 # 2. Python deps
-pip3 install pyyaml requests
+pip3 install pyyaml requests pillow beautifulsoup4 google-auth
 
 # 3. In YOUR project root — setup wizard
 cd /path/to/your-project
 ~/.claude/skills/seo-cycle/scripts/init-project.sh
-#   → 7 questions → seo-cycle.yaml with region_profile by country + .env.example
+#   → base questions + image workflow → seo-cycle.yaml + .env.example + AGENTS.md + policy files
 #   → registers the project
 
 # 4. Fill keys (only sources you use)
@@ -457,13 +493,19 @@ test -d ~/.claude/skills/seo-cycle || \
   git clone https://github.com/turvodnik/seo-cycle ~/.claude/skills/seo-cycle
 
 # Step 2. Deps
-python3 -c "import yaml, requests" 2>/dev/null || pip3 install pyyaml requests
+python3 -c "import yaml, requests, PIL, bs4; import google.auth" 2>/dev/null || \
+  pip3 install pyyaml requests pillow beautifulsoup4 google-auth
 
 # Step 3. Project config (non-interactive — via template)
 cd <project-root>
 test -f seo-cycle.yaml || cp ~/.claude/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml
-#   then edit: project.name/domain, locale, region_profile, project_type, cms, business_profile.
+#   then edit: project.name/domain, locale, region_profile, project_type, cms, business_profile, images.*.
 #   For Russia: region_profile: ru.
+
+# Alternative: the interactive wizard asks for base fields + image workflow
+# (featured/inline ratios, WebP width/quality, source policy, captions, lazy policy)
+# and creates AGENTS.md + policy templates for NeuronWriter/Google NLP/data access.
+~/.claude/skills/seo-cycle/scripts/init-project.sh
 
 # Step 4. .env (ask the human only for key values)
 test -f .env || cp ~/.claude/skills/seo-cycle/.env.example .env
@@ -551,6 +593,28 @@ Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible
 
 ---
 
+## <a id="en-project-policies"></a>6c. Project-local policies
+
+Before starting phases, making API calls, spending credits, or changing tracking/indexing behavior, read project-local policy files when present:
+
+- `seo/neuronwriter-limits.yaml` — NeuronWriter plan, remaining quota, reserve, reset time, allowed automation spend.
+- `seo/neuronwriter.md` — NeuronWriter workflow, project ID, helper commands, and scoring policy.
+- `seo/entities/google-nlp-policy.yaml` — Google Cloud Natural Language budget alert, cache TTL, per-run limits, unit caps, and language restrictions.
+- `seo/seo-data-collection-map.md` — approved data sources, AI visibility checks, ecommerce/product sources, tracking/tag policy.
+- `seo/access-setup-runbook.md` — connected accounts, skipped paid services, API notes, operational constraints.
+- `seo/ai-visibility-prompts.csv` — starter AI visibility query queue and evidence fields for Google AI/Bing Copilot/Perplexity/OpenAI/Claude/Gemini/DeepSeek.
+
+Rules:
+
+- NeuronWriter is the primary SERP/NLP content editor for briefs, terms, entities, questions, competitor scores, and final scoring when `NEURON_API_KEY`, the helper, and a limits file are present.
+- Google Cloud Natural Language is a guarded technical entity audit layer for entities, salience, syntax/category, and `title/H1/schema/text` mismatches. It is not a ranking submission mechanism or direct ranking signal.
+- Whole-site NeuronWriter/Google NLP jobs are forbidden without an approved URL/keyword queue and enough remaining policy budget.
+- Robots/Content-Signal: `search=yes, ai-input=yes, ai-train=no` is acceptable as a model-training opt-out. Public `robots.txt` must be clean `text/plain`, with no PHP warnings/HTML or editor/preview noise.
+- For Russian/RF projects, do not add foreign analytics/tracking tags or pixels without explicit policy approval. GSC, Bing Webmaster, PageSpeed/CrUX, sitemap/robots checks, and off-site API audits are acceptable because they do not install analytics code.
+- Never print API keys, OAuth tokens, service-account JSON, or `.env` values; use variable names and paths only.
+
+---
+
 ## <a id="en-tools"></a>7. Tools (what · command · output)
 
 > All scripts live in `~/.claude/skills/seo-cycle/scripts/`. Run via `python3 <script>.py` or `bash <script>.sh`.
@@ -558,7 +622,7 @@ Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible
 ### 7.1 Source & config management
 | Script | What | Command | Output |
 |---|---|---|---|
-| `validate-config.py` | Validates config, env, delegates | `python3 validate-config.py` | Active sources, missing keys, ✓/errors |
+| `validate-config.py` | Validates config, env, delegates, policy files | `python3 validate-config.py` | Active sources, missing keys/policies, ✓/errors |
 | `resolve-sources.py` | Expands `region_profile` + overrides into active sources | `python3 resolve-sources.py` | Active/skipped sources with reason + `active-sources.json` |
 | `init-project.sh` | New-project wizard | `bash init-project.sh` | `seo-cycle.yaml`, `.env.example`, registry entry |
 | `cycle-state.py` | Cycle state contract (handoff between phase skills) | `python3 cycle-state.py init --topic "X"` / `next` / `set <phase> --status done --gate-passed` / `show` | `_state.json` with phase DAG; the "handoff chain" |
@@ -577,9 +641,12 @@ Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible
 | `spyfu-fetch.py` | Competitor/PPC US/UK/EU (not RU) | `python3 spyfu-fetch.py domain-stats <domain> --cc US` | md table; $-budget tracker |
 | `atp-fetch.py` | AnswerThePublic question templates (en/us) | `python3 atp-fetch.py "<en keyword>"` | md questions/prepositions/comparisons |
 | `nw-cli.sh` | NeuronWriter: SERP terms/entities/score | `bash nw-cli.sh get <query_id>` | terms, entities, competitors, target score |
-| `llm-cli-collect.sh` | Parallel Antigravity + Codex (RUNTIME-aware, deep mode) | `bash llm-cli-collect.sh "<topic>"` | 2 raw files + merge hint |
+| `llm-cli-collect.sh` | Parallel Antigravity + Codex (RUNTIME-aware, deep mode); Antigravity is mandatory for semantics/intents/entities | `bash llm-cli-collect.sh "<topic>"` | 2 raw files + merge hint |
 | `llm-cli-merge.py` | Merge+dedup LLM-CLI results | `python3 llm-cli-merge.py a.md b.md -o merged.md` | `*-merged-*.md` (distilled) |
 | `research-cache.py` | TTL cache for expensive collection | `python3 research-cache.py check --dir ... --slug ... --source ... --ttl 14` | path to fresh cache (HIT) or exit 1 (MISS) |
+| `google-nlp-audit.py` | Guarded Google Cloud NLP entity/category/syntax audit with cache and unit caps | `python3 google-nlp-audit.py --project-root . --url https://example.com/ --dry-run` | JSON plan/cache/API results; no publishing and no guard bypass |
+
+Mandatory rule: a full cycle's semantic collection and Entity Map are not complete without Antigravity CLI and Perplexity Deep Research. Raw outputs are saved to disk; only the merged/distilled artifact is pulled into context. If Perplexity or Antigravity is unavailable, record a blocker/exception in the artifact.
 
 ### 7.3 Monitoring data (Google/Yandex)
 | Script | What | Command |
@@ -610,7 +677,10 @@ Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible
 | Script | What |
 |---|---|
 | `img-generate.sh` | Image generation (RUNTIME-aware: codex exec / native image-skill) |
-| (project) `img-optimize.sh`, `wp-image-upload.py`, `wp-*-publish.py` | WebP optimize, Media upload, publish posts/categories/pages |
+| `wp-photo-image.py` | Deterministic photo pipeline: local file/URL → crop by `images.aspect_ratios.*` → WebP → WordPress upload through SSH/WP-CLI → alt/caption/featured |
+| (project) `wp-*-publish.py` | Publish posts/categories/pages |
+
+Image gate: settings come from `images.*` in `seo-cycle.yaml`: `workflow`, `source_policy`, `visual_style`, `aspect_ratios`, `output`, `captions`, `alt`, `lazy_loading`, `upload`. For photo-first workflow, use `wp-photo-image.py` instead of manual cropping. Inline images should be clean topical photos/visuals that match the project's style. Do not add visible text to the image (SEO/AEO/GEO, process diagrams, labels, product descriptions, catalog disclaimers) when `images.allow_visible_text=false`, and do not make product-card collages the main visual unless explicitly requested. Every non-decorative image must have `alt` before publication: featured, inline, OG/schema, product/category visuals. Inline images must also have a short editorial caption when `images.captions.inline_required=true`. Alt text and captions should describe the visible object and page entity naturally, without keyword stuffing or process/meta explanations. After publication, verify public HTML and a browser screenshot: `<img>` without `alt`, an inline image without required caption, forbidden visible text on/under an image, or a lazy-load placeholder instead of the first-screen photo is a blocker/exception in the log. If an optimizer rewrites the first/above-the-fold inline image to a placeholder, exclude only that critical image from lazy-load (`skip-lazy`/`data-no-lazy` or CMS equivalent) and re-check. Keep lower inline images lazy-loaded.
 
 ### 7.6 Data, automation, alerts
 | Script | What | Command | Output |
@@ -657,10 +727,10 @@ External (connected separately, not skill code): goals/conversions in Yandex.Met
 | **1 Audit** | Tech/content audit, gaps | site → `01-audit.md` |
 | **2 Keyword research** | Collect from active sources (`resolve-sources` → Wordstat/Serpstat/suggest/LLM-CLI/...), cache, source log | topic → `02-keywords.md` (+ raw on disk) |
 | **3 Cluster + Intent** | Group into clusters, hub-and-spoke | keywords → `03-clusters.md` |
-| **4 Entity Map** | Entity map (Shestakov), 17 sections, fact_check_log, experience markers | cluster → `04-entity-maps/*.md` |
+| **4 Entity Map** | Entity map (Shestakov), 17 sections, Antigravity+Perplexity evidence, fact_check_log, experience markers | cluster → `04-entity-maps/*.md` |
 | **5 Content plan** | Roadmap, priorities, internal links, seasonality | maps → `05-content-plan.md` |
-| **6 Writing** | Copy + tone + AEO + stock-first; QA: stop-words → fact-check → NW≥65; E-E-A-T trust-block | brief → `06-drafts/*.publish.md` |
-| **7 Publishing** | Text + images to CMS | draft → published + `07-published.md` |
+| **6 Writing** | Copy + tone + AEO + stock-first; QA: stop-words → Perplexity+Antigravity fact-check → NW≥65; E-E-A-T trust-block | brief → `06-drafts/*.publish.md` |
+| **7 Publishing** | Text + images to CMS; for WordPress, primary channel is REST API + Application Password, MCP is optional, SSH/WP-CLI is fallback; alt is required for every non-decorative image | draft → published + `07-published.md` |
 | **8 Schema** | JSON-LD + canonical org node (`schema-org-build inject`) | page → `08-schema.md` |
 | **9 Monitoring** | GSC/Webmaster/Metrika snapshots | period → `09-monitoring/*-snapshot.json` |
 | **10 Iteration** | `triggers-eval` + `source-attribution` → fixes | snapshot → `10-iterations.md` |

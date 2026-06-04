@@ -1,0 +1,31 @@
+---
+name: codex-primary-runtime
+description: Точка входа для seo-cycle, когда Codex — основной мозг. Используй при запросах «запусти SEO-цикл», «продвинь раздел/категорию X», «семантическое ядро + контент-план + публикация», «мониторинг и обновления». Делегирует в универсальный скилл seo-cycle (~/.claude/skills/seo-cycle), используя гибрид: наши скрипты для уникального (РФ-источники, Serpstat/SpyFu, кэш, публикация) + нативные Codex-skills для изображений/браузера/делегирования.
+---
+
+# Codex primary runtime для seo-cycle
+
+Когда Codex — основной оркестратор SEO-цикла, **вся логика 10 фаз** — в универсальном скилле:
+
+```
+~/.claude/skills/seo-cycle/AGENTS.md              # = симлинк на SKILL.md, полная логика фаз
+~/.claude/skills/seo-cycle/docs/codex-runtime.md # маппинг Claude↔Codex
+```
+
+## Как работать
+
+1. Установи режим: `export SEO_RUNTIME=codex`.
+2. Прочитай `seo-cycle.yaml`, `docs/codex-runtime.md` и локальные policy-файлы проекта, если есть: `seo/neuronwriter-limits.yaml`, `seo/neuronwriter.md`, `seo/entities/google-nlp-policy.yaml`, `seo/seo-data-collection-map.md`, `seo/access-setup-runbook.md`, `seo/ai-visibility-prompts.csv`.
+3. Веди по фазам из `AGENTS.md`.
+
+Правила гибрида:
+
+- **Наши скрипты** (`~/.claude/skills/seo-cycle/scripts/`) — для РФ-семантики, Serpstat/SpyFu, suggest, кэша, публикации, данных/алертов. Вызывай через bash/Python.
+- **Нативные Codex skills** — для генерации изображений (`seo-image-gen`/`image`/`sora`), браузера (`browser`/`playwright`/`screenshot`) и делегирования (`dispatching-parallel-agents`).
+- **Не вызывай `codex exec` сам в себе.** `llm-cli-collect.sh` в codex-режиме отдаёт только Antigravity + промпт для нативного сбора; `img-generate.sh` отдаёт `CODEX_NATIVE_IMAGE`.
+- Проверяй robots/Content-Signal policy: `search=yes, ai-input=yes, ai-train=no` допустимо как запрет обучения моделей, но публичный `robots.txt` должен быть чистым `text/plain` без PHP warnings/HTML и editor preview мусора.
+- Не печатай секреты из `.env`, OAuth, API keys или service-account JSON.
+
+## Не для одношаговых задач
+
+Нужна только генерация картинки / только публикация / только сбор — вызывай конкретный скрипт или специализированный skill напрямую, без полного цикла.

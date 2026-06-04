@@ -1,5 +1,80 @@
 # Changelog — seo-cycle
 
+## [1.17.8] — 2026-06-04
+
+### Project policy intake for paid/API SEO tools
+
+- SKILL.md: `seo-cycle` now checks project-local policy files before phase selection, API calls, credit spend, indexing changes, or analytics/tracking changes.
+- Added local contracts for `seo/neuronwriter-limits.yaml`, `seo/neuronwriter.md`, `seo/entities/google-nlp-policy.yaml`, `seo/seo-data-collection-map.md`, and `seo/access-setup-runbook.md`.
+- NeuronWriter is treated as the primary SERP/NLP content editor when configured; Google Cloud Natural Language is treated only as a guarded technical entity audit layer with cache/unit caps.
+- Added `scripts/google-nlp-audit.py` with project-local `.env` loading, policy defaults, cache, dry-run mode, and monthly unit guards.
+- `install-codex.sh` now installs the Codex-first entrypoint skill via `~/.codex/skills/codex-primary-runtime` and includes `beautifulsoup4`/`google-auth` dependencies.
+- `init-project.sh` now creates project `AGENTS.md` and policy templates for NeuronWriter, Google NLP, data access, setup runbooks, and AI visibility prompts.
+- `validate-config.py` now checks policy-file presence and warns when NeuronWriter/Google NLP are configured without local guard files.
+- Added source/env scaffolding for Bing Webmaster, IndexNow, Bing Places, Google Merchant/Business Profile/YouTube, Yandex Merchant, and Ads accounts as approval-only data sources.
+- Added RF-site tracking guard: do not add foreign analytics/tracking tags or pixels without explicit project-policy approval.
+- Added robots/Content-Signal policy handling: `search=yes, ai-input=yes, ai-train=no` is allowed as a training opt-out, while public `robots.txt` must be clean text without PHP warnings/HTML.
+- `docs/codex-runtime.md` and GUIDE.md RU+EN now document the same Codex policy intake flow.
+
+## [1.17.7] — 2026-06-02
+
+### Configurable photo pipeline
+
+- Добавлен штатный инструмент `scripts/wp-photo-image.py`: локальное фото/URL → crop по `images.aspect_ratios.*` → WebP → WordPress upload через SSH/WP-CLI → alt/caption/featured.
+- `config/project.template.yaml`: секция `images` расширена до photo-first workflow с `tool`, `source_policy`, `visual_style`, `output`, `captions`, `alt`, `lazy_loading`, `upload` и `inline_min_per_post`.
+- `scripts/init-project.sh`: wizard для нового проекта теперь спрашивает пропорции featured/inline, WebP width/quality, источник фото, visual style, минимум inline-картинок, caption policy и разрешение видимого текста.
+- `validate-config.py` проверяет `images.*`: наличие tool scripts, featured/inline ratios и SSH/WP-CLI env для WordPress upload.
+- Установочные инструкции и `install-codex.sh` теперь добавляют `pillow`, нужный для crop/WebP.
+- GUIDE.md RU+EN и SKILL.md обновлены: image workflow теперь config-driven, `wp-photo-image.py` закреплён как основной photo-first инструмент.
+
+## [1.17.6] — 2026-06-02
+
+### WordPress REST publishing fallback
+
+- SKILL.md: Phase 7 теперь фиксирует WordPress REST API + Application Password как основной независимый канал публикации.
+- MCP/`emwoody-publish-*` остаются удобным интерфейсом, но не единственной точкой отказа.
+- SSH/WP-CLI закреплён как fallback для backup, cache purge, REST meta limitations и серверных исправлений.
+- GUIDE.md RU+EN обновлён в таблице фаз.
+
+## [1.17.5] — 2026-06-02
+
+### Scope для `skip-lazy`
+
+- SKILL.md и GUIDE.md RU+EN: `skip-lazy`/`data-no-lazy` применяется только к первому или above-the-fold inline image, если оптимизатор показывает плейсхолдер.
+- Inline images ниже первого экрана должны оставаться lazy-loaded, чтобы не раздувать начальную загрузку страницы.
+
+## [1.17.4] — 2026-06-02
+
+### Проверка lazy-load плейсхолдеров
+
+- SKILL.md: Phase 7 verify теперь требует не только GET/HTML, но и браузерную проверку inline images после публикации.
+- GUIDE.md RU+EN: lazy-load плейсхолдер вместо реального inline-фото считается blocker/exception.
+- Зафиксирован способ исправления для критичных inline images: исключение из lazy-load через `skip-lazy`/`data-no-lazy` или CMS-аналог с повторным screenshot-check.
+
+## [1.17.3] — 2026-06-02
+
+### Визуальный gate для inline images
+
+- SKILL.md: image QA теперь требует чистые тематические фото/визуалы в стиле проекта, без видимого SEO/AEO/GEO текста, схем, товарных описаний и каталоговых дисклеймеров на изображении.
+- GUIDE.md RU+EN: зафиксировано, что inline images должны иметь естественный `alt` и короткий редакционный caption; товарные карточки/коллажи не используются как основной визуал без явного запроса.
+- Публичная проверка теперь блокирует запрещённые тексты на/под изображениями и inline images без caption.
+
+## [1.17.2] — 2026-06-02
+
+### Обязательный alt-gate для изображений
+
+- SKILL.md: добавлен Image alt check в Phase 6 QA и публичная проверка `<img>` без `alt` в Phase 7 Publishing.
+- GUIDE.md RU+EN: зафиксировано, что featured, inline, OG/schema и product/category visuals должны иметь естественный alt без переспама ключами.
+- Изображение без alt теперь считается publication blocker/exception, а не мелкой рекомендацией.
+
+## [1.17.1] — 2026-06-02
+
+### Обязательный evidence-gate для семантики, сущностей и фактчекинга
+
+- SKILL.md: Antigravity CLI и Perplexity Deep Research теперь обязательны для Phase 2 (семантика), Phase 4 (Entity Map) и Phase 6 (fact-check перед публикацией), если инструменты доступны.
+- Если Antigravity/Perplexity недоступны технически, цикл должен записать blocker/exception в артефакт; нельзя выдавать сбор или проверку за полные.
+- GUIDE.md RU+EN обновлен: добавлены правила сохранения raw-ответов на диск, использования только distilled artifacts в контексте и QA-цепочка `stop-words → Perplexity+Antigravity fact-check → NW≥65`.
+
 ## [1.17.0] — 2026-05-30
 
 ### Установка одной командой (Codex + Claude)

@@ -1,0 +1,8 @@
+date,platform,query,region,language,answer_present,domain_cited,cited_url,cited_competitors,evidence_file,next_action
+__DATE__,google_ai_overview,"__PROJECT_NAME__ __DOMAIN__","not_configured","ru",,,,,,
+__DATE__,bing_copilot,"__PROJECT_NAME__ __DOMAIN__","not_configured","ru",,,,,,
+__DATE__,perplexity,"__PROJECT_NAME__ __DOMAIN__","not_configured","ru",,,,,,
+__DATE__,openai_chatgpt,"__PROJECT_NAME__ __DOMAIN__","not_configured","ru",,,,,,
+__DATE__,claude,"__PROJECT_NAME__ __DOMAIN__","not_configured","ru",,,,,,
+__DATE__,gemini,"__PROJECT_NAME__ __DOMAIN__","not_configured","ru",,,,,,
+__DATE__,deepseek,"__PROJECT_NAME__ __DOMAIN__","not_configured","ru",,,,,,

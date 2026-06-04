@@ -1,0 +1,102 @@
+version: 1
+updated: __DATE__
+project: not_configured
+api: language.googleapis.com
+status:
+  enabled: false
+  reason: configure_billing_budget_and_local_guards_first
+  enable_after:
+    - attach_billing_account_to_project
+    - create_google_cloud_budget_alert
+    - keep_local_unit_guards_enabled
+    - set_GOOGLE_NLP_ENABLED_1
+
+budget:
+  monthly_budget_alert_usd: 5
+  monthly_budget_alert_eur: null
+  budget_name: SEO NLP guard
+  scope: current_billing_account_or_project
+  alert_thresholds_percent: [50, 90, 100]
+  note: Google Cloud budgets are alerts, not hard spending caps. Local scripts must stop by unit counters before paid overrun.
+
+cache:
+  dir: seo/cache/google-nlp
+  ttl_days: 30
+  key_fields:
+    - url
+    - cleaned_text_sha256
+    - language
+    - feature
+    - api_version
+  rerun_when:
+    - page_content_changed
+    - title_h1_schema_changed
+    - template_changed
+    - cache_expired
+
+selection:
+  mode: important_urls_only
+  max_urls_per_run: 50
+  max_cleaned_chars_per_url: 10000
+  priority_url_types:
+    - home
+    - top_revenue_categories
+    - important_products_missing_or_weak_indexation
+    - gsc_impressions_low_ctr_pages
+    - pages_with_title_h1_schema_text_mismatch
+    - pages_targeting_priority_entities
+
+features:
+  analyzeEntities:
+    default: true
+    languages: [ru, en]
+    free_units_per_month: 5000
+    paid_units_cap_per_month: 5000
+    total_units_cap_per_month: 10000
+    seo_use:
+      - detect_visible_entities
+      - compare_title_h1_schema_text_entities
+      - find_missing_product_brand_location_entities
+      - measure_entity_salience
+  classifyText:
+    default: true
+    languages: [ru, en]
+    free_units_per_month: 30000
+    paid_units_cap_per_month: 0
+    total_units_cap_per_month: 30000
+    seo_use:
+      - validate_page_topic_category
+      - find_wrong_intent_or_mixed_topic_pages
+  analyzeSyntax:
+    default: true
+    languages: [ru, en]
+    free_units_per_month: 5000
+    paid_units_cap_per_month: 0
+    total_units_cap_per_month: 5000
+    seo_use:
+      - extract_lemmas_for_content_gap_checks
+      - inspect_thin_or_template_text
+  moderateText:
+    default: false
+    languages: [ru, en]
+    free_units_per_month: 50000
+    paid_units_cap_per_month: 0
+    total_units_cap_per_month: 50000
+    use_only_for:
+      - user_generated_content
+      - ai_generated_text_quality_control
+      - risky_or_sensitive_pages
+  analyzeSentiment:
+    default: false
+    languages: [en]
+    free_units_per_month: 5000
+    paid_units_cap_per_month: 0
+    total_units_cap_per_month: 5000
+    disabled_for_languages: [ru]
+  analyzeEntitySentiment:
+    default: false
+    languages: [en]
+    free_units_per_month: 5000
+    paid_units_cap_per_month: 0
+    total_units_cap_per_month: 5000
+    disabled_for_languages: [ru]
