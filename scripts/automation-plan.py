@@ -42,8 +42,14 @@ RUNNER_COMMANDS = {
 
 DEFAULT_AUTOMATION_CRON = {
     "usage_budget_watch": "0 7 * * 1",
+    "spend_guard_watch": "15 7 * * 1",
     "weekly_read_only_health": "0 8 * * 1",
+    "technical_indexability_watch": "30 8 * * 1",
+    "search_console_index_watch": "0 9 * * 1",
+    "bing_index_watch": "30 9 * * 1",
+    "schema_cwv_watch": "0 8 * * 3",
     "monthly_keyword_refresh": "0 10 1 * *",
+    "content_decay_refresh_queue": "0 10 3 * *",
     "monthly_ai_visibility": "0 11 2 * *",
     "ecommerce_feed_quality": "0 8 * * 2",
     "local_seo_reputation": "0 8 * * 4",
@@ -119,24 +125,67 @@ def governance_allows_schedules(cfg: dict[str, Any], policy: dict[str, Any]) -> 
 
 def command_for_policy_task(project_root: pathlib.Path, task_id: str, mode: str) -> str:
     root = skill_root()
+    latest_dir = "seo/automations/latest"
     if task_id == "usage_budget_watch":
         return (
             f"cd {shell_quote(project_root)} && "
+            f"mkdir -p {latest_dir} && "
             f"python3 {shell_quote(root / 'scripts/usage-ledger.py')} report --write && "
             f"python3 {shell_quote(root / 'scripts/governance-report.py')} --format md > seo/automations/latest-governance.md"
+        )
+    if task_id == "spend_guard_watch":
+        return (
+            f"cd {shell_quote(project_root)} && "
+            f"mkdir -p {latest_dir} && "
+            f"python3 {shell_quote(root / 'scripts/spend-guard.py')} --write"
         )
     if task_id == "weekly_read_only_health":
         return (
             f"cd {shell_quote(project_root)} && "
+            f"mkdir -p {latest_dir} && "
             f"python3 {shell_quote(root / 'scripts/validate-config.py')} >/tmp/seo-cycle-validate.log && "
             f"python3 {shell_quote(root / 'scripts/governance-report.py')} --format md > seo/automations/latest-governance.md && "
             f"bash {shell_quote(root / 'scripts/monthly-runner.sh')} status --dry-run"
+        )
+    if task_id == "technical_indexability_watch":
+        return (
+            f"cd {shell_quote(project_root)} && "
+            f"mkdir -p {latest_dir} && "
+            f"python3 {shell_quote(root / 'scripts/validate-config.py')} > seo/automations/latest/validate-config.log && "
+            f"python3 {shell_quote(root / 'scripts/resolve-sources.py')} --json > seo/automations/latest/resolved-sources.json && "
+            f"bash {shell_quote(root / 'scripts/monthly-runner.sh')} deindex --dry-run"
+        )
+    if task_id == "search_console_index_watch":
+        return (
+            f"cd {shell_quote(project_root)} && "
+            f"mkdir -p {latest_dir} && "
+            f"if [ -n \"$GSC_SITE_URL\" ]; then python3 {shell_quote(root / 'scripts/gsc-fetch.py')} --days 28 --output seo/automations/latest/gsc-index.json; fi && "
+            f"if [ -n \"$YANDEX_OAUTH_TOKEN\" ] && [ -n \"$YANDEX_USER_ID\" ] && [ -n \"$YANDEX_WEBMASTER_HOST_ID\" ]; then python3 {shell_quote(root / 'scripts/webmaster-fetch.py')} --days 28 --output seo/automations/latest/yandex-webmaster.json; fi && "
+            f"python3 {shell_quote(root / 'scripts/governance-report.py')} --format md > seo/automations/latest-search-governance.md"
+        )
+    if task_id == "bing_index_watch":
+        return (
+            f"cd {shell_quote(project_root)} && "
+            f"mkdir -p {latest_dir} && "
+            f"python3 {shell_quote(root / 'scripts/governance-report.py')} --format md > seo/automations/latest-bing-governance.md && "
+            f"bash {shell_quote(root / 'scripts/monthly-runner.sh')} status --dry-run"
+        )
+    if task_id == "schema_cwv_watch":
+        return (
+            f"cd {shell_quote(project_root)} && "
+            f"mkdir -p {latest_dir} && "
+            f"if [ -s seo/schema-candidates.txt ]; then xargs python3 {shell_quote(root / 'scripts/schema-validate.py')} < seo/schema-candidates.txt > seo/automations/latest/schema-validate.log; fi && "
+            f"if [ -s seo/psi-urls.txt ]; then python3 {shell_quote(root / 'scripts/psi-fetch.py')} --urls-file seo/psi-urls.txt --output-dir seo/automations/latest/psi; fi && "
+            f"python3 {shell_quote(root / 'scripts/governance-report.py')} --format md > seo/automations/latest-schema-cwv-governance.md"
         )
     if task_id == "monthly_ai_visibility":
         return f"cd {shell_quote(project_root)} && python3 {shell_quote(root / 'scripts/governance-report.py')} --format md > seo/automations/latest-ai-visibility-governance.md"
     if task_id == "monthly_keyword_refresh":
         dry = " --dry-run" if mode != "auto_with_caps" else ""
         return f"cd {shell_quote(project_root)} && bash {shell_quote(root / 'scripts/monthly-runner.sh')} keyword{dry}"
+    if task_id == "content_decay_refresh_queue":
+        dry = " --dry-run" if mode != "auto_with_caps" else ""
+        return f"cd {shell_quote(project_root)} && bash {shell_quote(root / 'scripts/monthly-runner.sh')} refresh{dry}"
     if task_id == "ecommerce_feed_quality":
         return f"cd {shell_quote(project_root)} && bash {shell_quote(root / 'scripts/monthly-runner.sh')} status --dry-run"
     if task_id == "local_seo_reputation":

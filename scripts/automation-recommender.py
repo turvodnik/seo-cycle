@@ -38,36 +38,87 @@ AUTOMATION_DEFAULTS: dict[str, dict[str, Any]] = {
         "cron": "0 7 * * 1",
         "mode": "report_only",
         "actions": ["usage_ledger_report", "budget_cap_watch", "approval_queue_summary"],
+        "tools": ["usage-ledger", "governance-report"],
+    },
+    "spend_guard_watch": {
+        "cadence": "weekly",
+        "cron": "15 7 * * 1",
+        "mode": "report_only",
+        "actions": ["spend_guard_report", "subscription_remaining_limits", "preflight_command_review"],
+        "tools": ["spend-guard", "usage-ledger"],
     },
     "weekly_read_only_health": {
         "cadence": "weekly",
         "cron": "0 8 * * 1",
         "mode": "report_only",
         "actions": ["robots_sitemap_check", "public_pagespeed_check", "read_only_index_status", "cache_usage_report"],
+        "tools": ["validate-config", "resolve-sources", "pagespeed_crux"],
+    },
+    "technical_indexability_watch": {
+        "cadence": "weekly",
+        "cron": "30 8 * * 1",
+        "mode": "report_only",
+        "actions": ["robots_sitemap_check", "canonical_noindex_audit", "sitemap_coverage_diff", "editor_preview_url_check"],
+        "tools": ["robots_sitemap", "schema_crawl"],
+    },
+    "search_console_index_watch": {
+        "cadence": "weekly",
+        "cron": "0 9 * * 1",
+        "mode": "report_only",
+        "actions": ["index_status", "crawl_errors", "sitemap_status", "query_delta"],
+        "tools": [],
+    },
+    "bing_index_watch": {
+        "cadence": "weekly",
+        "cron": "30 9 * * 1",
+        "mode": "report_only",
+        "actions": ["bing_index_status", "bing_crawl_errors", "bing_keywords", "bing_backlinks"],
+        "tools": ["bing_webmaster"],
+    },
+    "schema_cwv_watch": {
+        "cadence": "weekly",
+        "cron": "0 8 * * 3",
+        "mode": "report_only",
+        "actions": ["schema_validate", "product_schema_mismatch_report", "core_web_vitals_report", "pagespeed_check"],
+        "tools": ["schema_crawl", "pagespeed_crux"],
     },
     "monthly_keyword_refresh": {
         "cadence": "monthly",
         "cron": "0 10 1 * *",
         "mode": "approval_only",
         "actions": ["cached_fetch", "keyword_gap_report", "content_refresh_candidates"],
+        "tools": [],
+        "approval_gates": ["browser_mass_collection"],
+    },
+    "content_decay_refresh_queue": {
+        "cadence": "monthly",
+        "cron": "0 10 3 * *",
+        "mode": "approval_only",
+        "actions": ["content_decay_candidates", "entity_gap_queue", "refresh_brief_queue", "content_rewrite_queue"],
+        "tools": ["neuronwriter", "google_cloud_nlp", "growth-roadmap"],
+        "approval_gates": ["paid_api_run", "content_rewrite"],
     },
     "monthly_ai_visibility": {
         "cadence": "monthly",
         "cron": "0 11 2 * *",
         "mode": "report_only",
         "actions": ["ai_visibility_prompts_check", "cited_competitors_report"],
+        "tools": ["perplexity", "openai_chatgpt", "claude", "gemini", "deepseek"],
     },
     "ecommerce_feed_quality": {
         "cadence": "weekly",
         "cron": "0 8 * * 2",
         "mode": "approval_only",
         "actions": ["merchant_feed_errors_report", "product_schema_mismatch_report"],
+        "tools": ["google_merchant", "yandex_merchant"],
+        "approval_gates": ["merchant_feed_change"],
     },
     "local_seo_reputation": {
         "cadence": "weekly",
         "cron": "0 8 * * 4",
         "mode": "report_only",
         "actions": ["maps_profile_check", "reviews_velocity_report"],
+        "tools": ["google_business_profile", "bing_places", "yandex_business_maps"],
     },
 }
 
@@ -102,6 +153,13 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
     return data or {}
 
 
+def load_json(path: pathlib.Path) -> dict[str, Any]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def dump_yaml(data: dict[str, Any]) -> str:
     return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
@@ -109,6 +167,18 @@ def dump_yaml(data: dict[str, Any]) -> str:
 def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
     policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
     return rel_path(project_root, policy_files.get(key, default))
+
+
+def load_policy_json(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> dict[str, Any]:
+    path = policy_path(cfg, project_root, key, default)
+    candidates = [path]
+    if path.suffix == ".md":
+        candidates.append(path.with_suffix(".json"))
+    for candidate in candidates:
+        report = load_json(candidate)
+        if report:
+            return report
+    return {}
 
 
 def boolish(value: Any) -> bool:
@@ -151,16 +221,48 @@ def has_any(values: Any) -> bool:
     return boolish(values)
 
 
-def recommendation(task_id: str, enabled: bool, reason: str, mode: str | None = None) -> dict[str, Any]:
+def recommendation(
+    task_id: str,
+    enabled: bool,
+    reason: str,
+    mode: str | None = None,
+    tools: list[str] | None = None,
+    approval_gates: list[str] | None = None,
+) -> dict[str, Any]:
     base = copy.deepcopy(AUTOMATION_DEFAULTS[task_id])
     if mode:
         base["mode"] = mode
+    if tools is not None:
+        base["tools"] = tools
+    if approval_gates is not None:
+        base["approval_gates"] = approval_gates
+    base.setdefault("tools", [])
+    base.setdefault("approval_gates", [])
     base["enabled"] = enabled
     base["reason"] = reason
     return base
 
 
-def build_recommendations(cfg: dict[str, Any], intake: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
+def enabled_tools(tool_stack: dict[str, Any]) -> set[str]:
+    decisions = tool_stack.get("decisions", {}) if isinstance(tool_stack.get("decisions"), dict) else {}
+    return {
+        str(tool_id)
+        for tool_id, row in decisions.items()
+        if isinstance(row, dict) and row.get("decision") in {"enabled", "report_only", "approval_required"}
+    }
+
+
+def tools_present(candidates: list[str], active_tools: set[str]) -> list[str]:
+    return [tool for tool in candidates if tool in active_tools]
+
+
+def build_recommendations(
+    cfg: dict[str, Any],
+    intake: dict[str, Any],
+    policy: dict[str, Any],
+    tool_stack: dict[str, Any] | None = None,
+    spend_guard: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     business = intake.get("business", {}) if isinstance(intake.get("business"), dict) else {}
     marketing = intake.get("marketing", {}) if isinstance(intake.get("marketing"), dict) else {}
     markets = intake.get("markets", {}) if isinstance(intake.get("markets"), dict) else {}
@@ -173,6 +275,16 @@ def build_recommendations(cfg: dict[str, Any], intake: dict[str, Any], policy: d
     content_enabled = boolish(marketing.get("content_marketing", True))
     ecommerce_enabled = project_type == "ecommerce" or boolish(marketing.get("ecommerce_feeds"))
     local_enabled = project_type == "local_business" or boolish(marketing.get("local_seo")) or has_any(local_platforms)
+    active_tools = enabled_tools(tool_stack or {})
+    search_console_tools = tools_present(["google_search_console", "yandex_webmaster", "bing_webmaster"], active_tools)
+    merchant_tools = tools_present(["google_merchant", "yandex_merchant"], active_tools)
+    local_tools = tools_present(["google_business_profile", "bing_places", "yandex_business_maps"], active_tools)
+    ai_tools = tools_present(["perplexity", "openai_chatgpt", "claude", "gemini", "deepseek"], active_tools)
+    spend_blocked = [
+        row.get("service")
+        for row in (spend_guard or {}).get("service_guards", [])
+        if isinstance(row, dict) and row.get("status") in {"blocked", "approval_required"} and not row.get("allowed_now")
+    ]
 
     default_mode = policy.get("default_mode", "approval_only")
     safe_default_mode = default_mode if default_mode in {"report_only", "approval_only", "auto_with_caps"} else "approval_only"
@@ -185,10 +297,43 @@ def build_recommendations(cfg: dict[str, Any], intake: dict[str, Any], policy: d
             "Always recommended: watches token/API/ad spend and creates a weekly usage report.",
             "report_only",
         ),
+        "spend_guard_watch": recommendation(
+            "spend_guard_watch",
+            True,
+            "Always recommended: watches subscription limits, approval-only services, and preflight commands.",
+            "report_only",
+            approval_gates=["paid_api_run", "llm_token_spend"] if spend_blocked else [],
+        ),
         "weekly_read_only_health": recommendation(
             "weekly_read_only_health",
             True,
             "Always recommended: read-only technical health checks do not mutate the site.",
+            "report_only",
+        ),
+        "technical_indexability_watch": recommendation(
+            "technical_indexability_watch",
+            True,
+            "Always recommended: catches robots, sitemap, canonical, noindex, and editor-preview drift.",
+            "report_only",
+        ),
+        "search_console_index_watch": recommendation(
+            "search_console_index_watch",
+            bool(search_console_tools),
+            "Recommended when at least one search console source is active.",
+            "report_only",
+            tools=search_console_tools,
+        ),
+        "bing_index_watch": recommendation(
+            "bing_index_watch",
+            "bing" in search_engines or "bing_webmaster" in active_tools,
+            "Recommended when Bing is an active search engine or Bing Webmaster is available.",
+            "report_only",
+            tools=["bing_webmaster"] if "bing" in search_engines or "bing_webmaster" in active_tools else [],
+        ),
+        "schema_cwv_watch": recommendation(
+            "schema_cwv_watch",
+            True,
+            "Always recommended: schema and Core Web Vitals are low-risk quality signals.",
             "report_only",
         ),
         "monthly_keyword_refresh": recommendation(
@@ -197,23 +342,34 @@ def build_recommendations(cfg: dict[str, Any], intake: dict[str, Any], policy: d
             "Recommended when organic SEO is enabled and at least one search engine is active.",
             keyword_mode,
         ),
+        "content_decay_refresh_queue": recommendation(
+            "content_decay_refresh_queue",
+            content_enabled or organic_enabled,
+            "Recommended for ongoing content/entity gap and refresh queues; rewriting remains approval-only.",
+            "approval_only",
+            tools=tools_present(["neuronwriter", "google_cloud_nlp"], active_tools) or ["growth-roadmap"],
+            approval_gates=["paid_api_run", "content_rewrite"],
+        ),
         "monthly_ai_visibility": recommendation(
             "monthly_ai_visibility",
             bool(ai_visibility_tools) and (content_enabled or organic_enabled),
             "Recommended when AI visibility tools/prompts are configured for content/organic work.",
             "report_only",
+            tools=ai_tools or ai_visibility_tools,
         ),
         "ecommerce_feed_quality": recommendation(
             "ecommerce_feed_quality",
             ecommerce_enabled,
             "Recommended for ecommerce or merchant-feed projects; remains approval-only for feed changes.",
             "approval_only",
+            tools=merchant_tools or ["merchant_feed"],
         ),
         "local_seo_reputation": recommendation(
             "local_seo_reputation",
             local_enabled,
             "Recommended for local SEO, maps, NAP, and review velocity monitoring.",
             "report_only",
+            tools=local_tools or [name for name, enabled in local_platforms.items() if boolish(enabled)],
         ),
     }
 
@@ -235,6 +391,12 @@ def build_recommendations(cfg: dict[str, Any], intake: dict[str, Any], policy: d
             "local": local_enabled,
             "organic": organic_enabled,
             "content": content_enabled,
+        },
+        "signals": {
+            "active_tools": sorted(active_tools),
+            "spend_blocked_or_approval": sorted(str(item) for item in spend_blocked if item),
+            "recommended_task_count": len(planned),
+            "enabled_task_count": sum(1 for node in planned.values() if node.get("enabled")),
         },
         "policy_overlay": {
             "default_mode": safe_default_mode,
@@ -260,13 +422,14 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Create schedules in overlay: {overlay.get('create_schedules')}",
         "",
         "## Recommendations",
-        "| Task | Recommended | Current | Cadence | Mode | Reason |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| Task | Recommended | Current | Cadence | Mode | Tools | Gates | Reason |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for task_id, node in planned.items():
         lines.append(
             f"| {task_id} | {node.get('enabled')} | {node.get('current_enabled')} | "
-            f"{node.get('cadence')} | {node.get('mode')} | {node.get('reason')} |"
+            f"{node.get('cadence')} | {node.get('mode')} | {', '.join(node.get('tools', [])) or '-'} | "
+            f"{', '.join(node.get('approval_gates', [])) or '-'} | {node.get('reason')} |"
         )
     lines.extend(
         [
@@ -310,7 +473,7 @@ def apply_recommendations(policy_path: pathlib.Path, report: dict[str, Any], all
     for task_id, node in overlay.get("planned_automations", {}).items():
         current = planned.get(task_id, {}) if isinstance(planned.get(task_id), dict) else {}
         next_node = copy.deepcopy(current)
-        for key in ("enabled", "cadence", "cron", "mode", "actions", "reason"):
+        for key in ("enabled", "cadence", "cron", "mode", "actions", "tools", "approval_gates", "reason"):
             next_node[key] = node.get(key)
         planned[task_id] = next_node
     policy_path.write_text(dump_yaml(next_policy), encoding="utf-8")
@@ -343,15 +506,24 @@ def main() -> int:
     intake = load_yaml(policy_path(cfg, project_root, "project_intake", "seo/project-intake.yaml"))
     automation_path = policy_path(cfg, project_root, "automation_policy", "seo/automation-policy.yaml")
     policy = load_yaml(automation_path)
-    report = build_recommendations(cfg, intake, policy)
+    tool_stack = load_policy_json(cfg, project_root, "tool_stack_report", "seo/setup/tool-stack-report.json")
+    spend_guard = load_policy_json(cfg, project_root, "spend_guard_report", "seo/setup/spend-guard.json")
+    report = build_recommendations(cfg, intake, policy, tool_stack, spend_guard)
 
     if args.write or args.apply:
         out = write_outputs(project_root, report)
-        print(f"Wrote {out}")
+        if args.format != "json":
+            print(f"Wrote {out}")
+        else:
+            print(f"Wrote {out}", file=sys.stderr)
     if args.apply:
         backup = apply_recommendations(automation_path, report, args.allow_schedules)
-        print(f"Applied recommendations to {automation_path}; backup: {backup}")
-    elif args.format == "json":
+        message = f"Applied recommendations to {automation_path}; backup: {backup}"
+        if args.format == "json":
+            print(message, file=sys.stderr)
+        else:
+            print(message)
+    if args.format == "json":
         print(json.dumps(report, ensure_ascii=False, indent=2))
     elif not args.write:
         print(render_markdown(report), end="")

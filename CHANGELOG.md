@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.30.0] — 2026-06-05
+
+### Tool-aware automation matrix
+
+- Expanded `scripts/automation-recommender.py` from a small automation set into a tool-aware matrix covering spend guard, technical indexability, search-console index status, Bing Webmaster, schema/Core Web Vitals, content decay refresh queues, AI visibility, ecommerce feeds, and local reputation.
+- Recommendations now use generated tool-stack and spend-guard JSON signals, keep `create_schedules: false`, and preserve `tools` plus `approval_gates` when applied to `seo/automation-policy.yaml`.
+- `automation-recommender.py --write/--apply --format json` now keeps stdout as clean JSON and sends write/apply status to stderr.
+- `scripts/automation-plan.py` now has cron defaults and safe command templates for the expanded task IDs, including spend guard refresh, read-only GSC/Yandex fetches when env is present, Bing governance checks, schema/CWV candidate checks, and dry-run content refresh queues.
+- Added automation smoke tests proving RU ecommerce and US local projects receive the correct guarded task matrix, applied policy retains gates/tools, and generated plan commands target the intended safe scripts.
+
 ## [1.29.0] — 2026-06-05
 
 ### Spend and subscription guard

@@ -318,13 +318,13 @@ python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-
 
 `usage-ledger.py` — единый учёт фактического расхода. `report --write` создаёт `seo/usage/usage-ledger.jsonl` и `seo/setup/latest-usage-ledger.md/json`; `check --service <tool> --usd ... --fail-on-block` проверяет лимиты перед запуском; `record --service <tool> ...` добавляет append-only событие после расхода. Ledger также импортирует старые `_usage.json` от Keys.so/SpyFu и usage Google NLP.
 
-`automation-recommender.py` — подбирает planned automations под тип проекта, рынок, поисковики, local/ecommerce/AI visibility и текущую policy. Пишет `seo/automations/automation-recommendations.md/json` и `seo/automation-policy.generated.yaml`. `--apply` обновляет `seo/automation-policy.yaml` с backup; `create_schedules: true` ставится только с явным `--allow-schedules`.
+`automation-recommender.py` — подбирает tool-aware planned automations под тип проекта, рынок, поисковики, tool-stack/spend-guard, indexability, search consoles, Bing, schema/CWV, content decay, local/ecommerce/AI visibility и текущую policy. Пишет `seo/automations/automation-recommendations.md/json` и `seo/automation-policy.generated.yaml` с `tools`/`approval_gates`. `--apply` обновляет `seo/automation-policy.yaml` с backup; `create_schedules: true` ставится только с явным `--allow-schedules`.
 
 `project-intake-wizard.py` создаёт/уточняет `seo/project-intake.yaml` + `seo/project-intake-report.md`: тип проекта, бизнес-модель, каналы продаж, страны/регионы/языки, поисковики, local platforms, merchant feeds, ads policy, analytics tracking policy, guarded tools, AI visibility platforms и governance defaults. После `init-project.sh` можно запускать `--interactive --write`; для автоматического заполнения из `seo-cycle.yaml` используется `--defaults --write`.
 
 `project-profile.py` читает `seo/project-intake.yaml` и создаёт `seo/project-profile.generated.yaml` + `seo/project-profile-report.md`: какие страны/регионы/поисковики/источники/маркетинг/local/merchant/ads/video/analytics применять. `--apply` обновляет `seo-cycle.yaml` только явно и создаёт backup.
 
-`automation-plan.py` создаёт `seo/automations/automation-plan.md`, `automation-plan.json`, `crontab.txt` и launchd plist-шаблоны. Реальный `--install-cron` заблокирован, пока одновременно не включены `governance.automation_policy.create_schedules: true`, `seo/automation-policy.yaml create_schedules: true` и env `SEO_CYCLE_ALLOW_SCHEDULE_INSTALL=1`.
+`automation-plan.py` создаёт `seo/automations/automation-plan.md`, `automation-plan.json`, `crontab.txt` и launchd plist-шаблоны. Для expanded matrix он генерирует safe report-only/dry-run/env-gated команды: spend guard refresh, read-only GSC/Yandex fetch при наличии env, Bing governance check, schema/CWV candidate checks и content refresh dry-run. Реальный `--install-cron` заблокирован, пока одновременно не включены `governance.automation_policy.create_schedules: true`, `seo/automation-policy.yaml create_schedules: true` и env `SEO_CYCLE_ALLOW_SCHEDULE_INSTALL=1`.
 
 ---
 

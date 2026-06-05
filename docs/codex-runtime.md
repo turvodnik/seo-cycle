@@ -64,10 +64,10 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - перед широким циклом строить top-N roadmap: `python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write` и начинать с `seo/setup/growth-roadmap.md`;
 - перед первым запуском строить onboarding: `python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write`; human-secret значения вводятся только в `.env`/кабинетах;
 - перед чтением подробных setup-отчётов строить launch contract: `python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write` и начинать с `seo/setup/launch-plan.md`;
-- рекомендации schedule строить через `python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write`; применять через `--apply` только после review, `--allow-schedules` только по явному разрешению;
+- рекомендации schedule строить через `python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write`; он использует tool-stack/spend-guard и покрывает spend, indexability, search consoles, Bing, schema/CWV, content decay, ecommerce/local и AI visibility; применять через `--apply` только после review, `--allow-schedules` только по явному разрешению;
 - детальную настройку стран/поисковиков/регионов/ads/local/merchant/tools/governance делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`;
 - точечную настройку проекта делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review generated overlay/report;
-- schedule-артефакты создавать через `python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled`; реальный cron install — только при двойном разрешении governance + `seo/automation-policy.yaml`;
+- schedule-артефакты создавать через `python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled`; expanded tasks должны оставаться report-only/dry-run/env-gated до approval, реальный cron install — только при двойном разрешении governance + `seo/automation-policy.yaml`;
 - держать low-token режим: raw data на диск, в контекст только distillates/top-N, progressive disclosure вместо чтения всего репозитория;
 - проверять robots/Content-Signal policy: `search=yes, ai-input=yes, ai-train=no` допустимо как запрет обучения, но публичный `robots.txt` не должен содержать PHP warnings/HTML или editor preview мусор;
 - не ставить зарубежные tracking tags/pixels на РФ-проекты без явного разрешения policy;
