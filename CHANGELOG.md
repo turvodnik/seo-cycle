@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.32.0] — 2026-06-05
+
+### Detailed setup gap audit
+
+- Added `scripts/setup-gap-audit.py` to score detailed first-run readiness across market, business, marketing, local/ecommerce, tool stack, budget/subscriptions, spend guard, context pack, launch plan, and automation recommendations.
+- The audit writes `seo/setup/setup-gap-audit.md/json` and `seo/setup/latest-setup-gap-audit.md/json`, keeps secrets out, and returns missing fields plus owner questions for details such as priority products/services, local profile URLs, ecommerce feed policy, and paid API caps.
+- `setup-control-plane.py` now runs the audit, summarizes score/missing gaps, and adds a next action before broad execution while keeping `seo/setup/context-pack.md` as the first low-token entry point.
+- Project templates, validation, governance report, onboarding, init wizard, README, GUIDE, SKILL.md, INSTALL, and Codex runtime docs now include setup gap audit as a standard first-run artifact.
+- Added smoke tests for RU ecommerce and US local projects proving gap detection is project-type aware and does not require ecommerce feed policy for local-only sites.
+
 ## [1.31.0] — 2026-06-05
 
 ### Low-token context pack

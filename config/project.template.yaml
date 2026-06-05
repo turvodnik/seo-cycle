@@ -104,6 +104,9 @@ policy_files:
   context_pack_report: seo/setup/context-pack.md
   context_pack_json: seo/setup/context-pack.json
   latest_context_pack: seo/setup/latest-context-pack.md
+  setup_gap_audit_report: seo/setup/setup-gap-audit.md
+  setup_gap_audit_json: seo/setup/setup-gap-audit.json
+  latest_setup_gap_audit: seo/setup/latest-setup-gap-audit.md
   automation_recommendations: seo/automations/automation-recommendations.md
   automation_policy_generated: seo/automation-policy.generated.yaml
   setup_control_plane: seo/setup/setup-control-plane.md

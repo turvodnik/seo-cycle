@@ -25,6 +25,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo
 python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py <project-root>/seo-cycle.yaml --write
 python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py <project-root>/seo-cycle.yaml --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py <project-root>/seo-cycle.yaml --write
+python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py <project-root>/seo-cycle.yaml --write
 python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py <project-root>/seo-cycle.yaml --write
 python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py <project-root>/seo-cycle.yaml --write
 
@@ -37,7 +38,7 @@ $EDITOR <project-root>/.env
 
 `install-codex.sh` ставит ядро в `~/.claude/skills/seo-cycle`, создаёт симлинки `~/.codex/skills/seo-cycle` и `~/.codex/skills/codex-primary-runtime`, а `init-project.sh` создаёт проектный `AGENTS.md` если его ещё нет. Wizard также спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
 
-После wizard сначала открой `seo/setup/context-pack.md`: это самый короткий task-scoped вход для Claude/Codex. Затем, если нужно больше контекста, открой `seo/setup/launch-plan.md`: компактный первый экран проекта с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates, automations и execution order.
+После wizard сначала открой `seo/setup/context-pack.md`: это самый короткий task-scoped вход для Claude/Codex. Затем открой `seo/setup/setup-gap-audit.md`: там readiness score и вопросы по незаполненным бизнес/рынок/local/ecommerce/budget/tool деталям. Если нужно больше контекста, открой `seo/setup/launch-plan.md`: компактный первый экран проекта с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates, automations и execution order.
 Затем открой `seo/setup/tool-stack-report.md`: там видно, какие Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструменты можно использовать сразу, какие требуют approval, а какие отключены из-за региона, бюджета или RF tracking policy.
 Перед платными/API/LLM/subscription действиями открой `seo/setup/spend-guard.md`: там allowed/approval/blocked по сервисам, остатки лимитов и точные `usage-ledger.py check` preflight-команды.
 Затем открой `seo/setup/growth-roadmap.md`: там top-N приоритетов по техническому SEO, search evidence, ecommerce/local, контенту/сущностям, AI visibility, CRO/маркетингу и automations.
@@ -221,6 +222,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo
 - growth-roadmap артефакты для приоритизации действий перед широким циклом
 - onboarding playbook с владельцами шагов, env names, approval gates, командами и proof-файлами
 - context-pack handoff с read order, task route, caps, spend blockers, approval gates и do-not-load-raw
+- setup-gap-audit с readiness score, missing fields и вопросами по деталям проекта
 - launch-plan contract с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates и execution order
 
 Выдаёт **чек-лист** что нужно подключить:
@@ -291,6 +293,7 @@ seo/automation-policy.yaml
 seo/automation-policy.generated.yaml
 seo/automations/automation-recommendations.md
 seo/setup/context-pack.md
+seo/setup/setup-gap-audit.md
 seo/usage/usage-ledger.jsonl
 seo/setup/latest-usage-ledger.md
 seo/project-intake.yaml
@@ -304,6 +307,7 @@ AGENTS.md -> ~/.claude/skills/seo-cycle/AGENTS.md
 ```bash
 python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write
+python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "аудит индексации и robots" --write
@@ -315,9 +319,11 @@ python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
 ```
 
-`setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config, automation plan, spend guard, launch plan, context pack и стартовый task route; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `context-pack.md/json`, `spend-guard.md/json`, `launch-plan.md/json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`, `latest-task-route.md/json`. `--apply-profile` остаётся отдельным явным действием.
+`setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config, automation plan, spend guard, launch plan, context pack, setup gap audit и стартовый task route; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `context-pack.md/json`, `setup-gap-audit.md/json`, `spend-guard.md/json`, `launch-plan.md/json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`, `latest-task-route.md/json`. `--apply-profile` остаётся отдельным явным действием.
 
 `context-pack.py` — самый короткий task-scoped handoff для Claude/Codex. Пишет `seo/setup/context-pack.md/json` и `seo/setup/latest-context-pack.md/json`: что читать первым, какие raw-артефакты не грузить, какие approval gates/spend blockers действуют, какие команды запускать дальше.
+
+`setup-gap-audit.py` — детальный first-run readiness audit. Пишет `seo/setup/setup-gap-audit.md/json` и `seo/setup/latest-setup-gap-audit.md/json`: score, missing fields, owner questions и project-type-aware проверки local/ecommerce/budget/tools без вывода секретов.
 
 `task-router.py` — low-token роутер перед каждой конкретной задачей. Пример: `python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по минеральной вате" --write`. Он классифицирует задачу, выбирает фазы/источники, показывает approval gates, blocked actions, рекомендуемую automation и context caps, чтобы не поднимать весь проект и сырые данные в контекст.
 

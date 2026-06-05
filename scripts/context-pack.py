@@ -239,6 +239,7 @@ def automation_summary(automation: dict[str, Any]) -> list[dict[str, Any]]:
 def read_order(project_root: pathlib.Path, cfg: dict[str, Any], route: dict[str, Any]) -> list[str]:
     explicit = [
         "seo/setup/context-pack.md",
+        "seo/setup/setup-gap-audit.md",
         "seo/setup/latest-task-route.md",
         "seo/setup/launch-plan.md",
         "seo/setup/spend-guard.md",
@@ -261,6 +262,8 @@ def excluded_raw_artifacts() -> list[str]:
         "seo/setup/spend-guard.json",
         "seo/setup/growth-roadmap.json",
         "seo/setup/launch-plan.json",
+        "seo/setup/setup-gap-audit.json",
+        "seo/setup/latest-setup-gap-audit.json",
         "seo/setup/latest-task-route.json",
         "seo/automations/automation-recommendations.json",
         "seo/setup/setup-control-plane.json",

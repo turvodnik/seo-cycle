@@ -138,6 +138,9 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "context_pack_report": "seo/setup/context-pack.md",
         "context_pack_json": "seo/setup/context-pack.json",
         "latest_context_pack": "seo/setup/latest-context-pack.md",
+        "setup_gap_audit_report": "seo/setup/setup-gap-audit.md",
+        "setup_gap_audit_json": "seo/setup/setup-gap-audit.json",
+        "latest_setup_gap_audit": "seo/setup/latest-setup-gap-audit.md",
         "automation_recommendations": "seo/automations/automation-recommendations.md",
         "automation_policy_generated": "seo/automation-policy.generated.yaml",
         "automation_plan": "seo/automations/automation-plan.md",
@@ -176,6 +179,7 @@ def next_actions(
     onboarding: dict[str, Any],
     launch_plan: dict[str, Any],
     context_pack: dict[str, Any],
+    setup_gap_audit: dict[str, Any],
     spend_guard: dict[str, Any],
     automation: dict[str, Any],
     artifacts: list[dict[str, Any]],
@@ -230,6 +234,12 @@ def next_actions(
     if context_pack.get("rendered_chars"):
         actions.insert(0, f"Start each session from `seo/setup/context-pack.md` ({context_pack['rendered_chars']} chars) before opening larger setup reports.")
 
+    gap_summary = setup_gap_audit.get("summary", {}) if isinstance(setup_gap_audit.get("summary"), dict) else {}
+    missing_gap_count = int(gap_summary.get("missing") or 0)
+    if missing_gap_count:
+        sample = ", ".join(setup_gap_audit.get("missing_fields", [])[:6])
+        actions.append(f"Answer `seo/setup/setup-gap-audit.md` before broad execution: {missing_gap_count} setup gaps remain ({sample}).")
+
     blocked_spend = [
         row["service"]
         for row in spend_guard.get("service_guards", [])
@@ -265,6 +275,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     onboarding = report.get("onboarding", {})
     launch_plan = report.get("launch_plan", {})
     context_pack = report.get("context_pack", {})
+    setup_gap_audit = report.get("setup_gap_audit", {})
     spend_guard = report.get("spend_guard", {})
     task_route = report.get("task_route", {})
     usage = report.get("usage_ledger", {})
@@ -295,6 +306,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Launch plan execution steps: {len(launch_plan.get('execution_order', []))}",
         f"- Launch plan env names: {len((launch_plan.get('human_inputs') or {}).get('env_names', []))}",
         f"- Context pack chars: {context_pack.get('rendered_chars')}",
+        f"- Setup gap score: {setup_gap_audit.get('score')}",
+        f"- Setup gaps missing: {(setup_gap_audit.get('summary') or {}).get('missing')}",
         f"- Recommended automations: {len((automation_recommendations.get('policy_overlay') or {}).get('planned_automations', {}))}",
         f"- Automation install allowed: {automation.get('allowed')}",
     ]
@@ -486,6 +499,13 @@ def main() -> int:
         context_pack_command.extend(["--format", "json"])
     steps.append(run_step("context pack", context_pack_command, project_root))
 
+    setup_gap_command = [sys.executable, str(root / "scripts/setup-gap-audit.py"), str(cfg_path)]
+    if args.write:
+        setup_gap_command.append("--write")
+    else:
+        setup_gap_command.extend(["--format", "json"])
+    steps.append(run_step("setup gap audit", setup_gap_command, project_root))
+
     validation_step = run_step("validate config", [sys.executable, str(root / "scripts/validate-config.py"), str(cfg_path)], project_root)
     steps.append(validation_step)
 
@@ -548,6 +568,11 @@ def main() -> int:
     context_pack_file = project_root / "seo" / "setup" / "context-pack.json"
     if not context_pack and context_pack_file.exists():
         context_pack = json.loads(context_pack_file.read_text(encoding="utf-8"))
+    setup_gap_step = next((step for step in steps if step["name"] == "setup gap audit"), {})
+    setup_gap_audit = load_json_output(setup_gap_step)
+    setup_gap_file = project_root / "seo" / "setup" / "setup-gap-audit.json"
+    if not setup_gap_audit and setup_gap_file.exists():
+        setup_gap_audit = json.loads(setup_gap_file.read_text(encoding="utf-8"))
     validation = parse_validation(validation_step)
     artifacts = artifact_status(project_root, cfg)
     paid_missing = enabled_paid_missing_env(governance)
@@ -572,6 +597,7 @@ def main() -> int:
         "onboarding": onboarding,
         "launch_plan": launch_plan,
         "context_pack": context_pack,
+        "setup_gap_audit": setup_gap_audit,
         "paid_missing_env": paid_missing,
         "artifacts": artifacts,
         "steps": [
@@ -583,7 +609,7 @@ def main() -> int:
             for step in steps
         ],
     }
-    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, onboarding, launch_plan, context_pack, spend_guard, automation, artifacts, args.apply_profile)
+    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, onboarding, launch_plan, context_pack, setup_gap_audit, spend_guard, automation, artifacts, args.apply_profile)
 
     if args.write:
         out_dir = write_report(project_root, report)

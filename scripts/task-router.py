@@ -364,6 +364,7 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
 
     read_first = [
         str(policy_path(cfg, project_root, "setup_control_plane", "seo/setup/setup-control-plane.md")),
+        str(policy_path(cfg, project_root, "setup_gap_audit_report", "seo/setup/setup-gap-audit.md")),
         str(policy_path(cfg, project_root, "tool_budget", "seo/tool-budget.yaml")),
         str(policy_path(cfg, project_root, "latest_usage_report", "seo/setup/latest-usage-ledger.md")),
         str(policy_path(cfg, project_root, "automation_policy", "seo/automation-policy.yaml")),
