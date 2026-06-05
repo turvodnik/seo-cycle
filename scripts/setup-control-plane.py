@@ -144,6 +144,9 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "setup_questionnaire": "seo/setup/setup-questionnaire.md",
         "setup_questionnaire_csv": "seo/setup/setup-questionnaire.csv",
         "latest_setup_questionnaire": "seo/setup/latest-setup-questionnaire.md",
+        "setup_answer_plan": "seo/setup/setup-answer-plan.md",
+        "setup_answer_plan_json": "seo/setup/setup-answer-plan.json",
+        "latest_setup_answer_plan": "seo/setup/latest-setup-answer-plan.md",
         "automation_recommendations": "seo/automations/automation-recommendations.md",
         "automation_policy_generated": "seo/automation-policy.generated.yaml",
         "automation_plan": "seo/automations/automation-plan.md",
@@ -242,6 +245,7 @@ def next_actions(
     if missing_gap_count:
         sample = ", ".join(setup_gap_audit.get("missing_fields", [])[:6])
         actions.append(f"Answer `seo/setup/setup-questionnaire.csv` before broad execution: {missing_gap_count} setup gaps remain ({sample}).")
+        actions.append("After filling `seo/setup/setup-questionnaire.csv`, run `setup-answer-plan.py --write` and review `seo/setup/setup-answer-plan.md` before manually applying answers.")
 
     blocked_spend = [
         row["service"]

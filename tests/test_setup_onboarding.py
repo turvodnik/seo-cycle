@@ -76,6 +76,7 @@ class SetupOnboardingTest(unittest.TestCase):
         self.assertIn("spend_guard_report", steps["run_spend_guard"]["proofs"])
         self.assertIn("run_setup_control_plane", steps)
         self.assertIn("setup_control_plane", steps["run_setup_control_plane"]["proofs"])
+        self.assertIn("setup_answer_plan", steps["run_setup_control_plane"]["proofs"])
         self.assertIn("GOOGLE_APPLICATION_CREDENTIALS", report["secret_env_names"])
         self.assertIn("NEURON_API_KEY", report["secret_env_names"])
         self.assertNotIn("=", "\n".join(report["secret_env_names"]))

@@ -95,6 +95,7 @@ class ContextPackTest(unittest.TestCase):
         self.assertIn("seo/setup/latest-task-route.md", report["read_order"])
         self.assertIn("seo/setup/setup-gap-audit.md", report["read_order"])
         self.assertIn("seo/setup/setup-questionnaire.md", report["read_order"])
+        self.assertIn("seo/setup/setup-answer-plan.md", report["read_order"])
         self.assertIn("seo/setup/launch-plan.md", report["read_order"])
         self.assertIn("seo/setup/spend-guard.md", report["read_order"])
         self.assertIn("raw API JSON", report["do_not_load_raw"])

@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.34.0] — 2026-06-05
+
+### Setup answer plan
+
+- Added `scripts/setup-answer-plan.py` to read filled `seo/setup/setup-questionnaire.csv` rows and generate a review-only manual apply plan.
+- The plan writes `seo/setup/setup-answer-plan.md/json/csv` and latest copies with target files, target paths, parsed proposed values, follow-up commands, and manual-review mode.
+- Secret-like answers are rejected and never stored in the report; the script does not edit `seo-cycle.yaml` or `seo/project-intake.yaml`.
+- Project templates, validation, governance report, context pack, task router, init wizard, README, GUIDE, SKILL.md, INSTALL, and Codex runtime docs now include the answer-plan step after questionnaire filling.
+- Added smoke tests proving filled business/budget answers become manual plan entries and secret-looking answers are redacted/rejected.
+
 ## [1.33.0] — 2026-06-05
 
 ### Setup questionnaire worksheet
