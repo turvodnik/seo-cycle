@@ -455,9 +455,9 @@ def build_steps(
                 "verification",
                 "agent",
                 "Run full setup control plane",
-                "Refresh readiness, validation, sources, task route, usage ledger, tool stack, growth roadmap, and automation recommendations.",
+                "Refresh readiness, validation, sources, task route, context pack, usage ledger, tool stack, growth roadmap, and automation recommendations.",
                 commands=[f"python3 {skill_root()}/scripts/setup-control-plane.py {cfg_path} --write --task \"first SEO setup\""],
-                proofs=["setup_control_plane", "latest_task_route", "latest_usage_report", "tool_stack_report", "growth_roadmap_report"],
+                proofs=["setup_control_plane", "context_pack_report", "latest_task_route", "latest_usage_report", "tool_stack_report", "growth_roadmap_report"],
                 priority=90,
             ),
             step(
@@ -475,9 +475,12 @@ def build_steps(
                 "execution",
                 "agent",
                 "Route the first roadmap action before execution",
-                "Pick the top approved roadmap action and generate a bounded task route before loading data or using tools.",
-                commands=[f"python3 {skill_root()}/scripts/task-router.py {cfg_path} --task \"<top growth-roadmap action>\" --write"],
-                proofs=["latest_task_route", "growth_roadmap_report"],
+                "Pick the top approved roadmap action and generate a bounded task route plus context pack before loading data or using tools.",
+                commands=[
+                    f"python3 {skill_root()}/scripts/task-router.py {cfg_path} --task \"<top growth-roadmap action>\" --write",
+                    f"python3 {skill_root()}/scripts/context-pack.py {cfg_path} --task \"<top growth-roadmap action>\" --write",
+                ],
+                proofs=["latest_task_route", "context_pack_report", "growth_roadmap_report"],
                 priority=100,
             ),
         ]

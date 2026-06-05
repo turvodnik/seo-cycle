@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.31.0] — 2026-06-05
+
+### Low-token context pack
+
+- Added `scripts/context-pack.py` to generate a bounded first-read handoff from launch plan, latest task route, spend guard, tool-stack decisions, usage, growth roadmap, and automation recommendations.
+- The pack writes `seo/setup/context-pack.md/json` and `seo/setup/latest-context-pack.md/json`, lists read order, do-not-load raw artifacts, approval gates, spend blockers, human-secret env names, and task-scoped next commands without exposing secret values.
+- `setup-control-plane.py` now generates and summarizes the context pack, and makes `seo/setup/context-pack.md` the first next action before opening larger setup reports.
+- Project templates, validation, governance report, init wizard, README, GUIDE, SKILL.md, INSTALL, and Codex runtime docs now include the context pack as the default low-token session entry point.
+- Added smoke tests proving the pack stays within its char budget, preserves RF/paid-tool guards, excludes raw JSON artifacts, and is emitted by setup-control-plane.
+
 ## [1.30.0] — 2026-06-05
 
 ### Tool-aware automation matrix

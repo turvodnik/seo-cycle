@@ -135,6 +135,9 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "launch_plan_report": "seo/setup/launch-plan.md",
         "launch_checklist": "seo/setup/launch-checklist.csv",
         "latest_launch_plan": "seo/setup/latest-launch-plan.md",
+        "context_pack_report": "seo/setup/context-pack.md",
+        "context_pack_json": "seo/setup/context-pack.json",
+        "latest_context_pack": "seo/setup/latest-context-pack.md",
         "automation_recommendations": "seo/automations/automation-recommendations.md",
         "automation_policy_generated": "seo/automation-policy.generated.yaml",
         "automation_plan": "seo/automations/automation-plan.md",
@@ -172,6 +175,7 @@ def next_actions(
     growth_roadmap: dict[str, Any],
     onboarding: dict[str, Any],
     launch_plan: dict[str, Any],
+    context_pack: dict[str, Any],
     spend_guard: dict[str, Any],
     automation: dict[str, Any],
     artifacts: list[dict[str, Any]],
@@ -223,6 +227,9 @@ def next_actions(
     if launch_plan.get("approval_gates"):
         actions.append(f"Open `seo/setup/launch-plan.md` as the first project screen; launch gates={len(launch_plan['approval_gates'])}.")
 
+    if context_pack.get("rendered_chars"):
+        actions.insert(0, f"Start each session from `seo/setup/context-pack.md` ({context_pack['rendered_chars']} chars) before opening larger setup reports.")
+
     blocked_spend = [
         row["service"]
         for row in spend_guard.get("service_guards", [])
@@ -257,6 +264,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     growth_roadmap = report.get("growth_roadmap", {})
     onboarding = report.get("onboarding", {})
     launch_plan = report.get("launch_plan", {})
+    context_pack = report.get("context_pack", {})
     spend_guard = report.get("spend_guard", {})
     task_route = report.get("task_route", {})
     usage = report.get("usage_ledger", {})
@@ -286,6 +294,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Onboarding human-secret steps: {onboarding.get('owner_summary', {}).get('human_secret', 0)}",
         f"- Launch plan execution steps: {len(launch_plan.get('execution_order', []))}",
         f"- Launch plan env names: {len((launch_plan.get('human_inputs') or {}).get('env_names', []))}",
+        f"- Context pack chars: {context_pack.get('rendered_chars')}",
         f"- Recommended automations: {len((automation_recommendations.get('policy_overlay') or {}).get('planned_automations', {}))}",
         f"- Automation install allowed: {automation.get('allowed')}",
     ]
@@ -316,6 +325,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         [
             "",
             "## Low-Token Contract",
+            "- Start from `seo/setup/context-pack.md` for task-scoped handoff before opening larger reports.",
             "- Keep raw API/browser output on disk under `seo/`; load only distillates/top-N into model context.",
             "- Run expensive sources only after cache checks and budget policy review.",
             "- Do not install tracking tags, launch ads, submit indexes, or publish content without the relevant approval gates.",
@@ -469,6 +479,13 @@ def main() -> int:
         launch_plan_command.extend(["--format", "json"])
     steps.append(run_step("launch plan", launch_plan_command, project_root))
 
+    context_pack_command = [sys.executable, str(root / "scripts/context-pack.py"), str(cfg_path), "--task", args.task]
+    if args.write:
+        context_pack_command.append("--write")
+    else:
+        context_pack_command.extend(["--format", "json"])
+    steps.append(run_step("context pack", context_pack_command, project_root))
+
     validation_step = run_step("validate config", [sys.executable, str(root / "scripts/validate-config.py"), str(cfg_path)], project_root)
     steps.append(validation_step)
 
@@ -526,6 +543,11 @@ def main() -> int:
     launch_plan_file = project_root / "seo" / "setup" / "launch-plan.json"
     if not launch_plan and launch_plan_file.exists():
         launch_plan = json.loads(launch_plan_file.read_text(encoding="utf-8"))
+    context_pack_step = next((step for step in steps if step["name"] == "context pack"), {})
+    context_pack = load_json_output(context_pack_step)
+    context_pack_file = project_root / "seo" / "setup" / "context-pack.json"
+    if not context_pack and context_pack_file.exists():
+        context_pack = json.loads(context_pack_file.read_text(encoding="utf-8"))
     validation = parse_validation(validation_step)
     artifacts = artifact_status(project_root, cfg)
     paid_missing = enabled_paid_missing_env(governance)
@@ -549,6 +571,7 @@ def main() -> int:
         "growth_roadmap": growth_roadmap,
         "onboarding": onboarding,
         "launch_plan": launch_plan,
+        "context_pack": context_pack,
         "paid_missing_env": paid_missing,
         "artifacts": artifacts,
         "steps": [
@@ -560,7 +583,7 @@ def main() -> int:
             for step in steps
         ],
     }
-    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, onboarding, launch_plan, spend_guard, automation, artifacts, args.apply_profile)
+    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, onboarding, launch_plan, context_pack, spend_guard, automation, artifacts, args.apply_profile)
 
     if args.write:
         out_dir = write_report(project_root, report)
