@@ -62,45 +62,34 @@
 ## <a id="установка"></a>3. Установка (для человека)
 
 ```bash
-# 1. Поставить сам скилл (один раз на машину)
-git clone https://github.com/turvodnik/seo-cycle ~/.claude/skills/seo-cycle
-
-# 2. Зависимости Python
-pip3 install pyyaml requests pillow beautifulsoup4 google-auth
-
-# 3. В корне СВОЕГО проекта — мастер настройки
+# Codex-first: одна команда из корня СВОЕГО проекта
 cd /path/to/your-project
-~/.claude/skills/seo-cycle/scripts/init-project.sh
-#   → базовые вопросы + governance + image workflow →
-#   → создаёт seo-cycle.yaml, .env.example, AGENTS.md и policy-файлы
-#   → регистрирует проект в реестре
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash
 
-# 4. Заполнить ключи (только те источники, что используешь)
-cp ~/.claude/skills/seo-cycle/.env.example .env
-#   отредактировать .env (NEURON_API_KEY, SERPSTAT_API_KEY, WP_* и т.д.)
+# Claude Code variant:
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-claude.sh | bash
 
-# 5. Проверить конфиг
-python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
-#   → печатает активные источники, чего не хватает в .env, предупреждения
-
-# 6. Готово. В Claude Code / Codex: «запусти SEO-цикл для категории X»
+# Bootstrap сам ставит ядро, зависимости, symlinks, запускает wizard,
+# создаёт seo-cycle.yaml, .env.example, .env, AGENTS.md/CLAUDE.md и setup reports.
 ```
+
+Canonical checkout: `~/.codex/skills/seo-cycle`. Claude and agents paths are compatibility symlinks to the same Codex-first core.
 
 **Что выдаёт `validate-config.py`:** список активных источников (с учётом `region_profile`), список недостающих env-переменных, предупреждения о несуществующих делегатах/путях/policy-файлах/governance, итог ✓/ошибки.
 
 Перед дорогим сбором, браузерной сессией, публикацией или schedule:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по теме X" --write
-python3 ~/.claude/skills/seo-cycle/scripts/context-pack.py --task "собрать семантику по теме X" --write
-python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py check --service openai --category llm --usd 0.25 --fail-on-block
-python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-blueprint.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
+python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по теме X" --write
+python3 ~/.codex/skills/seo-cycle/scripts/context-pack.py --task "собрать семантику по теме X" --write
+python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service openai --category llm --usd 0.25 --fail-on-block
+python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-onboarding.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/governance-report.py --format md
 ```
 
 ---
@@ -110,36 +99,14 @@ python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
 > Этот раздел — машинно-исполнимый сценарий. ИИ-агент (Claude/Codex/любой) может выполнить его сам, по шагам, без участия человека (кроме ввода секретных ключей).
 
 ```bash
-# Шаг 1. Установить скилл
-test -d ~/.claude/skills/seo-cycle || \
-  git clone https://github.com/turvodnik/seo-cycle ~/.claude/skills/seo-cycle
-
-# Шаг 2. Зависимости
-python3 -c "import yaml, requests, PIL, bs4; import google.auth" 2>/dev/null || \
-  pip3 install pyyaml requests pillow beautifulsoup4 google-auth
-
-# Шаг 3. Создать конфиг проекта (неинтерактивно — через шаблон)
+# Codex-first bootstrap: ставит ядро, зависимости, symlinks и запускает wizard.
 cd <project-root>
-test -f seo-cycle.yaml || cp ~/.claude/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml
-#   затем отредактировать поля: project.name/domain, locale, region_profile,
-#   project_type, cms, business_profile и images.*. Для РФ: region_profile: ru.
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash
 
-# Альтернатива: интерактивный wizard сразу спросит базовые поля + image workflow
-# (governance profile, paid API/LLM budget, automation mode,
-# featured/inline ratios, WebP width/quality, source policy, captions, lazy policy)
-# и создаст AGENTS.md + policy-шаблоны для NeuronWriter/Google NLP/data access/budgets/automations.
-~/.claude/skills/seo-cycle/scripts/init-project.sh
+# Claude Code variant:
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-claude.sh | bash
 
-# Шаг 4. Создать .env (попросить у человека только значения ключей)
-test -f .env || cp ~/.claude/skills/seo-cycle/.env.example .env
-
-# Шаг 5. Валидация
-python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
-python3 ~/.claude/skills/seo-cycle/scripts/resolve-sources.py   # активные источники
-
-# Шаг 6. Выбрать рантайм
-#   Claude Code: читать ~/.claude/skills/seo-cycle/SKILL.md
-#   Codex CLI:   export SEO_RUNTIME=codex; читать AGENTS.md + docs/codex-runtime.md
+# После bootstrap человек заполняет только секреты в .env.
 ```
 
 **Правила для ИИ-агента (самопроверка перед работой):**
@@ -189,7 +156,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/resolve-sources.py   # активны
 Запуск под Codex:
 ```bash
 cd <проект>
-ln -sf ~/.claude/skills/seo-cycle/AGENTS.md ./AGENTS.md
+ln -sf ~/.codex/skills/seo-cycle/AGENTS.md ./AGENTS.md
 export SEO_RUNTIME=codex
 codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
   "Прочитай AGENTS.md и seo-cycle.yaml. Запусти Phase 2 для кластера X."
@@ -205,11 +172,11 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 **Вынесено (пилот):** `seo-keywords` (Phase 2-3). **Статус: дробление заморожено** (решение 2026-05-30) — монолитный `seo-cycle` основной; остальные фазы не выносим без явной потребности (продажа модулей / команда / переиспользование / параллелизм).
 
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py init --topic "минвата"
-python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py next      # разблокированные фазы
+python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py init --topic "минвата"
+python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py next      # разблокированные фазы
 # → вызвать соответствующий фазовый скилл (seo-keywords и т.д.)
-python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py gate keywords
-python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогресс
+python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py gate keywords
+python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py show      # прогресс
 ```
 
 Преимущества дробления: переиспользование (фаза вне цикла), ясность/контроль (видно прогресс и gate'ы), параллельность (независимые фазы разом), продажа (модуль = отдельный продукт). «Улучшение» — на данных (`source-attribution.py` + `triggers-eval.py`), без авто-переписывания кода.
@@ -271,7 +238,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 
 ## <a id="инструменты"></a>7. Инструменты (что делает · команда · результат)
 
-> Все скрипты лежат в `~/.claude/skills/seo-cycle/scripts/`. Запуск: `python3 <script>.py` или `bash <script>.sh`.
+> Все скрипты лежат в `~/.codex/skills/seo-cycle/scripts/`. Запуск: `python3 <script>.py` или `bash <script>.sh`.
 
 ### 7.1 Управление источниками и конфигом
 | Скрипт | Что делает | Команда | Результат |
@@ -544,34 +511,18 @@ are scripts, the "project truth" lives in one config.
 ## <a id="en-install"></a>3. Install (for humans)
 
 ```bash
-# 1. Install the skill itself (once per machine)
-git clone https://github.com/turvodnik/seo-cycle ~/.claude/skills/seo-cycle
-
-# 2. Python deps
-pip3 install pyyaml requests pillow beautifulsoup4 google-auth
-
-# 3. In YOUR project root — setup wizard
+# Codex-first: one command from YOUR project root
 cd /path/to/your-project
-~/.claude/skills/seo-cycle/scripts/init-project.sh
-#   → base questions + governance + image workflow → seo-cycle.yaml + .env.example + AGENTS.md + policy files
-#   → registers the project
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash
 
-# 4. Fill keys (only sources you use)
-cp ~/.claude/skills/seo-cycle/.env.example .env
-#   edit .env (NEURON_API_KEY, SERPSTAT_API_KEY, WP_*, etc.)
+# Claude Code variant:
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-claude.sh | bash
 
-# 5. Validate
-python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
-python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-blueprint.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/context-pack.py --task "collect semantics for topic X" --write
-
-# 6. Done. In Claude Code / Codex: "run the SEO cycle for category X"
+# Bootstrap installs core, dependencies, symlinks, runs the wizard,
+# and creates seo-cycle.yaml, .env.example, .env, AGENTS.md/CLAUDE.md, and setup reports.
 ```
+
+Canonical checkout: `~/.codex/skills/seo-cycle`. Claude and agents paths are compatibility symlinks to the same Codex-first core.
 
 ---
 
@@ -581,36 +532,14 @@ python3 ~/.claude/skills/seo-cycle/scripts/context-pack.py --task "collect seman
 > step by step, without a human (except entering secret keys).
 
 ```bash
-# Step 1. Install skill
-test -d ~/.claude/skills/seo-cycle || \
-  git clone https://github.com/turvodnik/seo-cycle ~/.claude/skills/seo-cycle
-
-# Step 2. Deps
-python3 -c "import yaml, requests, PIL, bs4; import google.auth" 2>/dev/null || \
-  pip3 install pyyaml requests pillow beautifulsoup4 google-auth
-
-# Step 3. Project config (non-interactive — via template)
+# Codex-first bootstrap: installs core, dependencies, symlinks, and runs the wizard.
 cd <project-root>
-test -f seo-cycle.yaml || cp ~/.claude/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml
-#   then edit: project.name/domain, locale, region_profile, project_type, cms, business_profile, images.*.
-#   For Russia: region_profile: ru.
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash
 
-# Alternative: the interactive wizard asks for base fields + image workflow
-# (governance profile, paid API/LLM budget, automation mode,
-# featured/inline ratios, WebP width/quality, source policy, captions, lazy policy)
-# and creates AGENTS.md + policy templates for NeuronWriter/Google NLP/data access/budgets/automations.
-~/.claude/skills/seo-cycle/scripts/init-project.sh
+# Claude Code variant:
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-claude.sh | bash
 
-# Step 4. .env (ask the human only for key values)
-test -f .env || cp ~/.claude/skills/seo-cycle/.env.example .env
-
-# Step 5. Validate
-python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
-python3 ~/.claude/skills/seo-cycle/scripts/resolve-sources.py
-
-# Step 6. Choose runtime
-#   Claude Code: read ~/.claude/skills/seo-cycle/SKILL.md
-#   Codex CLI:   export SEO_RUNTIME=codex; read AGENTS.md + docs/codex-runtime.md
+# After bootstrap, the human only fills secrets in .env.
 ```
 
 **Rules for the AI agent (self-check before working):**
@@ -660,7 +589,7 @@ Mode is set by `runtime: auto|claude|codex` in config or `SEO_RUNTIME` env.
 Run under Codex:
 ```bash
 cd <project>
-ln -sf ~/.claude/skills/seo-cycle/AGENTS.md ./AGENTS.md
+ln -sf ~/.codex/skills/seo-cycle/AGENTS.md ./AGENTS.md
 export SEO_RUNTIME=codex
 codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
   "Read AGENTS.md and seo-cycle.yaml. Run Phase 2 for cluster X."
@@ -676,11 +605,11 @@ Full mapping — [docs/codex-runtime.md](docs/codex-runtime.md).
 **Extracted (pilot):** `seo-keywords` (Phase 2-3). **Status: splitting is frozen** (decision 2026-05-30) — the monolithic `seo-cycle` is primary; remaining phases are not extracted without a clear need (selling modules / a team / reuse / parallelism).
 
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py init --topic "mineral wool"
-python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py next      # unblocked phases
+python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py init --topic "mineral wool"
+python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py next      # unblocked phases
 # → invoke the matching phase skill (seo-keywords, etc.)
-python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py gate keywords
-python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # progress
+python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py gate keywords
+python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py show      # progress
 ```
 
 Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible progress and gates), parallelism (independent phases at once), sale (a module is a separate product). "Improvement" is data-driven (`source-attribution.py` + `triggers-eval.py`), no code self-rewriting.
@@ -742,7 +671,7 @@ Rules:
 
 ## <a id="en-tools"></a>7. Tools (what · command · output)
 
-> All scripts live in `~/.claude/skills/seo-cycle/scripts/`. Run via `python3 <script>.py` or `bash <script>.sh`.
+> All scripts live in `~/.codex/skills/seo-cycle/scripts/`. Run via `python3 <script>.py` or `bash <script>.sh`.
 
 ### 7.1 Source & config management
 | Script | What | Command | Output |

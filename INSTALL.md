@@ -5,31 +5,39 @@
 ## TL;DR
 
 ```bash
-# Вариант A — интерактивный wizard (рекомендуется)
+# Вариант A — Codex-first bootstrap одной командой (рекомендуется)
 cd <project-root>
-bash ~/.claude/skills/seo-cycle/scripts/init-project.sh
-# базовые вопросы + governance + image workflow → seo-cycle.yaml + .env.example + policy-файлы + валидация
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash
+# clone/update ядра + deps + canonical Codex path + symlinks + wizard + .env + setup reports
 
-# Вариант B — ручная установка
+# Вариант B — Claude Code bootstrap
+cd <project-root>
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-claude.sh | bash
+# то же ядро в Codex path, плюс CLAUDE.md entrypoint
+
+# Вариант C — ручная установка
+# 0. Установи/обнови ядро без запуска project wizard
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install-codex.sh | bash
+
 # 1. Скопируй шаблон конфига в корень проекта
-cp ~/.claude/skills/seo-cycle/config/project.template.yaml \
+cp ~/.codex/skills/seo-cycle/config/project.template.yaml \
    <project-root>/seo-cycle.yaml
 
 # 2. Отредактируй под свой сайт (см. шаги ниже)
 $EDITOR <project-root>/seo-cycle.yaml
 
 # 3. Провалидируй
-python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo-cycle.yaml
+python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py <project-root>/seo-cycle.yaml
 
 # 4. Сгенерируй безопасный стек инструментов
-python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py <project-root>/seo-cycle.yaml --write
-python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py <project-root>/seo-cycle.yaml --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py <project-root>/seo-cycle.yaml --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-blueprint.py <project-root>/seo-cycle.yaml --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py <project-root>/seo-cycle.yaml --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-answer-plan.py <project-root>/seo-cycle.yaml --write  # после заполнения setup-questionnaire.csv
-python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py <project-root>/seo-cycle.yaml --write
-python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-onboarding.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-answer-plan.py <project-root>/seo-cycle.yaml --write  # после заполнения setup-questionnaire.csv
+python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py <project-root>/seo-cycle.yaml --write
 
 # 5. Добавь API-ключи в .env по списку из launch-plan/onboarding/tool-stack report
 $EDITOR <project-root>/.env
@@ -38,7 +46,7 @@ $EDITOR <project-root>/.env
 # «давай запустим SEO-цикл для категории X»
 ```
 
-`install-codex.sh` ставит ядро в `~/.claude/skills/seo-cycle`, создаёт симлинки `~/.codex/skills/seo-cycle` и `~/.codex/skills/codex-primary-runtime`, а `init-project.sh` создаёт проектный `AGENTS.md` если его ещё нет. Wizard также спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
+`install-codex.sh` ставит canonical checkout в `~/.codex/skills/seo-cycle`, создаёт `~/.codex/skills/codex-primary-runtime`, а `~/.claude/skills/seo-cycle` и `~/.agents/skills/seo-cycle` делает symlink на Codex-ядро. `bootstrap-codex.sh` дополнительно запускает `init-project.sh` в текущем проекте, создаёт `.env` из `.env.example`, добавляет `.env` в `.gitignore` и пишет `SEO_RUNTIME=codex`. `bootstrap-claude.sh` делает то же, но пишет `SEO_RUNTIME=claude` и создаёт `CLAUDE.md`, если его ещё нет. Wizard спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
 
 После wizard сначала открой `seo/setup/context-pack.md`: это самый короткий task-scoped вход для Claude/Codex. Затем открой `seo/setup/setup-blueprint.md`: там компактная матрица стран/регионов/поисковиков/типа бизнеса/marketing/ads/tools/budget/automations и first-read файлы. Затем открой `seo/setup/setup-questionnaire.csv` или `seo/setup/setup-gap-audit.md`: там readiness score и вопросы по незаполненным бизнес/рынок/local/ecommerce/budget/tool деталям, без хранения секретов. После заполнения CSV запусти `setup-answer-plan.py --write` и открой `seo/setup/setup-answer-plan.md`: это review-only план ручных правок, без автоприменения и без сохранения secret-like ответов. Если нужно больше контекста, открой `seo/setup/launch-plan.md`: компактный первый экран проекта с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates, automations и execution order.
 Затем открой `seo/setup/tool-stack-report.md`: там видно, какие Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструменты можно использовать сразу, какие требуют approval, а какие отключены из-за региона, бюджета или RF tracking policy.
@@ -53,7 +61,7 @@ $EDITOR <project-root>/.env
 ## Шаг 1. Скопировать шаблон конфига
 
 ```bash
-cp ~/.claude/skills/seo-cycle/config/project.template.yaml \
+cp ~/.codex/skills/seo-cycle/config/project.template.yaml \
    <project-root>/seo-cycle.yaml
 ```
 
@@ -159,7 +167,7 @@ tone:
   description: "Деловой, без воды, факты."
 ```
 
-`stop_words_extra` — твой проектный список запретов. Базовые стоп-слова уже в `~/.claude/skills/seo-cycle/templates/stop-words.md`.
+`stop_words_extra` — твой проектный список запретов. Базовые стоп-слова уже в `~/.codex/skills/seo-cycle/templates/stop-words.md`.
 
 ### Секция 7 — Data sources
 **Главный шаг настройки.** Идём по списку источников и решаем, что **сейчас** доступно. Что недоступно — `enabled: false`, потом включим.
@@ -208,7 +216,7 @@ Browser-MCP источники (требуют установленного Clau
 ## Шаг 3. Провалидировать конфиг
 
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo-cycle.yaml
+python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py <project-root>/seo-cycle.yaml
 ```
 
 Что проверяет:
@@ -304,7 +312,8 @@ seo/setup/setup-questionnaire.csv
 seo/usage/usage-ledger.jsonl
 seo/setup/latest-usage-ledger.md
 seo/project-intake.yaml
-AGENTS.md -> ~/.claude/skills/seo-cycle/AGENTS.md
+AGENTS.md -> ~/.codex/skills/seo-cycle/AGENTS.md
+CLAUDE.md -> ~/.codex/skills/seo-cycle/SKILL.md   # только bootstrap-claude.sh
 ```
 
 В этих файлах фиксируются подключённые аккаунты, пропущенные платные сервисы, лимиты NeuronWriter/Google NLP/Keys.so/Serpstat/LLM, policy по robots/Content-Signal, запрет зарубежных tracking tags/pixels для РФ-проектов без отдельного разрешения и правила автоматизаций. После заполнения `seo/setup/setup-questionnaire.csv` отдельная команда `setup-answer-plan.py --write` создаёт `seo/setup/setup-answer-plan.md/json/csv`.
@@ -312,20 +321,20 @@ AGENTS.md -> ~/.claude/skills/seo-cycle/AGENTS.md
 Перед дорогим сбором или schedule запуском:
 
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-blueprint.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-answer-plan.py --write  # после заполнения setup-questionnaire.csv
-python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "аудит индексации и robots" --write
-python3 ~/.claude/skills/seo-cycle/scripts/context-pack.py --task "аудит индексации и robots" --write
-python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py report --write
-python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
-python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
+python3 ~/.codex/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-control-plane.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-answer-plan.py --write  # после заполнения setup-questionnaire.csv
+python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task "аудит индексации и robots" --write
+python3 ~/.codex/skills/seo-cycle/scripts/context-pack.py --task "аудит индексации и robots" --write
+python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py report --write
+python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/governance-report.py --format md
+python3 ~/.codex/skills/seo-cycle/scripts/project-profile.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
 ```
 
 `setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config, automation plan, spend guard, launch plan, setup blueprint, context pack, setup gap audit/questionnaire, answer-plan path readiness и стартовый task route; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `setup-blueprint.md/json`, `setup-matrix.csv`, `context-pack.md/json`, `setup-gap-audit.md/json`, `setup-questionnaire.md/csv/json`, `spend-guard.md/json`, `launch-plan.md/json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`, `latest-task-route.md/json`. `--apply-profile` остаётся отдельным явным действием.
@@ -338,7 +347,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-
 
 `setup-answer-plan.py` — безопасный разбор заполненного `seo/setup/setup-questionnaire.csv`. Пишет `seo/setup/setup-answer-plan.md/json/csv` и latest copies: target files, target paths, parsed proposed values и follow-up commands. Режим только `manual_review`; конфиги не меняет, secret-like ответы отклоняет и не сохраняет.
 
-`task-router.py` — low-token роутер перед каждой конкретной задачей. Пример: `python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по минеральной вате" --write`. Он классифицирует задачу, выбирает фазы/источники, показывает approval gates, blocked actions, рекомендуемую automation и context caps, чтобы не поднимать весь проект и сырые данные в контекст.
+`task-router.py` — low-token роутер перед каждой конкретной задачей. Пример: `python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по минеральной вате" --write`. Он классифицирует задачу, выбирает фазы/источники, показывает approval gates, blocked actions, рекомендуемую automation и context caps, чтобы не поднимать весь проект и сырые данные в контекст.
 
 `usage-ledger.py` — единый учёт фактического расхода. `report --write` создаёт `seo/usage/usage-ledger.jsonl` и `seo/setup/latest-usage-ledger.md/json`; `check --service <tool> --usd ... --fail-on-block` проверяет лимиты перед запуском; `record --service <tool> ...` добавляет append-only событие после расхода. Ledger также импортирует старые `_usage.json` от Keys.so/SpyFu и usage Google NLP.
 
@@ -386,7 +395,7 @@ delegate:
 
 ## Адаптация под разные типы проектов
 
-> **Регион — одной строкой.** `region_profile: ru | eu | us | global` управляет тем, какие источники включены (Яндекс-стек для `ru`, западные SaaS для `eu`/`us`, и т.д.) и какие недоступны/нужен прокси. Профили: `config/region-profiles/`. `init-project.sh` выбирает профиль по стране автоматически. Развернуть в список активных: `python3 ~/.claude/skills/seo-cycle/scripts/resolve-sources.py`.
+> **Регион — одной строкой.** `region_profile: ru | eu | us | global` управляет тем, какие источники включены (Яндекс-стек для `ru`, западные SaaS для `eu`/`us`, и т.д.) и какие недоступны/нужен прокси. Профили: `config/region-profiles/`. `init-project.sh` выбирает профиль по стране автоматически. Развернуть в список активных: `python3 ~/.codex/skills/seo-cycle/scripts/resolve-sources.py`.
 
 ### A. Глобальный SaaS (английский, без региональной привязки)
 ```yaml
@@ -461,7 +470,7 @@ sources:
 Если в твоей нише нужны источники, которых нет в шаблоне:
 
 1. **Добавь в свой `seo-cycle.yaml`** в `sources` под новым ключом
-2. **Создай скрипт** в `<project>/seo/scripts/<source>.py` или `~/.claude/skills/seo-cycle/scripts/` (для PR upstream)
+2. **Создай скрипт** в `<project>/seo/scripts/<source>.py` или `~/.codex/skills/seo-cycle/scripts/` (для PR upstream)
 3. **Опиши в Phase 2 как использовать** в `<project>/CLAUDE.md`
 4. (Опционально) **Создай PR в общий скилл** если решение полезно для других проектов
 
@@ -486,7 +495,7 @@ sources:
 ├── blog/                                # черновики постов
 └── categories/                          # черновики категорий
 
-~/.claude/skills/seo-cycle/              # глобальный универсальный скилл
+~/.codex/skills/seo-cycle/              # глобальный универсальный скилл
 ├── SKILL.md                             # этот скилл
 ├── AGENTS.md                            # Codex entrypoint, симлинк → SKILL.md
 ├── codex-primary-runtime/               # отдельный Codex-first entrypoint skill
@@ -513,7 +522,7 @@ sources:
 
 **«delegate.* refers to skill that doesn't exist»** — либо установи скилл (см. список агентов в `~/.claude/agents/`), либо удали поле из `delegate.*` — используется fallback.
 
-**«NW evaluate fails»** — проверь project_id в конфиге; запусти `~/.claude/skills/seo-cycle/scripts/test-neuronwriter.py` для диагностики.
+**«NW evaluate fails»** — проверь project_id в конфиге; запусти `~/.codex/skills/seo-cycle/scripts/test-neuronwriter.py` для диагностики.
 
 См. `docs/troubleshooting.md` для полного списка.
 
@@ -521,27 +530,27 @@ sources:
 
 ## Как поделиться скиллом
 
-Скилл самодостаточен: вся логика — в `~/.claude/skills/seo-cycle/` (код, конфиг-шаблон, профили, промпты, доки). Проектные данные и ключи (`.env`, `seo-cycle.yaml`, контент) живут в репозитории проекта и НЕ входят в скилл.
+Скилл самодостаточен: вся логика — в `~/.codex/skills/seo-cycle/` (код, конфиг-шаблон, профили, промпты, доки). Проектные данные и ключи (`.env`, `seo-cycle.yaml`, контент) живут в репозитории проекта и НЕ входят в скилл.
 
-**Что шарить:** весь каталог `~/.claude/skills/seo-cycle/` (без `__pycache__`). Секретов в нём нет — ключи только в `.env` проектов.
+**Что шарить:** весь каталог `~/.codex/skills/seo-cycle/` (без `__pycache__`). Секретов в нём нет — ключи только в `.env` проектов.
 
 **Способы:**
 1. **Git-репозиторий (рекомендуется).**
    ```bash
-   cd ~/.claude/skills/seo-cycle
+   cd ~/.codex/skills/seo-cycle
    git init && git add -A && git commit -m "seo-cycle skill"
-   # запушить в GitHub. Получатель клонирует в ~/.claude/skills/seo-cycle/
+   # запушить в GitHub. Получатель клонирует в ~/.codex/skills/seo-cycle/
    ```
-2. **Архив.** `cd ~/.claude/skills && zip -r seo-cycle.zip seo-cycle -x '*__pycache__*'` → получатель распаковывает в `~/.claude/skills/`.
+2. **Архив.** `cd ~/.codex/skills && zip -r seo-cycle.zip seo-cycle -x '*__pycache__*'` → получатель распаковывает в `~/.codex/skills/`, затем создаёт symlink в `~/.claude/skills/` при необходимости.
 3. **Claude Code plugin.** Обернуть в плагин с `plugin.json` и раздать через marketplace/`/plugin install` (см. docs плагинов Claude Code).
 
 **Получатель после установки:**
 ```bash
 pip3 install pyyaml requests pillow beautifulsoup4 google-auth
 cd <свой-проект>
-~/.claude/skills/seo-cycle/scripts/init-project.sh   # wizard → seo-cycle.yaml
+~/.codex/skills/seo-cycle/scripts/init-project.sh   # wizard → seo-cycle.yaml
 # заполнить .env своими ключами (см. .env.example)
-python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
+python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py
 ```
 Дальше — в Claude Code или Codex: «запусти SEO-цикл для категории X».
 

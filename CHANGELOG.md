@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.36.0] — 2026-06-05
+
+### Codex-first bootstrap
+
+- Added `bootstrap-codex.sh` for one-command project setup from the project root: install/update core, dependencies, Codex symlinks, interactive project wizard, `.env`, `.gitignore`, and setup reports.
+- Added `bootstrap-claude.sh` as the Claude Code variant; it uses the same Codex-first core and adds `CLAUDE.md` plus `SEO_RUNTIME=claude`.
+- `install-codex.sh` now treats `~/.codex/skills/seo-cycle` as the canonical git checkout; `~/.claude/skills/seo-cycle` and `~/.agents/skills/seo-cycle` become compatibility symlinks to the Codex core.
+- Updated README, INSTALL, GUIDE, SKILL.md, and Codex runtime docs so new projects start with a single `curl ... bootstrap-codex.sh | bash` command.
+
 ## [1.35.0] — 2026-06-05
 
 ### Setup blueprint matrix

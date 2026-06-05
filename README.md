@@ -1,6 +1,6 @@
 # seo-cycle
 
-**Версия 1.35.0** · универсальный SEO/контент-цикл-оркестратор для Claude Code и Codex CLI.
+**Версия 1.36.0** · универсальный SEO/контент-цикл-оркестратор для Codex CLI и Claude Code.
 
 Полный цикл продвижения сайта — от стратегии и сбора семантики до публикации, fact-check, мониторинга и итераций — управляемый через декларативный конфиг `seo-cycle.yaml`. Адаптируется под любой проект: язык, регион, поисковики, тип сайта, CMS, набор источников.
 
@@ -9,34 +9,14 @@
 ## TL;DR
 
 ```bash
-# Установка одной командой (Codex + Claude): clone + deps + симлинки
-curl -sL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install-codex.sh | bash
+# Codex-first: запусти из корня нового проекта
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash
 
-# затем в корне своего проекта:
-cd <свой-проект>
-~/.claude/skills/seo-cycle/scripts/init-project.sh        # wizard → seo-cycle.yaml + policy templates
-python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
-python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write
-python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-blueprint.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-answer-plan.py --write   # после заполнения setup-questionnaire.csv
-python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "аудит индексации и robots" --write
-python3 ~/.claude/skills/seo-cycle/scripts/context-pack.py --task "аудит индексации и robots" --write
-python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py report --write
-python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
-python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
-# дальше в Claude Code / Codex: «запусти SEO-цикл для категории X»
+# Claude Code variant:
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-claude.sh | bash
 ```
 
-Установщик создаёт каноническое ядро в `~/.claude/skills/seo-cycle`, симлинки `~/.codex/skills/seo-cycle` и `~/.codex/skills/codex-primary-runtime`, а проектный wizard создаёт `AGENTS.md` и безопасные policy-файлы для NeuronWriter, Google NLP, tracking/data access, robots/Content-Signal, token/budget governance и автоматизаций.
+Codex — canonical runtime. Установщик создаёт основной git checkout в `~/.codex/skills/seo-cycle`, `codex-primary-runtime` в `~/.codex/skills/`, а `~/.claude/skills/seo-cycle` и `~/.agents/skills/seo-cycle` делает symlink на Codex-ядро. Project bootstrap запускает wizard, создаёт `seo-cycle.yaml`, `.env.example`, `.env`, `AGENTS.md`, policy-файлы, setup blueprint/matrix, context pack, spend guard, onboarding, roadmap и automation recommendations. Секреты не заполняются автоматически.
 
 Ручная установка и Codex-режим (AGENTS.md, SEO_RUNTIME) — в [INSTALL.md](INSTALL.md) и [docs/codex-runtime.md](docs/codex-runtime.md).
 

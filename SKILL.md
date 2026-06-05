@@ -134,8 +134,8 @@ Phase 10 Iteration                    (cycle continues)
 
 **Шаги:**
 1. Найти `seo-cycle.yaml` в проекте (поиск: `./seo-cycle.yaml` → `./.seo-cycle.yaml` → `./seo/seo-cycle.yaml` → `./.claude/seo-cycle.yaml`).
-2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + governance + image workflow + optional detailed intake → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`, а также создать `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/setup/setup-control-plane.md`, `seo/setup/context-pack.md`, `seo/setup/setup-blueprint.md`, `seo/setup/setup-matrix.csv`, `seo/setup/setup-gap-audit.md`, `seo/setup/setup-questionnaire.csv`, `seo/setup/launch-plan.md`, `seo/setup/launch-checklist.csv`, `seo/setup/spend-guard.md`, `seo/setup/spend-checklist.csv`, `seo/setup/latest-task-route.md`, `seo/setup/latest-usage-ledger.md`, `seo/tool-stack.generated.yaml`, `seo/setup/tool-stack-report.md`, `seo/growth-roadmap.generated.yaml`, `seo/setup/growth-roadmap.md`, `seo/setup/onboarding-playbook.md`, `seo/setup/onboarding-checklist.csv` и `seo/automations/automation-recommendations.md`. После заполнения `setup-questionnaire.csv` запусти `scripts/setup-answer-plan.py --write`.
-3. Если **найден** — провалидировать: `python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <path>`.
+2. Если **не найден** — запусти `bash ~/.codex/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + governance + image workflow + optional detailed intake → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`, а также создать `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/setup/setup-control-plane.md`, `seo/setup/context-pack.md`, `seo/setup/setup-blueprint.md`, `seo/setup/setup-matrix.csv`, `seo/setup/setup-gap-audit.md`, `seo/setup/setup-questionnaire.csv`, `seo/setup/launch-plan.md`, `seo/setup/launch-checklist.csv`, `seo/setup/spend-guard.md`, `seo/setup/spend-checklist.csv`, `seo/setup/latest-task-route.md`, `seo/setup/latest-usage-ledger.md`, `seo/tool-stack.generated.yaml`, `seo/setup/tool-stack-report.md`, `seo/growth-roadmap.generated.yaml`, `seo/setup/growth-roadmap.md`, `seo/setup/onboarding-playbook.md`, `seo/setup/onboarding-checklist.csv` и `seo/automations/automation-recommendations.md`. После заполнения `setup-questionnaire.csv` запусти `scripts/setup-answer-plan.py --write`.
+3. Если **найден** — провалидировать: `python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py <path>`.
 4. Прочитать `context_files` из конфига (обычно `CLAUDE.md`, brand guidelines).
 5. Определить **режим цикла** (`mode` в конфиге, default `standard`):
    - `standard` — обычный цикл по всем 10 фазам
@@ -147,31 +147,31 @@ Phase 10 Iteration                    (cycle continues)
    - Глубина: только семантика, до publish, или до monitoring?
 7. Зафиксировать low-token маршрут текущей задачи:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "<цель пользователя>" --write
+python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task "<цель пользователя>" --write
 ```
 Затем собрать context pack и читать его первым:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/context-pack.py --task "<цель пользователя>" --write
+python3 ~/.codex/skills/seo-cycle/scripts/context-pack.py --task "<цель пользователя>" --write
 ```
 Открывай `seo/setup/context-pack.md`, затем при необходимости `seo/setup/latest-task-route.md`; запускай только фазы/источники из маршрута, соблюдая approval gates и context caps.
 8. Перед фактическим расходом сделать preflight и после запуска записать расход:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py check --service openai --category llm --usd 0.25 --input-tokens 5000 --output-tokens 1000 --fail-on-block
-python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py record --service openai --category llm --usd 0.25 --input-tokens 5000 --output-tokens 1000 --task "<цель пользователя>" --write
+python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service openai --category llm --usd 0.25 --input-tokens 5000 --output-tokens 1000 --fail-on-block
+python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py record --service openai --category llm --usd 0.25 --input-tokens 5000 --output-tokens 1000 --task "<цель пользователя>" --write
 ```
 9. Сгенерировать и проверить рекомендации автоматизаций:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write
-# после review: python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --apply
-python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-blueprint.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/setup-answer-plan.py --write  # после заполнения setup-questionnaire.csv
-python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write
-python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write
-# после review: python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --apply
+python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write
+# после review: python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --apply
+python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-onboarding.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/setup-answer-plan.py --write  # после заполнения setup-questionnaire.csv
+python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write
+# после review: python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --apply
 ```
 
 **Маркетинг-стратегия (если `marketing.enabled` и цель шире SEO):** оценить, нужна ли платная реклама или хватит органики+локалки — `prompts/marketing-strategy.md` + `scripts/roi-calc.py` (воронка/ROI/ДРР по каналам). Реклама — только при дефиците объёма с ROI>0. Каналы дистрибуции и маркетплейсы — `prompts/distribution-channels.md`. Единый план — `prompts/marketing-calendar.md`.
@@ -223,7 +223,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write
 
 **Шаг 0 — развернуть источники региона (обязательно, один раз):**
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/resolve-sources.py
+python3 ~/.codex/skills/seo-cycle/scripts/resolve-sources.py
 ```
 Скрипт читает `region_profile` из конфига (`ru`/`eu`/`us`/`global`), мёрджит с локальными `sources.*` override и печатает финальный список активных источников + пропущенных с причиной (напр. «ahrefs недоступно в регионе», «dataforseo через прокси»). Артефакт: `seo/cycles/<date>/active-sources.json`. **Запускай только источники из этого списка** — это и экономит токены, и не даёт дёрнуть инструмент, недоступный в регионе. Если в конфиге нет `region_profile` (legacy) — скрипт отдаёт `sources.*.enabled` как есть.
 
@@ -402,7 +402,7 @@ last_fact_check:
 
 **E-E-A-T trust-блок (если есть `fact_check_log`):** сгенерируй видимый блок «Источники» в конец статьи —
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/eeat-render.py 06-drafts/<name>.publish.md
+python3 ~/.codex/skills/seo-cycle/scripts/eeat-render.py 06-drafts/<name>.publish.md
 ```
 Рендерятся только источники с verdict достоверно/частично; спорные — править формулировку в тексте, а не «подтверждать». Это прямой Trust-сигнал.
 
@@ -458,8 +458,8 @@ python3 ~/.claude/skills/seo-cycle/scripts/eeat-render.py 06-drafts/<name>.publi
 
 **E-E-A-T: канонический узел организации (обязательно).** Не оставляй `author`/`publisher` голым `{"@type":"Organization","name":...}`. Собери единый узел из `business_profile` и ссылайся на него через `@id`:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/schema-org-build.py build              # посмотреть узел
-python3 ~/.claude/skills/seo-cycle/scripts/schema-org-build.py inject schema/*.json  # вставить + переписать author/publisher на @id
+python3 ~/.codex/skills/seo-cycle/scripts/schema-org-build.py build              # посмотреть узел
+python3 ~/.codex/skills/seo-cycle/scripts/schema-org-build.py inject schema/*.json  # вставить + переписать author/publisher на @id
 ```
 Узел несёт trust-сигналы (address, telephone, openingHours, areaServed, knowsAbout, sameAs) — это то, что связывает контент с реальным бизнесом и усиливает Authoritativeness/Trust. Инжект идемпотентен. Требует секцию `business_profile` в конфиге.
 
@@ -528,9 +528,9 @@ config/triggers.yaml                   ├→ triggers-eval.py → 10-iterations
 ### Команда
 
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/triggers-eval.py \
+python3 ~/.codex/skills/seo-cycle/scripts/triggers-eval.py \
     09-monitoring/YYYY-MM-DD-snapshot.json \
-    ~/.claude/skills/seo-cycle/config/triggers.yaml \
+    ~/.codex/skills/seo-cycle/config/triggers.yaml \
     --output 10-iterations.md \
     --project-yaml ./seo-cycle.yaml   # для project-override правил
 ```
@@ -552,7 +552,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/triggers-eval.py \
 
 Замыкает петлю «откуда брали ключи → что сработало». Раз в квартал (когда накопились данные ≥30-60 дней) сопоставь лог источников со snapshot:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/source-attribution.py \
+python3 ~/.codex/skills/seo-cycle/scripts/source-attribution.py \
     --csv seo/source-attribution.csv \
     --snapshot 09-monitoring/<date>-snapshot.json
 ```
@@ -568,9 +568,9 @@ python3 ~/.claude/skills/seo-cycle/scripts/source-attribution.py \
 
 Полная инструкция в `INSTALL.md` рядом с этим файлом. Кратко:
 
-1. Скопировать `~/.claude/skills/seo-cycle/config/project.template.yaml` в корень проекта как `seo-cycle.yaml`.
+1. Скопировать `~/.codex/skills/seo-cycle/config/project.template.yaml` в корень проекта как `seo-cycle.yaml`.
 2. Заполнить под свой сайт (язык, регион, поисковики, CMS, источники).
-3. Запустить валидатор: `python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py`.
+3. Запустить валидатор: `python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py`.
 4. Подключить API-ключи в `.env` проекта по списку, который выдаст валидатор.
 5. (Опционально) Создать проектные скиллы для специфичных задач (custom publishing, brand-specific entity map) и прописать в `delegate.*`.
 6. Запустить: «давай запустим SEO-цикл для категории X».
@@ -584,7 +584,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/source-attribution.py \
 - **`content_rules.stock_first`** — только для ecommerce с инвентарём
 - **`content_rules.local_signals`** — отключи для глобального B2B SaaS
 - **`tone.stop_words_extra`** — добавляй свои запреты
-- **Custom prompts** — клонируй `~/.claude/skills/seo-cycle/prompts/*` в `<project>/seo/prompts/` и переопредели
+- **Custom prompts** — клонируй `~/.codex/skills/seo-cycle/prompts/*` в `<project>/seo/prompts/` и переопредели
 - **Custom delegate** — создавай проектные субскиллы и прописывай в `delegate.*`
 
 См. `docs/adapt.md` для подробной инструкции по адаптации.
@@ -594,7 +594,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/source-attribution.py \
 1. `seo-cycle.yaml` — конфиг проекта
 2. `<project>/CLAUDE.md` — правила проекта (если есть)
 3. `<project>/seo/entities/entities.yaml` — реестр сущностей проекта
-4. `~/.claude/skills/seo-cycle/prompts/` — универсальные промпт-шаблоны
+4. `~/.codex/skills/seo-cycle/prompts/` — универсальные промпт-шаблоны
 5. `<artifacts.research_root>` — результаты исследований (ATP, Perplexity, LLM CLI)
 
 ## Lessons learned (пополняется)
