@@ -16,7 +16,7 @@ validate-config.py — валидатор seo-cycle.yaml.
 - чек-лист «что подключить»
 
 Использование:
-    python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py [path-to-config]
+    python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py [path-to-config]
 
 Если путь не указан — ищет в 4 стандартных локациях.
 """
@@ -274,6 +274,14 @@ def check_project_policies(cfg: dict, env: dict, project_root: pathlib.Path, che
         "setup_blueprint_json": "seo/setup/setup-blueprint.json",
         "setup_matrix_csv": "seo/setup/setup-matrix.csv",
         "latest_setup_blueprint": "seo/setup/latest-setup-blueprint.md",
+        "upgrade_assistant": "seo/setup/upgrade-assistant.md",
+        "upgrade_assistant_json": "seo/setup/upgrade-assistant.json",
+        "upgrade_questionnaire_csv": "seo/setup/upgrade-questionnaire.csv",
+        "latest_upgrade_assistant": "seo/setup/latest-upgrade-assistant.md",
+        "access_key_assistant": "seo/setup/access-key-assistant.md",
+        "access_key_assistant_json": "seo/setup/access-key-assistant.json",
+        "access_key_assistant_csv": "seo/setup/access-key-assistant.csv",
+        "latest_access_key_assistant": "seo/setup/latest-access-key-assistant.md",
         "launch_plan_generated": "seo/launch-plan.generated.yaml",
         "launch_plan_report": "seo/setup/launch-plan.md",
         "launch_checklist": "seo/setup/launch-checklist.csv",
@@ -393,7 +401,7 @@ def check_governance(cfg: dict, project_root: pathlib.Path, checklist: list, war
         planner = automation.get("planner_script") or (cfg.get("monthly_automation", {}) or {}).get("planner_script")
         if planner and not pathlib.Path(os.path.expanduser(planner)).exists():
             warnings.append(f"automation planner_script не найден: {planner}")
-        checklist.append("Сгенерировать и проверить schedule artifacts: python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled")
+        checklist.append("Сгенерировать и проверить schedule artifacts: python3 ~/.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled")
 
 
 def check_content_rules(cfg: dict, warnings: list):
@@ -509,7 +517,7 @@ def main():
             for p in CONFIG_SEARCH_PATHS:
                 print(f"    {p}", file=sys.stderr)
             print(f"\n  Скопируй шаблон:", file=sys.stderr)
-            print(f"    cp ~/.claude/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml", file=sys.stderr)
+            print(f"    cp ~/.codex/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml", file=sys.stderr)
             sys.exit(2)
 
     project_root = cfg_path.parent

@@ -11,7 +11,7 @@
 ## Алерт на негатив
 Свежий негатив (оценка ≤ 3) — реагировать быстро (24-48ч). Отправить уведомление:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/notify.py \
+python3 ~/.codex/skills/seo-cycle/scripts/notify.py \
   "Негативный отзыв на <платформа>: <суть>. Ответить за 24-48ч." \
   --title "ORM: негатив" --level alert
 ```

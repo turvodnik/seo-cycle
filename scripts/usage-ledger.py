@@ -474,8 +474,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         [
             "",
             "## Usage Commands",
-            "- Check before spend: `python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py check --service openai --category llm --usd 0.25 --input-tokens 5000 --output-tokens 1000`",
-            "- Record after spend: `python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py record --service openai --category llm --usd 0.25 --input-tokens 5000 --output-tokens 1000 --task \"brief\"`",
+            "- Check before spend: `python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service openai --category llm --usd 0.25 --input-tokens 5000 --output-tokens 1000`",
+            "- Record after spend: `python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py record --service openai --category llm --usd 0.25 --input-tokens 5000 --output-tokens 1000 --task \"brief\"`",
         ]
     )
     return "\n".join(lines) + "\n"

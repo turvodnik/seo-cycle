@@ -12,7 +12,7 @@
 #   3. ./seo/seo-cycle.yaml
 #   4. ./.claude/seo-cycle.yaml
 #
-# Валидация: `python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py`
+# Валидация: `python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py`
 
 # -----------------------------------------------------------------------------
 # 1. Identity — кто мы
@@ -102,6 +102,14 @@ policy_files:
   setup_blueprint_json: seo/setup/setup-blueprint.json
   setup_matrix_csv: seo/setup/setup-matrix.csv
   latest_setup_blueprint: seo/setup/latest-setup-blueprint.md
+  upgrade_assistant: seo/setup/upgrade-assistant.md
+  upgrade_assistant_json: seo/setup/upgrade-assistant.json
+  upgrade_questionnaire_csv: seo/setup/upgrade-questionnaire.csv
+  latest_upgrade_assistant: seo/setup/latest-upgrade-assistant.md
+  access_key_assistant: seo/setup/access-key-assistant.md
+  access_key_assistant_json: seo/setup/access-key-assistant.json
+  access_key_assistant_csv: seo/setup/access-key-assistant.csv
+  latest_access_key_assistant: seo/setup/latest-access-key-assistant.md
   launch_plan_generated: seo/launch-plan.generated.yaml
   launch_plan_report: seo/setup/launch-plan.md
   launch_checklist: seo/setup/launch-checklist.csv
@@ -184,7 +192,7 @@ governance:
   automation_policy:
     default_mode: approval_only       # disabled | report_only | approval_only | auto_with_caps
     create_schedules: false
-    planner_script: "~/.claude/skills/seo-cycle/scripts/automation-plan.py"
+    planner_script: "~/.codex/skills/seo-cycle/scripts/automation-plan.py"
     output_dir: "seo/automations"
     allowed_without_approval:
       - cached_fetch
@@ -325,7 +333,7 @@ sources:
     method: browser_mcp         # парсинг правой колонки + сезонности
   yandex_suggest:
     enabled: true
-    script: ~/.claude/skills/seo-cycle/scripts/yandex-suggest.py
+    script: ~/.codex/skills/seo-cycle/scripts/yandex-suggest.py
   yandex_serp_blocks:
     enabled: true
     method: browser_mcp
@@ -372,14 +380,14 @@ sources:
     min_days_after_publish: 30
   google_trends:
     enabled: true
-    script: ~/.claude/skills/seo-cycle/scripts/google-trends.py
+    script: ~/.codex/skills/seo-cycle/scripts/google-trends.py
   google_suggest:
     enabled: true
-    script: ~/.claude/skills/seo-cycle/scripts/google-suggest.py
+    script: ~/.codex/skills/seo-cycle/scripts/google-suggest.py
   google_cloud_nlp:
     enabled: false
     api_key_env: GOOGLE_APPLICATION_CREDENTIALS
-    helper_script: ~/.claude/skills/seo-cycle/scripts/google-nlp-audit.py
+    helper_script: ~/.codex/skills/seo-cycle/scripts/google-nlp-audit.py
     policy_file: seo/entities/google-nlp-policy.yaml
     cache_ttl_days: 30
     requires_billing_budget: true
@@ -404,12 +412,12 @@ sources:
     # Вкл/выкл — из region_profile (ru/global). Лимит 10 запросов/10сек.
     api_key_env: KEYSO_API_TOKEN
     base: msk                     # региональная база (msk = Яндекс Москва)
-    helper_script: ~/.claude/skills/seo-cycle/scripts/keyso-fetch.py
+    helper_script: ~/.codex/skills/seo-cycle/scripts/keyso-fetch.py
   serpstat:
     # Вкл/выкл — из region_profile (поддерживает g_ru/g_ua/g_us/... включая РФ).
     api_key_env: SERPSTAT_API_KEY
     se: g_ru                      # search engine: g_ru | g_us | g_uk | g_de | g_ua ...
-    helper_script: ~/.claude/skills/seo-cycle/scripts/serpstat-fetch.py
+    helper_script: ~/.codex/skills/seo-cycle/scripts/serpstat-fetch.py
     monthly_credit_limit: 1000    # ⚠ бережём кредиты: точечно KD/volume + competitor gap
     min_credits_guard: 50
     cache_ttl_days: 30
@@ -417,7 +425,7 @@ sources:
     # Вкл/выкл — из region_profile (us/eu/global). ⚠ НЕ покрывает РФ/Яндекс.
     # Ключи: API_SpyFu_ID + API_SpyFu_secret_key. Competitor/PPC/SEO US/UK/EU.
     country_code: US             # US | GB | CA | DE | FR | AU ... (НЕ RU)
-    helper_script: ~/.claude/skills/seo-cycle/scripts/spyfu-fetch.py
+    helper_script: ~/.codex/skills/seo-cycle/scripts/spyfu-fetch.py
     monthly_budget_usd: 40       # Pro = $40 кредита/мес, pay-as-you-go по строкам
     cache_ttl_days: 30
 
@@ -438,8 +446,8 @@ sources:
     codex:
       enabled: true             # `codex` CLI установлен?
       cmd: codex
-    parallel_collect_script: ~/.claude/skills/seo-cycle/scripts/llm-cli-collect.sh
-    merge_script: ~/.claude/skills/seo-cycle/scripts/llm-cli-merge.py
+    parallel_collect_script: ~/.codex/skills/seo-cycle/scripts/llm-cli-collect.sh
+    merge_script: ~/.codex/skills/seo-cycle/scripts/llm-cli-merge.py
 
   # === AnswerThePublic ===
   answerthepublic:
@@ -455,7 +463,7 @@ sources:
     enabled: false              # включи после установки Claude for Chrome
     method: browser_mcp
     setup_doc: "./seo/research/perplexity/SETUP.md"
-    prompts_dir: ~/.claude/skills/seo-cycle/prompts/perplexity/
+    prompts_dir: ~/.codex/skills/seo-cycle/prompts/perplexity/
 
 # -----------------------------------------------------------------------------
 # 8. Publishing (CMS-specific) — куда заливаем контент
@@ -505,10 +513,10 @@ publishing:
 images:
   workflow: photo_first         # photo_first | generated | manual
   tool: wp-photo-image          # штатный инструмент: scripts/wp-photo-image.py
-  tool_script: "~/.claude/skills/seo-cycle/scripts/wp-photo-image.py"
+  tool_script: "~/.codex/skills/seo-cycle/scripts/wp-photo-image.py"
   generator: manual             # codex_cli | dalle | midjourney | manual | none
   generator_script: "./seo/scripts/publish/img-generate.sh"
-  optimize_script: "~/.claude/skills/seo-cycle/scripts/wp-photo-image.py"
+  optimize_script: "~/.codex/skills/seo-cycle/scripts/wp-photo-image.py"
   output_format: webp
   output:
     width: 1200
@@ -599,7 +607,7 @@ content_rules:
 quality_gates:
   stop_words_check:
     enabled: true
-    script: ~/.claude/skills/seo-cycle/scripts/check-stop-words.py
+    script: ~/.codex/skills/seo-cycle/scripts/check-stop-words.py
     fail_on_match: true
 
   neuronwriter_score:
@@ -644,10 +652,10 @@ context_files:
 # -----------------------------------------------------------------------------
 # Маппинг универсальных шагов на конкретные скиллы/агенты проекта.
 # Если у тебя есть проектные скиллы — указывай их здесь, иначе используются
-# универсальные fallback'и из ~/.claude/skills/seo-cycle/.
+# универсальные fallback'и из ~/.codex/skills/seo-cycle/.
 delegate:
   semantic_brief: emwoody-semantic-brief    # или null → fallback на универсальный шаблон
-  audit: seo-auditor                         # ~/.claude/agents/seo-auditor.md
+  audit: seo-auditor                         # agent/skill name or project-specific fallback
   keyword_research: seo-keyword-researcher
   content_writer: seo-content-writer
   content_strategy: seo-content-strategist
@@ -665,13 +673,13 @@ delegate:
 data_store:
   enabled: false                        # opt-in
   path: "seo/seo.db"
-  sync_script: "~/.claude/skills/seo-cycle/scripts/db-sync.py"
+  sync_script: "~/.codex/skills/seo-cycle/scripts/db-sync.py"
 
 # Лёгкие алерты через Telegram (без n8n). Без ключей в .env — graceful no-op.
 notifications:
   enabled: false                        # opt-in
   channel: telegram
-  script: "~/.claude/skills/seo-cycle/scripts/notify.py"
+  script: "~/.codex/skills/seo-cycle/scripts/notify.py"
   events: [approval_ticket_created, automation_error, low_api_credits, position_drop]
   bot_token_env: TELEGRAM_BOT_TOKEN
   chat_id_env: TELEGRAM_CHAT_ID
@@ -684,7 +692,7 @@ notifications:
 marketing:
   enabled: false                      # opt-in (нужен установленный плагин marketing-skills)
   plugin: marketing-skills
-  bridges_doc: "~/.claude/skills/seo-cycle/docs/marketing-bridges.md"
+  bridges_doc: "~/.codex/skills/seo-cycle/docs/marketing-bridges.md"
   rf_adaptation: false                # true для РФ → РФ-каналы (Директ/VK/Метрика/2ГИС)
   relevant_skills: [page-cro, form-cro, copywriting, customer-research, pricing-strategy]
 
@@ -696,7 +704,7 @@ marketing:
 #
 # Vault = зеркало артефактов проекта. Source of truth остаётся в файлах
 # проекта (entities.yaml, stock-inventory.yaml, blog/, categories/).
-# Обновление по запросу: python3 ~/.claude/skills/seo-cycle/scripts/obsidian-sync.py
+# Обновление по запросу: python3 ~/.codex/skills/seo-cycle/scripts/obsidian-sync.py
 obsidian:
   enabled: false                        # opt-in
   # Два варианта расположения vault:
@@ -721,7 +729,7 @@ obsidian:
 # 16. Stock inventory (для ecommerce / local business)
 # -----------------------------------------------------------------------------
 # Реестр складских позиций. Используется правилом content_rules.stock_first.
-# Шаблон: ~/.claude/skills/seo-cycle/scripts/stock-inventory.template.yaml
+# Шаблон: ~/.codex/skills/seo-cycle/scripts/stock-inventory.template.yaml
 stock_inventory:
   enabled: false                        # включить если ecommerce/локальный бизнес с инвентарём
   file: "./seo/stock-inventory.yaml"   # путь к реестру в проекте
@@ -744,7 +752,7 @@ monitoring:
   snapshot_format: json                        # JSON по схеме snapshot-build.py
   retention_months: 12                         # сколько месяцев храним снапшоты
   # Кастомные триггеры проекта (опц.) — перезаписывают/расширяют дефолтные из
-  # ~/.claude/skills/seo-cycle/config/triggers.yaml. Merge by id.
+  # ~/.codex/skills/seo-cycle/config/triggers.yaml. Merge by id.
   # triggers_file: "./seo-triggers.yaml"
   pagespeed_insights:
     enabled: false                             # PSI fetcher для CWV (free, API key опционален)
@@ -789,7 +797,7 @@ backlinks:
 # или Codex CLI schedule (если есть). Скрипт monthly-runner.sh — entry point.
 monthly_automation:
   enabled: false                              # opt-in
-  planner_script: "~/.claude/skills/seo-cycle/scripts/automation-plan.py"
+  planner_script: "~/.codex/skills/seo-cycle/scripts/automation-plan.py"
   output_dir: "./seo/automations"
   schedule:
     timezone: "Europe/Moscow"

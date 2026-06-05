@@ -184,7 +184,7 @@ def build_report(cfg_path: pathlib.Path, questionnaire_path: pathlib.Path | None
                 "answer_format": answer_format,
                 "proposed_value": proposed,
                 "answer_summary": value_summary(proposed),
-                "follow_up_command": str(row.get("follow_up_command") or "python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py --write"),
+                "follow_up_command": str(row.get("follow_up_command") or "python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py --write"),
                 "apply_mode": "manual_review",
             }
         )

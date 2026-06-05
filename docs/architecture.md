@@ -21,7 +21,7 @@ Phase 0 — найти seo-cycle.yaml → если нет, INSTALL wizard
 Phase 1 ← подключённые в config delegate.audit агенты
 Phase 2 ← по списку sources.*.enabled (Wordstat → Suggest → ATP → LLM CLI → Perplexity → ...)
 Phase 3 ← delegate.cluster_analysis
-Phase 4 ← delegate.semantic_brief (использует ~/.claude/skills/seo-cycle/templates/entity-map.template.md как fallback)
+Phase 4 ← delegate.semantic_brief (использует ~/.codex/skills/seo-cycle/templates/entity-map.template.md как fallback)
 Phase 5 ← delegate.content_strategy
 Phase 6 ← delegate.content_writer + quality gates (stop-words, fact-check, NW)
 Phase 7 ← delegate.publish_skills[<type>] (project-specific CMS handler)
@@ -33,7 +33,7 @@ Phase 10 ← сам скилл + проектные lessons learned
 ## Структура файлов скилла
 
 ```
-~/.claude/skills/seo-cycle/
+~/.codex/skills/seo-cycle/
 ├── SKILL.md                          # entry-point, orchestrator instructions
 ├── INSTALL.md                        # setup wizard для нового проекта
 ├── CHANGELOG.md                      # история изменений
@@ -118,7 +118,7 @@ delegate:
   schema_markup: "claude-seo:seo-schema"
 ```
 
-Если делегат не указан — используется fallback из `~/.claude/skills/seo-cycle/templates/`:
+Если делегат не указан — используется fallback из `~/.codex/skills/seo-cycle/templates/`:
 - `templates/entity-map.template.md` — для Phase 4
 - `templates/cycle-plan.template.md` — для Phase 5 (TBD)
 

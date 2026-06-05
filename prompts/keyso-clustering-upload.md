@@ -11,7 +11,7 @@ Keys.so clustering-инструмент НЕ доступен через API (т
 ## Предусловие
 1. Подготовь файл ключей (дёшево, без браузера):
    ```bash
-   python3 ~/.claude/skills/seo-cycle/scripts/keyso-clustering-export.py \
+   python3 ~/.codex/skills/seo-cycle/scripts/keyso-clustering-export.py \
      --from-keyso-cache <домен> --out <cycle>/keys-for-clustering.txt
    # или из нескольких источников: --from-md 02-keywords.md --from-csv ядро.csv keyword
    ```

@@ -54,7 +54,7 @@ monthly_automation:
 ### 1. Создать keyword queue
 
 ```bash
-cp ~/.claude/skills/seo-cycle/templates/keyword-queue.template.csv \
+cp ~/.codex/skills/seo-cycle/templates/keyword-queue.template.csv \
    seo/keyword-queue.csv
 # Заполни 4-8 ключей под свою нишу + approve через keyword-queue.py
 ```
@@ -72,9 +72,9 @@ crontab -e
 
 # Добавь (пути замени на свои)
 PROJECT=/Users/turvodnik/AI/emwoody
-0 9 * * 1   cd $PROJECT && bash ~/.claude/skills/seo-cycle/scripts/monthly-runner.sh content >> $PROJECT/seo/cron.log 2>&1
-0 14 * * 3  cd $PROJECT && bash ~/.claude/skills/seo-cycle/scripts/monthly-runner.sh >> $PROJECT/seo/cron.log 2>&1
-0 16 * * 5  cd $PROJECT && bash ~/.claude/skills/seo-cycle/scripts/monthly-runner.sh >> $PROJECT/seo/cron.log 2>&1
+0 9 * * 1   cd $PROJECT && bash ~/.codex/skills/seo-cycle/scripts/monthly-runner.sh content >> $PROJECT/seo/cron.log 2>&1
+0 14 * * 3  cd $PROJECT && bash ~/.codex/skills/seo-cycle/scripts/monthly-runner.sh >> $PROJECT/seo/cron.log 2>&1
+0 16 * * 5  cd $PROJECT && bash ~/.codex/skills/seo-cycle/scripts/monthly-runner.sh >> $PROJECT/seo/cron.log 2>&1
 ```
 
 `monthly-runner.sh` без аргумента auto-detect какая операция нужна по дню недели + неделе месяца.
@@ -95,7 +95,7 @@ PROJECT=/Users/turvodnik/AI/emwoody
 Уже включено по умолчанию (`approval_gates.*: required`). После каждого scheduled запуска проверяй:
 
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/approval-gate.py list --status pending
+python3 ~/.codex/skills/seo-cycle/scripts/approval-gate.py list --status pending
 ```
 
 Или просто открой `seo/pending-approvals.md` в Obsidian.

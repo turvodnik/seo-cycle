@@ -341,11 +341,11 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
     report["decision_matrix"] = decision_matrix(report)
     report["action_packs"] = action_packs(report)
     report["next_commands"] = [
-        "python3 ~/.claude/skills/seo-cycle/scripts/setup-blueprint.py --write",
-        "python3 ~/.claude/skills/seo-cycle/scripts/context-pack.py --task \"<task>\" --write",
-        "python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py --write",
-        "python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write",
-        "python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task \"<approved roadmap action>\" --write",
+        "python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py --write",
+        "python3 ~/.codex/skills/seo-cycle/scripts/context-pack.py --task \"<task>\" --write",
+        "python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py --write",
+        "python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write",
+        "python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task \"<approved roadmap action>\" --write",
     ]
     markdown = render_markdown(report)
     report["rendered_chars"] = len(markdown)

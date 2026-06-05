@@ -16,7 +16,7 @@ Wiki-link enrichment: упоминания зарегистрированных 
 
 Использование:
     # Из корня проекта (читает seo-cycle.yaml)
-    python3 ~/.claude/skills/seo-cycle/scripts/obsidian-sync.py
+    python3 ~/.codex/skills/seo-cycle/scripts/obsidian-sync.py
 
     # С указанием конфига и vault
     python3 obsidian-sync.py --config ./seo-cycle.yaml --vault ./obsidian-vault
@@ -591,7 +591,7 @@ tags: [vault-readme]
 
 Vault создаётся скриптом и **обновляется по запросу**:
 ```
-python3 ~/.claude/skills/seo-cycle/scripts/obsidian-sync.py
+python3 ~/.codex/skills/seo-cycle/scripts/obsidian-sync.py
 ```
 
 Источник истины — **файлы проекта**, не vault. Изменения вручную в vault

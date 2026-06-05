@@ -364,7 +364,9 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
 
     read_first = [
         str(policy_path(cfg, project_root, "setup_control_plane", "seo/setup/setup-control-plane.md")),
+        str(policy_path(cfg, project_root, "upgrade_assistant", "seo/setup/upgrade-assistant.md")),
         str(policy_path(cfg, project_root, "setup_blueprint", "seo/setup/setup-blueprint.md")),
+        str(policy_path(cfg, project_root, "access_key_assistant", "seo/setup/access-key-assistant.md")),
         str(policy_path(cfg, project_root, "setup_gap_audit_report", "seo/setup/setup-gap-audit.md")),
         str(policy_path(cfg, project_root, "setup_questionnaire", "seo/setup/setup-questionnaire.md")),
         str(policy_path(cfg, project_root, "setup_answer_plan", "seo/setup/setup-answer-plan.md")),
@@ -414,10 +416,10 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
             "caps": caps,
         },
         "commands": [
-            "python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write --skip-intake",
-            f"python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task {json.dumps(task, ensure_ascii=False)} --write",
-            "python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py report --write",
-            "python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md",
+            "python3 ~/.codex/skills/seo-cycle/scripts/setup-control-plane.py --write --skip-intake",
+            f"python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task {json.dumps(task, ensure_ascii=False)} --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py report --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/governance-report.py --format md",
         ],
     }
 

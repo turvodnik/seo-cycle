@@ -11,7 +11,7 @@ triggers-eval.py — оценщик triggers.yaml по snapshot.json (Phase 10 �
 
 Опции:
     snapshot         Путь к snapshot.json (Phase 9 output)
-    triggers         Путь к triggers.yaml (default: ~/.claude/skills/seo-cycle/config/triggers.yaml)
+    triggers         Путь к triggers.yaml (default: ~/.codex/skills/seo-cycle/config/triggers.yaml)
     --output PATH    Markdown файл (default: stdout)
     --project-yaml   Путь к seo-cycle.yaml проекта (для project-override triggers)
     --top N          Лимит на rule (default: 20 — топ N сработавших записей)

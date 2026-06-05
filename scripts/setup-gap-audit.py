@@ -162,54 +162,54 @@ def question_meta(field: str) -> dict[str, str]:
         return {
             "answer_format": "text_or_list",
             "target_file": "seo-cycle.yaml; seo/project-intake.yaml",
-            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write",
+            "follow_up_command": "python3 ~/.codex/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write",
         }
     if field.startswith("business."):
         return {
             "answer_format": "text_or_list",
             "target_file": "seo/project-intake.yaml",
-            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write && python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write",
+            "follow_up_command": "python3 ~/.codex/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write && python3 ~/.codex/skills/seo-cycle/scripts/project-profile.py --write",
         }
     if field.startswith("marketing."):
         return {
             "answer_format": "policy_choice",
             "target_file": "seo/project-intake.yaml; seo/seo-data-collection-map.md",
-            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write && python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write",
+            "follow_up_command": "python3 ~/.codex/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write && python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write",
         }
     if field.startswith("local."):
         return {
             "answer_format": "urls_or_structured_nap",
             "target_file": "seo-cycle.yaml; seo/project-intake.yaml",
-            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write && python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write",
+            "follow_up_command": "python3 ~/.codex/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write && python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write",
         }
     if field.startswith("ecommerce."):
         return {
             "answer_format": "policy_or_category_list",
             "target_file": "seo/project-intake.yaml; seo/access-setup-runbook.md",
-            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write && python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write",
+            "follow_up_command": "python3 ~/.codex/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write && python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write",
         }
     if field.startswith("tools."):
         return {
             "answer_format": "review_decision",
             "target_file": "seo/tool-stack.generated.yaml; seo/setup/tool-stack-report.md",
-            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write",
+            "follow_up_command": "python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write",
         }
     if field.startswith("budget."):
         return {
             "answer_format": "number_or_policy",
             "target_file": "seo-cycle.yaml; seo/tool-budget.yaml",
-            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write && python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py report --write",
+            "follow_up_command": "python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write && python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py report --write",
         }
     if field.startswith("automation."):
         return {
             "answer_format": "run_or_policy",
             "target_file": "seo/automation-policy.yaml; seo/automations/automation-recommendations.md",
-            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write && python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write",
+            "follow_up_command": "python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write && python3 ~/.codex/skills/seo-cycle/scripts/setup-control-plane.py --write",
         }
     return {
         "answer_format": "text",
         "target_file": "seo/project-intake.yaml",
-        "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py --write",
+        "follow_up_command": "python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py --write",
     }
 
 

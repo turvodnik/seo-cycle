@@ -10,11 +10,11 @@
 
 ### Уровень 2 — переопределение промптов
 
-Если стандартные промпт-шаблоны (`~/.claude/skills/seo-cycle/prompts/`) не подходят под нишу, скопируй их в проект и переопредели:
+Если стандартные промпт-шаблоны (`~/.codex/skills/seo-cycle/prompts/`) не подходят под нишу, скопируй их в проект и переопредели:
 
 ```bash
 mkdir -p <project>/seo/prompts
-cp ~/.claude/skills/seo-cycle/prompts/*.md <project>/seo/prompts/
+cp ~/.codex/skills/seo-cycle/prompts/*.md <project>/seo/prompts/
 # Отредактируй под свою нишу
 ```
 
@@ -22,7 +22,7 @@ cp ~/.claude/skills/seo-cycle/prompts/*.md <project>/seo/prompts/
 ```yaml
 sources:
   perplexity:
-    prompts_dir: "./seo/prompts/"   # вместо ~/.claude/skills/seo-cycle/prompts/
+    prompts_dir: "./seo/prompts/"   # вместо ~/.codex/skills/seo-cycle/prompts/
 ```
 
 ### Уровень 3 — проектные субскиллы
@@ -52,7 +52,7 @@ delegate:
 Если решение полезно для **многих проектов** (новый источник данных, новый CMS-публикатор):
 
 1. Реализуй и протестируй в своём проекте
-2. Перенеси в `~/.claude/skills/seo-cycle/` с правкой документации
+2. Перенеси в `~/.codex/skills/seo-cycle/` с правкой документации
 3. Добавь в `config/project.template.yaml` секцию опций
 4. Обнови `SKILL.md` Phase где применяется
 5. (Если у тебя git-репо для skills) — PR upstream
@@ -210,7 +210,7 @@ content_rules:
 
 ```bash
 # Перевалидировать
-python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
+python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py
 
 # Запустить dry-run на одной фазе
 # (просто скажи Клоду: «запусти Phase 2 для темы X в режиме dry-run»)

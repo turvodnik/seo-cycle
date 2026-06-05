@@ -175,8 +175,8 @@ def cmd_create(args, path: pathlib.Path):
     block += f"""
 
 **Actions:**
-- Approve: `python3 ~/.claude/skills/seo-cycle/scripts/approval-gate.py approve {tid}`
-- Reject:  `python3 ~/.claude/skills/seo-cycle/scripts/approval-gate.py reject {tid} --reason "..."`
+- Approve: `python3 ~/.codex/skills/seo-cycle/scripts/approval-gate.py approve {tid}`
+- Reject:  `python3 ~/.codex/skills/seo-cycle/scripts/approval-gate.py reject {tid} --reason "..."`
 """
 
     tickets = load_tickets(path)

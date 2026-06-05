@@ -239,7 +239,9 @@ def automation_summary(automation: dict[str, Any]) -> list[dict[str, Any]]:
 def read_order(project_root: pathlib.Path, cfg: dict[str, Any], route: dict[str, Any]) -> list[str]:
     explicit = [
         "seo/setup/context-pack.md",
+        "seo/setup/upgrade-assistant.md",
         "seo/setup/setup-blueprint.md",
+        "seo/setup/access-key-assistant.md",
         "seo/setup/setup-gap-audit.md",
         "seo/setup/setup-questionnaire.md",
         "seo/setup/setup-answer-plan.md",
@@ -266,6 +268,10 @@ def excluded_raw_artifacts() -> list[str]:
         "seo/setup/growth-roadmap.json",
         "seo/setup/setup-blueprint.json",
         "seo/setup/latest-setup-blueprint.json",
+        "seo/setup/upgrade-assistant.json",
+        "seo/setup/latest-upgrade-assistant.json",
+        "seo/setup/access-key-assistant.json",
+        "seo/setup/latest-access-key-assistant.json",
         "seo/setup/launch-plan.json",
         "seo/setup/setup-gap-audit.json",
         "seo/setup/latest-setup-gap-audit.json",
@@ -350,10 +356,10 @@ def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route:
         "enabled_automations": limit(automation_summary(automation), 12),
         "human_secret_env_names": limit(env_names(tool_stack, launch_plan), 50),
         "next_commands": [
-            "python3 ~/.claude/skills/seo-cycle/scripts/context-pack.py --task \"<current task>\" --write",
-            "python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task \"<current task>\" --write",
-            "python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write",
-            "python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py report --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/context-pack.py --task \"<current task>\" --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task \"<current task>\" --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py report --write",
         ],
     }
     md = render_markdown(report)

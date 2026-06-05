@@ -8,11 +8,11 @@
 
 Скилл искал в 4 локациях, нигде нет. Создай через wizard:
 ```bash
-bash ~/.claude/skills/seo-cycle/scripts/init-project.sh
+bash ~/.codex/skills/seo-cycle/scripts/init-project.sh
 ```
 Или вручную скопируй template:
 ```bash
-cp ~/.claude/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml
+cp ~/.codex/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml
 ```
 
 ### `validate-config.py показывает «delegate not found in ~/.claude/agents/ or ~/.claude/skills/»`
@@ -98,7 +98,7 @@ curl -H "Authorization: OAuth $YANDEX_OAUTH_TOKEN" \
 
 Возможные причины:
 1. Snapshot пустой — проверь `snapshot.json` глазами (queries[]/pages[] не пустые?)
-2. Условия слишком строгие — посмотри `~/.claude/skills/seo-cycle/config/triggers.yaml` и подстрой пороги под свой проект
+2. Условия слишком строгие — посмотри `~/.codex/skills/seo-cycle/config/triggers.yaml` и подстрой пороги под свой проект
 3. Поля в snapshot не совпадают с условиями — DSL ожидает `position`, `impressions` и т.д.; убедись что snapshot-build нормализовал правильно
 
 ### `triggers-eval.py: ImportError yaml`
@@ -145,7 +145,7 @@ NW обрабатывает запрос дольше обычного. Запу
 
 `entities.yaml` имеет нестандартный формат или нет вообще. Проверь:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/validate-entities.py seo/entities/entities.yaml
+python3 ~/.codex/skills/seo-cycle/scripts/validate-entities.py seo/entities/entities.yaml
 ```
 
 ### `obsidian-sync: -rebuild стирает корневой vault`
@@ -182,13 +182,13 @@ Safety check. Скрипт не удаляет директорию котора
 ### Permission denied при запуске скрипта
 
 ```bash
-chmod +x ~/.claude/skills/seo-cycle/scripts/<name>.{py,sh}
+chmod +x ~/.codex/skills/seo-cycle/scripts/<name>.{py,sh}
 ```
 
 ### `import: command not found` при запуске Python скрипта
 
 Bash trying to execute Python file as shell. Используй явно:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/<name>.py
+python3 ~/.codex/skills/seo-cycle/scripts/<name>.py
 ```
 Или убедись что shebang `#!/usr/bin/env python3` есть в первой строке файла.

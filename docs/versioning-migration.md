@@ -27,7 +27,7 @@
 
 ```bash
 cd <project-root>
-python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
+python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py
 ```
 
 Если 0 errors — конфиг совместим. Прочти warnings и new checklist items (новые поля env vars для observability hub).
@@ -50,7 +50,7 @@ monitoring:
 # Создай пустой snapshot для проверки
 mkdir -p 09-monitoring
 echo '{"snapshot_date":"2026-05-27","queries":[],"pages":[]}' > 09-monitoring/test.json
-python3 ~/.claude/skills/seo-cycle/scripts/triggers-eval.py 09-monitoring/test.json --output test-iterations.md
+python3 ~/.codex/skills/seo-cycle/scripts/triggers-eval.py 09-monitoring/test.json --output test-iterations.md
 cat test-iterations.md
 ```
 
@@ -62,8 +62,8 @@ cat test-iterations.md
 2. Скопировать `.env.example` → `.env`, заполнить
 3. Прогнать smoke test:
    ```bash
-   python3 ~/.claude/skills/seo-cycle/scripts/psi-fetch.py https://yoursite.com
-   python3 ~/.claude/skills/seo-cycle/scripts/gsc-fetch.py --days 7 --row-limit 10
+   python3 ~/.codex/skills/seo-cycle/scripts/psi-fetch.py https://yoursite.com
+   python3 ~/.codex/skills/seo-cycle/scripts/gsc-fetch.py --days 7 --row-limit 10
    ```
 
 #### Шаг 4. Добавить новые секции конфига (по мере необходимости)
@@ -124,7 +124,7 @@ migration:
    - `docs/troubleshooting.md` — FAQ
 3. Скопируй custom triggers (если нужны) в `<project>/seo-triggers.yaml`:
    ```bash
-   cp ~/.claude/skills/seo-cycle/config/triggers.yaml seo-triggers.yaml
+   cp ~/.codex/skills/seo-cycle/config/triggers.yaml seo-triggers.yaml
    # Отредактируй под свой проект
    ```
    Указать в `monitoring.triggers_file: "./seo-triggers.yaml"`.

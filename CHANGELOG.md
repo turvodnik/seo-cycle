@@ -1,5 +1,17 @@
 # Changelog — seo-cycle
 
+## [1.37.0] — 2026-06-05
+
+### Existing-project upgrades and access setup
+
+- Added `scripts/project-upgrade-assistant.py` for existing projects: review-only feature comparison against the current template/control-plane surface, `upgrade-assistant.md/json`, and `upgrade-questionnaire.csv` with yes/no/defer choices.
+- Added `scripts/access-key-assistant.py` for project-specific access setup: reads tool-stack decisions and `.env`, emits only needed Google/Yandex/Bing/NeuronWriter/AI key/token steps, and never prints secret values.
+- `bootstrap-codex.sh` and `bootstrap-claude.sh` now preserve existing `seo-cycle.yaml` projects and run upgrade/access/control-plane assistants instead of reinitializing the project.
+- `.env.example` and bootstraps now define runtime routing: Codex uses `SEO_RUNTIME=codex` + `SEO_SEARCH_RUNTIME=direct`; Claude uses `SEO_RUNTIME=claude` + `SEO_SEARCH_RUNTIME=codex_external`.
+- Setup control plane, context pack, task router, onboarding proofs, template policy files, README, INSTALL, GUIDE, SKILL.md, Codex runtime docs, and OAuth docs now include the upgrade/access assistants.
+- Switched project templates, prompt commands, and setup docs to the Codex-first canonical path `~/.codex/skills/seo-cycle`, while keeping Claude/agents compatibility symlinks documented.
+- Added smoke tests for review-only project upgrades, secret-free access-key instructions, context-pack read order, and onboarding proofs.
+
 ## [1.36.0] — 2026-06-05
 
 ### Codex-first bootstrap

@@ -21,7 +21,7 @@
 ```
 Затем посчитай план догона детерминированно:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/review-velocity.py \
+python3 ~/.codex/skills/seo-cycle/scripts/review-velocity.py \
   --my-total <N> --leader-total <M> --leader-30d <X> --my-target-30d <Y>
 ```
 Результат → `<cycle>/local/google-reviews-plan.md`: сколько отзывов/мес нужно и срок догона.

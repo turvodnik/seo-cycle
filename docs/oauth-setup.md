@@ -14,7 +14,8 @@
 4. **Яндекс OAuth токен** → `YANDEX_OAUTH_TOKEN`
 5. **PSI** — без авторизации работает, опц. API key для повышенного rate limit
 6. **Bing Webmaster API key** и **IndexNow key** — без установки analytics tag
-7. Скопировать `.env.example` → `.env`, заполнить, добавить в `.gitignore`
+7. Запустить `access-key-assistant.py --write`, чтобы увидеть только нужные этому проекту ключи
+8. Скопировать `.env.example` → `.env`, заполнить, добавить в `.gitignore`
 
 ## 1. Google Cloud Platform setup (одноразово)
 
@@ -76,7 +77,7 @@ GOOGLE_APPLICATION_CREDENTIALS=/Users/<you>/.config/seo-cycle/google-credentials
 
 Проверка:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/gsc-fetch.py --days 7 --row-limit 10 | head
+python3 ~/.codex/skills/seo-cycle/scripts/gsc-fetch.py --days 7 --row-limit 10 | head
 ```
 
 ## 3. Google Analytics 4 (GA4) доступ
@@ -93,7 +94,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/gsc-fetch.py --days 7 --row-limit 10 
 
 Проверка:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/ga4-fetch.py --days 7 --limit 10 | head
+python3 ~/.codex/skills/seo-cycle/scripts/ga4-fetch.py --days 7 --limit 10 | head
 ```
 
 ## 4. PageSpeed Insights
@@ -111,7 +112,7 @@ PSI работает **без авторизации**, но с лимитом ~
 
 Проверка:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/psi-fetch.py https://example.com --strategy mobile
+python3 ~/.codex/skills/seo-cycle/scripts/psi-fetch.py https://example.com --strategy mobile
 ```
 
 ## 5. Яндекс OAuth (для Метрики и Вебмастера)
@@ -169,8 +170,8 @@ YANDEX_WEBMASTER_HOST_ID=https:example.com:443
 
 Проверка:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/metrika-fetch.py --days 7 --limit 5
-python3 ~/.claude/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 10
+python3 ~/.codex/skills/seo-cycle/scripts/metrika-fetch.py --days 7 --limit 5
+python3 ~/.codex/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 10
 ```
 
 ## 6. Google Cloud Natural Language
@@ -189,7 +190,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 1
    ```
 4. Запускать только важные URL и кэшировать результаты:
    ```bash
-   python3 ~/.claude/skills/seo-cycle/scripts/google-nlp-audit.py --help
+   python3 ~/.codex/skills/seo-cycle/scripts/google-nlp-audit.py --help
    ```
 
 ## 7. Google Merchant, Business Profile и YouTube
@@ -245,6 +246,8 @@ python3 ~/.claude/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 1
 
 | Переменная | Источник | Тип | Обязательность |
 |---|---|---|---|
+| `SEO_RUNTIME` | runtime routing | enum | `codex`, `claude` или `auto` |
+| `SEO_SEARCH_RUNTIME` | search/browser routing | enum | `direct`, `codex_external` или `auto` |
 | `GOOGLE_APPLICATION_CREDENTIALS` | путь к service account JSON | path | для GSC/GA4 |
 | `GSC_SITE_URL` | `sc-domain:example.com` или URL | string | для GSC |
 | `GA4_PROPERTY_ID` | Property ID (числовой) | string | для GA4, если разрешено policy |
@@ -266,12 +269,42 @@ python3 ~/.claude/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 1
 | `INDEXNOW_KEY_LOCATION` | URL key-файла | string | опц. |
 | `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` | Microsoft OAuth app | string | опц., если нужен Graph/Ads OAuth |
 | `NEURON_API_KEY` | NeuronWriter | string | для NW evaluate/import |
+| `NEURON_PROJECT_ID` | NeuronWriter project | string | опц., для ручной привязки проекта |
+| `NEURON_LIMITS_FILE` | NeuronWriter лимиты | path | опц., default `seo/neuronwriter-limits.yaml` |
+| `KEYSO_API_TOKEN` | Keys.so | string | опц., RU/Yandex keyword evidence |
+| `SERPSTAT_API_KEY` | Serpstat | string | опц., quota-based keyword/competitor evidence |
 | `TOKEN_ANSWERTHEPUBLIC` | ATP | string | опц. (только en/us) |
+| `GEMINI_API_KEY` | Gemini API | string | опц., AI comparison layer |
+| `DEEPSEEK_API_KEY` | DeepSeek API | string | опц., AI comparison layer |
 | `WP_BASE_URL`, `WP_USER`, `WP_APP_PASSWORD` | WordPress REST | string | для WP publishing |
 | `WOO_REST_API_KEY`, `WOO_REST_API_SECRET` | WooCommerce REST | string | для WooCommerce |
 | `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` | DataForSEO | string | опц. (платная подписка) |
 
-## 11. Безопасность
+## 11. Paid/subscription tools
+
+Эти сервисы подключай только если tool-stack ставит их в `enabled`/`report_only`/`approval_required`, а `spend-guard.py --write` не блокирует расход.
+
+- **NeuronWriter**: открой account/API settings, скопируй API key только в `.env` как `NEURON_API_KEY`. Project ID и лимиты фиксируй в `seo/neuronwriter-limits.yaml`, не в отчётах.
+- **Keys.so**: токен только в `.env` как `KEYSO_API_TOKEN`; до первого запуска задай request caps/reserve в `seo/tool-budget.yaml`.
+- **Serpstat**: API key только в `.env` как `SERPSTAT_API_KEY`; перед запуском проверь credits через spend guard/usage ledger.
+- **AnswerThePublic**: `TOKEN_ANSWERTHEPUBLIC` только если вопросная семантика действительно нужна и регион/язык поддерживается.
+- **DataForSEO/SpyFu**: подключать отдельно по policy; без бюджета и approval не запускать.
+
+## 12. AI API keys
+
+AI API keys нужны только для сравнительных AI visibility/entity/content checks. Они не передают сайт напрямую в ранжирование.
+
+- **Gemini**: создай key в [AI Studio](https://aistudio.google.com/app/apikey), по возможности ограничь ключ, сохрани только `GEMINI_API_KEY` в `.env`.
+- **DeepSeek**: создай key в [DeepSeek Platform](https://platform.deepseek.com/api_keys), сохрани только `DEEPSEEK_API_KEY` в `.env`.
+- **OpenAI/Claude/Perplexity**: подключай только если проектная policy разрешает LLM spend; ключи вводятся в `.env` или системный secret manager, не в setup reports.
+
+Перед любым AI API запуском:
+```bash
+python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service gemini --category llm --usd 0.25 --fail-on-block
+```
+
+## 13. Безопасность
 
 - **`.env` в `.gitignore`** — никогда не коммить
 - Service account JSON — `chmod 600`, не публиковать
@@ -279,6 +312,6 @@ python3 ~/.claude/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 1
 - В CI/CD — использовать secret manager (GitHub Secrets, GCP Secret Manager)
 - Rate limits: GSC ~1200 запросов/мин, GA4 ~120 req/min/property, PSI без ключа — 25/день
 
-## 12. Troubleshooting
+## 14. Troubleshooting
 
 См. `docs/troubleshooting.md` для типичных ошибок (`403 PERMISSION_DENIED`, `401 Unauthorized`, expired tokens).

@@ -20,7 +20,7 @@
 ```
 Расчёт догона:
 ```bash
-python3 ~/.claude/skills/seo-cycle/scripts/review-velocity.py \
+python3 ~/.codex/skills/seo-cycle/scripts/review-velocity.py \
   --platform yandex --my-total <N> --leader-total <M> --leader-30d <X> --my-target-30d <Y>
 ```
 Результат → `<cycle>/local/yandex-reviews-plan.md`. Важно: не накручивать — Яндекс агрессивно фильтрует фейк; стимулировать реальные отзывы (QR на складе, после доставки).

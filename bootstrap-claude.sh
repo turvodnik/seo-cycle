@@ -66,6 +66,10 @@ abs_path() {
 
 ensure_env_file() {
     local project_dir="$1"
+    if [ ! -f "$project_dir/.env.example" ] && [ -f "$CORE/.env.example" ]; then
+        cp "$CORE/.env.example" "$project_dir/.env.example"
+        echo "✓ .env.example создан из core template"
+    fi
     if [ -f "$project_dir/.env.example" ] && [ ! -f "$project_dir/.env" ]; then
         cp "$project_dir/.env.example" "$project_dir/.env"
         echo "✓ .env создан из .env.example"
@@ -73,6 +77,10 @@ ensure_env_file() {
     if [ -f "$project_dir/.env" ] && ! grep -q '^SEO_RUNTIME=' "$project_dir/.env" 2>/dev/null; then
         printf '\n# seo-cycle runtime\nSEO_RUNTIME=claude\n' >> "$project_dir/.env"
         echo "✓ .env: SEO_RUNTIME=claude"
+    fi
+    if [ -f "$project_dir/.env" ] && ! grep -q '^SEO_SEARCH_RUNTIME=' "$project_dir/.env" 2>/dev/null; then
+        printf 'SEO_SEARCH_RUNTIME=codex_external\n' >> "$project_dir/.env"
+        echo "✓ .env: SEO_SEARCH_RUNTIME=codex_external"
     fi
     if [ ! -f "$project_dir/.gitignore" ]; then
         printf ".env\n" > "$project_dir/.gitignore"
@@ -83,6 +91,31 @@ ensure_env_file() {
     fi
 }
 
+find_project_config() {
+    local project_dir="$1"
+    local rel
+    for rel in seo-cycle.yaml .seo-cycle.yaml seo/seo-cycle.yaml .claude/seo-cycle.yaml; do
+        if [ -f "$project_dir/$rel" ]; then
+            printf "%s\n" "$project_dir/$rel"
+            return 0
+        fi
+    done
+    return 1
+}
+
+run_existing_project_upgrade() {
+    local project_dir="$1"
+    local cfg_path="$2"
+    echo "▶ existing seo-cycle project detected: $cfg_path"
+    echo "▶ running upgrade/access/control-plane assistants instead of overwriting config..."
+    python3 "$CORE/scripts/project-upgrade-assistant.py" "$cfg_path" --write \
+        || echo "ℹ project-upgrade-assistant failed; run it manually after checking config"
+    python3 "$CORE/scripts/access-key-assistant.py" "$cfg_path" --write \
+        || echo "ℹ access-key-assistant failed; run it manually after checking tool stack"
+    python3 "$CORE/scripts/setup-control-plane.py" "$cfg_path" --write --skip-intake \
+        || echo "ℹ setup-control-plane reported validation/setup issues; open seo/setup/setup-control-plane.md"
+}
+
 ensure_claude_entrypoint() {
     local project_dir="$1"
     if [ ! -e "$project_dir/CLAUDE.md" ]; then
@@ -90,6 +123,16 @@ ensure_claude_entrypoint() {
         echo "✓ CLAUDE.md → $CORE/SKILL.md"
     else
         echo "ℹ CLAUDE.md уже существует — не трогаю"
+    fi
+}
+
+ensure_codex_entrypoint() {
+    local project_dir="$1"
+    if [ ! -e "$project_dir/AGENTS.md" ]; then
+        ln -s "$CORE/AGENTS.md" "$project_dir/AGENTS.md"
+        echo "✓ AGENTS.md → $CORE/AGENTS.md"
+    else
+        echo "ℹ AGENTS.md уже существует — не трогаю"
     fi
 }
 
@@ -115,14 +158,23 @@ echo "▶ Project root: $PROJECT_DIR"
 if [ "$RUN_INIT" = "1" ]; then
     cd "$PROJECT_DIR"
     export SEO_RUNTIME=claude
+    export SEO_SEARCH_RUNTIME=codex_external
     if [ "$REGISTER" = "1" ]; then
         unset SEO_CYCLE_SKIP_REGISTRY
     else
         export SEO_CYCLE_SKIP_REGISTRY="${SEO_CYCLE_SKIP_REGISTRY:-1}"
     fi
-    "$CORE/scripts/init-project.sh"
     ensure_claude_entrypoint "$PROJECT_DIR"
+    ensure_codex_entrypoint "$PROJECT_DIR"
     ensure_env_file "$PROJECT_DIR"
+    cfg_path="$(find_project_config "$PROJECT_DIR" || true)"
+    if [ -n "$cfg_path" ]; then
+        run_existing_project_upgrade "$PROJECT_DIR" "$cfg_path"
+    else
+        "$CORE/scripts/init-project.sh"
+        ensure_claude_entrypoint "$PROJECT_DIR"
+        ensure_env_file "$PROJECT_DIR"
+    fi
 fi
 
 echo ""

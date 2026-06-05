@@ -1,0 +1,321 @@
+#!/usr/bin/env python3
+"""Review-only upgrade assistant for existing seo-cycle projects.
+
+When a project already has seo-cycle.yaml, the bootstrap should not overwrite
+it. This script compares the project against the current template/control-plane
+surface and writes a questionnaire for newly available features.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import datetime as dt
+import io
+import json
+import pathlib
+import sys
+from typing import Any
+
+try:
+    import yaml
+except ImportError:
+    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
+    sys.exit(2)
+
+
+CONFIG_SEARCH_PATHS = [
+    "seo-cycle.yaml",
+    ".seo-cycle.yaml",
+    "seo/seo-cycle.yaml",
+    ".claude/seo-cycle.yaml",
+]
+
+FEATURES: list[dict[str, Any]] = [
+    {
+        "id": "codex_first_runtime",
+        "title": "Codex-first runtime and search routing",
+        "policy_keys": [],
+        "artifacts": ["AGENTS.md"],
+        "question": "Use Codex as the primary runtime and set Claude search collection to Codex external mode?",
+        "default_answer": "yes_for_codex_projects",
+        "command": "curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash",
+        "notes": "Codex runs search/browser/native skills directly. Claude projects should use SEO_SEARCH_RUNTIME=codex_external for separate Codex search collection.",
+    },
+    {
+        "id": "setup_blueprint",
+        "title": "Setup blueprint matrix",
+        "policy_keys": ["setup_blueprint_generated", "setup_blueprint", "setup_blueprint_json", "setup_matrix_csv", "latest_setup_blueprint"],
+        "artifacts": ["seo/setup/setup-blueprint.md", "seo/setup/setup-matrix.csv"],
+        "question": "Generate the low-token country/engine/business/tools/budget/automation matrix?",
+        "default_answer": "yes",
+        "command": "python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py --write",
+        "notes": "Useful for every upgraded project; secret-free.",
+    },
+    {
+        "id": "setup_gap_questionnaire",
+        "title": "Setup gap audit and questionnaire",
+        "policy_keys": ["setup_gap_audit_report", "setup_questionnaire", "setup_questionnaire_csv", "setup_answer_plan"],
+        "artifacts": ["seo/setup/setup-gap-audit.md", "seo/setup/setup-questionnaire.csv", "seo/setup/setup-answer-plan.md"],
+        "question": "Create/update the missing-fields questionnaire and review-only answer plan?",
+        "default_answer": "yes",
+        "command": "python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py --write",
+        "notes": "Fill CSV with non-secret answers, then run setup-answer-plan.py --write.",
+    },
+    {
+        "id": "access_key_assistant",
+        "title": "Access key/token assistant",
+        "policy_keys": ["access_key_assistant", "access_key_assistant_json", "access_key_assistant_csv"],
+        "artifacts": ["seo/setup/access-key-assistant.md", "seo/setup/access-key-assistant.csv"],
+        "question": "Generate project-specific links and short instructions for only the needed keys/tokens?",
+        "default_answer": "yes",
+        "command": "python3 ~/.codex/skills/seo-cycle/scripts/access-key-assistant.py --write",
+        "notes": "Skips providers that are not applicable or blocked; never stores secret values.",
+    },
+    {
+        "id": "spend_usage_guard",
+        "title": "Spend guard and usage ledger",
+        "policy_keys": ["tool_budget", "spend_guard_report", "spend_checklist", "usage_ledger", "latest_usage_report"],
+        "artifacts": ["seo/setup/spend-guard.md", "seo/setup/latest-usage-ledger.md"],
+        "question": "Enable budget/subscription/token guardrails for this project?",
+        "default_answer": "yes",
+        "command": "python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write && python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py report --write",
+        "notes": "Required before paid API, LLM, browser, subscription, or ads work.",
+    },
+    {
+        "id": "tool_stack_growth_onboarding",
+        "title": "Tool stack, growth roadmap, onboarding",
+        "policy_keys": ["tool_stack_report", "growth_roadmap_report", "onboarding_playbook", "onboarding_checklist"],
+        "artifacts": ["seo/setup/tool-stack-report.md", "seo/setup/growth-roadmap.md", "seo/setup/onboarding-playbook.md"],
+        "question": "Refresh project-specific tools, roadmap, and onboarding playbook?",
+        "default_answer": "yes",
+        "command": "python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write && python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py --write && python3 ~/.codex/skills/seo-cycle/scripts/setup-onboarding.py --write",
+        "notes": "Keeps free/read-only tools first and gates paid/tracking/ads.",
+    },
+    {
+        "id": "automation_governance",
+        "title": "Automation recommendations and safe schedule plan",
+        "policy_keys": ["automation_policy", "automation_recommendations", "automation_policy_generated", "automation_plan"],
+        "artifacts": ["seo/automations/automation-recommendations.md", "seo/automations/automation-plan.md"],
+        "question": "Create report-only automation recommendations for this project?",
+        "default_answer": "yes_report_only",
+        "command": "python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write && python3 ~/.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled",
+        "notes": "Real cron/schedules remain disabled unless policy and explicit approval allow them.",
+    },
+]
+
+
+def skill_root() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parent.parent
+
+
+def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
+    for rel in CONFIG_SEARCH_PATHS:
+        path = start_dir / rel
+        if path.exists():
+            return path
+    return None
+
+
+def project_root_for(cfg_path: pathlib.Path) -> pathlib.Path:
+    if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
+        return cfg_path.parent
+    if "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
+        return cfg_path.parent.parent
+    return cfg_path.parent
+
+
+def load_yaml(path: pathlib.Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return data or {}
+
+
+def write_text(path: pathlib.Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Path:
+    path = pathlib.Path(str(raw)).expanduser()
+    return path if path.is_absolute() else project_root / path
+
+
+def current_version() -> str:
+    version_file = skill_root() / "VERSION"
+    return version_file.read_text(encoding="utf-8").strip() if version_file.exists() else "unknown"
+
+
+def template_policy_files() -> dict[str, str]:
+    template = load_yaml(skill_root() / "config" / "project.template.yaml")
+    return template.get("policy_files", {}) if isinstance(template.get("policy_files"), dict) else {}
+
+
+def existing_policy_files(cfg: dict[str, Any]) -> dict[str, str]:
+    return cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
+
+
+def feature_status(feature: dict[str, Any], cfg: dict[str, Any], project_root: pathlib.Path, template_policy: dict[str, str]) -> dict[str, Any]:
+    policy_files = existing_policy_files(cfg)
+    missing_policy_keys = [key for key in feature.get("policy_keys", []) if key not in policy_files and key in template_policy]
+    missing_artifacts = [path for path in feature.get("artifacts", []) if not rel_path(project_root, path).exists()]
+    configured = not missing_policy_keys and not missing_artifacts
+    status = "configured" if configured else "review_needed"
+    return {
+        "id": feature["id"],
+        "title": feature["title"],
+        "status": status,
+        "missing_policy_keys": missing_policy_keys,
+        "missing_artifacts": missing_artifacts,
+        "question": feature["question"],
+        "default_answer": feature["default_answer"],
+        "answer": "",
+        "command": feature["command"],
+        "notes": feature["notes"],
+    }
+
+
+def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
+    project_root = project_root_for(cfg_path)
+    cfg = load_yaml(cfg_path)
+    template_policy = template_policy_files()
+    rows = [feature_status(feature, cfg, project_root, template_policy) for feature in FEATURES]
+    missing_policy_defaults = {
+        key: value
+        for key, value in template_policy.items()
+        if key not in existing_policy_files(cfg)
+    }
+    review_rows = [row for row in rows if row["status"] != "configured"]
+    runtime = cfg.get("runtime", "auto")
+    report = {
+        "version": 1,
+        "generated": dt.datetime.now().isoformat(timespec="seconds"),
+        "core_version": current_version(),
+        "config": str(cfg_path),
+        "project_root": str(project_root),
+        "project": cfg.get("project", {}),
+        "runtime": runtime,
+        "summary": {
+            "features": len(rows),
+            "review_needed": len(review_rows),
+            "missing_policy_defaults": len(missing_policy_defaults),
+        },
+        "features": rows,
+        "missing_policy_defaults": missing_policy_defaults,
+        "rules": [
+            "This report is review-only and never edits seo-cycle.yaml automatically.",
+            "Fill upgrade-questionnaire.csv with yes/no/defer and apply safe changes manually or through the listed commands.",
+            "Do not paste secrets into the questionnaire; use access-key-assistant.md and .env for secret setup.",
+        ],
+        "next_actions": [
+            "Open seo/setup/upgrade-questionnaire.csv and answer only needed features.",
+            "Run access-key-assistant.py --write for provider-specific key/token steps.",
+            "Run setup-control-plane.py --write after applying reviewed upgrade choices.",
+        ],
+    }
+    return report
+
+
+def render_markdown(report: dict[str, Any]) -> str:
+    project = report.get("project", {})
+    lines = [
+        "# seo-cycle project upgrade assistant",
+        "",
+        f"- Generated: {report.get('generated')}",
+        f"- Core version: {report.get('core_version')}",
+        f"- Project: {project.get('name', '?')} ({project.get('domain', '?')})",
+        f"- Runtime: {report.get('runtime')}",
+        f"- Review-needed features: {report.get('summary', {}).get('review_needed')}",
+        "",
+        "## Feature Review",
+        "| Feature | Status | Default | Question | Command |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for row in report.get("features", []):
+        lines.append(
+            f"| `{row['id']}` | `{row['status']}` | `{row['default_answer']}` | {row['question']} | `{row['command']}` |"
+        )
+        if row.get("missing_policy_keys"):
+            lines.append(f"| | | | Missing policy keys: {', '.join(row['missing_policy_keys'])} | |")
+        if row.get("missing_artifacts"):
+            lines.append(f"| | | | Missing artifacts: {', '.join(row['missing_artifacts'])} | |")
+    lines.extend(["", "## Missing Policy Defaults"])
+    for key, path in report.get("missing_policy_defaults", {}).items():
+        lines.append(f"- `{key}`: `{path}`")
+    lines.extend(["", "## Rules"])
+    for rule in report.get("rules", []):
+        lines.append(f"- {rule}")
+    lines.extend(["", "## Next Actions"])
+    for action in report.get("next_actions", []):
+        lines.append(f"- {action}")
+    return "\n".join(lines) + "\n"
+
+
+def questionnaire_csv(report: dict[str, Any]) -> str:
+    buffer = io.StringIO()
+    fields = ["feature", "status", "default_answer", "answer", "question", "missing_policy_keys", "missing_artifacts", "command", "notes"]
+    writer = csv.DictWriter(buffer, fieldnames=fields)
+    writer.writeheader()
+    for row in report.get("features", []):
+        writer.writerow(
+            {
+                "feature": row.get("id", ""),
+                "status": row.get("status", ""),
+                "default_answer": row.get("default_answer", ""),
+                "answer": row.get("answer", ""),
+                "question": row.get("question", ""),
+                "missing_policy_keys": ", ".join(row.get("missing_policy_keys", [])),
+                "missing_artifacts": ", ".join(row.get("missing_artifacts", [])),
+                "command": row.get("command", ""),
+                "notes": row.get("notes", ""),
+            }
+        )
+    return buffer.getvalue()
+
+
+def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
+    setup_dir = project_root / "seo" / "setup"
+    markdown = render_markdown(report)
+    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+    write_text(setup_dir / "upgrade-assistant.md", markdown)
+    write_text(setup_dir / "upgrade-assistant.json", json_text)
+    write_text(setup_dir / "upgrade-questionnaire.csv", questionnaire_csv(report))
+    write_text(setup_dir / "latest-upgrade-assistant.md", markdown)
+    write_text(setup_dir / "latest-upgrade-assistant.json", json_text)
+    return setup_dir / "upgrade-assistant.md"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config", nargs="?", help="Path to seo-cycle.yaml")
+    parser.add_argument("--write", action="store_true", help="Write upgrade assistant artifacts under seo/setup.")
+    parser.add_argument("--format", choices=("md", "json"), default="md")
+    args = parser.parse_args()
+
+    if args.config:
+        cfg_path = pathlib.Path(args.config).expanduser().resolve()
+    else:
+        found = find_config(pathlib.Path.cwd())
+        if not found:
+            print(f"ERROR: seo-cycle.yaml не найден в {pathlib.Path.cwd()}", file=sys.stderr)
+            return 2
+        cfg_path = found.resolve()
+    if not cfg_path.exists():
+        print(f"ERROR: {cfg_path} не найден", file=sys.stderr)
+        return 2
+
+    project_root = project_root_for(cfg_path)
+    report = build_report(cfg_path)
+    if args.write:
+        write_outputs(project_root, report)
+
+    if args.format == "json":
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(render_markdown(report), end="")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

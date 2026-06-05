@@ -23,7 +23,7 @@ Ease). Метод — 7 шагов (адаптировано из практик
 4. **Сбор по измерениям:** keyword gap · backlink gap · technical (скорость/индексация) · content (типы, кластеры, E-E-A-T) · UX/коммерческие (цены, trust-сигналы, УТП) · локальное (карты).
 5. **Приоритизация по ICE.** Каждую находку оцени Impact/Confidence/Ease (1..10), сведи в CSV и прогони:
    ```bash
-   python3 ~/.claude/skills/seo-cycle/scripts/ice-score.py findings.csv --md
+   python3 ~/.codex/skills/seo-cycle/scripts/ice-score.py findings.csv --md
    ```
    CSV: `finding,impact,confidence,ease,source,note`. Выход — ранжированный список с зонами 🔥/✅/⏳.
 6. **Roadmap 1-6 мес.** Сначала 🔥 quick-wins (высокий ICE), затем ✅, потом ⏳. Связать с фазами цикла и `keyword-queue` / `triggers`.

@@ -34,21 +34,23 @@ python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py <project-roo
 python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py <project-root>/seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/setup-onboarding.py <project-root>/seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/access-key-assistant.py <project-root>/seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py <project-root>/seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/setup-answer-plan.py <project-root>/seo-cycle.yaml --write  # после заполнения setup-questionnaire.csv
 python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py <project-root>/seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py <project-root>/seo-cycle.yaml --write
 
-# 5. Добавь API-ключи в .env по списку из launch-plan/onboarding/tool-stack report
+# 5. Добавь API-ключи в .env только по списку из access-key assistant
 $EDITOR <project-root>/.env
 
 # 6. Готово — спрашивай Claude/Codex:
 # «давай запустим SEO-цикл для категории X»
 ```
 
-`install-codex.sh` ставит canonical checkout в `~/.codex/skills/seo-cycle`, создаёт `~/.codex/skills/codex-primary-runtime`, а `~/.claude/skills/seo-cycle` и `~/.agents/skills/seo-cycle` делает symlink на Codex-ядро. `bootstrap-codex.sh` дополнительно запускает `init-project.sh` в текущем проекте, создаёт `.env` из `.env.example`, добавляет `.env` в `.gitignore` и пишет `SEO_RUNTIME=codex`. `bootstrap-claude.sh` делает то же, но пишет `SEO_RUNTIME=claude` и создаёт `CLAUDE.md`, если его ещё нет. Wizard спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
+`install-codex.sh` ставит canonical checkout в `~/.codex/skills/seo-cycle`, создаёт `~/.codex/skills/codex-primary-runtime`, а `~/.claude/skills/seo-cycle` и `~/.agents/skills/seo-cycle` делает symlink на Codex-ядро. `bootstrap-codex.sh` дополнительно запускает `init-project.sh` в текущем проекте, создаёт `.env` из `.env.example`, добавляет `.env` в `.gitignore` и пишет `SEO_RUNTIME=codex`, `SEO_SEARCH_RUNTIME=direct`. `bootstrap-claude.sh` делает то же, но пишет `SEO_RUNTIME=claude`, `SEO_SEARCH_RUNTIME=codex_external` и создаёт `CLAUDE.md`, если его ещё нет. Wizard спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
 
-После wizard сначала открой `seo/setup/context-pack.md`: это самый короткий task-scoped вход для Claude/Codex. Затем открой `seo/setup/setup-blueprint.md`: там компактная матрица стран/регионов/поисковиков/типа бизнеса/marketing/ads/tools/budget/automations и first-read файлы. Затем открой `seo/setup/setup-questionnaire.csv` или `seo/setup/setup-gap-audit.md`: там readiness score и вопросы по незаполненным бизнес/рынок/local/ecommerce/budget/tool деталям, без хранения секретов. После заполнения CSV запусти `setup-answer-plan.py --write` и открой `seo/setup/setup-answer-plan.md`: это review-only план ручных правок, без автоприменения и без сохранения secret-like ответов. Если нужно больше контекста, открой `seo/setup/launch-plan.md`: компактный первый экран проекта с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates, automations и execution order.
+После wizard сначала открой `seo/setup/context-pack.md`: это самый короткий task-scoped вход для Claude/Codex. Затем открой `seo/setup/setup-blueprint.md`: там компактная матрица стран/регионов/поисковиков/типа бизнеса/marketing/ads/tools/budget/automations и first-read файлы. Для существующих проектов открой `seo/setup/upgrade-assistant.md` и `seo/setup/upgrade-questionnaire.csv`: там yes/no/defer вопросы по новым функциям без автоперезаписи `seo-cycle.yaml`. Затем открой `seo/setup/access-key-assistant.md`: там только нужные этому проекту ключи/токены, ссылки и env names, без secret values. Затем открой `seo/setup/setup-questionnaire.csv` или `seo/setup/setup-gap-audit.md`: там readiness score и вопросы по незаполненным бизнес/рынок/local/ecommerce/budget/tool деталям, без хранения секретов. После заполнения CSV запусти `setup-answer-plan.py --write` и открой `seo/setup/setup-answer-plan.md`: это review-only план ручных правок, без автоприменения и без сохранения secret-like ответов. Если нужно больше контекста, открой `seo/setup/launch-plan.md`: компактный первый экран проекта с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates, automations и execution order.
 Затем открой `seo/setup/tool-stack-report.md`: там видно, какие Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструменты можно использовать сразу, какие требуют approval, а какие отключены из-за региона, бюджета или RF tracking policy.
 Перед платными/API/LLM/subscription действиями открой `seo/setup/spend-guard.md`: там allowed/approval/blocked по сервисам, остатки лимитов и точные `usage-ledger.py check` preflight-команды.
 Затем открой `seo/setup/growth-roadmap.md`: там top-N приоритетов по техническому SEO, search evidence, ecommerce/local, контенту/сущностям, AI visibility, CRO/маркетингу и automations.
@@ -232,6 +234,8 @@ python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py <project-root>/seo-
 - growth-roadmap артефакты для приоритизации действий перед широким циклом
 - onboarding playbook с владельцами шагов, env names, approval gates, командами и proof-файлами
 - setup-blueprint и setup-matrix с точечной матрицей стран, регионов, поисковиков, бизнеса, marketing/ads/tracking policy, инструментов, budget/subscriptions, automations и guardrails
+- upgrade-assistant и upgrade-questionnaire для review-only включения новых функций в существующих проектах
+- access-key-assistant для project-specific списка нужных ключей/токенов без secret values
 - context-pack handoff с read order, task route, caps, spend blockers, approval gates и do-not-load-raw
 - setup-gap-audit, setup-questionnaire и setup-answer-plan с readiness score, missing fields, target files, follow-up commands, вопросами по деталям проекта и review-only планом ручного внесения заполненных ответов
 - launch-plan contract с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates и execution order
@@ -306,6 +310,10 @@ seo/automations/automation-recommendations.md
 seo/setup-blueprint.generated.yaml
 seo/setup/setup-blueprint.md
 seo/setup/setup-matrix.csv
+seo/setup/upgrade-assistant.md
+seo/setup/upgrade-questionnaire.csv
+seo/setup/access-key-assistant.md
+seo/setup/access-key-assistant.csv
 seo/setup/context-pack.md
 seo/setup/setup-gap-audit.md
 seo/setup/setup-questionnaire.csv
@@ -324,6 +332,8 @@ CLAUDE.md -> ~/.codex/skills/seo-cycle/SKILL.md   # только bootstrap-claud
 python3 ~/.codex/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write
 python3 ~/.codex/skills/seo-cycle/scripts/setup-control-plane.py --write
 python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py --write
+python3 ~/.codex/skills/seo-cycle/scripts/access-key-assistant.py --write
 python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py --write
 python3 ~/.codex/skills/seo-cycle/scripts/setup-answer-plan.py --write  # после заполнения setup-questionnaire.csv
 python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py --write
@@ -337,11 +347,15 @@ python3 ~/.codex/skills/seo-cycle/scripts/project-profile.py --write
 python3 ~/.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
 ```
 
-`setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config, automation plan, spend guard, launch plan, setup blueprint, context pack, setup gap audit/questionnaire, answer-plan path readiness и стартовый task route; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `setup-blueprint.md/json`, `setup-matrix.csv`, `context-pack.md/json`, `setup-gap-audit.md/json`, `setup-questionnaire.md/csv/json`, `spend-guard.md/json`, `launch-plan.md/json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`, `latest-task-route.md/json`. `--apply-profile` остаётся отдельным явным действием.
+`setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config, automation plan, spend guard, launch plan, setup blueprint, upgrade assistant, access-key assistant, context pack, setup gap audit/questionnaire, answer-plan path readiness и стартовый task route; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `setup-blueprint.md/json`, `setup-matrix.csv`, `upgrade-assistant.md/json`, `upgrade-questionnaire.csv`, `access-key-assistant.md/json/csv`, `context-pack.md/json`, `setup-gap-audit.md/json`, `setup-questionnaire.md/csv/json`, `spend-guard.md/json`, `launch-plan.md/json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`, `latest-task-route.md/json`. `--apply-profile` остаётся отдельным явным действием.
 
 `context-pack.py` — самый короткий task-scoped handoff для Claude/Codex. Пишет `seo/setup/context-pack.md/json` и `seo/setup/latest-context-pack.md/json`: что читать первым, какие raw-артефакты не грузить, какие approval gates/spend blockers действуют, какие команды запускать дальше.
 
 `setup-blueprint.py` — компактная project setup matrix. Пишет `seo/setup-blueprint.generated.yaml`, `seo/setup/setup-blueprint.md/json`, latest copies и `seo/setup/setup-matrix.csv`: страны, регионы, поисковики, тип бизнеса, local/ecommerce, marketing/ads/tracking policy, tools, budget/subscriptions, automations, guardrails и first-read файлы. Секреты не хранит и конфиг не меняет.
+
+`project-upgrade-assistant.py` — review-only помощник для существующих проектов. Сравнивает проект с текущим template/control-plane surface, пишет `seo/setup/upgrade-assistant.md/json`, latest copies и `seo/setup/upgrade-questionnaire.csv` с yes/no/defer вопросами. `seo-cycle.yaml` не меняет.
+
+`access-key-assistant.py` — project-specific помощник по ключам/токенам. Читает tool-stack decision report и `.env`, пишет `seo/setup/access-key-assistant.md/json/csv` только с нужными провайдерами, env names, ссылками и шагами. Secret values не печатает и не сохраняет.
 
 `setup-gap-audit.py` — детальный first-run readiness audit. Пишет `seo/setup/setup-gap-audit.md/json`, `seo/setup/setup-questionnaire.md/csv/json` и latest copies: score, missing fields, owner questions, target files, follow-up commands и project-type-aware проверки local/ecommerce/budget/tools без вывода секретов.
 

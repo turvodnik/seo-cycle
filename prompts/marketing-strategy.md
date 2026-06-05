@@ -10,7 +10,7 @@
 
 2. **Текущая картина по каналам.** Собери воронку (трафик→лиды→заказы→выручка) по каналам в CSV и прогони:
    ```bash
-   python3 ~/.claude/skills/seo-cycle/scripts/roi-calc.py funnel.csv --margin <доля_маржи>
+   python3 ~/.codex/skills/seo-cycle/scripts/roi-calc.py funnel.csv --margin <доля_маржи>
    ```
    Получишь ROI/ДРР/CAC по каналам и вердикт об окупаемости.
 
