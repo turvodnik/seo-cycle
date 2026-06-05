@@ -131,6 +131,11 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "onboarding_playbook": "seo/setup/onboarding-playbook.md",
         "onboarding_checklist": "seo/setup/onboarding-checklist.csv",
         "latest_onboarding_playbook": "seo/setup/latest-onboarding-playbook.md",
+        "setup_blueprint_generated": "seo/setup-blueprint.generated.yaml",
+        "setup_blueprint": "seo/setup/setup-blueprint.md",
+        "setup_blueprint_json": "seo/setup/setup-blueprint.json",
+        "setup_matrix_csv": "seo/setup/setup-matrix.csv",
+        "latest_setup_blueprint": "seo/setup/latest-setup-blueprint.md",
         "launch_plan_generated": "seo/launch-plan.generated.yaml",
         "launch_plan_report": "seo/setup/launch-plan.md",
         "launch_checklist": "seo/setup/launch-checklist.csv",
@@ -184,6 +189,7 @@ def next_actions(
     growth_roadmap: dict[str, Any],
     onboarding: dict[str, Any],
     launch_plan: dict[str, Any],
+    setup_blueprint: dict[str, Any],
     context_pack: dict[str, Any],
     setup_gap_audit: dict[str, Any],
     spend_guard: dict[str, Any],
@@ -237,6 +243,9 @@ def next_actions(
     if launch_plan.get("approval_gates"):
         actions.append(f"Open `seo/setup/launch-plan.md` as the first project screen; launch gates={len(launch_plan['approval_gates'])}.")
 
+    if setup_blueprint.get("rendered_chars"):
+        actions.insert(0, f"Review `seo/setup/setup-blueprint.md` ({setup_blueprint['rendered_chars']} chars) for the project setup matrix before detailed reports.")
+
     if context_pack.get("rendered_chars"):
         actions.insert(0, f"Start each session from `seo/setup/context-pack.md` ({context_pack['rendered_chars']} chars) before opening larger setup reports.")
 
@@ -281,6 +290,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     growth_roadmap = report.get("growth_roadmap", {})
     onboarding = report.get("onboarding", {})
     launch_plan = report.get("launch_plan", {})
+    setup_blueprint = report.get("setup_blueprint", {})
     context_pack = report.get("context_pack", {})
     setup_gap_audit = report.get("setup_gap_audit", {})
     spend_guard = report.get("spend_guard", {})
@@ -312,6 +322,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Onboarding human-secret steps: {onboarding.get('owner_summary', {}).get('human_secret', 0)}",
         f"- Launch plan execution steps: {len(launch_plan.get('execution_order', []))}",
         f"- Launch plan env names: {len((launch_plan.get('human_inputs') or {}).get('env_names', []))}",
+        f"- Setup blueprint chars/matrix rows: {setup_blueprint.get('rendered_chars')}/{len(setup_blueprint.get('decision_matrix', []))}",
         f"- Context pack chars: {context_pack.get('rendered_chars')}",
         f"- Setup gap score: {setup_gap_audit.get('score')}",
         f"- Setup gaps missing: {(setup_gap_audit.get('summary') or {}).get('missing')}",
@@ -514,6 +525,13 @@ def main() -> int:
         setup_gap_command.extend(["--format", "json"])
     steps.append(run_step("setup gap audit", setup_gap_command, project_root))
 
+    setup_blueprint_command = [sys.executable, str(root / "scripts/setup-blueprint.py"), str(cfg_path)]
+    if args.write:
+        setup_blueprint_command.append("--write")
+    else:
+        setup_blueprint_command.extend(["--format", "json"])
+    steps.append(run_step("setup blueprint", setup_blueprint_command, project_root))
+
     validation_step = run_step("validate config", [sys.executable, str(root / "scripts/validate-config.py"), str(cfg_path)], project_root)
     steps.append(validation_step)
 
@@ -581,6 +599,11 @@ def main() -> int:
     setup_gap_file = project_root / "seo" / "setup" / "setup-gap-audit.json"
     if not setup_gap_audit and setup_gap_file.exists():
         setup_gap_audit = json.loads(setup_gap_file.read_text(encoding="utf-8"))
+    setup_blueprint_step = next((step for step in steps if step["name"] == "setup blueprint"), {})
+    setup_blueprint = load_json_output(setup_blueprint_step)
+    setup_blueprint_file = project_root / "seo" / "setup" / "setup-blueprint.json"
+    if not setup_blueprint and setup_blueprint_file.exists():
+        setup_blueprint = json.loads(setup_blueprint_file.read_text(encoding="utf-8"))
     validation = parse_validation(validation_step)
     artifacts = artifact_status(project_root, cfg)
     paid_missing = enabled_paid_missing_env(governance)
@@ -604,6 +627,7 @@ def main() -> int:
         "growth_roadmap": growth_roadmap,
         "onboarding": onboarding,
         "launch_plan": launch_plan,
+        "setup_blueprint": setup_blueprint,
         "context_pack": context_pack,
         "setup_gap_audit": setup_gap_audit,
         "paid_missing_env": paid_missing,
@@ -617,7 +641,7 @@ def main() -> int:
             for step in steps
         ],
     }
-    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, onboarding, launch_plan, context_pack, setup_gap_audit, spend_guard, automation, artifacts, args.apply_profile)
+    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, onboarding, launch_plan, setup_blueprint, context_pack, setup_gap_audit, spend_guard, automation, artifacts, args.apply_profile)
 
     if args.write:
         out_dir = write_report(project_root, report)

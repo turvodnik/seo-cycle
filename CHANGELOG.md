@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.35.0] — 2026-06-05
+
+### Setup blueprint matrix
+
+- Added `scripts/setup-blueprint.py` as a compact per-project setup matrix for countries, regions, search engines, business type, local/ecommerce flags, marketing/ads/tracking policy, tools, budgets, subscriptions, automations, guardrails, and first-read files.
+- The blueprint writes `seo/setup-blueprint.generated.yaml`, `seo/setup/setup-blueprint.md/json`, `seo/setup/latest-setup-blueprint.md/json`, and `seo/setup/setup-matrix.csv`; it is secret-free and does not mutate project config.
+- `setup-control-plane.py` now generates and summarizes the blueprint, `context-pack.py` and `task-router.py` include it in low-token read order, and onboarding proofs include `setup_blueprint` plus `setup_matrix_csv`.
+- Project templates, validation, governance report, init wizard, README, GUIDE, SKILL.md, INSTALL, and Codex runtime docs now include the blueprint as the first detailed setup matrix after context pack.
+- Added smoke tests proving RU ecommerce gets RF/paid guardrails and a compact decision matrix, while US local projects get Bing/local setup without RF-only guards.
+
 ## [1.34.0] — 2026-06-05
 
 ### Setup answer plan

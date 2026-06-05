@@ -35,6 +35,9 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - `seo/onboarding.generated.yaml`
 - `seo/setup/onboarding-playbook.md`
 - `seo/setup/onboarding-checklist.csv`
+- `seo/setup-blueprint.generated.yaml`
+- `seo/setup/setup-blueprint.md`
+- `seo/setup/setup-matrix.csv`
 - `seo/launch-plan.generated.yaml`
 - `seo/setup/launch-plan.md`
 - `seo/setup/launch-checklist.csv`
@@ -64,14 +67,14 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - использовать NeuronWriter как primary SERP/NLP content editor только в пределах limits-файла;
 - использовать Google Cloud Natural Language только как guarded technical entity audit с cache/unit caps;
 - перед дорогим сбором, браузером, публикацией или schedule запускать `python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md`;
-- перед началом большого цикла обновлять compact readiness и gap audit: `python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write`;
+- перед началом большого цикла обновлять compact readiness, setup blueprint и gap audit: `python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write`;
 - перед конкретной задачей строить bounded route: `python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "<цель пользователя>" --write` и запускать только фазы/источники из `seo/setup/latest-task-route.md`;
 - после route строить context pack: `python3 ~/.claude/skills/seo-cycle/scripts/context-pack.py --task "<цель пользователя>" --write` и читать `seo/setup/context-pack.md` первым; подробные отчёты открывать только по read order;
 - перед расходом токенов/API/credits/ads строить spend guard `python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write`; если сервис не allowed, нужен approval/policy. Затем делать preflight `usage-ledger.py check --service <tool> ... --fail-on-block`, после расхода фиксировать `usage-ledger.py record --service <tool> ... --write`;
 - перед подключением Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструментов строить stack: `python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write`; `--apply` только после review, без секретов;
 - перед широким циклом строить top-N roadmap: `python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write` и начинать с `seo/setup/growth-roadmap.md`;
 - перед первым запуском строить onboarding: `python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write`; human-secret значения вводятся только в `.env`/кабинетах;
-- перед чтением подробных setup-отчётов строить context pack, gap audit/questionnaire и launch contract: `context-pack.py --write`, `setup-gap-audit.py --write`, после заполнения questionnaire — `setup-answer-plan.py --write`, затем `launch-plan.py --write`; начинать с `seo/setup/context-pack.md`, потом `seo/setup/setup-questionnaire.csv` / `seo/setup/setup-gap-audit.md`, после заполнения CSV — `seo/setup/setup-answer-plan.md`, затем `seo/setup/launch-plan.md`;
+- перед чтением подробных setup-отчётов строить context pack, setup blueprint, gap audit/questionnaire и launch contract: `context-pack.py --write`, `setup-blueprint.py --write`, `setup-gap-audit.py --write`, после заполнения questionnaire — `setup-answer-plan.py --write`, затем `launch-plan.py --write`; начинать с `seo/setup/context-pack.md`, потом `seo/setup/setup-blueprint.md`, потом `seo/setup/setup-questionnaire.csv` / `seo/setup/setup-gap-audit.md`, после заполнения CSV — `seo/setup/setup-answer-plan.md`, затем `seo/setup/launch-plan.md`;
 - рекомендации schedule строить через `python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write`; он использует tool-stack/spend-guard и покрывает spend, indexability, search consoles, Bing, schema/CWV, content decay, ecommerce/local и AI visibility; применять через `--apply` только после review, `--allow-schedules` только по явному разрешению;
 - детальную настройку стран/поисковиков/регионов/ads/local/merchant/tools/governance делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`;
 - точечную настройку проекта делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review generated overlay/report;

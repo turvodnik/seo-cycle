@@ -51,6 +51,7 @@
 | **Стек инструментов под проект** | `tool-stack-recommender.py --write`: Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking решения по стране, бизнесу, бюджету и RF policy. |
 | **Growth roadmap** | `growth-roadmap.py --write`: top-N roadmap по технике, search evidence, ecommerce/local, entities/content, AI visibility, CRO/маркетингу и automation gates. |
 | **Onboarding playbook** | `setup-onboarding.py --write`: подробный first-run checklist с owner, human-secret env names, approval gates, командами и proof-файлами. |
+| **Setup blueprint** | `setup-blueprint.py --write`: компактная матрица стран, регионов, поисковиков, типа бизнеса, marketing/ads/tracking policy, tools, budgets, subscriptions, automations и guardrails. |
 | **Launch plan** | `launch-plan.py --write`: первый экран проекта с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates и execution order. |
 | **Context pack** | `context-pack.py --task "..." --write`: первый короткий файл для Claude/Codex с read order, task route, caps, spend blockers, approval gates и do-not-load-raw. |
 | **Автоматизации под проект** | `automation-recommender.py --write`: рекомендует tool-aware planned automations по типу бизнеса, рынку, tool-stack/spend-guard, indexability, search consoles, Bing, schema/CWV, content decay, ecommerce/local и AI visibility. |
@@ -96,6 +97,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write
+python3 ~/.claude/skills/seo-cycle/scripts/setup-blueprint.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
@@ -228,6 +230,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 - `seo/tool-stack.generated.yaml` и `seo/setup/tool-stack-report.md` — выбранный/рекомендованный набор инструментов с решениями enabled/report-only/approval-required/disabled/not-applicable.
 - `seo/growth-roadmap.generated.yaml` и `seo/setup/growth-roadmap.md` — top-N приоритетов по technical/search evidence/ecommerce/local/content/entities/AI visibility/CRO/automation.
 - `seo/onboarding.generated.yaml`, `seo/setup/onboarding-playbook.md` и `seo/setup/onboarding-checklist.csv` — first-run checklist с владельцами шагов, human-secret env names, approval gates, командами и proof-файлами.
+- `seo/setup-blueprint.generated.yaml`, `seo/setup/setup-blueprint.md` и `seo/setup/setup-matrix.csv` — low-token setup matrix по странам, регионам, поисковикам, типу бизнеса, marketing/ads/tracking policy, tools, budget/subscriptions, automations, guardrails и first-read файлам.
 - `seo/launch-plan.generated.yaml`, `seo/setup/launch-plan.md` и `seo/setup/launch-checklist.csv` — first-screen launch contract по market/business/tools/token/budget/subscriptions/approval/execution order.
 - `seo/setup/context-pack.md` и `seo/setup/latest-context-pack.md` — first-read context pack под текущую задачу: read order, task route, caps, spend blockers, approval gates, do-not-load-raw и next commands.
 - `seo/setup/setup-gap-audit.md`, `seo/setup/setup-questionnaire.md` и `seo/setup/setup-questionnaire.csv` — readiness score, missing fields и заполняемый worksheet по рынку, бизнесу, local/ecommerce, инструментам, budget/subscriptions, spend guard и automations.
@@ -238,7 +241,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 - `seo/usage/usage-ledger.jsonl` — append-only журнал фактического расхода токенов, USD, credits, units, requests и browser minutes.
 - `seo/setup/latest-usage-ledger.md` — текущий месячный usage report и cap/approval/block status.
 - `seo/spend-guard.generated.yaml`, `seo/setup/spend-guard.md` и `seo/setup/spend-checklist.csv` — spend/subscription guard: allowed/approval/blocked, остатки лимитов, preflight-команды.
-- `seo/setup/setup-control-plane.md` — compact readiness report: intake/profile/sources/governance/validation/tool stack/spend guard/growth roadmap/onboarding/launch-plan/context-pack/setup-gap-audit/automation + next actions.
+- `seo/setup/setup-control-plane.md` — compact readiness report: intake/profile/sources/governance/validation/tool stack/spend guard/growth roadmap/onboarding/launch-plan/setup-blueprint/context-pack/setup-gap-audit/automation + next actions.
 - `seo/setup/latest-task-route.md` — low-token route for the latest task: phases, sources, approval gates, blocked actions, automation and context caps.
 - `seo/project-intake.yaml` — детальная карта стран, регионов, поисковиков, рекламы, local/merchant/video/analytics decisions.
 - `seo/project-intake-report.md` — человекочитаемый отчёт по intake для review перед profile/apply.
@@ -257,7 +260,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 - Перед подключением новых Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструментов запускай `tool-stack-recommender.py --write`; `--apply` только после review.
 - Перед широким циклом или маркетинг-задачей запускай `growth-roadmap.py --write` и начинай с `seo/setup/growth-roadmap.md`.
 - Перед first-run открывай `setup-onboarding.py --write` / `seo/setup/onboarding-playbook.md`; secret values не записывай в playbook.
-- Перед чтением подробных setup-отчётов открывай `context-pack.py --write` / `seo/setup/context-pack.md`, затем `setup-gap-audit.py --write` / `seo/setup/setup-questionnaire.csv` и `seo/setup/setup-gap-audit.md`, после заполнения CSV — `setup-answer-plan.py --write` / `seo/setup/setup-answer-plan.md`, затем `launch-plan.py --write` / `seo/setup/launch-plan.md`; это low-token вход, заполняемый worksheet, review-only план ручных правок и первый экран проекта.
+- Перед чтением подробных setup-отчётов открывай `context-pack.py --write` / `seo/setup/context-pack.md`, затем `setup-blueprint.py --write` / `seo/setup/setup-blueprint.md`, затем `setup-gap-audit.py --write` / `seo/setup/setup-questionnaire.csv` и `seo/setup/setup-gap-audit.md`, после заполнения CSV — `setup-answer-plan.py --write` / `seo/setup/setup-answer-plan.md`, затем `launch-plan.py --write` / `seo/setup/launch-plan.md`; это low-token вход, проектная матрица, заполняемый worksheet, review-only план ручных правок и первый экран проекта.
 - Перед `automation-plan.py` запускай `automation-recommender.py --write`; `--apply` только после review generated policy, `--allow-schedules` только при явном разрешении. Расширенные задачи должны оставаться report-only/dry-run или env-gated до approval.
 - Low-token режим обязателен: raw CSV/JSON/HTML на диск, в контекст только distillates/top-N; не читай весь репозиторий или сырьё без необходимости.
 - Robots/Content-Signal: `search=yes, ai-input=yes, ai-train=no` допустимо как запрет обучения моделей. Публичный `robots.txt` должен быть чистым `text/plain`, без PHP warnings/HTML и editor/preview мусора.
@@ -275,9 +278,10 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 |---|---|---|---|
 | `validate-config.py` | Проверяет `seo-cycle.yaml`, env, делегатов, policy-файлы и governance | `python3 validate-config.py` | Список активных источников, недостающие ключи/policy, ✓/ошибки |
 | `resolve-sources.py` | Разворачивает `region_profile` + override в список активных источников | `python3 resolve-sources.py` | Активные/пропущенные источники с причиной + `seo/cycles/<date>/active-sources.json` |
-| `setup-control-plane.py` | Единый low-token setup/readiness отчёт по intake/profile/sources/governance/validation/tool stack/spend guard/growth roadmap/onboarding/launch-plan/context-pack/setup-gap-audit/automation/task route/usage ledger | `python3 setup-control-plane.py --write` | `seo/setup/setup-control-plane.md/json`, latest validation/governance/sources/tool stack/spend/growth roadmap/onboarding/launch-plan/context-pack/setup-gap-audit/task route/usage |
+| `setup-control-plane.py` | Единый low-token setup/readiness отчёт по intake/profile/sources/governance/validation/tool stack/spend guard/growth roadmap/onboarding/launch-plan/setup-blueprint/context-pack/setup-gap-audit/automation/task route/usage ledger | `python3 setup-control-plane.py --write` | `seo/setup/setup-control-plane.md/json`, latest validation/governance/sources/tool stack/spend/growth roadmap/onboarding/launch-plan/setup-blueprint/context-pack/setup-gap-audit/task route/usage |
 | `task-router.py` | Строит low-token маршрут под конкретную SEO/маркетинг-задачу | `python3 task-router.py --task "аудит индексации" --write` | `seo/setup/latest-task-route.md/json` + archived route |
 | `context-pack.py` | Строит первый короткий task-scoped handoff для Claude/Codex | `python3 context-pack.py --task "аудит индексации" --write` | `seo/setup/context-pack.md/json`, `seo/setup/latest-context-pack.md/json` |
+| `setup-blueprint.py` | Строит компактную per-project матрицу настройки: страны, регионы, поисковики, бизнес, marketing/ads/tracking, tools, budget, subscriptions, automations, guardrails | `python3 setup-blueprint.py --write` | `seo/setup-blueprint.generated.yaml`, `seo/setup/setup-blueprint.md/json`, `seo/setup/setup-matrix.csv`, latest copies |
 | `setup-gap-audit.py` | Проверяет детальную готовность проекта и создаёт заполняемый worksheet владельца по бизнесу, local/ecommerce, tools, budget/subscriptions и automations | `python3 setup-gap-audit.py --write` | `seo/setup/setup-gap-audit.md/json`, `seo/setup/setup-questionnaire.md/csv/json`, latest copies |
 | `setup-answer-plan.py` | Читает заполненный setup questionnaire и строит review-only план ручных правок без сохранения secret-like ответов | `python3 setup-answer-plan.py --write` | `seo/setup/setup-answer-plan.md/json/csv`, latest copies |
 | `usage-ledger.py` | Ведёт фактический расход токенов, USD, credits, units, requests, browser minutes и проверяет caps | `python3 usage-ledger.py report --write` / `check --service openai --usd 0.25 --fail-on-block` / `record --service openai --usd 0.25` | `seo/usage/usage-ledger.jsonl`, `seo/setup/latest-usage-ledger.md/json` |
@@ -529,6 +533,7 @@ are scripts, the "project truth" lives in one config.
 | **Per-project tool stack** | `tool-stack-recommender.py --write` decides Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking tools by country, business type, budget, and RF policy. |
 | **Growth roadmap** | `growth-roadmap.py --write` builds a top-N roadmap across technical, search evidence, ecommerce/local, entities/content, AI visibility, CRO/marketing, and automation gates. |
 | **Onboarding playbook** | `setup-onboarding.py --write` creates a detailed first-run checklist with owners, human-secret env names, approval gates, commands, and proof artifacts. |
+| **Setup blueprint** | `setup-blueprint.py --write` creates a compact matrix for countries, regions, search engines, business type, marketing/ads/tracking policy, tools, budgets, subscriptions, automations, and guardrails. |
 | **Launch plan** | `launch-plan.py --write` creates the first project screen with market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates, and execution order. |
 | **Context pack** | `context-pack.py --task "..." --write` creates the first short Claude/Codex handoff with read order, task route, caps, spend blockers, approval gates, and do-not-load-raw. |
 | **Per-project automations** | `automation-recommender.py --write` recommends tool-aware planned automations by business type, market, tool stack/spend guard, indexability, search consoles, Bing, schema/CWV, content decay, ecommerce/local, and AI visibility. |
@@ -561,6 +566,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write
+python3 ~/.claude/skills/seo-cycle/scripts/setup-blueprint.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/context-pack.py --task "collect semantics for topic X" --write
 
@@ -695,6 +701,7 @@ Before starting phases, making API calls, spending credits, or changing tracking
 - `seo/tool-stack.generated.yaml` and `seo/setup/tool-stack-report.md` — generated tool decisions: enabled/report-only/approval-required/disabled/not-applicable.
 - `seo/growth-roadmap.generated.yaml` and `seo/setup/growth-roadmap.md` — top-N priorities across technical/search evidence/ecommerce/local/content/entities/AI visibility/CRO/automation.
 - `seo/onboarding.generated.yaml`, `seo/setup/onboarding-playbook.md`, and `seo/setup/onboarding-checklist.csv` — first-run checklist with owners, human-secret env names, approval gates, commands, and proof files.
+- `seo/setup-blueprint.generated.yaml`, `seo/setup/setup-blueprint.md`, and `seo/setup/setup-matrix.csv` — low-token setup matrix for countries, regions, search engines, business type, marketing/ads/tracking policy, tools, budget/subscriptions, automations, guardrails, and first-read files.
 - `seo/launch-plan.generated.yaml`, `seo/setup/launch-plan.md`, and `seo/setup/launch-checklist.csv` — first-screen launch contract for market/business/tools/token/budget/subscriptions/approval/execution order.
 - `seo/setup/context-pack.md` and `seo/setup/latest-context-pack.md` — first-read context pack for the current task: read order, task route, caps, spend blockers, approval gates, do-not-load-raw, and next commands.
 - `seo/setup/setup-gap-audit.md`, `seo/setup/setup-questionnaire.md`, and `seo/setup/setup-questionnaire.csv` — readiness score, missing fields, and a fillable worksheet for market, business, local/ecommerce, tools, budget/subscriptions, spend guard, and automations.
@@ -705,7 +712,7 @@ Before starting phases, making API calls, spending credits, or changing tracking
 - `seo/usage/usage-ledger.jsonl` — append-only actual usage ledger for tokens, USD, credits, units, requests, and browser minutes.
 - `seo/setup/latest-usage-ledger.md` — current monthly usage report plus cap/approval/block status.
 - `seo/spend-guard.generated.yaml`, `seo/setup/spend-guard.md`, and `seo/setup/spend-checklist.csv` — spend/subscription guard with allowed/approval/blocked status, remaining limits, and preflight commands.
-- `seo/setup/setup-control-plane.md` — compact readiness report: intake/profile/sources/governance/validation/tool stack/spend guard/growth roadmap/onboarding/launch-plan/context-pack/setup-gap-audit/automation + next actions.
+- `seo/setup/setup-control-plane.md` — compact readiness report: intake/profile/sources/governance/validation/tool stack/spend guard/growth roadmap/onboarding/launch-plan/setup-blueprint/context-pack/setup-gap-audit/automation + next actions.
 - `seo/setup/latest-task-route.md` — low-token route for the latest task: phases, sources, approval gates, blocked actions, automation, and context caps.
 - `seo/project-intake.yaml` — detailed map of countries, regions, search engines, ads, local/merchant/video/analytics decisions.
 - `seo/project-intake-report.md` — human-readable intake report for review before profile/apply.
@@ -724,7 +731,7 @@ Rules:
 - Before connecting new Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking tools, run `tool-stack-recommender.py --write`; use `--apply` only after review.
 - Before broad cycles or marketing tasks, run `growth-roadmap.py --write` and start from `seo/setup/growth-roadmap.md`.
 - Before first run, use `setup-onboarding.py --write` / `seo/setup/onboarding-playbook.md`; never store secret values in the playbook.
-- Before reading detailed setup reports, run `context-pack.py --write` / open `seo/setup/context-pack.md`, then `setup-gap-audit.py --write` / open `seo/setup/setup-questionnaire.csv` and `seo/setup/setup-gap-audit.md`, after filling the CSV run `setup-answer-plan.py --write` / open `seo/setup/setup-answer-plan.md`, then `launch-plan.py --write` / open `seo/setup/launch-plan.md`; these are the low-token entry point, fillable worksheet, review-only manual change plan, and first project screen.
+- Before reading detailed setup reports, run `context-pack.py --write` / open `seo/setup/context-pack.md`, then `setup-blueprint.py --write` / open `seo/setup/setup-blueprint.md`, then `setup-gap-audit.py --write` / open `seo/setup/setup-questionnaire.csv` and `seo/setup/setup-gap-audit.md`, after filling the CSV run `setup-answer-plan.py --write` / open `seo/setup/setup-answer-plan.md`, then `launch-plan.py --write` / open `seo/setup/launch-plan.md`; these are the low-token entry point, project setup matrix, fillable worksheet, review-only manual change plan, and first project screen.
 - Before `automation-plan.py`, run `automation-recommender.py --write`; use `--apply` only after review and `--allow-schedules` only with explicit permission. Expanded tasks must stay report-only/dry-run or env-gated until approval.
 - Low-token mode is mandatory: raw CSV/JSON/HTML to disk, only distillates/top-N in context; do not read the whole repository or raw source files without need.
 - Robots/Content-Signal: `search=yes, ai-input=yes, ai-train=no` is acceptable as a model-training opt-out. Public `robots.txt` must be clean `text/plain`, with no PHP warnings/HTML or editor/preview noise.
@@ -742,9 +749,10 @@ Rules:
 |---|---|---|---|
 | `validate-config.py` | Validates config, env, delegates, policy files, governance | `python3 validate-config.py` | Active sources, missing keys/policies, ✓/errors |
 | `resolve-sources.py` | Expands `region_profile` + overrides into active sources | `python3 resolve-sources.py` | Active/skipped sources with reason + `active-sources.json` |
-| `setup-control-plane.py` | Single low-token setup/readiness report for intake/profile/sources/governance/validation/tool stack/spend guard/growth roadmap/onboarding/launch-plan/context-pack/setup-gap-audit/automation/task route/usage ledger | `python3 setup-control-plane.py --write` | `seo/setup/setup-control-plane.md/json`, latest validation/governance/sources/tool stack/spend/growth roadmap/onboarding/launch-plan/context-pack/setup-gap-audit/task route/usage |
+| `setup-control-plane.py` | Single low-token setup/readiness report for intake/profile/sources/governance/validation/tool stack/spend guard/growth roadmap/onboarding/launch-plan/setup-blueprint/context-pack/setup-gap-audit/automation/task route/usage ledger | `python3 setup-control-plane.py --write` | `seo/setup/setup-control-plane.md/json`, latest validation/governance/sources/tool stack/spend/growth roadmap/onboarding/launch-plan/setup-blueprint/context-pack/setup-gap-audit/task route/usage |
 | `task-router.py` | Builds a low-token route for one SEO/marketing task | `python3 task-router.py --task "indexation audit" --write` | `seo/setup/latest-task-route.md/json` + archived route |
 | `context-pack.py` | Builds the first short task-scoped handoff for Claude/Codex | `python3 context-pack.py --task "indexation audit" --write` | `seo/setup/context-pack.md/json`, `seo/setup/latest-context-pack.md/json` |
+| `setup-blueprint.py` | Builds a compact per-project setup matrix for countries, regions, engines, business, marketing/ads/tracking, tools, budget, subscriptions, automations, and guardrails | `python3 setup-blueprint.py --write` | `seo/setup-blueprint.generated.yaml`, `seo/setup/setup-blueprint.md/json`, `seo/setup/setup-matrix.csv`, latest copies |
 | `setup-gap-audit.py` | Checks detailed project readiness and creates a fillable owner worksheet for business, local/ecommerce, tools, budget/subscriptions, and automations | `python3 setup-gap-audit.py --write` | `seo/setup/setup-gap-audit.md/json`, `seo/setup/setup-questionnaire.md/csv/json`, latest copies |
 | `setup-answer-plan.py` | Reads the filled setup questionnaire and builds a review-only manual change plan without storing secret-like answers | `python3 setup-answer-plan.py --write` | `seo/setup/setup-answer-plan.md/json/csv`, latest copies |
 | `usage-ledger.py` | Tracks actual tokens, USD, credits, units, requests, browser minutes and checks caps | `python3 usage-ledger.py report --write` / `check --service openai --usd 0.25 --fail-on-block` / `record --service openai --usd 0.25` | `seo/usage/usage-ledger.jsonl`, `seo/setup/latest-usage-ledger.md/json` |

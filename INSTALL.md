@@ -25,6 +25,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo
 python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py <project-root>/seo-cycle.yaml --write
 python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py <project-root>/seo-cycle.yaml --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py <project-root>/seo-cycle.yaml --write
+python3 ~/.claude/skills/seo-cycle/scripts/setup-blueprint.py <project-root>/seo-cycle.yaml --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py <project-root>/seo-cycle.yaml --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-answer-plan.py <project-root>/seo-cycle.yaml --write  # после заполнения setup-questionnaire.csv
 python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py <project-root>/seo-cycle.yaml --write
@@ -39,7 +40,7 @@ $EDITOR <project-root>/.env
 
 `install-codex.sh` ставит ядро в `~/.claude/skills/seo-cycle`, создаёт симлинки `~/.codex/skills/seo-cycle` и `~/.codex/skills/codex-primary-runtime`, а `init-project.sh` создаёт проектный `AGENTS.md` если его ещё нет. Wizard также спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
 
-После wizard сначала открой `seo/setup/context-pack.md`: это самый короткий task-scoped вход для Claude/Codex. Затем открой `seo/setup/setup-questionnaire.csv` или `seo/setup/setup-gap-audit.md`: там readiness score и вопросы по незаполненным бизнес/рынок/local/ecommerce/budget/tool деталям, без хранения секретов. После заполнения CSV запусти `setup-answer-plan.py --write` и открой `seo/setup/setup-answer-plan.md`: это review-only план ручных правок, без автоприменения и без сохранения secret-like ответов. Если нужно больше контекста, открой `seo/setup/launch-plan.md`: компактный первый экран проекта с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates, automations и execution order.
+После wizard сначала открой `seo/setup/context-pack.md`: это самый короткий task-scoped вход для Claude/Codex. Затем открой `seo/setup/setup-blueprint.md`: там компактная матрица стран/регионов/поисковиков/типа бизнеса/marketing/ads/tools/budget/automations и first-read файлы. Затем открой `seo/setup/setup-questionnaire.csv` или `seo/setup/setup-gap-audit.md`: там readiness score и вопросы по незаполненным бизнес/рынок/local/ecommerce/budget/tool деталям, без хранения секретов. После заполнения CSV запусти `setup-answer-plan.py --write` и открой `seo/setup/setup-answer-plan.md`: это review-only план ручных правок, без автоприменения и без сохранения secret-like ответов. Если нужно больше контекста, открой `seo/setup/launch-plan.md`: компактный первый экран проекта с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates, automations и execution order.
 Затем открой `seo/setup/tool-stack-report.md`: там видно, какие Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструменты можно использовать сразу, какие требуют approval, а какие отключены из-за региона, бюджета или RF tracking policy.
 Перед платными/API/LLM/subscription действиями открой `seo/setup/spend-guard.md`: там allowed/approval/blocked по сервисам, остатки лимитов и точные `usage-ledger.py check` preflight-команды.
 Затем открой `seo/setup/growth-roadmap.md`: там top-N приоритетов по техническому SEO, search evidence, ecommerce/local, контенту/сущностям, AI visibility, CRO/маркетингу и automations.
@@ -222,6 +223,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo
 - spend-guard артефакты для контроля подписок, paid API, LLM, ads, остатков лимитов и preflight-команд
 - growth-roadmap артефакты для приоритизации действий перед широким циклом
 - onboarding playbook с владельцами шагов, env names, approval gates, командами и proof-файлами
+- setup-blueprint и setup-matrix с точечной матрицей стран, регионов, поисковиков, бизнеса, marketing/ads/tracking policy, инструментов, budget/subscriptions, automations и guardrails
 - context-pack handoff с read order, task route, caps, spend blockers, approval gates и do-not-load-raw
 - setup-gap-audit, setup-questionnaire и setup-answer-plan с readiness score, missing fields, target files, follow-up commands, вопросами по деталям проекта и review-only планом ручного внесения заполненных ответов
 - launch-plan contract с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates и execution order
@@ -293,6 +295,9 @@ seo/tool-budget.yaml
 seo/automation-policy.yaml
 seo/automation-policy.generated.yaml
 seo/automations/automation-recommendations.md
+seo/setup-blueprint.generated.yaml
+seo/setup/setup-blueprint.md
+seo/setup/setup-matrix.csv
 seo/setup/context-pack.md
 seo/setup/setup-gap-audit.md
 seo/setup/setup-questionnaire.csv
@@ -309,6 +314,7 @@ AGENTS.md -> ~/.claude/skills/seo-cycle/AGENTS.md
 ```bash
 python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write
+python3 ~/.claude/skills/seo-cycle/scripts/setup-blueprint.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-answer-plan.py --write  # после заполнения setup-questionnaire.csv
 python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write
@@ -322,9 +328,11 @@ python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
 ```
 
-`setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config, automation plan, spend guard, launch plan, context pack, setup gap audit/questionnaire, answer-plan path readiness и стартовый task route; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `context-pack.md/json`, `setup-gap-audit.md/json`, `setup-questionnaire.md/csv/json`, `spend-guard.md/json`, `launch-plan.md/json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`, `latest-task-route.md/json`. `--apply-profile` остаётся отдельным явным действием.
+`setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config, automation plan, spend guard, launch plan, setup blueprint, context pack, setup gap audit/questionnaire, answer-plan path readiness и стартовый task route; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `setup-blueprint.md/json`, `setup-matrix.csv`, `context-pack.md/json`, `setup-gap-audit.md/json`, `setup-questionnaire.md/csv/json`, `spend-guard.md/json`, `launch-plan.md/json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`, `latest-task-route.md/json`. `--apply-profile` остаётся отдельным явным действием.
 
 `context-pack.py` — самый короткий task-scoped handoff для Claude/Codex. Пишет `seo/setup/context-pack.md/json` и `seo/setup/latest-context-pack.md/json`: что читать первым, какие raw-артефакты не грузить, какие approval gates/spend blockers действуют, какие команды запускать дальше.
+
+`setup-blueprint.py` — компактная project setup matrix. Пишет `seo/setup-blueprint.generated.yaml`, `seo/setup/setup-blueprint.md/json`, latest copies и `seo/setup/setup-matrix.csv`: страны, регионы, поисковики, тип бизнеса, local/ecommerce, marketing/ads/tracking policy, tools, budget/subscriptions, automations, guardrails и first-read файлы. Секреты не хранит и конфиг не меняет.
 
 `setup-gap-audit.py` — детальный first-run readiness audit. Пишет `seo/setup/setup-gap-audit.md/json`, `seo/setup/setup-questionnaire.md/csv/json` и latest copies: score, missing fields, owner questions, target files, follow-up commands и project-type-aware проверки local/ecommerce/budget/tools без вывода секретов.
 
