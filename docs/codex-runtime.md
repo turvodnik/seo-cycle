@@ -35,6 +35,9 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - `seo/onboarding.generated.yaml`
 - `seo/setup/onboarding-playbook.md`
 - `seo/setup/onboarding-checklist.csv`
+- `seo/launch-plan.generated.yaml`
+- `seo/setup/launch-plan.md`
+- `seo/setup/launch-checklist.csv`
 - `seo/automation-policy.yaml`
 - `seo/setup/setup-control-plane.md`
 - `seo/setup/latest-task-route.md`
@@ -57,6 +60,7 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - перед подключением Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструментов строить stack: `python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write`; `--apply` только после review, без секретов;
 - перед широким циклом строить top-N roadmap: `python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write` и начинать с `seo/setup/growth-roadmap.md`;
 - перед первым запуском строить onboarding: `python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write`; human-secret значения вводятся только в `.env`/кабинетах;
+- перед чтением подробных setup-отчётов строить launch contract: `python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write` и начинать с `seo/setup/launch-plan.md`;
 - рекомендации schedule строить через `python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write`; применять через `--apply` только после review, `--allow-schedules` только по явному разрешению;
 - детальную настройку стран/поисковиков/регионов/ads/local/merchant/tools/governance делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`;
 - точечную настройку проекта делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review generated overlay/report;

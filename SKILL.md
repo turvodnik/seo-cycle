@@ -25,6 +25,7 @@ description: Универсальный SEO/контент-цикл оркест
 - `seo/tool-stack.generated.yaml` и `seo/setup/tool-stack-report.md` — рекомендуемый стек Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking под страну, бизнес, бюджет и policy; создаётся `scripts/tool-stack-recommender.py --write`.
 - `seo/growth-roadmap.generated.yaml` и `seo/setup/growth-roadmap.md` — top-N приоритетов по technical/search evidence/ecommerce/local/content/entities/AI visibility/CRO/automation; создаётся `scripts/growth-roadmap.py --write`.
 - `seo/onboarding.generated.yaml`, `seo/setup/onboarding-playbook.md` и `seo/setup/onboarding-checklist.csv` — подробный first-run setup playbook с владельцами шагов, human-secret env names, approval gates, командами и proof-артефактами; создаётся `scripts/setup-onboarding.py --write`.
+- `seo/launch-plan.generated.yaml`, `seo/setup/launch-plan.md` и `seo/setup/launch-checklist.csv` — компактный first-screen launch contract: страна/движки/регион, тип бизнеса, token/budget/subscription controls, tool packs, human-secret env names, approval gates, automations и execution order; создаётся `scripts/launch-plan.py --write`.
 - `seo/automation-policy.yaml` — какие scheduled automations разрешены, какие требуют approval, какие запрещены без явной policy.
 - `seo/automation-policy.generated.yaml` и `seo/automations/automation-recommendations.md` — рекомендованный набор автоматизаций по intake/business/market/tools/budget; применять через `scripts/automation-recommender.py --apply`.
 - `seo/usage/usage-ledger.jsonl` — append-only журнал фактического расхода токенов/USD/API/credits/units/requests/browser minutes; создаётся `scripts/usage-ledger.py report --write`.
@@ -32,7 +33,7 @@ description: Универсальный SEO/контент-цикл оркест
 - `seo/project-intake.yaml` — детальная карта проекта: страны, регионы, поисковики, local/merchant/ads/video/analytics decisions.
 - `seo/project-intake-report.md` — человекочитаемый отчёт по intake; создаётся `scripts/project-intake-wizard.py`.
 - `seo/project-profile.generated.yaml` и `seo/project-profile-report.md` — сгенерированный overlay/отчёт по intake; применять к `seo-cycle.yaml` только через явный `scripts/project-profile.py --apply`.
-- `seo/setup/setup-control-plane.md` — компактная readiness-сводка intake/profile/sources/governance/validation/tool-stack/growth-roadmap/onboarding/automation; создаётся `scripts/setup-control-plane.py --write`.
+- `seo/setup/setup-control-plane.md` — компактная readiness-сводка intake/profile/sources/governance/validation/tool-stack/growth-roadmap/onboarding/launch-plan/automation; создаётся `scripts/setup-control-plane.py --write`.
 - `seo/setup/latest-task-route.md` — low-token маршрут под последнюю конкретную задачу: фазы, источники, approval gates, blocked actions, automation и context caps; создаётся `scripts/task-router.py --task "..." --write`.
 
 Если файлы есть, они являются локальным контрактом проекта:
@@ -47,6 +48,7 @@ description: Универсальный SEO/контент-цикл оркест
 - Перед подключением новых API/кабинетов/тегов/ads или переносом проекта в новый регион запускай `scripts/tool-stack-recommender.py --write`: он разделяет бесплатные read-only источники, approval-only paid/quota/LLM/index-submission и forbidden/disabled tracking для РФ. `--apply` только после review, без секретов.
 - Перед широким циклом или маркетинг-задачей запускай `scripts/growth-roadmap.py --write` и начинай с `seo/setup/growth-roadmap.md`: он ограничивает работу top-N действиями и привязывает технику, контент, local/ecommerce, AI visibility, CRO и автоматизации к approval gates.
 - Перед первым запуском проекта открывай `seo/setup/onboarding-playbook.md`: он отделяет действия агента от human-secret ввода и approval steps. Секреты храни только в `.env`/кабинетах, не в playbook.
+- Перед чтением подробных setup-отчётов открывай `seo/setup/launch-plan.md`: это первый low-token экран проекта. Загружай `tool-stack`, `growth-roadmap`, `onboarding` и policy-файлы только если launch-plan указывает на нужный блок.
 - Перед созданием schedule-артефактов запускай `scripts/automation-recommender.py --write`: он предлагает безопасные planned automations; `--apply` только после review generated policy. Не включай `create_schedules` без явного `--allow-schedules`.
 - Для запланированных автоматизаций используй `scripts/automation-plan.py`: сначала `--write --include-disabled`, затем ручной review `seo/automations/*`; `--install-cron` только если governance и automation-policy разрешают schedules.
 - Для детальной настройки нового проекта используй `scripts/project-intake-wizard.py --interactive --write`; для автозаполнения из `seo-cycle.yaml` — `--defaults --write`.
@@ -124,7 +126,7 @@ Phase 10 Iteration                    (cycle continues)
 
 **Шаги:**
 1. Найти `seo-cycle.yaml` в проекте (поиск: `./seo-cycle.yaml` → `./.seo-cycle.yaml` → `./seo/seo-cycle.yaml` → `./.claude/seo-cycle.yaml`).
-2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + governance + image workflow + optional detailed intake → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`, а также создать `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/setup/setup-control-plane.md`, `seo/setup/latest-task-route.md`, `seo/setup/latest-usage-ledger.md`, `seo/tool-stack.generated.yaml`, `seo/setup/tool-stack-report.md`, `seo/growth-roadmap.generated.yaml`, `seo/setup/growth-roadmap.md`, `seo/setup/onboarding-playbook.md`, `seo/setup/onboarding-checklist.csv` и `seo/automations/automation-recommendations.md`.
+2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + governance + image workflow + optional detailed intake → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`, а также создать `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/setup/setup-control-plane.md`, `seo/setup/launch-plan.md`, `seo/setup/launch-checklist.csv`, `seo/setup/latest-task-route.md`, `seo/setup/latest-usage-ledger.md`, `seo/tool-stack.generated.yaml`, `seo/setup/tool-stack-report.md`, `seo/growth-roadmap.generated.yaml`, `seo/setup/growth-roadmap.md`, `seo/setup/onboarding-playbook.md`, `seo/setup/onboarding-checklist.csv` и `seo/automations/automation-recommendations.md`.
 3. Если **найден** — провалидировать: `python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <path>`.
 4. Прочитать `context_files` из конфига (обычно `CLAUDE.md`, brand guidelines).
 5. Определить **режим цикла** (`mode` в конфиге, default `standard`):
@@ -151,6 +153,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write
 # после review: python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --apply
 python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write
+python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write
 # после review: python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --apply
 ```

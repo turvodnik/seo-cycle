@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.28.0] — 2026-06-05
+
+### Per-project launch plan contract
+
+- Added `scripts/launch-plan.py` to generate a compact first-screen launch contract from project intake, tool-stack decisions, growth roadmap, onboarding, automation recommendations, and budget/subscription policy.
+- The launch plan writes `seo/launch-plan.generated.yaml`, `seo/setup/launch-plan.md/json`, `seo/setup/latest-launch-plan.md/json`, and `seo/setup/launch-checklist.csv`; it never stores secret values.
+- The report summarizes market/business matrix, low-token token contract, budget caps, subscription controls, tool packs, human-secret env names, approval gates, policy guards, automations, and bounded execution order.
+- `setup-control-plane.py`, project templates, validation, governance report, init wizard, README, GUIDE, SKILL.md, INSTALL, and Codex runtime docs now include launch-plan as the first project setup screen.
+- Added smoke tests proving RU ecommerce gets RF tracking guards, Google NLP/NeuronWriter budget controls, approval gates, and env-name-only inputs, while US local projects get Bing Webmaster, Bing Places, and Google Business Profile without RF-only guards.
+
 ## [1.27.0] — 2026-06-05
 
 ### Detailed setup onboarding playbook

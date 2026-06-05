@@ -25,8 +25,9 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo
 python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py <project-root>/seo-cycle.yaml --write
 python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py <project-root>/seo-cycle.yaml --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py <project-root>/seo-cycle.yaml --write
+python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py <project-root>/seo-cycle.yaml --write
 
-# 5. Добавь API-ключи в .env по списку из onboarding/tool-stack report
+# 5. Добавь API-ключи в .env по списку из launch-plan/onboarding/tool-stack report
 $EDITOR <project-root>/.env
 
 # 6. Готово — спрашивай Claude/Codex:
@@ -35,9 +36,10 @@ $EDITOR <project-root>/.env
 
 `install-codex.sh` ставит ядро в `~/.claude/skills/seo-cycle`, создаёт симлинки `~/.codex/skills/seo-cycle` и `~/.codex/skills/codex-primary-runtime`, а `init-project.sh` создаёт проектный `AGENTS.md` если его ещё нет. Wizard также спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
 
-После wizard открой `seo/setup/tool-stack-report.md`: там видно, какие Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструменты можно использовать сразу, какие требуют approval, а какие отключены из-за региона, бюджета или RF tracking policy.
+После wizard сначала открой `seo/setup/launch-plan.md`: это компактный первый экран проекта с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates, automations и execution order.
+Затем открой `seo/setup/tool-stack-report.md`: там видно, какие Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструменты можно использовать сразу, какие требуют approval, а какие отключены из-за региона, бюджета или RF tracking policy.
 Затем открой `seo/setup/growth-roadmap.md`: там top-N приоритетов по техническому SEO, search evidence, ecommerce/local, контенту/сущностям, AI visibility, CRO/маркетингу и automations.
-Главный файл первого запуска — `seo/setup/onboarding-playbook.md`: там разделены шаги агента, human-secret ввод, review и approval.
+Подробный файл первого запуска — `seo/setup/onboarding-playbook.md`: там разделены шаги агента, human-secret ввод, review и approval.
 
 **OAuth setup для GSC/GA4/PSI/Метрики/Яндекса** → см. `docs/oauth-setup.md`.
 
@@ -215,6 +217,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo
 - tool-stack артефакты для выбора бесплатных, paid/quota, AI, merchant/local, ads и tracking инструментов под регион/бизнес/бюджет
 - growth-roadmap артефакты для приоритизации действий перед широким циклом
 - onboarding playbook с владельцами шагов, env names, approval gates, командами и proof-файлами
+- launch-plan contract с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates и execution order
 
 Выдаёт **чек-лист** что нужно подключить:
 ```
@@ -296,6 +299,7 @@ AGENTS.md -> ~/.claude/skills/seo-cycle/AGENTS.md
 ```bash
 python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write
+python3 ~/.claude/skills/seo-cycle/scripts/launch-plan.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "аудит индексации и robots" --write
 python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py report --write
 python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write
@@ -304,7 +308,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
 ```
 
-`setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config, automation plan и стартовый task route; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`, `latest-task-route.md/json`. `--apply-profile` остаётся отдельным явным действием.
+`setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config, automation plan, launch plan и стартовый task route; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `launch-plan.md/json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`, `latest-task-route.md/json`. `--apply-profile` остаётся отдельным явным действием.
 
 `task-router.py` — low-token роутер перед каждой конкретной задачей. Пример: `python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по минеральной вате" --write`. Он классифицирует задачу, выбирает фазы/источники, показывает approval gates, blocked actions, рекомендуемую automation и context caps, чтобы не поднимать весь проект и сырые данные в контекст.
 

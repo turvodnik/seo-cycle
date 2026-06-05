@@ -127,6 +127,10 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "onboarding_playbook": "seo/setup/onboarding-playbook.md",
         "onboarding_checklist": "seo/setup/onboarding-checklist.csv",
         "latest_onboarding_playbook": "seo/setup/latest-onboarding-playbook.md",
+        "launch_plan_generated": "seo/launch-plan.generated.yaml",
+        "launch_plan_report": "seo/setup/launch-plan.md",
+        "launch_checklist": "seo/setup/launch-checklist.csv",
+        "latest_launch_plan": "seo/setup/latest-launch-plan.md",
         "automation_recommendations": "seo/automations/automation-recommendations.md",
         "automation_policy_generated": "seo/automation-policy.generated.yaml",
         "automation_plan": "seo/automations/automation-plan.md",
@@ -163,6 +167,7 @@ def next_actions(
     tool_stack: dict[str, Any],
     growth_roadmap: dict[str, Any],
     onboarding: dict[str, Any],
+    launch_plan: dict[str, Any],
     automation: dict[str, Any],
     artifacts: list[dict[str, Any]],
     apply_profile: bool,
@@ -173,7 +178,15 @@ def next_actions(
     if validation.get("checklist", 0) > 0:
         actions.append("Review `seo/setup/latest-validation.txt` and fill required env/policy items.")
 
-    missing_policy = [row["key"] for row in governance.get("policy_files", []) if not row.get("exists")]
+    artifact_by_key = {row["key"]: row for row in artifacts}
+    missing_policy = []
+    for row in governance.get("policy_files", []):
+        if row.get("exists"):
+            continue
+        current_artifact = artifact_by_key.get(row["key"])
+        if current_artifact and current_artifact.get("exists"):
+            continue
+        missing_policy.append(row["key"])
     if missing_policy:
         actions.append(f"Create missing policy files: {', '.join(missing_policy)}.")
 
@@ -202,6 +215,9 @@ def next_actions(
         if human_steps or approval_steps:
             actions.append(f"Use `seo/setup/onboarding-playbook.md` before first run: human_secret={human_steps}, approval={approval_steps}.")
 
+    if launch_plan.get("approval_gates"):
+        actions.append(f"Open `seo/setup/launch-plan.md` as the first project screen; launch gates={len(launch_plan['approval_gates'])}.")
+
     if automation.get("blockers"):
         actions.append("Automation files were generated for review; install remains blocked until policy gates allow schedules.")
 
@@ -227,6 +243,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     tool_stack = report.get("tool_stack", {})
     growth_roadmap = report.get("growth_roadmap", {})
     onboarding = report.get("onboarding", {})
+    launch_plan = report.get("launch_plan", {})
     task_route = report.get("task_route", {})
     usage = report.get("usage_ledger", {})
     tool_summary = tool_stack.get("summary", {}).get("by_decision", {}) if isinstance(tool_stack.get("summary"), dict) else {}
@@ -251,6 +268,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Growth roadmap lanes/actions: {len(growth_roadmap.get('lanes', {}))}/{len(growth_roadmap.get('actions', []))}",
         f"- Onboarding steps: {onboarding.get('limits', {}).get('emitted_steps')}",
         f"- Onboarding human-secret steps: {onboarding.get('owner_summary', {}).get('human_secret', 0)}",
+        f"- Launch plan execution steps: {len(launch_plan.get('execution_order', []))}",
+        f"- Launch plan env names: {len((launch_plan.get('human_inputs') or {}).get('env_names', []))}",
         f"- Recommended automations: {len((automation_recommendations.get('policy_overlay') or {}).get('planned_automations', {}))}",
         f"- Automation install allowed: {automation.get('allowed')}",
     ]
@@ -420,6 +439,13 @@ def main() -> int:
         onboarding_command.extend(["--format", "json"])
     steps.append(run_step("setup onboarding", onboarding_command, project_root))
 
+    launch_plan_command = [sys.executable, str(root / "scripts/launch-plan.py"), str(cfg_path)]
+    if args.write:
+        launch_plan_command.append("--write")
+    else:
+        launch_plan_command.extend(["--format", "json"])
+    steps.append(run_step("launch plan", launch_plan_command, project_root))
+
     validation_step = run_step("validate config", [sys.executable, str(root / "scripts/validate-config.py"), str(cfg_path)], project_root)
     steps.append(validation_step)
 
@@ -467,6 +493,11 @@ def main() -> int:
     onboarding_file = project_root / "seo" / "setup" / "onboarding-playbook.json"
     if not onboarding and onboarding_file.exists():
         onboarding = json.loads(onboarding_file.read_text(encoding="utf-8"))
+    launch_plan_step = next((step for step in steps if step["name"] == "launch plan"), {})
+    launch_plan = load_json_output(launch_plan_step)
+    launch_plan_file = project_root / "seo" / "setup" / "launch-plan.json"
+    if not launch_plan and launch_plan_file.exists():
+        launch_plan = json.loads(launch_plan_file.read_text(encoding="utf-8"))
     validation = parse_validation(validation_step)
     artifacts = artifact_status(project_root, cfg)
     paid_missing = enabled_paid_missing_env(governance)
@@ -488,6 +519,7 @@ def main() -> int:
         "tool_stack": tool_stack,
         "growth_roadmap": growth_roadmap,
         "onboarding": onboarding,
+        "launch_plan": launch_plan,
         "paid_missing_env": paid_missing,
         "artifacts": artifacts,
         "steps": [
@@ -499,7 +531,7 @@ def main() -> int:
             for step in steps
         ],
     }
-    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, onboarding, automation, artifacts, args.apply_profile)
+    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, onboarding, launch_plan, automation, artifacts, args.apply_profile)
 
     if args.write:
         out_dir = write_report(project_root, report)
