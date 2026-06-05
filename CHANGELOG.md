@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.27.0] — 2026-06-05
+
+### Detailed setup onboarding playbook
+
+- Added `scripts/setup-onboarding.py` to generate a detailed first-run setup playbook from `seo-cycle.yaml`, project intake, tool-stack decisions, growth roadmap, automation recommendations, and usage/budget posture.
+- The playbook writes `seo/onboarding.generated.yaml`, `seo/setup/onboarding-playbook.md/json`, `seo/setup/latest-onboarding-playbook.md/json`, and `seo/setup/onboarding-checklist.csv`.
+- Onboarding steps now have explicit owners (`agent`, `human_secret`, `review`, `approval`), commands, proof artifacts, env-name-only secret requirements, and approval gates for paid API, tracking, ads, schedules, config changes, and LLM spend.
+- `setup-control-plane.py`, project templates, validation, governance report, init wizard, README, INSTALL, GUIDE, SKILL.md, and Codex runtime docs now include onboarding as part of first-run setup.
+- Added smoke tests proving RU ecommerce receives RF tracking review, Google NLP/NeuronWriter budget guards, human-secret env names without values, and setup-control-plane commands, while US local projects receive Bing/local setup without RF-only guards.
+
 ## [1.26.0] — 2026-06-05
 
 ### Growth roadmap control layer

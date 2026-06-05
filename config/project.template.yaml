@@ -89,6 +89,10 @@ policy_files:
   growth_roadmap_generated: seo/growth-roadmap.generated.yaml
   growth_roadmap_report: seo/setup/growth-roadmap.md
   latest_growth_roadmap: seo/setup/latest-growth-roadmap.md
+  onboarding_generated: seo/onboarding.generated.yaml
+  onboarding_playbook: seo/setup/onboarding-playbook.md
+  onboarding_checklist: seo/setup/onboarding-checklist.csv
+  latest_onboarding_playbook: seo/setup/latest-onboarding-playbook.md
   automation_recommendations: seo/automations/automation-recommendations.md
   automation_policy_generated: seo/automation-policy.generated.yaml
   setup_control_plane: seo/setup/setup-control-plane.md
