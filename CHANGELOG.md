@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.26.0] — 2026-06-05
+
+### Growth roadmap control layer
+
+- Added `scripts/growth-roadmap.py` to turn project intake, generated tool stack, automation recommendations, usage posture, and budget policy into a compact top-N roadmap across technical SEO, search evidence, ecommerce revenue, local dominance, content/entities, AI visibility, marketing/CRO, and automation control.
+- The roadmap writes `seo/growth-roadmap.generated.yaml`, `seo/setup/growth-roadmap.md/json`, and `seo/setup/latest-growth-roadmap.md/json`; it never fetches external data or prints secrets.
+- `setup-control-plane.py` now generates and summarizes the growth roadmap as part of first-run readiness, so new projects start with priorities, not only setup checklists.
+- Project templates, validation, governance report, init wizard, README, INSTALL, GUIDE, SKILL.md, and Codex runtime docs now include the roadmap artifacts and command.
+- Added smoke tests proving RU ecommerce gets technical/ecommerce/content/entity/AI priorities with RF tracking guard and paid API approval gates, while US local business gets local/Bing/Google priorities without ecommerce actions.
+
 ## [1.25.0] — 2026-06-05
 
 ### Per-project tool stack recommender

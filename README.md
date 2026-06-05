@@ -1,6 +1,6 @@
 # seo-cycle
 
-**Версия 1.25.0** · универсальный SEO/контент-цикл-оркестратор для Claude Code и Codex CLI.
+**Версия 1.26.0** · универсальный SEO/контент-цикл-оркестратор для Claude Code и Codex CLI.
 
 Полный цикл продвижения сайта — от стратегии и сбора семантики до публикации, fact-check, мониторинга и итераций — управляемый через декларативный конфиг `seo-cycle.yaml`. Адаптируется под любой проект: язык, регион, поисковики, тип сайта, CMS, набор источников.
 
@@ -22,6 +22,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "аудит индексации и robots" --write
 python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py report --write
 python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write
+python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md
 python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
@@ -84,15 +85,16 @@ python3 ~/.claude/skills/seo-cycle/scripts/automation-plan.py --write --include-
 | **Источники семантики** | Яндекс (Wordstat/Suggest/SERP/Вебмастер/Кью/Карты/Товары), Google (GSC/Trends/Suggest/Merchant/Business Profile), Bing Webmaster/IndexNow/Bing Places, Serpstat (вкл. РФ `g_ru`), SpyFu (US/UK/EU), NeuronWriter, LLM-CLI, AnswerThePublic, Perplexity. |
 | **Guarded NLP/entity audit** | `google-nlp-audit.py` для Google Cloud Natural Language: entity salience, categories, syntax, moderation/sentiment только по policy, кэш 30 дней и unit caps. |
 | **Token/budget governance** | `governance` в `seo-cycle.yaml` + `governance-report.py`: raw на диск, distillates в контекст, cache-first, лимиты платных API/LLM/браузера/автоматизаций. |
-| **Setup control plane** | `setup-control-plane.py --write` собирает intake/profile/sources/governance/validation/tool stack/automation/task route/usage ledger в `seo/setup/setup-control-plane.md/json` и next-action checklist. |
+| **Setup control plane** | `setup-control-plane.py --write` собирает intake/profile/sources/governance/validation/tool stack/growth roadmap/automation/task route/usage ledger в `seo/setup/setup-control-plane.md/json` и next-action checklist. |
 | **Low-token task routing** | `task-router.py --task "..."` строит точный маршрут под задачу: фазы, источники, approval gates, blocked actions, automation и context caps; пишет `seo/setup/latest-task-route.md/json`. |
 | **Usage/budget ledger** | `usage-ledger.py report/check/record` ведёт append-only расход токенов, USD, credits, units, requests, browser minutes; пишет `seo/usage/usage-ledger.jsonl` и `seo/setup/latest-usage-ledger.md/json`. |
 | **Tool-stack recommender** | `tool-stack-recommender.py --write` выбирает инструменты под страну/движки/тип бизнеса/бюджет: бесплатные read-only включает, платные API/LLM/IndexNow/ads/tracking ставит за approval, RF foreign tracking отключает. |
+| **Growth roadmap** | `growth-roadmap.py --write` превращает intake/tool-stack/budget/automation в top-N действий по технике, search evidence, ecommerce/local, entities/content, AI visibility, CRO/маркетингу и automations. |
 | **Detailed intake wizard** | `project-intake-wizard.py` точечно заполняет страны, регионы, поисковики, тип бизнеса, аудитории, local/merchant/ads/video/analytics, tools и governance. |
 | **Detailed project profile** | `project-profile.py` читает `seo/project-intake.yaml` и генерирует overlay/report для стран, поисковиков, регионов, local/merchant/ads/video/analytics, marketing и source overrides. |
 | **Automation recommender** | `automation-recommender.py --write` рекомендует planned automations по intake/business/market/tools/budget и создаёт `seo/automation-policy.generated.yaml`; `--apply` только после review. |
 | **Safe automations** | `automation-plan.py` генерирует `seo/automations/automation-plan.md`, `crontab.txt`, launchd plist templates; реальный install заблокирован без двойного policy-разрешения. |
-| **Project policies** | `seo/neuronwriter-limits.yaml`, `seo/entities/google-nlp-policy.yaml`, `seo/tool-budget.yaml`, `seo/tool-stack.generated.yaml`, `seo/setup/tool-stack-report.md`, `seo/automation-policy.yaml`, `seo/automation-policy.generated.yaml`, `seo/automations/automation-recommendations.md`, `seo/usage/usage-ledger.jsonl`, `seo/setup/latest-usage-ledger.md`, `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/project-profile.generated.yaml`, `seo/setup/setup-control-plane.md`, `seo/setup/latest-task-route.md`, `seo/seo-data-collection-map.md`, `seo/access-setup-runbook.md`, `seo/ai-visibility-prompts.csv`. |
+| **Project policies** | `seo/neuronwriter-limits.yaml`, `seo/entities/google-nlp-policy.yaml`, `seo/tool-budget.yaml`, `seo/tool-stack.generated.yaml`, `seo/setup/tool-stack-report.md`, `seo/growth-roadmap.generated.yaml`, `seo/setup/growth-roadmap.md`, `seo/automation-policy.yaml`, `seo/automation-policy.generated.yaml`, `seo/automations/automation-recommendations.md`, `seo/usage/usage-ledger.jsonl`, `seo/setup/latest-usage-ledger.md`, `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/project-profile.generated.yaml`, `seo/setup/setup-control-plane.md`, `seo/setup/latest-task-route.md`, `seo/seo-data-collection-map.md`, `seo/access-setup-runbook.md`, `seo/ai-visibility-prompts.csv`. |
 | **E-E-A-T** | `schema-org-build.py` — канонический Organization/LocalBusiness узел из `business_profile`; `eeat-render.py` — trust-блок «Источники» из `fact_check_log`; `source-attribution.py` — какой источник даёт топ. |
 | **Экономия** | `research-cache.py` (TTL), дистилляты в контекст, guard'ы кредитов Serpstat/SpyFu. |
 | **Слой данных** | `db-sync.py` → `seo.db` (SQLite) из всех CSV/JSON. Фундамент дашбордов. |

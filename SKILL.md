@@ -23,6 +23,7 @@ description: Универсальный SEO/контент-цикл оркест
 - `seo/ai-visibility-prompts.csv` — стартовая очередь AI visibility запросов и evidence-полей для Google AI/Bing Copilot/Perplexity/OpenAI/Claude/Gemini/DeepSeek.
 - `seo/tool-budget.yaml` — лимиты токенов, paid API, LLM, подписок, кэша и stop-условия по источникам.
 - `seo/tool-stack.generated.yaml` и `seo/setup/tool-stack-report.md` — рекомендуемый стек Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking под страну, бизнес, бюджет и policy; создаётся `scripts/tool-stack-recommender.py --write`.
+- `seo/growth-roadmap.generated.yaml` и `seo/setup/growth-roadmap.md` — top-N приоритетов по technical/search evidence/ecommerce/local/content/entities/AI visibility/CRO/automation; создаётся `scripts/growth-roadmap.py --write`.
 - `seo/automation-policy.yaml` — какие scheduled automations разрешены, какие требуют approval, какие запрещены без явной policy.
 - `seo/automation-policy.generated.yaml` и `seo/automations/automation-recommendations.md` — рекомендованный набор автоматизаций по intake/business/market/tools/budget; применять через `scripts/automation-recommender.py --apply`.
 - `seo/usage/usage-ledger.jsonl` — append-only журнал фактического расхода токенов/USD/API/credits/units/requests/browser minutes; создаётся `scripts/usage-ledger.py report --write`.
@@ -30,7 +31,7 @@ description: Универсальный SEO/контент-цикл оркест
 - `seo/project-intake.yaml` — детальная карта проекта: страны, регионы, поисковики, local/merchant/ads/video/analytics decisions.
 - `seo/project-intake-report.md` — человекочитаемый отчёт по intake; создаётся `scripts/project-intake-wizard.py`.
 - `seo/project-profile.generated.yaml` и `seo/project-profile-report.md` — сгенерированный overlay/отчёт по intake; применять к `seo-cycle.yaml` только через явный `scripts/project-profile.py --apply`.
-- `seo/setup/setup-control-plane.md` — компактная readiness-сводка intake/profile/sources/governance/validation/automation; создаётся `scripts/setup-control-plane.py --write`.
+- `seo/setup/setup-control-plane.md` — компактная readiness-сводка intake/profile/sources/governance/validation/tool-stack/growth-roadmap/automation; создаётся `scripts/setup-control-plane.py --write`.
 - `seo/setup/latest-task-route.md` — low-token маршрут под последнюю конкретную задачу: фазы, источники, approval gates, blocked actions, automation и context caps; создаётся `scripts/task-router.py --task "..." --write`.
 
 Если файлы есть, они являются локальным контрактом проекта:
@@ -43,6 +44,7 @@ description: Универсальный SEO/контент-цикл оркест
 - Перед конкретной задачей запускай `scripts/task-router.py --task "<что делаем>" --write` и следуй `seo/setup/latest-task-route.md`; не поднимай полный цикл/сырьё в контекст, если route ограничивает фазы и источники.
 - Перед расходом токенов/paid API/credits/ads запускай `scripts/usage-ledger.py check --service <tool> ... --fail-on-block`; после расхода фиксируй `scripts/usage-ledger.py record --service <tool> ...`. Без ledger-записи нельзя считать лимиты управляемыми.
 - Перед подключением новых API/кабинетов/тегов/ads или переносом проекта в новый регион запускай `scripts/tool-stack-recommender.py --write`: он разделяет бесплатные read-only источники, approval-only paid/quota/LLM/index-submission и forbidden/disabled tracking для РФ. `--apply` только после review, без секретов.
+- Перед широким циклом или маркетинг-задачей запускай `scripts/growth-roadmap.py --write` и начинай с `seo/setup/growth-roadmap.md`: он ограничивает работу top-N действиями и привязывает технику, контент, local/ecommerce, AI visibility, CRO и автоматизации к approval gates.
 - Перед созданием schedule-артефактов запускай `scripts/automation-recommender.py --write`: он предлагает безопасные planned automations; `--apply` только после review generated policy. Не включай `create_schedules` без явного `--allow-schedules`.
 - Для запланированных автоматизаций используй `scripts/automation-plan.py`: сначала `--write --include-disabled`, затем ручной review `seo/automations/*`; `--install-cron` только если governance и automation-policy разрешают schedules.
 - Для детальной настройки нового проекта используй `scripts/project-intake-wizard.py --interactive --write`; для автозаполнения из `seo-cycle.yaml` — `--defaults --write`.
@@ -120,7 +122,7 @@ Phase 10 Iteration                    (cycle continues)
 
 **Шаги:**
 1. Найти `seo-cycle.yaml` в проекте (поиск: `./seo-cycle.yaml` → `./.seo-cycle.yaml` → `./seo/seo-cycle.yaml` → `./.claude/seo-cycle.yaml`).
-2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + governance + image workflow + optional detailed intake → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`, а также создать `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/setup/setup-control-plane.md`, `seo/setup/latest-task-route.md`, `seo/setup/latest-usage-ledger.md`, `seo/tool-stack.generated.yaml`, `seo/setup/tool-stack-report.md` и `seo/automations/automation-recommendations.md`.
+2. Если **не найден** — запусти `bash ~/.claude/skills/seo-cycle/scripts/init-project.sh` (интерактивный wizard: базовые поля + governance + image workflow + optional detailed intake → готовый yaml + .env.example). Wizard обязан записать `images.*`: featured/inline ratios, WebP width/quality, source_policy, visual_style, captions/alt policy, lazy-loading policy и upload env для `wp-photo-image.py`, а также создать `seo/project-intake.yaml`, `seo/project-intake-report.md`, `seo/setup/setup-control-plane.md`, `seo/setup/latest-task-route.md`, `seo/setup/latest-usage-ledger.md`, `seo/tool-stack.generated.yaml`, `seo/setup/tool-stack-report.md`, `seo/growth-roadmap.generated.yaml`, `seo/setup/growth-roadmap.md` и `seo/automations/automation-recommendations.md`.
 3. Если **найден** — провалидировать: `python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <path>`.
 4. Прочитать `context_files` из конфига (обычно `CLAUDE.md`, brand guidelines).
 5. Определить **режим цикла** (`mode` в конфиге, default `standard`):
@@ -145,6 +147,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py record --service open
 ```bash
 python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write
 # после review: python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --apply
+python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write
 # после review: python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --apply
 ```

@@ -23,6 +23,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo
 
 # 4. Сгенерируй безопасный стек инструментов
 python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py <project-root>/seo-cycle.yaml --write
+python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py <project-root>/seo-cycle.yaml --write
 
 # 5. Добавь API-ключи в .env по списку из валидатора/tool-stack report
 $EDITOR <project-root>/.env
@@ -34,6 +35,7 @@ $EDITOR <project-root>/.env
 `install-codex.sh` ставит ядро в `~/.claude/skills/seo-cycle`, создаёт симлинки `~/.codex/skills/seo-cycle` и `~/.codex/skills/codex-primary-runtime`, а `init-project.sh` создаёт проектный `AGENTS.md` если его ещё нет. Wizard также спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
 
 После wizard открой `seo/setup/tool-stack-report.md`: там видно, какие Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструменты можно использовать сразу, какие требуют approval, а какие отключены из-за региона, бюджета или RF tracking policy.
+Затем открой `seo/setup/growth-roadmap.md`: там top-N приоритетов по техническому SEO, search evidence, ecommerce/local, контенту/сущностям, AI visibility, CRO/маркетингу и automations.
 
 **OAuth setup для GSC/GA4/PSI/Метрики/Яндекса** → см. `docs/oauth-setup.md`.
 
@@ -209,6 +211,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py <project-root>/seo
 - policy-файлы проекта для NeuronWriter, Google NLP, data collection/access и RF tracking guard
 - governance sanity: raw data не грузится в контекст, cache-first включён, paid sources не активны при нулевом бюджете, schedules не создаются без automation policy
 - tool-stack артефакты для выбора бесплатных, paid/quota, AI, merchant/local, ads и tracking инструментов под регион/бизнес/бюджет
+- growth-roadmap артефакты для приоритизации действий перед широким циклом
 
 Выдаёт **чек-лист** что нужно подключить:
 ```

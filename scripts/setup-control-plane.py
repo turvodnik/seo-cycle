@@ -120,6 +120,9 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "tool_stack_generated": "seo/tool-stack.generated.yaml",
         "tool_stack_report": "seo/setup/tool-stack-report.md",
         "latest_tool_stack": "seo/setup/latest-tool-stack.md",
+        "growth_roadmap_generated": "seo/growth-roadmap.generated.yaml",
+        "growth_roadmap_report": "seo/setup/growth-roadmap.md",
+        "latest_growth_roadmap": "seo/setup/latest-growth-roadmap.md",
         "automation_recommendations": "seo/automations/automation-recommendations.md",
         "automation_policy_generated": "seo/automation-policy.generated.yaml",
         "automation_plan": "seo/automations/automation-plan.md",
@@ -154,6 +157,7 @@ def next_actions(
     governance: dict[str, Any],
     sources: dict[str, Any],
     tool_stack: dict[str, Any],
+    growth_roadmap: dict[str, Any],
     automation: dict[str, Any],
     artifacts: list[dict[str, Any]],
     apply_profile: bool,
@@ -184,6 +188,9 @@ def next_actions(
     if approval_tools:
         actions.append(f"Review tool-stack approval gates before use: {', '.join(sorted(approval_tools))}.")
 
+    if growth_roadmap.get("approval_gates"):
+        actions.append(f"Start from `seo/setup/growth-roadmap.md`; approval gates present: {', '.join(growth_roadmap['approval_gates'])}.")
+
     if automation.get("blockers"):
         actions.append("Automation files were generated for review; install remains blocked until policy gates allow schedules.")
 
@@ -207,6 +214,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     automation = report.get("automation", {})
     automation_recommendations = report.get("automation_recommendations", {})
     tool_stack = report.get("tool_stack", {})
+    growth_roadmap = report.get("growth_roadmap", {})
     task_route = report.get("task_route", {})
     usage = report.get("usage_ledger", {})
     tool_summary = tool_stack.get("summary", {}).get("by_decision", {}) if isinstance(tool_stack.get("summary"), dict) else {}
@@ -228,6 +236,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Usage ledger status: {usage.get('evaluation', {}).get('status')}",
         f"- Usage ledger allowed: {usage.get('evaluation', {}).get('allowed')}",
         f"- Tool stack enabled/report-only/approval: {tool_summary.get('enabled', 0)}/{tool_summary.get('report_only', 0)}/{tool_summary.get('approval_required', 0)}",
+        f"- Growth roadmap lanes/actions: {len(growth_roadmap.get('lanes', {}))}/{len(growth_roadmap.get('actions', []))}",
         f"- Recommended automations: {len((automation_recommendations.get('policy_overlay') or {}).get('planned_automations', {}))}",
         f"- Automation install allowed: {automation.get('allowed')}",
     ]
@@ -383,6 +392,13 @@ def main() -> int:
         tool_stack_command.extend(["--format", "json"])
     steps.append(run_step("tool stack recommender", tool_stack_command, project_root))
 
+    growth_roadmap_command = [sys.executable, str(root / "scripts/growth-roadmap.py"), str(cfg_path)]
+    if args.write:
+        growth_roadmap_command.append("--write")
+    else:
+        growth_roadmap_command.extend(["--format", "json"])
+    steps.append(run_step("growth roadmap", growth_roadmap_command, project_root))
+
     validation_step = run_step("validate config", [sys.executable, str(root / "scripts/validate-config.py"), str(cfg_path)], project_root)
     steps.append(validation_step)
 
@@ -420,6 +436,11 @@ def main() -> int:
     tool_stack_file = project_root / "seo" / "setup" / "tool-stack-report.json"
     if not tool_stack and tool_stack_file.exists():
         tool_stack = json.loads(tool_stack_file.read_text(encoding="utf-8"))
+    growth_roadmap_step = next((step for step in steps if step["name"] == "growth roadmap"), {})
+    growth_roadmap = load_json_output(growth_roadmap_step)
+    growth_roadmap_file = project_root / "seo" / "setup" / "growth-roadmap.json"
+    if not growth_roadmap and growth_roadmap_file.exists():
+        growth_roadmap = json.loads(growth_roadmap_file.read_text(encoding="utf-8"))
     validation = parse_validation(validation_step)
     artifacts = artifact_status(project_root, cfg)
     paid_missing = enabled_paid_missing_env(governance)
@@ -439,6 +460,7 @@ def main() -> int:
         "usage_ledger": usage_ledger,
         "automation_recommendations": automation_recommendations,
         "tool_stack": tool_stack,
+        "growth_roadmap": growth_roadmap,
         "paid_missing_env": paid_missing,
         "artifacts": artifacts,
         "steps": [
@@ -450,7 +472,7 @@ def main() -> int:
             for step in steps
         ],
     }
-    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, automation, artifacts, args.apply_profile)
+    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, automation, artifacts, args.apply_profile)
 
     if args.write:
         out_dir = write_report(project_root, report)

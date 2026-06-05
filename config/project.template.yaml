@@ -86,6 +86,9 @@ policy_files:
   tool_stack_generated: seo/tool-stack.generated.yaml
   tool_stack_report: seo/setup/tool-stack-report.md
   latest_tool_stack: seo/setup/latest-tool-stack.md
+  growth_roadmap_generated: seo/growth-roadmap.generated.yaml
+  growth_roadmap_report: seo/setup/growth-roadmap.md
+  latest_growth_roadmap: seo/setup/latest-growth-roadmap.md
   automation_recommendations: seo/automations/automation-recommendations.md
   automation_policy_generated: seo/automation-policy.generated.yaml
   setup_control_plane: seo/setup/setup-control-plane.md
