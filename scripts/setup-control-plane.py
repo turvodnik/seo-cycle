@@ -117,6 +117,10 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "active_sources_latest": "seo/setup/latest-sources.json",
         "usage_ledger": "seo/usage/usage-ledger.jsonl",
         "latest_usage_report": "seo/setup/latest-usage-ledger.md",
+        "spend_guard_generated": "seo/spend-guard.generated.yaml",
+        "spend_guard_report": "seo/setup/spend-guard.md",
+        "spend_checklist": "seo/setup/spend-checklist.csv",
+        "latest_spend_guard": "seo/setup/latest-spend-guard.md",
         "tool_stack_generated": "seo/tool-stack.generated.yaml",
         "tool_stack_report": "seo/setup/tool-stack-report.md",
         "latest_tool_stack": "seo/setup/latest-tool-stack.md",
@@ -168,6 +172,7 @@ def next_actions(
     growth_roadmap: dict[str, Any],
     onboarding: dict[str, Any],
     launch_plan: dict[str, Any],
+    spend_guard: dict[str, Any],
     automation: dict[str, Any],
     artifacts: list[dict[str, Any]],
     apply_profile: bool,
@@ -218,6 +223,14 @@ def next_actions(
     if launch_plan.get("approval_gates"):
         actions.append(f"Open `seo/setup/launch-plan.md` as the first project screen; launch gates={len(launch_plan['approval_gates'])}.")
 
+    blocked_spend = [
+        row["service"]
+        for row in spend_guard.get("service_guards", [])
+        if isinstance(row, dict) and row.get("status") in {"blocked", "approval_required"} and not row.get("allowed_now")
+    ]
+    if blocked_spend:
+        actions.append(f"Review `seo/setup/spend-guard.md` before paid/LLM/subscription use: {', '.join(blocked_spend[:8])}.")
+
     if automation.get("blockers"):
         actions.append("Automation files were generated for review; install remains blocked until policy gates allow schedules.")
 
@@ -244,6 +257,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     growth_roadmap = report.get("growth_roadmap", {})
     onboarding = report.get("onboarding", {})
     launch_plan = report.get("launch_plan", {})
+    spend_guard = report.get("spend_guard", {})
     task_route = report.get("task_route", {})
     usage = report.get("usage_ledger", {})
     tool_summary = tool_stack.get("summary", {}).get("by_decision", {}) if isinstance(tool_stack.get("summary"), dict) else {}
@@ -264,6 +278,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Paid/quota sources needing env: {len(report.get('paid_missing_env', []))}",
         f"- Usage ledger status: {usage.get('evaluation', {}).get('status')}",
         f"- Usage ledger allowed: {usage.get('evaluation', {}).get('allowed')}",
+        f"- Spend guard services: {len(spend_guard.get('service_guards', []))}",
+        f"- Spend guard blocked/approval: {len([row for row in spend_guard.get('service_guards', []) if isinstance(row, dict) and row.get('status') in {'blocked', 'approval_required'} and not row.get('allowed_now')])}",
         f"- Tool stack enabled/report-only/approval: {tool_summary.get('enabled', 0)}/{tool_summary.get('report_only', 0)}/{tool_summary.get('approval_required', 0)}",
         f"- Growth roadmap lanes/actions: {len(growth_roadmap.get('lanes', {}))}/{len(growth_roadmap.get('actions', []))}",
         f"- Onboarding steps: {onboarding.get('limits', {}).get('emitted_steps')}",
@@ -425,6 +441,13 @@ def main() -> int:
         tool_stack_command.extend(["--format", "json"])
     steps.append(run_step("tool stack recommender", tool_stack_command, project_root))
 
+    spend_guard_command = [sys.executable, str(root / "scripts/spend-guard.py"), str(cfg_path)]
+    if args.write:
+        spend_guard_command.append("--write")
+    else:
+        spend_guard_command.extend(["--format", "json"])
+    steps.append(run_step("spend guard", spend_guard_command, project_root))
+
     growth_roadmap_command = [sys.executable, str(root / "scripts/growth-roadmap.py"), str(cfg_path)]
     if args.write:
         growth_roadmap_command.append("--write")
@@ -483,6 +506,11 @@ def main() -> int:
     tool_stack_file = project_root / "seo" / "setup" / "tool-stack-report.json"
     if not tool_stack and tool_stack_file.exists():
         tool_stack = json.loads(tool_stack_file.read_text(encoding="utf-8"))
+    spend_guard_step = next((step for step in steps if step["name"] == "spend guard"), {})
+    spend_guard = load_json_output(spend_guard_step)
+    spend_guard_file = project_root / "seo" / "setup" / "spend-guard.json"
+    if not spend_guard and spend_guard_file.exists():
+        spend_guard = json.loads(spend_guard_file.read_text(encoding="utf-8"))
     growth_roadmap_step = next((step for step in steps if step["name"] == "growth roadmap"), {})
     growth_roadmap = load_json_output(growth_roadmap_step)
     growth_roadmap_file = project_root / "seo" / "setup" / "growth-roadmap.json"
@@ -517,6 +545,7 @@ def main() -> int:
         "usage_ledger": usage_ledger,
         "automation_recommendations": automation_recommendations,
         "tool_stack": tool_stack,
+        "spend_guard": spend_guard,
         "growth_roadmap": growth_roadmap,
         "onboarding": onboarding,
         "launch_plan": launch_plan,
@@ -531,7 +560,7 @@ def main() -> int:
             for step in steps
         ],
     }
-    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, onboarding, launch_plan, automation, artifacts, args.apply_profile)
+    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, onboarding, launch_plan, spend_guard, automation, artifacts, args.apply_profile)
 
     if args.write:
         out_dir = write_report(project_root, report)

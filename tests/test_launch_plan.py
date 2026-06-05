@@ -83,6 +83,8 @@ class LaunchPlanTest(unittest.TestCase):
         self.assertIn("GOOGLE_APPLICATION_CREDENTIALS", report["human_inputs"]["env_names"])
         self.assertNotIn("=", "\n".join(report["human_inputs"]["env_names"]))
         self.assertFalse(report["automation_contract"]["create_schedules"])
+        self.assertGreater(report["spend_contract"]["service_count"], 0)
+        self.assertIn("google_cloud_nlp", report["spend_contract"]["blocked_or_approval"])
         self.assertIn("setup-control-plane", " ".join(report["execution_order"]))
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "launch-plan.md").exists())
         self.assertTrue((cfg_path.parent / "seo" / "launch-plan.generated.yaml").exists())
@@ -98,6 +100,7 @@ class LaunchPlanTest(unittest.TestCase):
         self.assertIn("google_business_profile", report["tool_contract"]["local_profiles"])
         self.assertIn("BING_WEBMASTER_API_KEY", report["human_inputs"]["env_names"])
         self.assertIn("GOOGLE_BUSINESS_ACCOUNT_ID", report["human_inputs"]["env_names"])
+        self.assertGreater(report["spend_contract"]["service_count"], 0)
         self.assertNotIn("rf_foreign_tracking_guard", report["policy_guards"])
         self.assertLessEqual(len(report["execution_order"]), report["limits"]["max_execution_steps"])
 

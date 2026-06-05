@@ -38,6 +38,9 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - `seo/launch-plan.generated.yaml`
 - `seo/setup/launch-plan.md`
 - `seo/setup/launch-checklist.csv`
+- `seo/spend-guard.generated.yaml`
+- `seo/setup/spend-guard.md`
+- `seo/setup/spend-checklist.csv`
 - `seo/automation-policy.yaml`
 - `seo/setup/setup-control-plane.md`
 - `seo/setup/latest-task-route.md`
@@ -56,7 +59,7 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - перед дорогим сбором, браузером, публикацией или schedule запускать `python3 ~/.claude/skills/seo-cycle/scripts/governance-report.py --format md`;
 - перед началом большого цикла обновлять compact readiness: `python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write`;
 - перед конкретной задачей строить bounded route: `python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "<цель пользователя>" --write` и запускать только фазы/источники из `seo/setup/latest-task-route.md`;
-- перед расходом токенов/API/credits/ads делать preflight `python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py check --service <tool> ... --fail-on-block`, после расхода фиксировать `usage-ledger.py record --service <tool> ... --write`;
+- перед расходом токенов/API/credits/ads строить spend guard `python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write`; если сервис не allowed, нужен approval/policy. Затем делать preflight `usage-ledger.py check --service <tool> ... --fail-on-block`, после расхода фиксировать `usage-ledger.py record --service <tool> ... --write`;
 - перед подключением Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструментов строить stack: `python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write`; `--apply` только после review, без секретов;
 - перед широким циклом строить top-N roadmap: `python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write` и начинать с `seo/setup/growth-roadmap.md`;
 - перед первым запуском строить onboarding: `python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write`; human-secret значения вводятся только в `.env`/кабинетах;

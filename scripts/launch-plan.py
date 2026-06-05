@@ -159,6 +159,11 @@ def load_onboarding(cfg_path: pathlib.Path, cfg: dict[str, Any], project_root: p
     return report or run_json_script("setup-onboarding.py", cfg_path, project_root)
 
 
+def load_spend_guard(cfg_path: pathlib.Path, cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, Any]:
+    report = load_policy_json(cfg, project_root, "spend_guard_report", "seo/setup/spend-guard.json")
+    return report or run_json_script("spend-guard.py", cfg_path, project_root)
+
+
 def load_automation(cfg_path: pathlib.Path, cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, Any]:
     report = load_policy_json(cfg, project_root, "automation_recommendations", "seo/automations/automation-recommendations.json")
     return report or run_json_script("automation-recommender.py", cfg_path, project_root)
@@ -391,11 +396,30 @@ def automation_contract(automation: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def spend_contract(spend_guard: dict[str, Any]) -> dict[str, Any]:
+    rows = spend_guard.get("service_guards", []) if isinstance(spend_guard.get("service_guards"), list) else []
+    allowed = sorted(row.get("service") for row in rows if isinstance(row, dict) and row.get("allowed_now") and row.get("service"))
+    blocked_or_approval = sorted(
+        row.get("service")
+        for row in rows
+        if isinstance(row, dict) and row.get("service") and not row.get("allowed_now") and row.get("status") in {"blocked", "approval_required"}
+    )
+    return {
+        "month": spend_guard.get("month"),
+        "service_count": len(rows),
+        "allowed_now": allowed,
+        "blocked_or_approval": blocked_or_approval,
+        "token_guards": spend_guard.get("token_guards", []),
+        "preflight_commands": spend_guard.get("preflight_commands", {}),
+    }
+
+
 def execution_order(report: dict[str, Any], max_steps: int) -> list[str]:
     order = [
         "review seo/project-intake.yaml and seo/setup/launch-plan.md",
         "run project-profile.py --write; apply only after review",
         "run tool-stack-recommender.py --write; approve gated tools only as needed",
+        "run spend-guard.py --write before paid/API/LLM/subscription usage",
         "fill human-secret env names in .env/provider consoles",
         "run setup-onboarding.py --write and complete human/approval steps",
         "run setup-control-plane.py --write before first SEO cycle",
@@ -419,6 +443,7 @@ def build_report(cfg_path: pathlib.Path, max_execution_steps: int = DEFAULT_MAX_
     tool_stack = load_tool_stack(cfg_path, cfg, project_root)
     growth_roadmap = load_growth_roadmap(cfg_path, cfg, project_root)
     onboarding = load_onboarding(cfg_path, cfg, project_root)
+    spend_guard = load_spend_guard(cfg_path, cfg, project_root)
     automation = load_automation(cfg_path, cfg, project_root)
     market = market_matrix(cfg, intake)
     business = business_matrix(cfg, intake)
@@ -436,6 +461,7 @@ def build_report(cfg_path: pathlib.Path, max_execution_steps: int = DEFAULT_MAX_
         "token_contract": token,
         "budget_contract": budget,
         "subscription_controls": subscription_controls(cfg, tool_budget),
+        "spend_contract": spend_contract(spend_guard),
         "tool_contract": tool_contract(tool_stack),
         "automation_contract": automation_contract(automation),
         "human_inputs": {
@@ -468,6 +494,7 @@ def generated_yaml(report: dict[str, Any]) -> str:
         "business_matrix": report.get("business_matrix", {}),
         "token_contract": report.get("token_contract", {}),
         "budget_contract": report.get("budget_contract", {}),
+        "spend_contract": report.get("spend_contract", {}),
         "tool_contract": report.get("tool_contract", {}),
         "automation_contract": report.get("automation_contract", {}),
         "human_inputs": report.get("human_inputs", {}),
@@ -486,6 +513,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     token = report.get("token_contract", {})
     budget = report.get("budget_contract", {})
     tools = report.get("tool_contract", {})
+    spend = report.get("spend_contract", {})
     automation = report.get("automation_contract", {})
     lines = [
         "# seo-cycle launch plan",
@@ -510,6 +538,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Monthly LLM USD cap: ${budget.get('monthly_llm_usd_cap')}",
         f"- Monthly ads USD cap: ${budget.get('monthly_ads_usd_cap')}",
         f"- Cloud budget alert USD: ${budget.get('cloud_budget_alert_usd')}",
+        f"- Spend guard services: {spend.get('service_count')}",
+        f"- Spend blocked/approval: {', '.join(spend.get('blocked_or_approval', [])) or '-'}",
         "",
         "## Tools",
         f"- Free-first: {', '.join(tools.get('free_first', [])) or '-'}",

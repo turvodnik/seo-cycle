@@ -72,6 +72,8 @@ class SetupOnboardingTest(unittest.TestCase):
         self.assertIn("approval", owners)
         self.assertIn("rf_tracking_policy_review", steps)
         self.assertIn("google_cloud_nlp_budget_guard", steps)
+        self.assertIn("run_spend_guard", steps)
+        self.assertIn("spend_guard_report", steps["run_spend_guard"]["proofs"])
         self.assertIn("run_setup_control_plane", steps)
         self.assertIn("setup_control_plane", steps["run_setup_control_plane"]["proofs"])
         self.assertIn("GOOGLE_APPLICATION_CREDENTIALS", report["secret_env_names"])

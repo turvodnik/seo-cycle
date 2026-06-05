@@ -420,6 +420,16 @@ def build_steps(
                 priority=70,
             ),
             step(
+                "run_spend_guard",
+                "budget",
+                "agent",
+                "Generate spend/subscription guard",
+                "Create a compact spend guard before paid/API/LLM/subscription work; use its preflight commands before each run.",
+                commands=[f"python3 {skill_root()}/scripts/spend-guard.py {cfg_path} --write"],
+                proofs=["spend_guard_report", "latest_spend_guard", "spend_checklist"],
+                priority=72,
+            ),
+            step(
                 "run_growth_roadmap",
                 "roadmap",
                 "agent",

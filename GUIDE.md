@@ -47,6 +47,7 @@
 | **Контроль токенов и бюджета** | `governance` + `tool-budget.yaml` + `governance-report.py`: cache-first, raw на диск, distillates в контекст, approval gates. |
 | **Маршрут под задачу** | `task-router.py --task "..."`: выбирает только нужные фазы/источники, показывает approval gates, blocked actions, automation и context caps. |
 | **Фактический расход** | `usage-ledger.py report/check/record`: append-only учёт токенов, USD, requests, credits, units, browser minutes и подписок. |
+| **Spend guard** | `spend-guard.py --write`: allowed/approval/blocked по paid/API/LLM/subscription сервисам, остатки лимитов, reserves и preflight-команды. |
 | **Стек инструментов под проект** | `tool-stack-recommender.py --write`: Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking решения по стране, бизнесу, бюджету и RF policy. |
 | **Growth roadmap** | `growth-roadmap.py --write`: top-N roadmap по технике, search evidence, ecommerce/local, entities/content, AI visibility, CRO/маркетингу и automation gates. |
 | **Onboarding playbook** | `setup-onboarding.py --write`: подробный first-run checklist с owner, human-secret env names, approval gates, командами и proof-файлами. |
@@ -89,6 +90,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
 ```bash
 python3 ~/.claude/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по теме X" --write
 python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py check --service openai --category llm --usd 0.25 --fail-on-block
+python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write
@@ -230,7 +232,8 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 - `seo/automations/automation-recommendations.md` — human-readable automation recommendations by project type/market/tools.
 - `seo/usage/usage-ledger.jsonl` — append-only журнал фактического расхода токенов, USD, credits, units, requests и browser minutes.
 - `seo/setup/latest-usage-ledger.md` — текущий месячный usage report и cap/approval/block status.
-- `seo/setup/setup-control-plane.md` — compact readiness report: intake/profile/sources/governance/validation/tool stack/growth roadmap/onboarding/launch-plan/automation + next actions.
+- `seo/spend-guard.generated.yaml`, `seo/setup/spend-guard.md` и `seo/setup/spend-checklist.csv` — spend/subscription guard: allowed/approval/blocked, остатки лимитов, preflight-команды.
+- `seo/setup/setup-control-plane.md` — compact readiness report: intake/profile/sources/governance/validation/tool stack/spend guard/growth roadmap/onboarding/launch-plan/automation + next actions.
 - `seo/setup/latest-task-route.md` — low-token route for the latest task: phases, sources, approval gates, blocked actions, automation and context caps.
 - `seo/project-intake.yaml` — детальная карта стран, регионов, поисковиков, рекламы, local/merchant/video/analytics decisions.
 - `seo/project-intake-report.md` — человекочитаемый отчёт по intake для review перед profile/apply.
@@ -243,6 +246,7 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 - Перед дорогим сбором или автоматизацией запускай `governance-report.py`; если бюджет/approval не позволяют, делай только report-only/cached/read-only шаг.
 - Перед конкретной задачей запускай `task-router.py --task "..." --write` и следуй `seo/setup/latest-task-route.md`, чтобы не запускать лишние фазы/источники.
 - Перед фактическим расходом запускай `usage-ledger.py check ... --fail-on-block`; после расхода фиксируй `usage-ledger.py record ... --write`.
+- Перед paid/API/LLM/subscription расходом запускай `spend-guard.py --write`; если сервис не allowed или status approval/blocked, остановись до approval/policy.
 - Перед подключением новых Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструментов запускай `tool-stack-recommender.py --write`; `--apply` только после review.
 - Перед широким циклом или маркетинг-задачей запускай `growth-roadmap.py --write` и начинай с `seo/setup/growth-roadmap.md`.
 - Перед first-run открывай `setup-onboarding.py --write` / `seo/setup/onboarding-playbook.md`; secret values не записывай в playbook.
@@ -264,9 +268,10 @@ python3 ~/.claude/skills/seo-cycle/scripts/cycle-state.py show      # прогр
 |---|---|---|---|
 | `validate-config.py` | Проверяет `seo-cycle.yaml`, env, делегатов, policy-файлы и governance | `python3 validate-config.py` | Список активных источников, недостающие ключи/policy, ✓/ошибки |
 | `resolve-sources.py` | Разворачивает `region_profile` + override в список активных источников | `python3 resolve-sources.py` | Активные/пропущенные источники с причиной + `seo/cycles/<date>/active-sources.json` |
-| `setup-control-plane.py` | Единый low-token setup/readiness отчёт по intake/profile/sources/governance/validation/tool stack/growth roadmap/onboarding/launch-plan/automation/task route/usage ledger | `python3 setup-control-plane.py --write` | `seo/setup/setup-control-plane.md/json`, latest validation/governance/sources/tool stack/growth roadmap/onboarding/launch-plan/task route/usage |
+| `setup-control-plane.py` | Единый low-token setup/readiness отчёт по intake/profile/sources/governance/validation/tool stack/spend guard/growth roadmap/onboarding/launch-plan/automation/task route/usage ledger | `python3 setup-control-plane.py --write` | `seo/setup/setup-control-plane.md/json`, latest validation/governance/sources/tool stack/spend/growth roadmap/onboarding/launch-plan/task route/usage |
 | `task-router.py` | Строит low-token маршрут под конкретную SEO/маркетинг-задачу | `python3 task-router.py --task "аудит индексации" --write` | `seo/setup/latest-task-route.md/json` + archived route |
 | `usage-ledger.py` | Ведёт фактический расход токенов, USD, credits, units, requests, browser minutes и проверяет caps | `python3 usage-ledger.py report --write` / `check --service openai --usd 0.25 --fail-on-block` / `record --service openai --usd 0.25` | `seo/usage/usage-ledger.jsonl`, `seo/setup/latest-usage-ledger.md/json` |
+| `spend-guard.py` | Показывает allowed/approval/blocked по paid/API/LLM/subscription сервисам, остатки лимитов и preflight-команды | `python3 spend-guard.py --write` | `seo/spend-guard.generated.yaml`, `seo/setup/spend-guard.md/json`, `seo/setup/spend-checklist.csv` |
 | `tool-stack-recommender.py` | Рекомендует стек инструментов по country/search engines/business/local/ecommerce/budget/tracking policy | `python3 tool-stack-recommender.py --write` / `--apply` | `seo/tool-stack.generated.yaml`, `seo/setup/tool-stack-report.md/json`, optional backup+safe source flags |
 | `growth-roadmap.py` | Строит top-N roadmap по technical/search evidence/ecommerce/local/content/entities/AI visibility/CRO/automation | `python3 growth-roadmap.py --write` / `--max-actions 8` | `seo/growth-roadmap.generated.yaml`, `seo/setup/growth-roadmap.md/json` |
 | `setup-onboarding.py` | Строит подробный first-run checklist с owner, env names, approval gates, командами и proofs | `python3 setup-onboarding.py --write` / `--max-steps 24` | `seo/onboarding.generated.yaml`, `seo/setup/onboarding-playbook.md/json`, `seo/setup/onboarding-checklist.csv` |
@@ -510,6 +515,7 @@ are scripts, the "project truth" lives in one config.
 | **Token and budget control** | `governance` + `tool-budget.yaml` + `governance-report.py`: cache-first, raw to disk, distillates in context, approval gates. |
 | **Task-level routing** | `task-router.py --task "..."` selects only the needed phases/sources and reports approval gates, blocked actions, automation, and context caps. |
 | **Actual usage ledger** | `usage-ledger.py report/check/record`: append-only tracking for tokens, USD, requests, credits, units, browser minutes, and subscriptions. |
+| **Spend guard** | `spend-guard.py --write`: allowed/approval/blocked status for paid/API/LLM/subscription services, remaining limits, reserves, and preflight commands. |
 | **Per-project tool stack** | `tool-stack-recommender.py --write` decides Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking tools by country, business type, budget, and RF policy. |
 | **Growth roadmap** | `growth-roadmap.py --write` builds a top-N roadmap across technical, search evidence, ecommerce/local, entities/content, AI visibility, CRO/marketing, and automation gates. |
 | **Onboarding playbook** | `setup-onboarding.py --write` creates a detailed first-run checklist with owners, human-secret env names, approval gates, commands, and proof artifacts. |
@@ -540,6 +546,7 @@ cp ~/.claude/skills/seo-cycle/.env.example .env
 
 # 5. Validate
 python3 ~/.claude/skills/seo-cycle/scripts/validate-config.py
+python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write
 python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write
@@ -682,7 +689,8 @@ Before starting phases, making API calls, spending credits, or changing tracking
 - `seo/automations/automation-recommendations.md` — human-readable automation recommendations by project type/market/tools.
 - `seo/usage/usage-ledger.jsonl` — append-only actual usage ledger for tokens, USD, credits, units, requests, and browser minutes.
 - `seo/setup/latest-usage-ledger.md` — current monthly usage report plus cap/approval/block status.
-- `seo/setup/setup-control-plane.md` — compact readiness report: intake/profile/sources/governance/validation/tool stack/growth roadmap/onboarding/launch-plan/automation + next actions.
+- `seo/spend-guard.generated.yaml`, `seo/setup/spend-guard.md`, and `seo/setup/spend-checklist.csv` — spend/subscription guard with allowed/approval/blocked status, remaining limits, and preflight commands.
+- `seo/setup/setup-control-plane.md` — compact readiness report: intake/profile/sources/governance/validation/tool stack/spend guard/growth roadmap/onboarding/launch-plan/automation + next actions.
 - `seo/setup/latest-task-route.md` — low-token route for the latest task: phases, sources, approval gates, blocked actions, automation, and context caps.
 - `seo/project-intake.yaml` — detailed map of countries, regions, search engines, ads, local/merchant/video/analytics decisions.
 - `seo/project-intake-report.md` — human-readable intake report for review before profile/apply.
@@ -695,6 +703,7 @@ Rules:
 - Run `governance-report.py` before expensive collection or automation; if budget/approval does not allow it, do only report-only/cached/read-only steps.
 - Before each concrete task, run `task-router.py --task "..." --write` and follow `seo/setup/latest-task-route.md` so unnecessary phases/sources are skipped.
 - Before actual spend, run `usage-ledger.py check ... --fail-on-block`; after spend, record it with `usage-ledger.py record ... --write`.
+- Before paid/API/LLM/subscription spend, run `spend-guard.py --write`; if the service is not allowed or has approval/blocked status, stop until approval/policy changes.
 - Before connecting new Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking tools, run `tool-stack-recommender.py --write`; use `--apply` only after review.
 - Before broad cycles or marketing tasks, run `growth-roadmap.py --write` and start from `seo/setup/growth-roadmap.md`.
 - Before first run, use `setup-onboarding.py --write` / `seo/setup/onboarding-playbook.md`; never store secret values in the playbook.
@@ -716,9 +725,10 @@ Rules:
 |---|---|---|---|
 | `validate-config.py` | Validates config, env, delegates, policy files, governance | `python3 validate-config.py` | Active sources, missing keys/policies, ✓/errors |
 | `resolve-sources.py` | Expands `region_profile` + overrides into active sources | `python3 resolve-sources.py` | Active/skipped sources with reason + `active-sources.json` |
-| `setup-control-plane.py` | Single low-token setup/readiness report for intake/profile/sources/governance/validation/tool stack/growth roadmap/onboarding/launch-plan/automation/task route/usage ledger | `python3 setup-control-plane.py --write` | `seo/setup/setup-control-plane.md/json`, latest validation/governance/sources/tool stack/growth roadmap/onboarding/launch-plan/task route/usage |
+| `setup-control-plane.py` | Single low-token setup/readiness report for intake/profile/sources/governance/validation/tool stack/spend guard/growth roadmap/onboarding/launch-plan/automation/task route/usage ledger | `python3 setup-control-plane.py --write` | `seo/setup/setup-control-plane.md/json`, latest validation/governance/sources/tool stack/spend/growth roadmap/onboarding/launch-plan/task route/usage |
 | `task-router.py` | Builds a low-token route for one SEO/marketing task | `python3 task-router.py --task "indexation audit" --write` | `seo/setup/latest-task-route.md/json` + archived route |
 | `usage-ledger.py` | Tracks actual tokens, USD, credits, units, requests, browser minutes and checks caps | `python3 usage-ledger.py report --write` / `check --service openai --usd 0.25 --fail-on-block` / `record --service openai --usd 0.25` | `seo/usage/usage-ledger.jsonl`, `seo/setup/latest-usage-ledger.md/json` |
+| `spend-guard.py` | Shows allowed/approval/blocked status for paid/API/LLM/subscription services, remaining limits, and preflight commands | `python3 spend-guard.py --write` | `seo/spend-guard.generated.yaml`, `seo/setup/spend-guard.md/json`, `seo/setup/spend-checklist.csv` |
 | `tool-stack-recommender.py` | Recommends the tool stack from country/search engines/business/local/ecommerce/budget/tracking policy | `python3 tool-stack-recommender.py --write` / `--apply` | `seo/tool-stack.generated.yaml`, `seo/setup/tool-stack-report.md/json`, optional backup+safe source flags |
 | `growth-roadmap.py` | Builds a top-N roadmap across technical/search evidence/ecommerce/local/content/entities/AI visibility/CRO/automation | `python3 growth-roadmap.py --write` / `--max-actions 8` | `seo/growth-roadmap.generated.yaml`, `seo/setup/growth-roadmap.md/json` |
 | `setup-onboarding.py` | Builds the detailed first-run checklist with owners, env names, approval gates, commands, and proofs | `python3 setup-onboarding.py --write` / `--max-steps 24` | `seo/onboarding.generated.yaml`, `seo/setup/onboarding-playbook.md/json`, `seo/setup/onboarding-checklist.csv` |

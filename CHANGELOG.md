@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.29.0] — 2026-06-05
+
+### Spend and subscription guard
+
+- Added `scripts/spend-guard.py` to create a local spend/subscription control plane from `seo-cycle.yaml`, `seo/tool-budget.yaml`, tool-stack decisions, subscriptions, and `seo/usage/usage-ledger.jsonl`.
+- The guard writes `seo/spend-guard.generated.yaml`, `seo/setup/spend-guard.md/json`, `seo/setup/latest-spend-guard.md/json`, and `seo/setup/spend-checklist.csv`; it never stores secret values.
+- Service guards now show `allowed_now`, status, metric caps, reserves, remaining limits, approval gates, env names, and exact `usage-ledger.py check ... --fail-on-block` preflight commands for paid API, LLM, ads, and subscription tools.
+- `setup-control-plane.py`, `launch-plan.py`, onboarding, project templates, validation, governance report, init wizard, and docs now include spend guard as part of first-run setup.
+- Added smoke tests proving default RU projects block paid/LLM spend without approval and tuned projects report remaining NeuronWriter/OpenAI limits correctly.
+
 ## [1.28.0] — 2026-06-05
 
 ### Per-project launch plan contract
