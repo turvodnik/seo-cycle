@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.33.0] — 2026-06-05
+
+### Setup questionnaire worksheet
+
+- `setup-gap-audit.py --write` now also generates `seo/setup/setup-questionnaire.md`, `setup-questionnaire.csv`, `setup-questionnaire.json`, and latest copies as a fillable owner worksheet for missing setup fields.
+- Questionnaire rows include priority, field, category, severity, question, answer format, target file, follow-up command, empty answer, and notes; secret values are explicitly kept out.
+- `setup-control-plane.py`, context pack read order, task router, onboarding proofs, project templates, validation, governance report, init wizard, README, GUIDE, SKILL.md, INSTALL, and Codex runtime docs now include the worksheet.
+- Added smoke tests proving RU ecommerce and US local projects receive project-type-aware questionnaire rows without requiring irrelevant ecommerce feed fields for local-only projects.
+
 ## [1.32.0] — 2026-06-05
 
 ### Detailed setup gap audit

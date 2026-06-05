@@ -107,6 +107,9 @@ policy_files:
   setup_gap_audit_report: seo/setup/setup-gap-audit.md
   setup_gap_audit_json: seo/setup/setup-gap-audit.json
   latest_setup_gap_audit: seo/setup/latest-setup-gap-audit.md
+  setup_questionnaire: seo/setup/setup-questionnaire.md
+  setup_questionnaire_csv: seo/setup/setup-questionnaire.csv
+  latest_setup_questionnaire: seo/setup/latest-setup-questionnaire.md
   automation_recommendations: seo/automations/automation-recommendations.md
   automation_policy_generated: seo/automation-policy.generated.yaml
   setup_control_plane: seo/setup/setup-control-plane.md

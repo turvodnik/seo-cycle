@@ -94,6 +94,7 @@ class ContextPackTest(unittest.TestCase):
         self.assertLessEqual(report["rendered_chars"], report["context_contract"]["max_pack_chars"])
         self.assertIn("seo/setup/latest-task-route.md", report["read_order"])
         self.assertIn("seo/setup/setup-gap-audit.md", report["read_order"])
+        self.assertIn("seo/setup/setup-questionnaire.md", report["read_order"])
         self.assertIn("seo/setup/launch-plan.md", report["read_order"])
         self.assertIn("seo/setup/spend-guard.md", report["read_order"])
         self.assertIn("raw API JSON", report["do_not_load_raw"])
@@ -122,7 +123,9 @@ class ContextPackTest(unittest.TestCase):
         setup = json.loads((cfg_path.parent / "seo" / "setup" / "setup-control-plane.json").read_text(encoding="utf-8"))
         self.assertGreater(setup["context_pack"]["rendered_chars"], 0)
         self.assertLess(setup["setup_gap_audit"]["score"], 100)
+        self.assertGreater(setup["setup_gap_audit"]["questionnaire"]["row_count"], 0)
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "setup-gap-audit.md").exists())
+        self.assertTrue((cfg_path.parent / "seo" / "setup" / "setup-questionnaire.csv").exists())
         self.assertIn("seo/setup/context-pack.md", setup["next_actions"][0])
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "latest-context-pack.md").exists())
 

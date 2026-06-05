@@ -457,7 +457,7 @@ def build_steps(
                 "Run full setup control plane",
                 "Refresh readiness, validation, sources, task route, context pack, setup gap audit, usage ledger, tool stack, growth roadmap, and automation recommendations.",
                 commands=[f"python3 {skill_root()}/scripts/setup-control-plane.py {cfg_path} --write --task \"first SEO setup\""],
-                proofs=["setup_control_plane", "context_pack_report", "setup_gap_audit_report", "latest_task_route", "latest_usage_report", "tool_stack_report", "growth_roadmap_report"],
+                proofs=["setup_control_plane", "context_pack_report", "setup_gap_audit_report", "setup_questionnaire", "latest_task_route", "latest_usage_report", "tool_stack_report", "growth_roadmap_report"],
                 priority=90,
             ),
             step(

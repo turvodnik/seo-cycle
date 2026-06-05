@@ -141,6 +141,9 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "setup_gap_audit_report": "seo/setup/setup-gap-audit.md",
         "setup_gap_audit_json": "seo/setup/setup-gap-audit.json",
         "latest_setup_gap_audit": "seo/setup/latest-setup-gap-audit.md",
+        "setup_questionnaire": "seo/setup/setup-questionnaire.md",
+        "setup_questionnaire_csv": "seo/setup/setup-questionnaire.csv",
+        "latest_setup_questionnaire": "seo/setup/latest-setup-questionnaire.md",
         "automation_recommendations": "seo/automations/automation-recommendations.md",
         "automation_policy_generated": "seo/automation-policy.generated.yaml",
         "automation_plan": "seo/automations/automation-plan.md",
@@ -238,7 +241,7 @@ def next_actions(
     missing_gap_count = int(gap_summary.get("missing") or 0)
     if missing_gap_count:
         sample = ", ".join(setup_gap_audit.get("missing_fields", [])[:6])
-        actions.append(f"Answer `seo/setup/setup-gap-audit.md` before broad execution: {missing_gap_count} setup gaps remain ({sample}).")
+        actions.append(f"Answer `seo/setup/setup-questionnaire.csv` before broad execution: {missing_gap_count} setup gaps remain ({sample}).")
 
     blocked_spend = [
         row["service"]
@@ -308,6 +311,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Context pack chars: {context_pack.get('rendered_chars')}",
         f"- Setup gap score: {setup_gap_audit.get('score')}",
         f"- Setup gaps missing: {(setup_gap_audit.get('summary') or {}).get('missing')}",
+        f"- Setup questionnaire rows: {(setup_gap_audit.get('questionnaire') or {}).get('row_count')}",
         f"- Recommended automations: {len((automation_recommendations.get('policy_overlay') or {}).get('planned_automations', {}))}",
         f"- Automation install allowed: {automation.get('allowed')}",
     ]

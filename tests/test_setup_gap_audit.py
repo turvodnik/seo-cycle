@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import csv
 
 try:
     import yaml
@@ -84,7 +85,17 @@ class SetupGapAuditTest(unittest.TestCase):
         self.assertIn("automation.recommendations", report["evidence"])
         self.assertIn("seo/setup/context-pack.md", report["read_first"])
         self.assertTrue(report["recommended_questions"])
+        self.assertEqual(report["questionnaire"]["markdown"], "seo/setup/setup-questionnaire.md")
+        self.assertIn("business.priority_products_or_services", {row["field"] for row in report["questionnaire"]["rows"]})
+        self.assertIn("budget.monthly_paid_api_usd_cap", {row["field"] for row in report["questionnaire"]["rows"]})
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "setup-gap-audit.md").exists())
+        self.assertTrue((cfg_path.parent / "seo" / "setup" / "setup-questionnaire.md").exists())
+        self.assertTrue((cfg_path.parent / "seo" / "setup" / "setup-questionnaire.csv").exists())
+
+        with (cfg_path.parent / "seo" / "setup" / "setup-questionnaire.csv").open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertIn("business.priority_products_or_services", {row["field"] for row in rows})
+        self.assertEqual({row["answer"] for row in rows}, {""})
 
     def test_us_local_gap_audit_checks_local_profiles_without_ecommerce_feed_requirement(self) -> None:
         cfg_path = self.make_project(country="US", project_type="local_business")
@@ -96,6 +107,9 @@ class SetupGapAuditTest(unittest.TestCase):
         self.assertNotIn("ecommerce.feed_policy", report["missing_fields"])
         self.assertIn("bing_places", report["signals"]["local_platforms"])
         self.assertIn("google_business_profile", report["signals"]["local_platforms"])
+        local_row = next(row for row in report["questionnaire"]["rows"] if row["field"] == "local.business_profile_urls")
+        self.assertIn("seo-cycle.yaml", local_row["target_file"])
+        self.assertIn("project-intake", local_row["follow_up_command"])
 
 
 if __name__ == "__main__":

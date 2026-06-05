@@ -42,6 +42,8 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - `seo/setup/latest-context-pack.md`
 - `seo/setup/setup-gap-audit.md`
 - `seo/setup/latest-setup-gap-audit.md`
+- `seo/setup/setup-questionnaire.md`
+- `seo/setup/setup-questionnaire.csv`
 - `seo/spend-guard.generated.yaml`
 - `seo/setup/spend-guard.md`
 - `seo/setup/spend-checklist.csv`
@@ -68,7 +70,7 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 - перед подключением Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструментов строить stack: `python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write`; `--apply` только после review, без секретов;
 - перед широким циклом строить top-N roadmap: `python3 ~/.claude/skills/seo-cycle/scripts/growth-roadmap.py --write` и начинать с `seo/setup/growth-roadmap.md`;
 - перед первым запуском строить onboarding: `python3 ~/.claude/skills/seo-cycle/scripts/setup-onboarding.py --write`; human-secret значения вводятся только в `.env`/кабинетах;
-- перед чтением подробных setup-отчётов строить context pack, gap audit и launch contract: `context-pack.py --write`, `setup-gap-audit.py --write`, затем `launch-plan.py --write`; начинать с `seo/setup/context-pack.md`, потом `seo/setup/setup-gap-audit.md` и `seo/setup/launch-plan.md`;
+- перед чтением подробных setup-отчётов строить context pack, gap audit/questionnaire и launch contract: `context-pack.py --write`, `setup-gap-audit.py --write`, затем `launch-plan.py --write`; начинать с `seo/setup/context-pack.md`, потом `seo/setup/setup-questionnaire.csv` / `seo/setup/setup-gap-audit.md` и `seo/setup/launch-plan.md`;
 - рекомендации schedule строить через `python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write`; он использует tool-stack/spend-guard и покрывает spend, indexability, search consoles, Bing, schema/CWV, content decay, ecommerce/local и AI visibility; применять через `--apply` только после review, `--allow-schedules` только по явному разрешению;
 - детальную настройку стран/поисковиков/регионов/ads/local/merchant/tools/governance делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`;
 - точечную настройку проекта делать через `python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review generated overlay/report;

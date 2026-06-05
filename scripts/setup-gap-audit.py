@@ -4,13 +4,16 @@
 This report answers: "what is still not configured enough to run high-quality,
 low-token SEO/marketing work for this specific project?" It reads local config,
 project intake, tool stack, spend guard, automations, launch plan, and context
-pack. It never prints secret values.
+pack. It also writes a fillable setup questionnaire with empty answer fields.
+It never prints secret values.
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
+import io
 import json
 import pathlib
 import sys
@@ -148,6 +151,101 @@ def spend_services(spend_guard: dict[str, Any], statuses: set[str]) -> list[str]
         if isinstance(row, dict) and row.get("status") in statuses:
             rows.append(str(row.get("service")))
     return sorted(item for item in rows if item)
+
+
+def gap_priority(severity: str) -> int:
+    return {"high": 10, "medium": 30, "low": 60}.get(severity, 50)
+
+
+def question_meta(field: str) -> dict[str, str]:
+    if field.startswith("market.") or field.startswith("project."):
+        return {
+            "answer_format": "text_or_list",
+            "target_file": "seo-cycle.yaml; seo/project-intake.yaml",
+            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write",
+        }
+    if field.startswith("business."):
+        return {
+            "answer_format": "text_or_list",
+            "target_file": "seo/project-intake.yaml",
+            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write && python3 ~/.claude/skills/seo-cycle/scripts/project-profile.py --write",
+        }
+    if field.startswith("marketing."):
+        return {
+            "answer_format": "policy_choice",
+            "target_file": "seo/project-intake.yaml; seo/seo-data-collection-map.md",
+            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write && python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write",
+        }
+    if field.startswith("local."):
+        return {
+            "answer_format": "urls_or_structured_nap",
+            "target_file": "seo-cycle.yaml; seo/project-intake.yaml",
+            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write && python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write",
+        }
+    if field.startswith("ecommerce."):
+        return {
+            "answer_format": "policy_or_category_list",
+            "target_file": "seo/project-intake.yaml; seo/access-setup-runbook.md",
+            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write && python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write",
+        }
+    if field.startswith("tools."):
+        return {
+            "answer_format": "review_decision",
+            "target_file": "seo/tool-stack.generated.yaml; seo/setup/tool-stack-report.md",
+            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/tool-stack-recommender.py --write",
+        }
+    if field.startswith("budget."):
+        return {
+            "answer_format": "number_or_policy",
+            "target_file": "seo-cycle.yaml; seo/tool-budget.yaml",
+            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/spend-guard.py --write && python3 ~/.claude/skills/seo-cycle/scripts/usage-ledger.py report --write",
+        }
+    if field.startswith("automation."):
+        return {
+            "answer_format": "run_or_policy",
+            "target_file": "seo/automation-policy.yaml; seo/automations/automation-recommendations.md",
+            "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/automation-recommender.py --write && python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write",
+        }
+    return {
+        "answer_format": "text",
+        "target_file": "seo/project-intake.yaml",
+        "follow_up_command": "python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py --write",
+    }
+
+
+def questionnaire_rows(gaps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for gap in sorted(gaps, key=lambda row: (gap_priority(str(row.get("severity"))), str(row.get("category")), str(row.get("field")))):
+        meta = question_meta(str(gap.get("field")))
+        rows.append(
+            {
+                "priority": gap_priority(str(gap.get("severity"))),
+                "field": str(gap.get("field")),
+                "category": str(gap.get("category")),
+                "severity": str(gap.get("severity")),
+                "question": str(gap.get("question")),
+                "answer_format": meta["answer_format"],
+                "target_file": meta["target_file"],
+                "follow_up_command": meta["follow_up_command"],
+                "answer": "",
+                "notes": "",
+            }
+        )
+    return rows
+
+
+def build_questionnaire(gaps: list[dict[str, Any]]) -> dict[str, Any]:
+    rows = questionnaire_rows(gaps)
+    return {
+        "markdown": "seo/setup/setup-questionnaire.md",
+        "csv": "seo/setup/setup-questionnaire.csv",
+        "json": "seo/setup/setup-questionnaire.json",
+        "latest_markdown": "seo/setup/latest-setup-questionnaire.md",
+        "latest_json": "seo/setup/latest-setup-questionnaire.json",
+        "rows": rows,
+        "row_count": len(rows),
+        "high_priority_count": sum(1 for row in rows if row["severity"] == "high"),
+    }
 
 
 def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
@@ -308,6 +406,7 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
         "context_pack": "seo/setup/context-pack.md",
     }
     missing_fields = [gap["field"] for gap in gaps]
+    questionnaire = build_questionnaire(gaps)
     return {
         "version": 1,
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
@@ -328,6 +427,7 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
         "missing_fields": missing_fields,
         "gaps": gaps,
         "recommended_questions": [gap["question"] for gap in gaps],
+        "questionnaire": questionnaire,
         "signals": {
             "search_engines": engines,
             "local_platforms": local_platforms,
@@ -374,6 +474,12 @@ def render_markdown(report: dict[str, Any]) -> str:
     else:
         lines.append("- none")
 
+    lines.extend(["", "## Setup Questionnaire"])
+    questionnaire = report.get("questionnaire", {})
+    lines.append(f"- Markdown: `{questionnaire.get('markdown')}`")
+    lines.append(f"- CSV: `{questionnaire.get('csv')}`")
+    lines.append(f"- Rows: {questionnaire.get('row_count', 0)}")
+
     lines.extend(["", "## Read First"])
     for path in report.get("read_first", []):
         lines.append(f"- `{path}`")
@@ -387,22 +493,75 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_questionnaire_markdown(report: dict[str, Any]) -> str:
+    project = report.get("project", {})
+    rows = report.get("questionnaire", {}).get("rows", [])
+    lines = [
+        "# seo-cycle setup questionnaire",
+        "",
+        f"- Generated: {report.get('generated')}",
+        f"- Project: {project.get('name')} ({project.get('domain')})",
+        "- Fill answers in this worksheet or directly in the target files. Do not paste API keys, OAuth tokens, passwords, service-account JSON, or private customer data here.",
+        "- After answering a row, run its follow-up command and refresh `setup-gap-audit.py --write`.",
+        "",
+        "| Priority | Field | Severity | Question | Target file | Follow-up command |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    if rows:
+        for row in rows:
+            lines.append(
+                f"| {row['priority']} | `{row['field']}` | {row['severity']} | "
+                f"{row['question']} | `{row['target_file']}` | `{row['follow_up_command']}` |"
+            )
+    else:
+        lines.append("| - | - | - | No missing setup fields. | - | - |")
+    return "\n".join(lines) + "\n"
+
+
+def questionnaire_csv(report: dict[str, Any]) -> str:
+    buffer = io.StringIO()
+    fieldnames = [
+        "priority",
+        "field",
+        "category",
+        "severity",
+        "question",
+        "answer_format",
+        "target_file",
+        "follow_up_command",
+        "answer",
+        "notes",
+    ]
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in report.get("questionnaire", {}).get("rows", []):
+        writer.writerow({key: row.get(key, "") for key in fieldnames})
+    return buffer.getvalue()
+
+
 def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
     out_dir = project_root / "seo" / "setup"
     out_dir.mkdir(parents=True, exist_ok=True)
     md = render_markdown(report)
     json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+    questionnaire_md = render_questionnaire_markdown(report)
+    questionnaire_json = json.dumps(report.get("questionnaire", {}), ensure_ascii=False, indent=2) + "\n"
     for name in ("setup-gap-audit.md", "latest-setup-gap-audit.md"):
         (out_dir / name).write_text(md, encoding="utf-8")
     for name in ("setup-gap-audit.json", "latest-setup-gap-audit.json"):
         (out_dir / name).write_text(json_text, encoding="utf-8")
+    for name in ("setup-questionnaire.md", "latest-setup-questionnaire.md"):
+        (out_dir / name).write_text(questionnaire_md, encoding="utf-8")
+    for name in ("setup-questionnaire.json", "latest-setup-questionnaire.json"):
+        (out_dir / name).write_text(questionnaire_json, encoding="utf-8")
+    (out_dir / "setup-questionnaire.csv").write_text(questionnaire_csv(report), encoding="utf-8")
     return out_dir / "setup-gap-audit.md"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("config", nargs="?", help="Path to seo-cycle.yaml")
-    parser.add_argument("--write", action="store_true", help="Write seo/setup/setup-gap-audit.md/json.")
+    parser.add_argument("--write", action="store_true", help="Write setup gap audit and setup questionnaire artifacts.")
     parser.add_argument("--format", choices=("md", "json"), default="md")
     args = parser.parse_args()
 

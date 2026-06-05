@@ -280,7 +280,7 @@ if [ -f "seo/project-intake.yaml" ]; then
 fi
 
 python3 "$SKILL_ROOT/scripts/setup-control-plane.py" "$TARGET" --write --skip-intake >/dev/null 2>&1 \
-    && echo "✓ setup control plane создан: context-pack/setup-gap-audit/launch-plan/spend-guard/setup/task-route/usage-ledger/tool-stack/growth-roadmap/onboarding + automation recommendations" \
+    && echo "✓ setup control plane создан: context-pack/setup-gap-audit/setup-questionnaire/launch-plan/spend-guard/setup/task-route/usage-ledger/tool-stack/growth-roadmap/onboarding + automation recommendations" \
     || echo "ℹ setup control plane не создан — запусти scripts/setup-control-plane.py --write"
 
 # Дозапись проекта в общий реестр (идемпотентно — по path)
@@ -323,6 +323,7 @@ echo "     seo/setup/setup-control-plane.md"
 echo "     # обновить: python3 ~/.claude/skills/seo-cycle/scripts/setup-control-plane.py --write"
 echo "  6. Открой вопросы по недонастроенным деталям проекта:"
 echo "     seo/setup/setup-gap-audit.md"
+echo "     seo/setup/setup-questionnaire.csv"
 echo "     # обновить: python3 ~/.claude/skills/seo-cycle/scripts/setup-gap-audit.py --write"
 echo "  7. Открой компактный launch contract:"
 echo "     seo/setup/launch-plan.md"
