@@ -1,5 +1,16 @@
 # Changelog — seo-cycle
 
+## [1.42.0] — 2026-06-06
+
+### Core quality and token efficiency
+
+- Added `scripts/seo_cycle_core/` for shared config/path parsing, report bundle writing, subprocess JSON handling, context manifests, and provider health checks.
+- Added `scripts/token-waste-audit.py` to flag raw artifacts, oversized distillates, and large context candidates while keeping raw data on disk.
+- Added `scripts/perplexity-health.py` and `scripts/notebooklm-health.py` as report-only provider checks: persistent Perplexity app/browser mode, optional API, no password storage, and NotebookLM MCP/export fallback.
+- Extended `task-router.py` and `context-pack.py` with a stable `context_manifest` contract: read-first files, blocked raw artifacts, source caps, and output paths.
+- Wired token/provider reports into `setup-control-plane.py`, template policy files, validation defaults, and the existing-project upgrade assistant.
+- Refactored vNext/control-plane helpers onto shared core without changing public CLI commands or artifact paths.
+
 ## [1.41.0] — 2026-06-06
 
 ### Live AI bot access check

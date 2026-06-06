@@ -22,53 +22,7 @@ import subprocess
 import sys
 from typing import Any
 
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
-
-
-CONFIG_SEARCH_PATHS = [
-    "seo-cycle.yaml",
-    ".seo-cycle.yaml",
-    "seo/seo-cycle.yaml",
-    ".claude/seo-cycle.yaml",
-]
-
-
-def skill_root() -> pathlib.Path:
-    return pathlib.Path(__file__).resolve().parent.parent
-
-
-def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
-    for rel in CONFIG_SEARCH_PATHS:
-        path = start_dir / rel
-        if path.exists():
-            return path
-    return None
-
-
-def project_root_for(cfg_path: pathlib.Path) -> pathlib.Path:
-    if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
-        return cfg_path.parent
-    if "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
-        return cfg_path.parent.parent
-    return cfg_path.parent
-
-
-def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Path:
-    path = pathlib.Path(raw).expanduser()
-    if not path.is_absolute():
-        path = project_root / path
-    return path
-
-
-def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
+from seo_cycle_core.config import find_config, load_yaml, project_root_for, rel_path, skill_root, write_text
 
 
 def run_step(name: str, command: list[str], cwd: pathlib.Path) -> dict[str, Any]:
@@ -151,6 +105,18 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "context_pack_report": "seo/setup/context-pack.md",
         "context_pack_json": "seo/setup/context-pack.json",
         "latest_context_pack": "seo/setup/latest-context-pack.md",
+        "token_waste_audit_report": "seo/setup/token-waste-audit.md",
+        "token_waste_audit_json": "seo/setup/token-waste-audit.json",
+        "latest_token_waste_audit": "seo/setup/latest-token-waste-audit.md",
+        "latest_token_waste_audit_json": "seo/setup/latest-token-waste-audit.json",
+        "perplexity_health_report": "seo/setup/perplexity-health.md",
+        "perplexity_health_json": "seo/setup/perplexity-health.json",
+        "latest_perplexity_health": "seo/setup/latest-perplexity-health.md",
+        "latest_perplexity_health_json": "seo/setup/latest-perplexity-health.json",
+        "notebooklm_health_report": "seo/setup/notebooklm-health.md",
+        "notebooklm_health_json": "seo/setup/notebooklm-health.json",
+        "latest_notebooklm_health": "seo/setup/latest-notebooklm-health.md",
+        "latest_notebooklm_health_json": "seo/setup/latest-notebooklm-health.json",
         "setup_gap_audit_report": "seo/setup/setup-gap-audit.md",
         "setup_gap_audit_json": "seo/setup/setup-gap-audit.json",
         "latest_setup_gap_audit": "seo/setup/latest-setup-gap-audit.md",
@@ -209,6 +175,9 @@ def next_actions(
     setup_gap_audit: dict[str, Any],
     spend_guard: dict[str, Any],
     automation: dict[str, Any],
+    token_waste_audit: dict[str, Any],
+    perplexity_health: dict[str, Any],
+    notebooklm_health: dict[str, Any],
     artifacts: list[dict[str, Any]],
     apply_profile: bool,
 ) -> list[str]:
@@ -288,6 +257,16 @@ def next_actions(
     if automation.get("blockers"):
         actions.append("Automation files were generated for review; install remains blocked until policy gates allow schedules.")
 
+    if token_waste_audit.get("status") == "needs_review":
+        findings = len(token_waste_audit.get("findings", []))
+        actions.append(f"Review `seo/setup/token-waste-audit.md`: {findings} token/context waste findings need cleanup or distillates.")
+
+    if perplexity_health.get("status") == "degraded_source":
+        actions.append("Perplexity is degraded; continue with Codex/Antigravity/NotebookLM fallback until browser/app or API access is available.")
+
+    if notebooklm_health.get("status") in {"fallback_required", "unavailable"}:
+        actions.append("NotebookLM MCP is not fully available; use browser/manual export and source-pack ingestion for expert evidence.")
+
     missing_artifacts = [row["key"] for row in artifacts if not row.get("exists")]
     if missing_artifacts:
         actions.append(f"Generate/review missing setup artifacts: {', '.join(missing_artifacts)}.")
@@ -317,6 +296,9 @@ def render_markdown(report: dict[str, Any]) -> str:
     context_pack = report.get("context_pack", {})
     setup_gap_audit = report.get("setup_gap_audit", {})
     spend_guard = report.get("spend_guard", {})
+    token_waste_audit = report.get("token_waste_audit", {})
+    perplexity_health = report.get("perplexity_health", {})
+    notebooklm_health = report.get("notebooklm_health", {})
     task_route = report.get("task_route", {})
     usage = report.get("usage_ledger", {})
     vnext_reports = report.get("vnext_reports", {})
@@ -350,6 +332,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Upgrade review-needed/features: {(upgrade_assistant.get('summary') or {}).get('review_needed')}/{(upgrade_assistant.get('summary') or {}).get('features')}",
         f"- Access key tasks/approval: {(access_key_assistant.get('summary') or {}).get('tasks')}/{(access_key_assistant.get('summary') or {}).get('approval_required')}",
         f"- Context pack chars: {context_pack.get('rendered_chars')}",
+        f"- Token waste findings: {len(token_waste_audit.get('findings', []))}",
+        f"- Perplexity health: {perplexity_health.get('status')}",
+        f"- NotebookLM health: {notebooklm_health.get('status')}",
         f"- Setup gap score: {setup_gap_audit.get('score')}",
         f"- Setup gaps missing: {(setup_gap_audit.get('summary') or {}).get('missing')}",
         f"- Setup questionnaire rows: {(setup_gap_audit.get('questionnaire') or {}).get('row_count')}",
@@ -392,11 +377,6 @@ def render_markdown(report: dict[str, Any]) -> str:
         ]
     )
     return "\n".join(lines) + "\n"
-
-
-def write_text(path: pathlib.Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def write_report(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
@@ -586,6 +566,18 @@ def main() -> int:
         command.extend(["--format", "json"])
         steps.append(run_step(step_name, command, project_root))
 
+    for script_name, step_name in (
+        ("perplexity-health.py", "perplexity health"),
+        ("notebooklm-health.py", "notebooklm health"),
+        ("token-waste-audit.py", "token waste audit"),
+    ):
+        command = [sys.executable, str(root / "scripts" / script_name), str(cfg_path)]
+        if args.write:
+            command.append("--write")
+        else:
+            command.extend(["--format", "json"])
+        steps.append(run_step(step_name, command, project_root))
+
     validation_step = run_step("validate config", [sys.executable, str(root / "scripts/validate-config.py"), str(cfg_path)], project_root)
     steps.append(validation_step)
 
@@ -648,6 +640,21 @@ def main() -> int:
     context_pack_file = project_root / "seo" / "setup" / "context-pack.json"
     if not context_pack and context_pack_file.exists():
         context_pack = json.loads(context_pack_file.read_text(encoding="utf-8"))
+    token_waste_step = next((step for step in steps if step["name"] == "token waste audit"), {})
+    token_waste_audit = load_json_output(token_waste_step)
+    token_waste_file = project_root / "seo" / "setup" / "token-waste-audit.json"
+    if not token_waste_audit and token_waste_file.exists():
+        token_waste_audit = json.loads(token_waste_file.read_text(encoding="utf-8"))
+    perplexity_step = next((step for step in steps if step["name"] == "perplexity health"), {})
+    perplexity_health = load_json_output(perplexity_step)
+    perplexity_file = project_root / "seo" / "setup" / "perplexity-health.json"
+    if not perplexity_health and perplexity_file.exists():
+        perplexity_health = json.loads(perplexity_file.read_text(encoding="utf-8"))
+    notebooklm_step = next((step for step in steps if step["name"] == "notebooklm health"), {})
+    notebooklm_health = load_json_output(notebooklm_step)
+    notebooklm_file = project_root / "seo" / "setup" / "notebooklm-health.json"
+    if not notebooklm_health and notebooklm_file.exists():
+        notebooklm_health = json.loads(notebooklm_file.read_text(encoding="utf-8"))
     setup_gap_step = next((step for step in steps if step["name"] == "setup gap audit"), {})
     setup_gap_audit = load_json_output(setup_gap_step)
     setup_gap_file = project_root / "seo" / "setup" / "setup-gap-audit.json"
@@ -711,6 +718,9 @@ def main() -> int:
         "upgrade_assistant": upgrade_assistant,
         "access_key_assistant": access_key_assistant,
         "context_pack": context_pack,
+        "token_waste_audit": token_waste_audit,
+        "perplexity_health": perplexity_health,
+        "notebooklm_health": notebooklm_health,
         "setup_gap_audit": setup_gap_audit,
         "vnext_reports": vnext_reports,
         "paid_missing_env": paid_missing,
@@ -728,7 +738,27 @@ def main() -> int:
     validation_errors = validation.get("errors", 0)
     has_blocking_step = any(step["name"] not in {"validate config"} for step in blocking_exit_codes)
     report["status"] = "blocked" if validation_errors or has_blocking_step else "ok"
-    report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, onboarding, launch_plan, setup_blueprint, upgrade_assistant, access_key_assistant, context_pack, setup_gap_audit, spend_guard, automation, artifacts, args.apply_profile)
+    report["next_actions"] = next_actions(
+        validation,
+        governance,
+        sources,
+        tool_stack,
+        growth_roadmap,
+        onboarding,
+        launch_plan,
+        setup_blueprint,
+        upgrade_assistant,
+        access_key_assistant,
+        context_pack,
+        setup_gap_audit,
+        spend_guard,
+        automation,
+        token_waste_audit,
+        perplexity_health,
+        notebooklm_health,
+        artifacts,
+        args.apply_profile,
+    )
 
     if args.write:
         out_dir = write_report(project_root, report)

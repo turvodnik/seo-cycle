@@ -18,19 +18,7 @@ import re
 import sys
 from typing import Any
 
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML is required. Install with `pip3 install pyyaml`.", file=sys.stderr)
-    sys.exit(2)
-
-
-CONFIG_SEARCH_PATHS = [
-    "seo-cycle.yaml",
-    ".seo-cycle.yaml",
-    "seo/seo-cycle.yaml",
-    ".claude/seo-cycle.yaml",
-]
+from seo_cycle_core.config import boolish, find_config, load_yaml, nested_get, policy_path, project_root_for, rel_path, write_text
 
 
 SOURCES = [
@@ -264,69 +252,10 @@ BOT_PATTERNS = {
 }
 
 
-def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
-    for rel in CONFIG_SEARCH_PATHS:
-        path = start_dir / rel
-        if path.exists():
-            return path
-    return None
-
-
-def project_root_for(cfg_path: pathlib.Path) -> pathlib.Path:
-    if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
-        return cfg_path.parent
-    if "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
-        return cfg_path.parent.parent
-    return cfg_path.parent
-
-
-def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Path:
-    path = pathlib.Path(raw).expanduser()
-    if not path.is_absolute():
-        path = project_root / path
-    return path
-
-
-def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
-
-
-def write_text(path: pathlib.Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-
-
-def boolish(value: Any, default: bool = False) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"true", "yes", "y", "1", "enabled", "да", "д", "on"}
-    return bool(value)
-
-
-def nested_get(data: dict[str, Any], dotted: str) -> Any:
-    cur: Any = data
-    for part in dotted.split("."):
-        if not isinstance(cur, dict) or part not in cur:
-            return None
-        cur = cur[part]
-    return cur
-
-
 def missing(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip() in {"", "not_configured", "__PROJECT_NAME__", "__DOMAIN__", "__DATE__"}
     return value in (None, [], {})
-
-
-def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
-    policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
-    return rel_path(project_root, policy_files.get(key, default))
 
 
 def output_paths(spec: dict[str, Any], cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, pathlib.Path]:
@@ -693,4 +622,3 @@ def main(audit_id: str, argv: list[str] | None = None) -> int:
     else:
         print(render_markdown(report))
     return 0
-

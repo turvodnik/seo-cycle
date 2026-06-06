@@ -23,6 +23,8 @@ except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)
 
+from seo_cycle_core.context import build_context_manifest
+
 
 CONFIG_SEARCH_PATHS = [
     "seo-cycle.yaml",
@@ -306,6 +308,15 @@ def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route:
     spend = spend_summary(spend_guard)
     route_contract = route.get("context_contract", {}) if isinstance(route.get("context_contract"), dict) else {}
 
+    read_order_list = read_order(project_root, cfg, route)
+    do_not_load_raw = unique(route_contract.get("do_not_load_raw", []) + ["raw API JSON", "browser dumps", "full CSV exports", "full sitemap URL lists"])
+    outputs = {
+        "markdown": "seo/setup/context-pack.md",
+        "json": "seo/setup/context-pack.json",
+        "latest_markdown": "seo/setup/latest-context-pack.md",
+        "latest_json": "seo/setup/latest-context-pack.json",
+    }
+
     report = {
         "version": 1,
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
@@ -333,8 +344,8 @@ def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route:
             "max_pack_chars": max_chars,
             "load_only": route_contract.get("load_only", ["distillates/top-N summaries", "specific URLs or rows needed for this task"]),
         },
-        "read_order": read_order(project_root, cfg, route),
-        "do_not_load_raw": unique(route_contract.get("do_not_load_raw", []) + ["raw API JSON", "browser dumps", "full CSV exports", "full sitemap URL lists"]),
+        "read_order": read_order_list,
+        "do_not_load_raw": do_not_load_raw,
         "excluded_raw_artifacts": excluded_raw_artifacts(),
         "usage": {
             "status": (usage.get("evaluation") or {}).get("status"),
@@ -361,7 +372,15 @@ def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route:
             "python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write",
             "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py report --write",
         ],
+        "outputs": outputs,
     }
+    report["context_manifest"] = build_context_manifest(
+        read_first=read_order_list,
+        do_not_load_raw=do_not_load_raw,
+        outputs=outputs,
+        caps=report["context_contract"],
+        sources=route.get("sources", []),
+    )
     md = render_markdown(report)
     if len(md) > max_chars:
         report["roadmap_top_actions"] = limit(report["roadmap_top_actions"], 3)
@@ -369,12 +388,6 @@ def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route:
         report["human_secret_env_names"] = limit(report["human_secret_env_names"], 25)
         md = render_markdown(report)
     report["rendered_chars"] = len(md)
-    report["outputs"] = {
-        "markdown": "seo/setup/context-pack.md",
-        "json": "seo/setup/context-pack.json",
-        "latest_markdown": "seo/setup/latest-context-pack.md",
-        "latest_json": "seo/setup/latest-context-pack.json",
-    }
     return report
 
 

@@ -93,6 +93,27 @@ FEATURES: list[dict[str, Any]] = [
         "notes": "Keeps free/read-only tools first and gates paid/tracking/ads.",
     },
     {
+        "id": "token_efficiency_provider_health",
+        "title": "Token efficiency and provider health",
+        "policy_keys": [
+            "token_waste_audit_report",
+            "token_waste_audit_json",
+            "perplexity_health_report",
+            "perplexity_health_json",
+            "notebooklm_health_report",
+            "notebooklm_health_json",
+        ],
+        "artifacts": [
+            "seo/setup/token-waste-audit.md",
+            "seo/setup/perplexity-health.md",
+            "seo/setup/notebooklm-health.md",
+        ],
+        "question": "Enable token waste audit plus Perplexity/NotebookLM health reports for low-token evidence workflows?",
+        "default_answer": "yes_report_only",
+        "command": "python3 ~/.codex/skills/seo-cycle/scripts/token-waste-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/perplexity-health.py --write && python3 ~/.codex/skills/seo-cycle/scripts/notebooklm-health.py --write",
+        "notes": "Report-only. Perplexity uses persistent browser/app when available, no password storage; NotebookLM falls back to browser/manual source-pack export if MCP tools are unavailable.",
+    },
+    {
         "id": "automation_governance",
         "title": "Automation recommendations and safe schedule plan",
         "policy_keys": ["automation_policy", "automation_recommendations", "automation_policy_generated", "automation_plan"],

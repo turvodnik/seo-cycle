@@ -24,6 +24,8 @@ except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)
 
+from seo_cycle_core.context import build_context_manifest
+
 
 CONFIG_SEARCH_PATHS = [
     "seo-cycle.yaml",
@@ -276,6 +278,7 @@ def governance_caps(cfg: dict[str, Any], tool_budget: dict[str, Any]) -> dict[st
     budget_policy = governance.get("budget_policy", {}) if isinstance(governance.get("budget_policy"), dict) else {}
     tool_tokens = tool_budget.get("token_budget", {}) if isinstance(tool_budget.get("token_budget"), dict) else {}
     tool_money = tool_budget.get("money_budget", {}) if isinstance(tool_budget.get("money_budget"), dict) else {}
+
     return {
         "raw_data_in_context": token_policy.get("raw_data_in_context", tool_tokens.get("raw_data_in_context", False)),
         "cache_first": token_policy.get("cache_first", tool_tokens.get("cache_first", True)),
@@ -379,6 +382,35 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
         read_first.append(str(policy_path(cfg, project_root, "ai_visibility_prompts", "seo/ai-visibility-prompts.csv")))
         read_first.append(str(policy_path(cfg, project_root, "google_nlp_policy", "seo/entities/google-nlp-policy.yaml")))
 
+    do_not_load_raw = [
+        "large CSV exports",
+        "raw API JSON",
+        "browser dumps",
+        "full sitemap URL lists",
+    ]
+    context_contract = {
+        "read_first": read_first,
+        "do_not_load_raw": do_not_load_raw,
+        "load_only": [
+            "latest setup/governance/source reports",
+            "distillates/top-N summaries",
+            "specific URLs or rows needed for this task",
+        ],
+        "caps": caps,
+    }
+    context_manifest = build_context_manifest(
+        read_first=read_first,
+        do_not_load_raw=do_not_load_raw,
+        outputs={
+            "markdown": "seo/setup/latest-task-route.md",
+            "json": "seo/setup/latest-task-route.json",
+            "archive_markdown": "seo/setup/task-routes/<task>.md",
+            "archive_json": "seo/setup/task-routes/<task>.json",
+        },
+        caps=caps,
+        sources=source_rows,
+    )
+
     return {
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
         "config": str(cfg_path),
@@ -400,21 +432,8 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
             "ledger_path": usage_report.get("ledger_path"),
         },
         "automation": automation_status(meta.get("automation"), policies["automation_policy"]),
-        "context_contract": {
-            "read_first": read_first,
-            "do_not_load_raw": [
-                "large CSV exports",
-                "raw API JSON",
-                "browser dumps",
-                "full sitemap URL lists",
-            ],
-            "load_only": [
-                "latest setup/governance/source reports",
-                "distillates/top-N summaries",
-                "specific URLs or rows needed for this task",
-            ],
-            "caps": caps,
-        },
+        "context_contract": context_contract,
+        "context_manifest": context_manifest,
         "commands": [
             "python3 ~/.codex/skills/seo-cycle/scripts/setup-control-plane.py --write --skip-intake",
             f"python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task {json.dumps(task, ensure_ascii=False)} --write",

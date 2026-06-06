@@ -117,6 +117,18 @@ policy_files:
   context_pack_report: seo/setup/context-pack.md
   context_pack_json: seo/setup/context-pack.json
   latest_context_pack: seo/setup/latest-context-pack.md
+  token_waste_audit_report: seo/setup/token-waste-audit.md
+  token_waste_audit_json: seo/setup/token-waste-audit.json
+  latest_token_waste_audit: seo/setup/latest-token-waste-audit.md
+  latest_token_waste_audit_json: seo/setup/latest-token-waste-audit.json
+  perplexity_health_report: seo/setup/perplexity-health.md
+  perplexity_health_json: seo/setup/perplexity-health.json
+  latest_perplexity_health: seo/setup/latest-perplexity-health.md
+  latest_perplexity_health_json: seo/setup/latest-perplexity-health.json
+  notebooklm_health_report: seo/setup/notebooklm-health.md
+  notebooklm_health_json: seo/setup/notebooklm-health.json
+  latest_notebooklm_health: seo/setup/latest-notebooklm-health.md
+  latest_notebooklm_health_json: seo/setup/latest-notebooklm-health.json
   setup_gap_audit_report: seo/setup/setup-gap-audit.md
   setup_gap_audit_json: seo/setup/setup-gap-audit.json
   latest_setup_gap_audit: seo/setup/latest-setup-gap-audit.md
@@ -377,6 +389,33 @@ expert_sources:
     - google_ai_guidance
     - ru_seo_expert_articles
     - notebooklm_video_transcripts
+  full_transcripts_in_context: false
+
+token_efficiency:
+  enabled: true
+  context_manifest: true
+  raw_dirs: [seo/research/raw, seo/logs/raw, seo/research/browser-dumps]
+  distillate_dirs: [seo/research/distillates, seo/research/vnext/vector]
+  latest_summary_required: true
+  audit_command: "python3 ~/.codex/skills/seo-cycle/scripts/token-waste-audit.py --write"
+
+perplexity_provider:
+  enabled: true
+  mode: persistent_browser
+  api_default: disabled
+  cache_enabled: true
+  cache_key_parts: [topic, region, prompt_version, mode]
+  raw_path: seo/research/raw/perplexity/
+  distillate_path: seo/research/distillates/perplexity/
+  stores_password: false
+  degraded_fallback: [codex_native, antigravity, notebooklm, manual_browser_export]
+
+notebooklm_provider:
+  enabled: true
+  mode: mcp_or_export
+  source_role: curated_expert_evidence
+  ranking_signal: false
+  access_modes: [mcp, browser_export, manual_export, source_pack_ingestion]
   full_transcripts_in_context: false
 
 # -----------------------------------------------------------------------------
