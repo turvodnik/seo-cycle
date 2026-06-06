@@ -106,6 +106,7 @@ def write_technical_report(
     notes: list[str] | None = None,
     cache_parts: dict[str, Any] | None = None,
     paid_api_used: bool = False,
+    extra_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     report_paths = technical_paths(project_root, slug)
     source_policy = "Keep raw tool/API data on disk; use this distillate and top-N findings in LLM context."
@@ -131,6 +132,8 @@ def write_technical_report(
         "paid_api_used": paid_api_used,
         "paths": rel_paths(project_root, report_paths),
     }
+    if extra_payload:
+        payload.update(extra_payload)
     cache_key = stable_cache_key(cache_parts or {"provider": provider, "slug": slug, "summary": summary}, label=slug)
     source_paths: dict[str, str] = {}
     if write:

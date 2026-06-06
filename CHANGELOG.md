@@ -1,5 +1,19 @@
 # Changelog — seo-cycle
 
+## [1.45.0] — 2026-06-06
+
+### Technical SEO Evidence Layer
+
+- Added `scripts/technical-site-audit.py` to aggregate latest technical distillates into one bounded rollup without triggering live crawls/API calls.
+- Added guarded `scripts/gsc-url-inspection.py` for Google URL Inspection JSON/live read-only checks with `GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN`.
+- Added guarded `scripts/bing-url-inspection.py` for Bing Webmaster `GetUrlInfo` JSON/live read-only checks with `BING_WEBMASTER_API_KEY`.
+- Added `scripts/labrika-health.py` to record Labrika API readiness, support questions and manual/export fallback.
+- Added `scripts/technical-mcp-health.py` to check optional mcp-gsc, Google Analytics MCP and Lighthouse MCP readiness without installing servers or reading secrets.
+- Extended `scripts/link-audit.py` with a separate `broken_anchors` summary and finding.
+- Extended `scripts/serpstat-audit.py` with settings, list/poll, issue report, error/sub-element, history and export planned/live actions while keeping Serpstat credit/API use gated.
+- Wired new technical reports into project template policy files, validation defaults, setup control plane, task routing, upgrade assistant, access-key assistant and docs.
+- Added regression tests for GSC/Bing guarded/input adapters, Labrika health, Serpstat extended actions and technical rollup.
+
 ## [1.44.1] — 2026-06-06
 
 ### Compatibility

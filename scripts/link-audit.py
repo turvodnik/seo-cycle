@@ -100,6 +100,7 @@ def run_linkinator(url: str, timeout: int, recurse: bool, extra_args: list[str])
 def summarize(rows: list[dict[str, Any]], target_url: str | None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     target_host = host(target_url or "") if target_url else ""
     broken: list[dict[str, Any]] = []
+    broken_anchors: list[dict[str, Any]] = []
     redirects: list[dict[str, Any]] = []
     insecure: list[dict[str, Any]] = []
     external_errors: list[dict[str, Any]] = []
@@ -117,6 +118,8 @@ def summarize(rows: list[dict[str, Any]], target_url: str | None) -> tuple[dict[
         normalized = {"url": url, "status": status, "parent": normalized_parent(row)}
         if is_broken(row, status):
             broken.append(normalized)
+            if urllib.parse.urlparse(url).fragment:
+                broken_anchors.append(normalized)
             if not internal_match:
                 external_errors.append(normalized)
         if is_redirect(row, status):
@@ -129,6 +132,7 @@ def summarize(rows: list[dict[str, Any]], target_url: str | None) -> tuple[dict[
         "internal_links": internal,
         "external_links": external,
         "broken_links": len(broken),
+        "broken_anchors": len(broken_anchors),
         "redirect_links": len(redirects),
         "http_links": len(insecure),
         "mode": "linkinator",
@@ -141,6 +145,15 @@ def summarize(rows: list[dict[str, Any]], target_url: str | None) -> tuple[dict[
                 "severity": "high",
                 "message": f"{len(broken)} broken links found. Fix internal 4xx/5xx first, then important external references.",
                 "evidence": broken[:10],
+            }
+        )
+    if broken_anchors:
+        findings.append(
+            {
+                "id": "broken_anchors_present",
+                "severity": "medium",
+                "message": f"{len(broken_anchors)} fragment/anchor links appear broken. Fix in-page anchor IDs or remove stale fragments.",
+                "evidence": broken_anchors[:10],
             }
         )
     if redirects:

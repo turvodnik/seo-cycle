@@ -58,6 +58,7 @@ project_type: ecommerce
                     "parent": "https://technical.test/catalog/",
                     "redirected": True,
                 },
+                {"url": "https://technical.test/catalog/#missing-anchor", "status": 404, "parent": "https://technical.test/catalog/"},
                 {"url": "https://external.example/", "status": 500, "parent": "https://technical.test/catalog/"},
             ]
         }
@@ -67,10 +68,12 @@ project_type: ecommerce
         report = self.run_script("link-audit.py", "--input-json", str(input_path), "--url", "https://technical.test/")
 
         self.assertEqual(report["status"], "ready")
-        self.assertEqual(report["summary"]["total_links"], 4)
-        self.assertEqual(report["summary"]["broken_links"], 2)
+        self.assertEqual(report["summary"]["total_links"], 5)
+        self.assertEqual(report["summary"]["broken_links"], 3)
         self.assertEqual(report["summary"]["redirect_links"], 1)
+        self.assertEqual(report["summary"]["broken_anchors"], 1)
         self.assertIn("broken_links_present", {row["id"] for row in report["findings"]})
+        self.assertIn("broken_anchors_present", {row["id"] for row in report["findings"]})
         self.assertTrue((self.tmp / "seo" / "technical" / "link-audit.md").exists())
         self.assertTrue(pathlib.Path(report["source_paths"]["raw"]).exists())
         self.assertTrue((self.tmp / "seo" / "research" / "vector" / "source_pack.jsonl").exists())
@@ -161,6 +164,123 @@ project_type: ecommerce
         self.assertEqual(report["summary"]["high_count"], 3)
         self.assertIn("serpstat_high_priority_errors", {row["id"] for row in report["findings"]})
 
+    def test_serpstat_extended_actions_are_guarded_and_source_backed(self) -> None:
+        settings_path = self.tmp / "serpstat-settings.json"
+        settings_path.write_text(json.dumps({"scanType": "domain", "pagesLimit": 100}), encoding="utf-8")
+
+        set_settings = self.run_script(
+            "serpstat-audit.py",
+            "--action",
+            "set-settings",
+            "--project-id",
+            "777",
+            "--settings-json",
+            str(settings_path),
+        )
+        issue_report = self.run_script("serpstat-audit.py", "--action", "issue-report", "--report-id", "123456")
+        export_report = self.run_script("serpstat-audit.py", "--action", "export", "--report-id", "123456")
+
+        self.assertEqual(set_settings["status"], "guarded")
+        self.assertEqual(set_settings["planned_request"]["method"], "AuditSite.setSettings")
+        self.assertEqual(set_settings["planned_request"]["params"]["projectId"], 777)
+        self.assertEqual(issue_report["planned_request"]["method"], "AuditSite.getReportWithoutDetails")
+        self.assertEqual(export_report["planned_request"]["method"], "AuditSite.export")
+        self.assertIn("https://serpstat.com/blog/how-to-automate-searching-for-technical-issues-leave-all-your-work-to-our-api/", set_settings["distillate"]["citations"])
+
+    def test_gsc_url_inspection_distills_local_api_export(self) -> None:
+        payload = {
+            "inspectionResult": {
+                "inspectionResultLink": "https://search.google.com/search-console/inspect?resource_id=sc-domain:technical.test&id=https://technical.test/",
+                "indexStatusResult": {
+                    "verdict": "PASS",
+                    "coverageState": "Submitted and indexed",
+                    "robotsTxtState": "ALLOWED",
+                    "indexingState": "INDEXING_ALLOWED",
+                    "pageFetchState": "SUCCESSFUL",
+                    "googleCanonical": "https://technical.test/",
+                    "userCanonical": "https://technical.test/",
+                    "lastCrawlTime": "2026-06-05T10:00:00Z",
+                },
+                "mobileUsabilityResult": {"verdict": "PASS"},
+                "richResultsResult": {"verdict": "PASS", "detectedItems": [{"richResultType": "Product snippets"}]},
+            }
+        }
+        input_path = self.tmp / "gsc-url-inspection.json"
+        input_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        report = self.run_script(
+            "gsc-url-inspection.py",
+            "--input-json",
+            str(input_path),
+            "--url",
+            "https://technical.test/",
+            "--site-url",
+            "sc-domain:technical.test",
+        )
+
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["coverage_state"], "Submitted and indexed")
+        self.assertEqual(report["summary"]["index_verdict"], "PASS")
+        self.assertTrue((self.tmp / "seo" / "technical" / "gsc-url-inspection.json").exists())
+
+    def test_gsc_url_inspection_without_token_is_guarded_plan(self) -> None:
+        report = self.run_script(
+            "gsc-url-inspection.py",
+            "--url",
+            "https://technical.test/",
+            "--site-url",
+            "sc-domain:technical.test",
+        )
+
+        self.assertEqual(report["status"], "guarded")
+        self.assertFalse(report["live_api_used"])
+        self.assertEqual(report["planned_request"]["endpoint"], "https://searchconsole.googleapis.com/v1/urlInspection/index:inspect")
+        self.assertIn("GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN", report["env_required"])
+
+    def test_bing_url_inspection_distills_get_url_info_export(self) -> None:
+        payload = {
+            "d": {
+                "Url": "https://technical.test/",
+                "HttpStatus": 200,
+                "IsPage": True,
+                "AnchorCount": 50,
+                "DocumentSize": 12345,
+                "LastCrawledDate": "/Date(1764948000000+0000)/",
+                "TotalChildUrlCount": 100,
+            }
+        }
+        input_path = self.tmp / "bing-url-info.json"
+        input_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        report = self.run_script(
+            "bing-url-inspection.py",
+            "--input-json",
+            str(input_path),
+            "--url",
+            "https://technical.test/",
+            "--site-url",
+            "https://technical.test/",
+        )
+
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["summary"]["http_status"], 200)
+        self.assertTrue(report["summary"]["is_page"])
+        self.assertTrue((self.tmp / "seo" / "technical" / "bing-url-inspection.md").exists())
+
+    def test_bing_url_inspection_without_key_is_guarded_plan(self) -> None:
+        report = self.run_script(
+            "bing-url-inspection.py",
+            "--url",
+            "https://technical.test/",
+            "--site-url",
+            "https://technical.test/",
+        )
+
+        self.assertEqual(report["status"], "guarded")
+        self.assertFalse(report["live_api_used"])
+        self.assertIn("/webmaster/api.svc/json/GetUrlInfo", report["planned_request"]["endpoint"])
+        self.assertIn("BING_WEBMASTER_API_KEY", report["env_required"])
+
     def test_labrika_source_pack_ingests_manual_export(self) -> None:
         export = self.tmp / "labrika.md"
         export.write_text(
@@ -176,6 +296,49 @@ project_type: ecommerce
         self.assertEqual(report["source_type"], "manual_export")
         self.assertIn("https://labrika.com/seo-auditor", report["distillate"]["citations"])
         self.assertTrue(pathlib.Path(report["paths"]["raw"]).exists())
+
+    def test_labrika_health_is_manual_until_public_api_is_confirmed(self) -> None:
+        report = self.run_script("labrika-health.py", "--domain", "technical.test")
+
+        self.assertEqual(report["status"], "needs_input")
+        self.assertEqual(report["summary"]["api_status"], "not_confirmed")
+        self.assertIn("labrika_api_not_confirmed", {row["id"] for row in report["findings"]})
+
+    def test_technical_mcp_health_reports_missing_optional_mcp_servers(self) -> None:
+        report = self.run_script("technical-mcp-health.py")
+
+        self.assertEqual(report["status"], "needs_input")
+        self.assertFalse(report["summary"]["mcp_gsc_configured"])
+        self.assertFalse(report["summary"]["ga_mcp_configured"])
+        self.assertFalse(report["summary"]["lighthouse_mcp_configured"])
+        self.assertIn("technical_mcp_servers_not_configured", {row["id"] for row in report["findings"]})
+
+    def test_technical_site_audit_aggregates_latest_reports(self) -> None:
+        payload = {
+            "links": [
+                {"url": "https://technical.test/", "status": 200, "parent": "https://technical.test/catalog/"},
+                {"url": "https://technical.test/missing", "status": 404, "parent": "https://technical.test/catalog/"},
+            ]
+        }
+        links_path = self.tmp / "linkinator.json"
+        links_path.write_text(json.dumps(payload), encoding="utf-8")
+        self.run_script("link-audit.py", "--input-json", str(links_path), "--url", "https://technical.test/")
+
+        lighthouse = {
+            "categories": {"performance": {"score": 0.55}, "seo": {"score": 0.9}},
+            "audits": {"largest-contentful-paint": {"numericValue": 4100}, "cumulative-layout-shift": {"numericValue": 0.21}},
+        }
+        lighthouse_path = self.tmp / "lighthouse.json"
+        lighthouse_path.write_text(json.dumps(lighthouse), encoding="utf-8")
+        self.run_script("lighthouse-audit.py", "--input-json", str(lighthouse_path), "--url", "https://technical.test/")
+
+        report = self.run_script("technical-site-audit.py")
+
+        self.assertEqual(report["status"], "attention_required")
+        self.assertGreaterEqual(report["summary"]["source_count"], 2)
+        self.assertIn("link-audit", report["sources"])
+        self.assertIn("lighthouse-audit", report["sources"])
+        self.assertTrue((self.tmp / "seo" / "technical" / "technical-site-audit.md").exists())
 
 
 if __name__ == "__main__":

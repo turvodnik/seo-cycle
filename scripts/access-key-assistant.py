@@ -50,7 +50,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
     },
     "google_search_console": {
         "title": "Google Search Console property access",
-        "env": ["GSC_SITE_URL"],
+        "env": ["GSC_SITE_URL", "GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN"],
         "tools": ["google_search_console"],
         "url": "https://search.google.com/search-console",
         "doc": "docs/oauth-setup.md#2-search-console-gsc-доступ",
@@ -58,6 +58,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
             "Open the verified property.",
             "Add the service-account client_email as a user.",
             "Set GSC_SITE_URL as sc-domain:example.com or https://example.com/.",
+            "For URL Inspection API live checks, provide a short-lived OAuth access token in GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN or pass an exported JSON response instead.",
         ],
         "notes": "Read-only/off-site evidence; no analytics tag is installed.",
     },

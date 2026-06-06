@@ -73,7 +73,11 @@ GOOGLE_APPLICATION_CREDENTIALS=/Users/<you>/.config/seo-cycle/google-credentials
    GSC_SITE_URL=sc-domain:example.com
    # либо для URL prefix property:
    GSC_SITE_URL=https://example.com/
+   # опц. только для live URL Inspection API:
+   GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN=...
    ```
+
+Для `gsc-url-inspection.py --live` нужен OAuth access token с доступом к Search Console property. Если токена нет или не нужен live API, используй экспортированный JSON: `gsc-url-inspection.py --input-json gsc-url-inspection.json`.
 
 Проверка:
 ```bash
@@ -250,6 +254,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 10
 | `SEO_SEARCH_RUNTIME` | search/browser routing | enum | `direct`, `codex_external` или `auto` |
 | `GOOGLE_APPLICATION_CREDENTIALS` | путь к service account JSON | path | для GSC/GA4 |
 | `GSC_SITE_URL` | `sc-domain:example.com` или URL | string | для GSC |
+| `GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN` | short-lived OAuth access token | string | опц., только для live URL Inspection API |
 | `GA4_PROPERTY_ID` | Property ID (числовой) | string | для GA4, если разрешено policy |
 | `PSI_API_KEY` | PageSpeed API key | string | опц. (без — rate limit 25/день) |
 | `GOOGLE_MERCHANT_ACCOUNT_ID` | Merchant account ID | string | опц. |

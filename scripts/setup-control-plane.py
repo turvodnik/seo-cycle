@@ -137,11 +137,16 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "ai_bot_access_check_report": "seo/vnext/ai-bot-access-check.md",
         "technical_guardrails_audit_report": "seo/vnext/technical-guardrails-audit.md",
         "expert_source_pack_report": "seo/vnext/expert-source-pack.md",
+        "technical_site_audit_report": "seo/technical/technical-site-audit.md",
         "link_audit_report": "seo/technical/link-audit.md",
         "redirect_map_audit_report": "seo/technical/redirect-map-audit.md",
         "lighthouse_audit_report": "seo/technical/lighthouse-audit.md",
+        "gsc_url_inspection_report": "seo/technical/gsc-url-inspection.md",
+        "bing_url_inspection_report": "seo/technical/bing-url-inspection.md",
         "serpstat_audit_report": "seo/technical/serpstat-audit.md",
         "labrika_source_pack_report": "seo/technical/labrika-source-pack.md",
+        "labrika_health_report": "seo/technical/labrika-health.md",
+        "technical_mcp_health_report": "seo/technical/technical-mcp-health.md",
     }
     policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
     rows = []
@@ -577,8 +582,13 @@ def main() -> int:
         ("link-audit.py", "technical link audit"),
         ("redirect-map-audit.py", "technical redirect map audit"),
         ("lighthouse-audit.py", "technical lighthouse audit"),
+        ("gsc-url-inspection.py", "technical gsc url inspection"),
+        ("bing-url-inspection.py", "technical bing url inspection"),
         ("serpstat-audit.py", "technical serpstat audit"),
         ("labrika-source-pack.py", "technical labrika source pack"),
+        ("labrika-health.py", "technical labrika health"),
+        ("technical-mcp-health.py", "technical mcp health"),
+        ("technical-site-audit.py", "technical site rollup"),
     ):
         command = [sys.executable, str(root / "scripts" / script_name), str(cfg_path)]
         if args.write:

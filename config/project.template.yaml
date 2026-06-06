@@ -201,6 +201,10 @@ policy_files:
   expert_source_pack_json: seo/vnext/expert-source-pack.json
   latest_expert_source_pack: seo/vnext/latest-expert-source-pack.md
   latest_expert_source_pack_json: seo/vnext/latest-expert-source-pack.json
+  technical_site_audit_report: seo/technical/technical-site-audit.md
+  technical_site_audit_json: seo/technical/technical-site-audit.json
+  latest_technical_site_audit: seo/technical/latest-technical-site-audit.md
+  latest_technical_site_audit_json: seo/technical/latest-technical-site-audit.json
   link_audit_report: seo/technical/link-audit.md
   link_audit_json: seo/technical/link-audit.json
   latest_link_audit: seo/technical/latest-link-audit.md
@@ -213,6 +217,14 @@ policy_files:
   lighthouse_audit_json: seo/technical/lighthouse-audit.json
   latest_lighthouse_audit: seo/technical/latest-lighthouse-audit.md
   latest_lighthouse_audit_json: seo/technical/latest-lighthouse-audit.json
+  gsc_url_inspection_report: seo/technical/gsc-url-inspection.md
+  gsc_url_inspection_json: seo/technical/gsc-url-inspection.json
+  latest_gsc_url_inspection: seo/technical/latest-gsc-url-inspection.md
+  latest_gsc_url_inspection_json: seo/technical/latest-gsc-url-inspection.json
+  bing_url_inspection_report: seo/technical/bing-url-inspection.md
+  bing_url_inspection_json: seo/technical/bing-url-inspection.json
+  latest_bing_url_inspection: seo/technical/latest-bing-url-inspection.md
+  latest_bing_url_inspection_json: seo/technical/latest-bing-url-inspection.json
   serpstat_audit_report: seo/technical/serpstat-audit.md
   serpstat_audit_json: seo/technical/serpstat-audit.json
   latest_serpstat_audit: seo/technical/latest-serpstat-audit.md
@@ -221,6 +233,14 @@ policy_files:
   labrika_source_pack_json: seo/technical/labrika-source-pack.json
   latest_labrika_source_pack: seo/technical/latest-labrika-source-pack.md
   latest_labrika_source_pack_json: seo/technical/latest-labrika-source-pack.json
+  labrika_health_report: seo/technical/labrika-health.md
+  labrika_health_json: seo/technical/labrika-health.json
+  latest_labrika_health: seo/technical/latest-labrika-health.md
+  latest_labrika_health_json: seo/technical/latest-labrika-health.json
+  technical_mcp_health_report: seo/technical/technical-mcp-health.md
+  technical_mcp_health_json: seo/technical/technical-mcp-health.json
+  latest_technical_mcp_health: seo/technical/latest-technical-mcp-health.md
+  latest_technical_mcp_health_json: seo/technical/latest-technical-mcp-health.json
 
 # -----------------------------------------------------------------------------
 # 3b. Governance — лимиты токенов, денег, подписок и автоматизаций
@@ -367,7 +387,7 @@ technical_site_tools:
   raw_data_in_context: false
   live_http_default: disabled
   paid_api_default: disabled
-  checks: [broken_links, redirect_map, lighthouse_cwv, serpstat_site_audit, labrika_export]
+  checks: [technical_rollup, broken_links, redirect_map, lighthouse_cwv, gsc_url_inspection, bing_url_inspection, serpstat_site_audit, labrika_export, labrika_health, technical_mcp_health]
   linkinator:
     enabled: true
     live_requires_flag: true
@@ -381,16 +401,33 @@ technical_site_tools:
     input_json_preferred: true
     live_requires_flag: true
     mcp_optional: true
+  google_search_console:
+    enabled: true
+    url_inspection_enabled: true
+    env: GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN
+    live_requires_flag: true
+    read_only: true
+  bing_webmaster:
+    enabled: true
+    url_inspection_enabled: true
+    env: BING_WEBMASTER_API_KEY
+    live_requires_flag: true
+    read_only: true
   serpstat:
     enabled: false
     env: SERPSTAT_API_KEY
     live_requires_flag: true
     credit_guard: true
-    actions: [projects, create-project, start, basic-info, categories, scan-urls]
+    actions: [projects, create-project, start, stop, list, poll, default-settings, settings, set-settings, basic-info, categories, scan-urls, issue-report, error-elements, sub-elements, history-errors, export]
   labrika:
     enabled: true
     mode: manual_export
     public_api_status: not_confirmed
+  mcp:
+    enabled: true
+    mode: optional_health_check
+    servers: [mcp-gsc, google-analytics-mcp, lighthouse-mcp-server]
+    install_automatically: false
 
 snippet_sitemap:
   enabled: true

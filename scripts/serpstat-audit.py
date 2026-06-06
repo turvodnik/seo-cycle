@@ -31,6 +31,13 @@ def load_json(path: str | None) -> dict[str, Any] | None:
     return json.loads(pathlib.Path(path).expanduser().read_text(encoding="utf-8"))
 
 
+def int_or_zero(value: str | int | None) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def planned_request(args: argparse.Namespace, cfg: dict[str, Any]) -> dict[str, Any]:
     domain = args.domain or nested_get(cfg, "project.domain")
     if args.action == "projects":
@@ -39,12 +46,36 @@ def planned_request(args: argparse.Namespace, cfg: dict[str, Any]) -> dict[str, 
         groups = [{"name": args.group}] if args.group else []
         return {"method": "ProjectProcedure.createProject", "params": {"domain": domain, "name": args.project_name or domain, "groups": groups}}
     if args.action == "start":
-        return {"method": "AuditSite.start", "params": {"projectId": int(args.project_id or 0)}}
+        return {"method": "AuditSite.start", "params": {"projectId": int_or_zero(args.project_id)}}
+    if args.action == "stop":
+        return {"method": "AuditSite.stop", "params": {"projectId": int_or_zero(args.project_id)}}
+    if args.action in {"list", "poll"}:
+        return {"method": "AuditSite.getList", "params": {"projectId": int_or_zero(args.project_id), "page": args.page, "size": args.size}}
+    if args.action == "default-settings":
+        return {"method": "AuditSite.getDefaultSettings", "params": {}}
+    if args.action == "settings":
+        return {"method": "AuditSite.getSettings", "params": {"projectId": int_or_zero(args.project_id)}}
+    if args.action == "set-settings":
+        settings = load_json(args.settings_json) or {}
+        return {"method": "AuditSite.setSettings", "params": {"projectId": int_or_zero(args.project_id), "settings": settings}}
     if args.action == "categories":
-        return {"method": "AuditSite.getCategoriesStatistic", "params": {"reportId": int(args.report_id or 0)}}
+        return {"method": "AuditSite.getCategoriesStatistic", "params": {"reportId": int_or_zero(args.report_id)}}
     if args.action == "scan-urls":
-        return {"method": "AuditSite.getScanUserUrlList", "params": {"projectId": int(args.project_id or 0)}}
-    return {"method": "AuditSite.getBasicInfo", "params": {"reportId": int(args.report_id or 0)}}
+        return {"method": "AuditSite.getScanUserUrlList", "params": {"projectId": int_or_zero(args.project_id)}}
+    if args.action == "issue-report":
+        return {"method": "AuditSite.getReportWithoutDetails", "params": {"reportId": int_or_zero(args.report_id)}}
+    if args.action == "error-elements":
+        params: dict[str, Any] = {"reportId": int_or_zero(args.report_id)}
+        if args.issue_type:
+            params["type"] = args.issue_type
+        return {"method": "AuditSite.getErrorElements", "params": params}
+    if args.action == "sub-elements":
+        return {"method": "AuditSite.getSubElementsByCrc", "params": {"reportId": int_or_zero(args.report_id), "crc": args.crc or ""}}
+    if args.action == "history-errors":
+        return {"method": "AuditSite.getHistoryByCountError", "params": {"projectId": int_or_zero(args.project_id)}}
+    if args.action == "export":
+        return {"method": "AuditSite.export", "params": {"reportId": int_or_zero(args.report_id), "format": args.export_format}}
+    return {"method": "AuditSite.getBasicInfo", "params": {"reportId": int_or_zero(args.report_id)}}
 
 
 def request_warnings(request: dict[str, Any], action: str) -> list[str]:
@@ -54,14 +85,17 @@ def request_warnings(request: dict[str, Any], action: str) -> list[str]:
         warnings.append("Project creation requires 1 Serpstat project credit.")
         if not params.get("domain"):
             warnings.append("domain is required for project creation.")
-    if action == "start":
-        warnings.append("Audit start consumes audit credits equal to checked pages.")
+    if action in {"start", "stop", "list", "poll", "settings", "set-settings", "scan-urls", "history-errors"}:
+        if action == "start":
+            warnings.append("Audit start consumes audit credits equal to checked pages.")
         if not params.get("projectId"):
-            warnings.append("projectId is required for audit start.")
-    if action in {"basic-info", "categories"} and not params.get("reportId"):
+            warnings.append(f"projectId is required for {action}.")
+    if action == "set-settings" and not params.get("settings"):
+        warnings.append("settings-json is required for set-settings.")
+    if action in {"basic-info", "categories", "issue-report", "error-elements", "sub-elements", "export"} and not params.get("reportId"):
         warnings.append("reportId is required for audit report retrieval.")
-    if action == "scan-urls" and not params.get("projectId"):
-        warnings.append("projectId is required for scanned URL list retrieval.")
+    if action == "sub-elements" and not params.get("crc"):
+        warnings.append("crc is required for sub-elements retrieval.")
     return warnings
 
 
@@ -155,6 +189,7 @@ def distill_serpstat(payload: dict[str, Any], action: str) -> tuple[dict[str, An
             "https://serpstat.com/api/510-audit-start-auditsitestart/",
             "https://serpstat.com/api/516-audit-basic-information-getbasicinfo/",
             "https://serpstat.com/api/534-issue-categories-statistics-getcategoriesstatistic/",
+            "https://serpstat.com/blog/how-to-automate-searching-for-technical-issues-leave-all-your-work-to-our-api/",
         ],
     }
     return summary, findings, distillate
@@ -197,6 +232,7 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
                 "https://serpstat.com/api/project-creation/",
                 "https://serpstat.com/api/510-audit-start-auditsitestart/",
                 "https://serpstat.com/api/516-audit-basic-information-getbasicinfo/",
+                "https://serpstat.com/blog/how-to-automate-searching-for-technical-issues-leave-all-your-work-to-our-api/",
             ],
         }
         raw_payload = {"planned_request": request, "warnings": warnings, "token_present": bool(token)}
@@ -218,6 +254,8 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
         commands=[
             "SERPSTAT_API_KEY=*** python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py seo-cycle.yaml --action projects --live --write",
             "SERPSTAT_API_KEY=*** python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py seo-cycle.yaml --action start --project-id 123 --live --write",
+            "SERPSTAT_API_KEY=*** python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py seo-cycle.yaml --action set-settings --project-id 123 --settings-json serpstat-settings.json --live --write",
+            "SERPSTAT_API_KEY=*** python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py seo-cycle.yaml --action issue-report --report-id 456 --live --write",
             "python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py seo-cycle.yaml --input-json serpstat-basic-info.json --write",
         ],
         notes=["No API token value is written to reports. Live calls require explicit --live."],
@@ -235,7 +273,29 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("config", nargs="?", help="Path to seo-cycle.yaml")
-    parser.add_argument("--action", choices=("projects", "create-project", "start", "basic-info", "categories", "scan-urls"), default="basic-info")
+    parser.add_argument(
+        "--action",
+        choices=(
+            "projects",
+            "create-project",
+            "start",
+            "stop",
+            "list",
+            "poll",
+            "default-settings",
+            "settings",
+            "set-settings",
+            "basic-info",
+            "categories",
+            "scan-urls",
+            "issue-report",
+            "error-elements",
+            "sub-elements",
+            "history-errors",
+            "export",
+        ),
+        default="basic-info",
+    )
     parser.add_argument("--input-json", help="Previously exported Serpstat JSON payload.")
     parser.add_argument("--live", action="store_true", help="Call Serpstat API. Requires SERPSTAT_API_KEY and may spend credits.")
     parser.add_argument("--domain", help="Domain for create-project.")
@@ -243,6 +303,10 @@ def main() -> int:
     parser.add_argument("--group", help="Project group name for create-project.")
     parser.add_argument("--project-id", help="Serpstat project id for audit actions.")
     parser.add_argument("--report-id", help="Serpstat report id for report actions.")
+    parser.add_argument("--settings-json", help="JSON settings payload for AuditSite.setSettings.")
+    parser.add_argument("--issue-type", help="Issue/check type for AuditSite.getErrorElements.")
+    parser.add_argument("--crc", help="CRC identifier for AuditSite.getSubElementsByCrc.")
+    parser.add_argument("--export-format", default="csv", choices=("csv", "xls", "xlsx"), help="Export format for AuditSite.export.")
     parser.add_argument("--page", type=int, default=1)
     parser.add_argument("--size", type=int, default=100)
     parser.add_argument("--with-categories", action="store_true", help="For basic-info live calls, also fetch category statistics.")
