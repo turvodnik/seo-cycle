@@ -17,6 +17,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from seo_cycle_core.config import boolish, find_config, nested_get, numeric, policy_path, project_root_for, rel_path
 from seo_cycle_core.providers import notebooklm_health, perplexity_health
 from seo_cycle_core.reports import write_report_bundle
+from seo_cycle_core.source_artifacts import (
+    make_vector_record,
+    read_cached_distillate,
+    stable_cache_key,
+    write_source_artifacts,
+)
 from seo_cycle_core.subprocesses import run_json
 
 
@@ -57,6 +63,37 @@ class SeoCycleCoreTest(unittest.TestCase):
         self.assertEqual(json.loads((self.tmp / "seo/report.json").read_text(encoding="utf-8"))["status"], "ok")
         self.assertTrue((self.tmp / "seo/latest-report.md").exists())
         self.assertTrue((self.tmp / "seo/latest-report.json").exists())
+
+    def test_source_artifacts_write_raw_distillate_latest_and_vector(self) -> None:
+        cache_key = stable_cache_key({"topic": "Плита ОСП", "region": "RU", "mode": "manual_browser"})
+        vector = make_vector_record(
+            provider="perplexity",
+            cache_key=cache_key,
+            topic="Плита ОСП",
+            region="RU",
+            mode="manual_browser",
+            status="ready",
+            summary="OSB page evidence",
+            citations=["https://example.com/osb"],
+        )
+        paths = write_source_artifacts(
+            self.tmp,
+            "perplexity",
+            cache_key,
+            raw_payload={"response": "raw stays out of context"},
+            distillate_markdown="# Distillate\n",
+            distillate_payload={"summary": "OSB page evidence"},
+            vector_record=vector,
+        )
+
+        self.assertTrue(pathlib.Path(paths["raw"]).exists())
+        self.assertTrue(pathlib.Path(paths["distillate_markdown"]).exists())
+        self.assertTrue(pathlib.Path(paths["latest_markdown"]).exists())
+        cached = read_cached_distillate(self.tmp, "perplexity", cache_key)
+        self.assertEqual(cached["summary"], "OSB page evidence")
+        vector_lines = pathlib.Path(paths["vector_jsonl"]).read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(vector_lines), 1)
+        self.assertEqual(json.loads(vector_lines[0])["provider"], "perplexity")
 
     def test_run_json_reports_invalid_json_without_raising(self) -> None:
         result = run_json([sys.executable, "-c", "print('not-json')"], self.tmp)

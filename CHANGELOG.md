@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.43.0] — 2026-06-06
+
+### Source artifacts and provider collectors
+
+- Added `scripts/seo_cycle_core/source_artifacts.py` for stable raw/distillate/latest/vector source records under `seo/research/raw`, `seo/research/distillates`, and `seo/research/vector/source_pack.jsonl`.
+- Added `scripts/perplexity-collect.py` to cache Perplexity raw exports, emit bounded distillates with citations, reuse cache hits, and write degraded/manual prompt packets without paid API calls by default.
+- Added `scripts/notebooklm-source-pack.py` to ingest NotebookLM MCP/browser/manual exports as curated expert evidence source packs; NotebookLM remains non-ranking-signal evidence only.
+- Refactored `task-router.py` and `context-pack.py` onto shared `seo_cycle_core` config/path/subprocess helpers without changing public CLI outputs.
+- Added regression tests for provider collectors and source artifact contracts.
+
 ## [1.42.2] — 2026-06-06
 
 ### Bootstrap reliability

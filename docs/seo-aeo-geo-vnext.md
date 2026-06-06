@@ -25,6 +25,8 @@ Run the full report pack:
 python3 ~/.codex/skills/seo-cycle/scripts/token-waste-audit.py seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/perplexity-health.py seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/notebooklm-health.py seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/perplexity-collect.py seo-cycle.yaml --topic "Плита ОСП" --write
+python3 ~/.codex/skills/seo-cycle/scripts/notebooklm-source-pack.py seo-cycle.yaml --topic "SEO evidence" --export-file notebook.md --write
 python3 ~/.codex/skills/seo-cycle/scripts/expert-source-pack.py seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/ai-brand-audit.py seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/answer-units-audit.py seo-cycle.yaml --write
@@ -83,8 +85,8 @@ the classic multi-pass files to build `similarity.jsonl` and
 | Module | Script | Primary output |
 | --- | --- | --- |
 | Token efficiency | `token-waste-audit.py` | raw/large artifact findings and distillate requirements |
-| Perplexity provider | `perplexity-health.py` | persistent app/browser/API/fallback readiness |
-| NotebookLM provider | `notebooklm-health.py` | MCP/export fallback readiness |
+| Perplexity provider | `perplexity-health.py`, `perplexity-collect.py` | persistent app/browser/API/fallback readiness, raw/distillate/vector evidence cache |
+| NotebookLM provider | `notebooklm-health.py`, `notebooklm-source-pack.py` | MCP/export fallback readiness, curated expert source-pack ingestion |
 | Expert sources | `expert-source-pack.py` | NotebookLM/articles/videos source queue |
 | AI Brand Audit | `ai-brand-audit.py` | AI prompt pack and brand gap checks |
 | Answer Units | `answer-units-audit.py` | Citation-ready paragraph contract |

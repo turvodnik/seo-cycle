@@ -120,8 +120,8 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 ## Фазы в Codex-режиме (отличия от Claude)
 
 - **Phase 2 (сбор):** РФ-источники + Serpstat/SpyFu/suggest — наши скрипты. `llm-cli-collect.sh` в codex-режиме запускает только `agy`; вторую половину Codex собирает нативно (web_search) по напечатанному промпту и сам сливает через `llm-cli-merge.py`. Браузерные источники (Wordstat deep, Я.Вебмастер) — через codex `browser`/`playwright`.
-- **Phase 6 (writing) fact-check:** перед Perplexity use запускай `perplexity-health.py --write`; основной режим — persistent app/browser через уже залогиненную сессию, API optional/disabled by default. Результат пишется в raw/cache, downstream context получает distillate + citations.
-- **NotebookLM expert evidence:** перед source-pack work запускай `notebooklm-health.py --write`; если MCP tools не exposed, используй browser/manual export и ingestion. NotebookLM не является volume/KD/ranking signal.
+- **Phase 6 (writing) fact-check:** перед Perplexity use запускай `perplexity-health.py --write`; основной режим — persistent app/browser через уже залогиненную сессию, API optional/disabled by default. Сбор/кэш делай через `perplexity-collect.py --topic "<тема>" --raw-file <response.md> --write`; если ответа ещё нет, collector пишет prompt packet/degraded status. Downstream context получает только distillate + citations.
+- **NotebookLM expert evidence:** перед source-pack work запускай `notebooklm-health.py --write`; если MCP tools не exposed, используй browser/manual export и ingestion через `notebooklm-source-pack.py --topic "<тема>" --export-file <export.md> --write`. NotebookLM не является volume/KD/ranking signal.
 - **Phase 7 (изображения):** `img-generate.sh` отдаёт `CODEX_NATIVE_IMAGE` — Codex генерит своим image-skill и сохраняет в `save_to`; дальше общие `img-optimize.sh` + `wp-image-upload.py`.
 - **Делегирование (любая фаза):** вместо Claude subagents — `dispatching-parallel-agents` / последовательные шаги Codex.
 - **Phase 9-10 (мониторинг/итерация):** наши `*-fetch.py` + `triggers-eval.py` + `source-attribution.py` — без изменений.

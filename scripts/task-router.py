@@ -14,25 +14,12 @@ import datetime as dt
 import json
 import pathlib
 import re
-import subprocess
 import sys
 from typing import Any
 
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
-
+from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for, skill_root
 from seo_cycle_core.context import build_context_manifest
-
-
-CONFIG_SEARCH_PATHS = [
-    "seo-cycle.yaml",
-    ".seo-cycle.yaml",
-    "seo/seo-cycle.yaml",
-    ".claude/seo-cycle.yaml",
-]
+from seo_cycle_core.subprocesses import run_json
 
 PAID_OR_QUOTA_SOURCES = {
     "neuronwriter",
@@ -169,50 +156,6 @@ TASKS: dict[str, dict[str, Any]] = {
 }
 
 
-def skill_root() -> pathlib.Path:
-    return pathlib.Path(__file__).resolve().parent.parent
-
-
-def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
-    for rel in CONFIG_SEARCH_PATHS:
-        path = start_dir / rel
-        if path.exists():
-            return path
-    return None
-
-
-def project_root_for(cfg_path: pathlib.Path) -> pathlib.Path:
-    if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
-        return cfg_path.parent
-    if "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
-        return cfg_path.parent.parent
-    return cfg_path.parent
-
-
-def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Path:
-    path = pathlib.Path(raw).expanduser()
-    if not path.is_absolute():
-        path = project_root / path
-    return path
-
-
-def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
-
-
-def run_json(command: list[str], cwd: pathlib.Path) -> dict[str, Any]:
-    proc = subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False)
-    if proc.returncode != 0:
-        return {"error": proc.stderr.strip() or proc.stdout.strip(), "exit_code": proc.returncode}
-    try:
-        return json.loads(proc.stdout or "{}")
-    except json.JSONDecodeError:
-        return {"error": "invalid json", "exit_code": proc.returncode}
-
-
 def classify_task(task: str, explicit: str | None) -> str:
     if explicit:
         if explicit not in TASKS:
@@ -258,11 +201,6 @@ def source_enabled(cfg: dict[str, Any], intake: dict[str, Any], source: str, act
         return True
     node = (cfg.get("sources", {}) or {}).get(source)
     return isinstance(node, dict) and bool(node.get("enabled"))
-
-
-def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
-    policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
-    return rel_path(project_root, policy_files.get(key, default))
 
 
 def load_project_policies(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, Any]:
