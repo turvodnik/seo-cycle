@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.46.0] — 2026-06-06
+
+### Project-local Codex and WordPress MCP
+
+- Changed `install-codex.sh` / `bootstrap-codex.sh` to be local-entrypoint by default: shared code updates in `~/.codex/vendor/seo-cycle`, while installed projects get local `./.codex/skills`, `./.agents/skills` and `./.claude/skills` symlinks. Uninstalled projects no longer load/read seo-cycle. Legacy global exposure is available only with explicit `--global-skill`.
+- Added `scripts/project-mcp-config.py` to generate a project-local `.codex/config.toml` for WordPress/Novomira MCP without writing secrets. The MCP wrapper reads `WP_API_URL`, `WP_API_USERNAME`, and `WP_API_PASSWORD` from that project's `.env`.
+- Wired project-local MCP generation into `init-project.sh` and existing-project bootstrap upgrades.
+- Added `.env.example`, README, INSTALL and GUIDE documentation for project-local WordPress MCP.
+- Added regression tests that verify MCP config generation preserves existing local config, avoids secret values and skips non-WordPress projects.
+
 ## [1.45.1] — 2026-06-06
 
 ### Technical run reliability

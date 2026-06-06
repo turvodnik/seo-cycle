@@ -75,25 +75,25 @@ curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-
 # создаёт seo-cycle.yaml, .env.example, .env, AGENTS.md/CLAUDE.md и setup reports.
 ```
 
-Canonical checkout: `~/.codex/skills/seo-cycle`. Claude and agents paths are compatibility symlinks to the same Codex-first core.
+Shared core: `~/.codex/vendor/seo-cycle`. Project-local entrypoints are created only by bootstrap: `./.codex/skills/seo-cycle`, `./.agents/skills/seo-cycle`, `./.claude/skills/seo-cycle` symlink to that shared core. Projects that were not bootstrapped do not load seo-cycle.
 
 **Что выдаёт `validate-config.py`:** список активных источников (с учётом `region_profile`), список недостающих env-переменных, предупреждения о несуществующих делегатах/путях/policy-файлах/governance, итог ✓/ошибки.
 
 Перед дорогим сбором, браузерной сессией, публикацией или schedule:
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по теме X" --write
-python3 ~/.codex/skills/seo-cycle/scripts/context-pack.py --task "собрать семантику по теме X" --write
-python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service openai --category llm --usd 0.25 --fail-on-block
-python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-onboarding.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/access-key-assistant.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/governance-report.py --format md
+python3 ./.codex/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по теме X" --write
+python3 ./.codex/skills/seo-cycle/scripts/context-pack.py --task "собрать семантику по теме X" --write
+python3 ./.codex/skills/seo-cycle/scripts/usage-ledger.py check --service openai --category llm --usd 0.25 --fail-on-block
+python3 ./.codex/skills/seo-cycle/scripts/spend-guard.py --write
+python3 ./.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write
+python3 ./.codex/skills/seo-cycle/scripts/growth-roadmap.py --write
+python3 ./.codex/skills/seo-cycle/scripts/setup-onboarding.py --write
+python3 ./.codex/skills/seo-cycle/scripts/setup-blueprint.py --write
+python3 ./.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py --write
+python3 ./.codex/skills/seo-cycle/scripts/access-key-assistant.py --write
+python3 ./.codex/skills/seo-cycle/scripts/launch-plan.py --write
+python3 ./.codex/skills/seo-cycle/scripts/automation-recommender.py --write
+python3 ./.codex/skills/seo-cycle/scripts/governance-report.py --format md
 ```
 
 ---
@@ -160,7 +160,6 @@ curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-
 Запуск под Codex:
 ```bash
 cd <проект>
-ln -sf ~/.codex/skills/seo-cycle/AGENTS.md ./AGENTS.md
 export SEO_RUNTIME=codex
 codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
   "Прочитай AGENTS.md и seo-cycle.yaml. Запусти Phase 2 для кластера X."
@@ -176,11 +175,11 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 **Вынесено (пилот):** `seo-keywords` (Phase 2-3). **Статус: дробление заморожено** (решение 2026-05-30) — монолитный `seo-cycle` основной; остальные фазы не выносим без явной потребности (продажа модулей / команда / переиспользование / параллелизм).
 
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py init --topic "минвата"
-python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py next      # разблокированные фазы
+python3 ./.codex/skills/seo-cycle/scripts/cycle-state.py init --topic "минвата"
+python3 ./.codex/skills/seo-cycle/scripts/cycle-state.py next      # разблокированные фазы
 # → вызвать соответствующий фазовый скилл (seo-keywords и т.д.)
-python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py gate keywords
-python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py show      # прогресс
+python3 ./.codex/skills/seo-cycle/scripts/cycle-state.py gate keywords
+python3 ./.codex/skills/seo-cycle/scripts/cycle-state.py show      # прогресс
 ```
 
 Преимущества дробления: переиспользование (фаза вне цикла), ясность/контроль (видно прогресс и gate'ы), параллельность (независимые фазы разом), продажа (модуль = отдельный продукт). «Улучшение» — на данных (`source-attribution.py` + `triggers-eval.py`), без авто-переписывания кода.
@@ -248,9 +247,9 @@ python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py show      # прогр�
 Для развития самого `seo-cycle`, больших изменений, evidence ingestion и графовой навигации используй локальный support-набор:
 
 ```bash
-bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex
-bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex --notebooklm
-bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --check
+bash ./.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex
+bash ./.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex --notebooklm
+bash ./.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --check
 ```
 
 | Инструмент | Когда использовать | Правило безопасности |
@@ -267,7 +266,7 @@ CloakBrowser/CloakMCP и другие stealth/anti-bot инструменты н
 
 ## <a id="инструменты"></a>7. Инструменты (что делает · команда · результат)
 
-> Все скрипты лежат в `~/.codex/skills/seo-cycle/scripts/`. Запуск: `python3 <script>.py` или `bash <script>.sh`. Core-скрипты поддерживают системный Python 3.9+; UTC timestamps пишутся через совместимый timezone-aware helper.
+> В установленном проекте скрипты доступны через `./.codex/skills/seo-cycle/scripts/`. Общий обновляемый core лежит в `~/.codex/vendor/seo-cycle`. Запуск: `python3 <script>.py` или `bash <script>.sh`. Core-скрипты поддерживают системный Python 3.9+; UTC timestamps пишутся через совместимый timezone-aware helper.
 
 ### 7.0 Локальный AI/dev support-набор
 | Инструмент | Что делает | Команда | Результат |
@@ -299,6 +298,7 @@ CloakBrowser/CloakMCP и другие stealth/anti-bot инструменты н
 | `gsc-url-inspection.py` | Guarded Google URL Inspection adapter: input JSON или read-only live OAuth token | `python3 gsc-url-inspection.py --input-json gsc-url-inspection.json --url https://example.com/ --site-url sc-domain:example.com --write` | `seo/technical/gsc-url-inspection.md/json`, raw/distillate/vector source records |
 | `bing-url-inspection.py` | Guarded Bing Webmaster `GetUrlInfo`: input JSON или read-only live API key | `python3 bing-url-inspection.py --input-json bing-url-info.json --url https://example.com/ --site-url https://example.com/ --write` | `seo/technical/bing-url-inspection.md/json`, raw/distillate/vector source records |
 | `technical-mcp-health.py` | Проверяет optional MCP readiness для mcp-gsc, Google Analytics MCP и Lighthouse MCP без установки и без секретов | `python3 technical-mcp-health.py --write` | `seo/technical/technical-mcp-health.md/json`, latest copies |
+| `project-mcp-config.py` | Создаёт project-local `.codex/config.toml` для WordPress/Novomira MCP без secret values; URL/user/password читаются из `.env` проекта | `python3 project-mcp-config.py --write` | `.codex/config.toml`, `.env.example` hints; не трогает чужие MCP-блоки вне managed markers |
 | `serpstat-audit.py` | Guarded Serpstat API adapter: projects/create/start/settings/issue reports/export/basic-info/categories/scan-urls; live только с `SERPSTAT_API_KEY` | `python3 serpstat-audit.py --action basic-info --report-id 123 --write` / `--live` | `seo/technical/serpstat-audit.md/json`, raw/distillate/vector source records |
 | `labrika-source-pack.py` | Ингестит Labrika manual/browser export как third-party technical evidence, пока public API не подтверждён | `python3 labrika-source-pack.py --export-file labrika.md --write` | `seo/technical/labrika-source-pack.md/json`, `seo/research/raw/labrika/*`, vector records |
 | `labrika-health.py` | Фиксирует Labrika API readiness, support questions и manual/export fallback | `python3 labrika-health.py --write` | `seo/technical/labrika-health.md/json`, latest copies |
@@ -435,7 +435,7 @@ Image gate: настройки берутся из `images.*` в `seo-cycle.yaml
 
 ## <a id="агенты"></a>9. Агенты и делегаты — кого как вызывать
 
-В Claude Code логика делегируется субагентам (поле `delegate.*` в конфиге). Универсальные агенты в `~/.claude/agents/`:
+В Claude Code логика делегируется субагентам (поле `delegate.*` в конфиге). Для seo-cycle ставь нужные агенты локально в проекте (`.claude/agents/` или `.agents/`), чтобы они не появлялись в проектах без установки:
 
 | Агент | Для чего | Когда |
 |---|---|---|
@@ -590,7 +590,7 @@ curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-
 # and creates seo-cycle.yaml, .env.example, .env, AGENTS.md/CLAUDE.md, and setup reports.
 ```
 
-Canonical checkout: `~/.codex/skills/seo-cycle`. Claude and agents paths are compatibility symlinks to the same Codex-first core.
+Shared core: `~/.codex/vendor/seo-cycle`. Project-local entrypoints are created only by bootstrap: `./.codex/skills/seo-cycle`, `./.agents/skills/seo-cycle`, `./.claude/skills/seo-cycle` symlink to that shared core. Projects that were not bootstrapped do not load seo-cycle.
 
 ---
 
@@ -657,7 +657,6 @@ Mode is set by `runtime: auto|claude|codex` in config or `SEO_RUNTIME` env.
 Run under Codex:
 ```bash
 cd <project>
-ln -sf ~/.codex/skills/seo-cycle/AGENTS.md ./AGENTS.md
 export SEO_RUNTIME=codex
 codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
   "Read AGENTS.md and seo-cycle.yaml. Run Phase 2 for cluster X."
@@ -673,11 +672,11 @@ Full mapping — [docs/codex-runtime.md](docs/codex-runtime.md).
 **Extracted (pilot):** `seo-keywords` (Phase 2-3). **Status: splitting is frozen** (decision 2026-05-30) — the monolithic `seo-cycle` is primary; remaining phases are not extracted without a clear need (selling modules / a team / reuse / parallelism).
 
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py init --topic "mineral wool"
-python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py next      # unblocked phases
+python3 ./.codex/skills/seo-cycle/scripts/cycle-state.py init --topic "mineral wool"
+python3 ./.codex/skills/seo-cycle/scripts/cycle-state.py next      # unblocked phases
 # → invoke the matching phase skill (seo-keywords, etc.)
-python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py gate keywords
-python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py show      # progress
+python3 ./.codex/skills/seo-cycle/scripts/cycle-state.py gate keywords
+python3 ./.codex/skills/seo-cycle/scripts/cycle-state.py show      # progress
 ```
 
 Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible progress and gates), parallelism (independent phases at once), sale (a module is a separate product). "Improvement" is data-driven (`source-attribution.py` + `triggers-eval.py`), no code self-rewriting.
@@ -745,9 +744,9 @@ Rules:
 For `seo-cycle` development, larger changes, evidence ingestion, and graph-based navigation, use the local support toolchain:
 
 ```bash
-bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex
-bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex --notebooklm
-bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --check
+bash ./.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex
+bash ./.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex --notebooklm
+bash ./.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --check
 ```
 
 | Tool | When to use | Safety rule |
@@ -764,7 +763,7 @@ CloakBrowser/CloakMCP and other stealth/anti-bot tools are not part of the stand
 
 ## <a id="en-tools"></a>7. Tools (what · command · output)
 
-> All scripts live in `~/.codex/skills/seo-cycle/scripts/`. Run via `python3 <script>.py` or `bash <script>.sh`. Core scripts support system Python 3.9+; UTC timestamps use a compatible timezone-aware helper.
+> In an installed project, scripts are available through `./.codex/skills/seo-cycle/scripts/`. The shared updatable core lives in `~/.codex/vendor/seo-cycle`. Run via `python3 <script>.py` or `bash <script>.sh`. Core scripts support system Python 3.9+; UTC timestamps use a compatible timezone-aware helper.
 
 ### 7.0 Local AI/dev support toolchain
 | Tool | What | Command | Output |
@@ -932,7 +931,7 @@ Each run's artifacts go to `seo/cycles/<topic>-<quarter>/`.
 
 ## <a id="en-agents"></a>9. Agents & delegates — who to call
 
-In Claude Code, work is delegated to subagents (`delegate.*` in config). Universal agents in `~/.claude/agents/`:
+In Claude Code, work is delegated to subagents (`delegate.*` in config). For seo-cycle, install required agents locally in the project (`.claude/agents/` or `.agents/`) so they do not appear in projects without bootstrap:
 
 | Agent | For | When |
 |---|---|---|

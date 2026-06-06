@@ -8,7 +8,7 @@
 # Вариант A — Codex-first bootstrap одной командой (рекомендуется)
 cd <project-root>
 curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash
-# clone/update ядра + deps + canonical Codex path + symlinks + wizard + .env + setup reports
+# shared update в ~/.codex/vendor + локальные skill symlinks + wizard + .env + project-local MCP + setup reports
 
 # Вариант B — Claude Code bootstrap
 cd <project-root>
@@ -20,42 +20,43 @@ curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-
 curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install-codex.sh | bash
 
 # 0b. Опционально: установи локальный AI/dev toolchain для Codex/spec/research задач
-bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex
+bash ~/.codex/vendor/seo-cycle/scripts/install-ai-toolchain.sh --codex
 
 # 0c. Опционально: добавь NotebookLM MCP для curated expert knowledge base
-bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex --notebooklm
+bash ~/.codex/vendor/seo-cycle/scripts/install-ai-toolchain.sh --codex --notebooklm
 
 # 1. Скопируй шаблон конфига в корень проекта
-cp ~/.codex/skills/seo-cycle/config/project.template.yaml \
+cp ~/.codex/vendor/seo-cycle/config/project.template.yaml \
    <project-root>/seo-cycle.yaml
 
 # 2. Отредактируй под свой сайт (см. шаги ниже)
 $EDITOR <project-root>/seo-cycle.yaml
 
 # 3. Провалидируй
-python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py <project-root>/seo-cycle.yaml
+python3 ~/.codex/vendor/seo-cycle/scripts/validate-config.py <project-root>/seo-cycle.yaml
 
 # 4. Сгенерируй безопасный стек инструментов
-python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-onboarding.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/access-key-assistant.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-answer-plan.py <project-root>/seo-cycle.yaml --write  # после заполнения setup-questionnaire.csv
-python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/expert-source-pack.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/ai-brand-audit.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/answer-units-audit.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/technical-guardrails-audit.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/link-audit.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/redirect-map-audit.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/lighthouse-audit.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/labrika-source-pack.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/ai-bot-access-check.py <project-root>/seo-cycle.yaml --url https://example.com/ --write
+python3 ~/.codex/vendor/seo-cycle/scripts/tool-stack-recommender.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/growth-roadmap.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/setup-onboarding.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/setup-blueprint.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/project-upgrade-assistant.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/access-key-assistant.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/project-mcp-config.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/setup-gap-audit.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/setup-answer-plan.py <project-root>/seo-cycle.yaml --write  # после заполнения setup-questionnaire.csv
+python3 ~/.codex/vendor/seo-cycle/scripts/launch-plan.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/spend-guard.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/expert-source-pack.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/ai-brand-audit.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/answer-units-audit.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/technical-guardrails-audit.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/link-audit.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/redirect-map-audit.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/lighthouse-audit.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/serpstat-audit.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/labrika-source-pack.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/vendor/seo-cycle/scripts/ai-bot-access-check.py <project-root>/seo-cycle.yaml --url https://example.com/ --write
 
 # 5. Добавь API-ключи в .env только по списку из access-key assistant
 $EDITOR <project-root>/.env
@@ -64,9 +65,26 @@ $EDITOR <project-root>/.env
 # «давай запустим SEO-цикл для категории X»
 ```
 
-`install-codex.sh` ставит canonical checkout в `~/.codex/skills/seo-cycle`, создаёт `~/.codex/skills/codex-primary-runtime`, а `~/.claude/skills/seo-cycle` и `~/.agents/skills/seo-cycle` делает symlink на Codex-ядро. `bootstrap-codex.sh` дополнительно запускает `init-project.sh` в текущем проекте, создаёт `.env` из `.env.example`, добавляет `.env` в `.gitignore` и пишет `SEO_RUNTIME=codex`, `SEO_SEARCH_RUNTIME=direct`. `bootstrap-claude.sh` делает то же, но пишет `SEO_RUNTIME=claude`, `SEO_SEARCH_RUNTIME=codex_external` и создаёт `CLAUDE.md`, если его ещё нет. Wizard спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
+`bootstrap-codex.sh` по умолчанию ставит seo-cycle как **shared core + project-local entrypoints**: общий код в `~/.codex/vendor/seo-cycle`, а в проекте только symlink `./.codex/skills/seo-cycle`, `./.agents/skills/seo-cycle`, `./.claude/skills/seo-cycle`. Если проект не bootstrap'или, seo-cycle skills в нём не появляются и не читаются. Полный vendor clone в проект доступен через `--vendor-local`; legacy global skill exposure только через `--global-skill`. Project bootstrap запускает `init-project.sh`, создаёт `.env` из `.env.example`, добавляет `.env` в `.gitignore`, пишет `SEO_RUNTIME=codex`, `SEO_SEARCH_RUNTIME=direct` и генерирует project-local `.codex/config.toml` для WordPress/Novomira MCP без секретов. `bootstrap-claude.sh` делает Claude-вариант и создаёт `CLAUDE.md`, если его ещё нет. Wizard спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
 
-`scripts/install-ai-toolchain.sh --codex` ставит только безопасный локальный support-набор: GitHub Spec Kit CLI, Microsoft MarkItDown, Graphify и CodeGraph + Codex-интеграции Graphify/CodeGraph. Он не ставит stealth/anti-bot браузеры, платные API, memory-сервисы и не пишет секреты. Проверка: `bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --check`.
+WordPress/Novomira MCP не надо добавлять в глобальный `~/.codex/config.toml` под каждый сайт. Для каждого проекта запускай:
+
+```bash
+cd <project-root>
+python3 ./.codex/skills/seo-cycle/scripts/project-mcp-config.py --write
+```
+
+Это создаст/обновит только managed-блок в `./.codex/config.toml`. Реальные значения хранятся в `.env` проекта:
+
+```bash
+WP_API_URL=https://example.com/wp-json/mcp/novamira
+WP_API_USERNAME=...
+WP_API_PASSWORD=...
+```
+
+Так один и тот же MCP runner остаётся общим, но URL/логин/ключ всегда берутся из текущего проекта и не перезаписывают другие сайты.
+
+`scripts/install-ai-toolchain.sh --codex` ставит только безопасный локальный support-набор: GitHub Spec Kit CLI, Microsoft MarkItDown, Graphify и CodeGraph + Codex-интеграции Graphify/CodeGraph. Он не ставит stealth/anti-bot браузеры, платные API, memory-сервисы и не пишет секреты. Проверка: `bash ./.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --check` из установленного проекта или `bash ~/.codex/vendor/seo-cycle/scripts/install-ai-toolchain.sh --check` для shared core.
 
 `--notebooklm` — отдельный явный флаг для подключения NotebookLM MCP как gated bridge к curated expert knowledge base. Он добавляет MCP-сервер в `~/.codex/config.toml`, но не получает доступ к notebook без первичного Google login через `setup_auth`. По умолчанию включён `standard` profile и отключены destructive/write/audio tools.
 
@@ -84,7 +102,7 @@ $EDITOR <project-root>/.env
 ## Шаг 1. Скопировать шаблон конфига
 
 ```bash
-cp ~/.codex/skills/seo-cycle/config/project.template.yaml \
+cp ./.codex/skills/seo-cycle/config/project.template.yaml \
    <project-root>/seo-cycle.yaml
 ```
 
@@ -190,7 +208,7 @@ tone:
   description: "Деловой, без воды, факты."
 ```
 
-`stop_words_extra` — твой проектный список запретов. Базовые стоп-слова уже в `~/.codex/skills/seo-cycle/templates/stop-words.md`.
+`stop_words_extra` — твой проектный список запретов. Базовые стоп-слова уже в `./.codex/skills/seo-cycle/templates/stop-words.md` после bootstrap.
 
 ### Секция 7 — Data sources
 **Главный шаг настройки.** Идём по списку источников и решаем, что **сейчас** доступно. Что недоступно — `enabled: false`, потом включим.
@@ -239,7 +257,7 @@ Browser-MCP источники (требуют установленного Clau
 ## Шаг 3. Провалидировать конфиг
 
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py <project-root>/seo-cycle.yaml
+python3 ./.codex/skills/seo-cycle/scripts/validate-config.py <project-root>/seo-cycle.yaml
 ```
 
 Что проверяет:
@@ -263,7 +281,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py <project-root>/seo-
 
 Выдаёт **чек-лист** что нужно подключить:
 ```
-[ ] Установить агент yandex-seo-specialist (ставится из ~/.claude/agents/)
+[ ] Установить агент yandex-seo-specialist в project-local `.claude/agents/` или `.agents/`
 [ ] Добавить NEURON_API_KEY в .env
 [ ] Установить codex CLI: brew install codex
 [ ] Создать seo/entities/entities.yaml (или отключить entities-секцию)
@@ -295,6 +313,11 @@ WP_USER=admin
 WP_APP_PASSWORD=xxxx xxxx xxxx xxxx
 WOO_REST_API_KEY=ck_...
 WOO_REST_API_SECRET=cs_...
+
+# WordPress MCP / Novomira (project-local .codex/config.toml)
+WP_API_URL=https://example.com/wp-json/mcp/novamira
+WP_API_USERNAME=...
+WP_API_PASSWORD=...
 
 # DataForSEO (опционально)
 DATAFORSEO_LOGIN=...
@@ -341,8 +364,11 @@ seo/setup/setup-questionnaire.csv
 seo/usage/usage-ledger.jsonl
 seo/setup/latest-usage-ledger.md
 seo/project-intake.yaml
-AGENTS.md -> ~/.codex/skills/seo-cycle/AGENTS.md
-CLAUDE.md -> ~/.codex/skills/seo-cycle/SKILL.md   # только bootstrap-claude.sh
+.codex/skills/seo-cycle -> ~/.codex/vendor/seo-cycle
+.agents/skills/seo-cycle -> .codex/skills/seo-cycle
+.claude/skills/seo-cycle -> .codex/skills/seo-cycle
+.codex/config.toml        # project-local MCP wrapper, secrets read from .env
+AGENTS.md                 # project-local wrapper, if project did not have one
 ```
 
 В этих файлах фиксируются подключённые аккаунты, пропущенные платные сервисы, лимиты NeuronWriter/Google NLP/Keys.so/Serpstat/LLM, policy по robots/Content-Signal, запрет зарубежных tracking tags/pixels для РФ-проектов без отдельного разрешения и правила автоматизаций. После заполнения `seo/setup/setup-questionnaire.csv` отдельная команда `setup-answer-plan.py --write` создаёт `seo/setup/setup-answer-plan.md/json/csv`.
@@ -350,22 +376,22 @@ CLAUDE.md -> ~/.codex/skills/seo-cycle/SKILL.md   # только bootstrap-claud
 Перед дорогим сбором или schedule запуском:
 
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-control-plane.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/access-key-assistant.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-answer-plan.py --write  # после заполнения setup-questionnaire.csv
-python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task "аудит индексации и robots" --write
-python3 ~/.codex/skills/seo-cycle/scripts/context-pack.py --task "аудит индексации и robots" --write
-python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py report --write
-python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/governance-report.py --format md
-python3 ~/.codex/skills/seo-cycle/scripts/project-profile.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
+python3 ./.codex/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write
+python3 ./.codex/skills/seo-cycle/scripts/setup-control-plane.py --write
+python3 ./.codex/skills/seo-cycle/scripts/setup-blueprint.py --write
+python3 ./.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py --write
+python3 ./.codex/skills/seo-cycle/scripts/access-key-assistant.py --write
+python3 ./.codex/skills/seo-cycle/scripts/setup-gap-audit.py --write
+python3 ./.codex/skills/seo-cycle/scripts/setup-answer-plan.py --write  # после заполнения setup-questionnaire.csv
+python3 ./.codex/skills/seo-cycle/scripts/launch-plan.py --write
+python3 ./.codex/skills/seo-cycle/scripts/spend-guard.py --write
+python3 ./.codex/skills/seo-cycle/scripts/task-router.py --task "аудит индексации и robots" --write
+python3 ./.codex/skills/seo-cycle/scripts/context-pack.py --task "аудит индексации и robots" --write
+python3 ./.codex/skills/seo-cycle/scripts/usage-ledger.py report --write
+python3 ./.codex/skills/seo-cycle/scripts/automation-recommender.py --write
+python3 ./.codex/skills/seo-cycle/scripts/governance-report.py --format md
+python3 ./.codex/skills/seo-cycle/scripts/project-profile.py --write
+python3 ./.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled
 ```
 
 `setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config, automation plan, spend guard, launch plan, setup blueprint, upgrade assistant, access-key assistant, context pack, token-waste audit, Perplexity/NotebookLM health, setup gap audit/questionnaire, answer-plan path readiness и стартовый task route; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `setup-blueprint.md/json`, `setup-matrix.csv`, `upgrade-assistant.md/json`, `upgrade-questionnaire.csv`, `access-key-assistant.md/json/csv`, `context-pack.md/json`, `token-waste-audit.md/json`, `perplexity-health.md/json`, `notebooklm-health.md/json`, `setup-gap-audit.md/json`, `setup-questionnaire.md/csv/json`, `spend-guard.md/json`, `launch-plan.md/json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`, `latest-task-route.md/json`. `--apply-profile` остаётся отдельным явным действием.
@@ -388,7 +414,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-d
 
 `setup-answer-plan.py` — безопасный разбор заполненного `seo/setup/setup-questionnaire.csv`. Пишет `seo/setup/setup-answer-plan.md/json/csv` и latest copies: target files, target paths, parsed proposed values и follow-up commands. Режим только `manual_review`; конфиги не меняет, secret-like ответы отклоняет и не сохраняет.
 
-`task-router.py` — low-token роутер перед каждой конкретной задачей. Пример: `python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по минеральной вате" --write`. Он классифицирует задачу, выбирает фазы/источники, показывает approval gates, blocked actions, рекомендуемую automation и context caps, чтобы не поднимать весь проект и сырые данные в контекст.
+`task-router.py` — low-token роутер перед каждой конкретной задачей. Пример: `python3 ./.codex/skills/seo-cycle/scripts/task-router.py --task "собрать семантику по минеральной вате" --write`. Он классифицирует задачу, выбирает фазы/источники, показывает approval gates, blocked actions, рекомендуемую automation и context caps, чтобы не поднимать весь проект и сырые данные в контекст.
 
 `usage-ledger.py` — единый учёт фактического расхода. `report --write` создаёт `seo/usage/usage-ledger.jsonl` и `seo/setup/latest-usage-ledger.md/json`; `check --service <tool> --usd ... --fail-on-block` проверяет лимиты перед запуском; `record --service <tool> ...` добавляет append-only событие после расхода. Ledger также импортирует старые `_usage.json` от Keys.so/SpyFu и usage Google NLP.
 
@@ -404,7 +430,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-d
 
 ## Шаг 6. (Опционально) Создать проектные суб-скиллы
 
-Универсальный seo-cycle делегирует в субскиллы. По умолчанию использует общие из `~/.claude/agents/`, но для специфичных задач (custom CMS publishing, brand-specific entity map) лучше создать **проектные скиллы** в `<project>/.claude/skills/`.
+Универсальный seo-cycle делегирует в субскиллы. По умолчанию bootstrap создаёт project-local skill surface в `<project>/.codex/skills/`, `<project>/.agents/skills/`, `<project>/.claude/skills/`. Для специфичных задач (custom CMS publishing, brand-specific entity map) лучше создать **проектные скиллы** рядом, например `<project>/.claude/skills/`.
 
 Пример (emwoody): `<project>/.claude/skills/emwoody-semantic-brief/`, `<project>/.claude/skills/emwoody-publish-taxonomy/`.
 
@@ -436,7 +462,7 @@ delegate:
 
 ## Адаптация под разные типы проектов
 
-> **Регион — одной строкой.** `region_profile: ru | eu | us | global` управляет тем, какие источники включены (Яндекс-стек для `ru`, западные SaaS для `eu`/`us`, и т.д.) и какие недоступны/нужен прокси. Профили: `config/region-profiles/`. `init-project.sh` выбирает профиль по стране автоматически. Развернуть в список активных: `python3 ~/.codex/skills/seo-cycle/scripts/resolve-sources.py`.
+> **Регион — одной строкой.** `region_profile: ru | eu | us | global` управляет тем, какие источники включены (Яндекс-стек для `ru`, западные SaaS для `eu`/`us`, и т.д.) и какие недоступны/нужен прокси. Профили: `config/region-profiles/`. `init-project.sh` выбирает профиль по стране автоматически. Развернуть в список активных: `python3 ./.codex/skills/seo-cycle/scripts/resolve-sources.py`.
 
 ### A. Глобальный SaaS (английский, без региональной привязки)
 ```yaml
@@ -511,7 +537,7 @@ sources:
 Если в твоей нише нужны источники, которых нет в шаблоне:
 
 1. **Добавь в свой `seo-cycle.yaml`** в `sources` под новым ключом
-2. **Создай скрипт** в `<project>/seo/scripts/<source>.py` или `~/.codex/skills/seo-cycle/scripts/` (для PR upstream)
+2. **Создай скрипт** в `<project>/seo/scripts/<source>.py` или в shared core `~/.codex/vendor/seo-cycle/scripts/` только если это upstream-изменение для всех проектов.
 3. **Опиши в Phase 2 как использовать** в `<project>/CLAUDE.md`
 4. (Опционально) **Создай PR в общий скилл** если решение полезно для других проектов
 
@@ -536,7 +562,7 @@ sources:
 ├── blog/                                # черновики постов
 └── categories/                          # черновики категорий
 
-~/.codex/skills/seo-cycle/              # глобальный универсальный скилл
+~/.codex/vendor/seo-cycle/              # shared updatable core, not auto-loaded as a global skill
 ├── SKILL.md                             # этот скилл
 ├── AGENTS.md                            # Codex entrypoint, симлинк → SKILL.md
 ├── codex-primary-runtime/               # отдельный Codex-first entrypoint skill
@@ -561,9 +587,9 @@ sources:
 
 **«Source X enabled but env-var Y not set»** — открой .env, добавь ключ; или временно отключи источник.
 
-**«delegate.* refers to skill that doesn't exist»** — либо установи скилл (см. список агентов в `~/.claude/agents/`), либо удали поле из `delegate.*` — используется fallback.
+**«delegate.* refers to skill that doesn't exist»** — либо установи нужный project-local skill/agent в `.agents/skills/` или `.claude/skills/`, либо удали поле из `delegate.*` — используется fallback.
 
-**«NW evaluate fails»** — проверь project_id в конфиге; запусти `~/.codex/skills/seo-cycle/scripts/test-neuronwriter.py` для диагностики.
+**«NW evaluate fails»** — проверь project_id в конфиге; запусти `./.codex/skills/seo-cycle/scripts/test-neuronwriter.py` для диагностики.
 
 См. `docs/troubleshooting.md` для полного списка.
 
@@ -571,27 +597,27 @@ sources:
 
 ## Как поделиться скиллом
 
-Скилл самодостаточен: вся логика — в `~/.codex/skills/seo-cycle/` (код, конфиг-шаблон, профили, промпты, доки). Проектные данные и ключи (`.env`, `seo-cycle.yaml`, контент) живут в репозитории проекта и НЕ входят в скилл.
+Скилл самодостаточен: вся общая логика — в `~/.codex/vendor/seo-cycle/` (код, конфиг-шаблон, профили, промпты, доки). В проекте лежат только локальные entrypoints/symlinks, конфиг, правила и ключи (`.env`, `seo-cycle.yaml`, `seo/project-rules.md`, контент).
 
-**Что шарить:** весь каталог `~/.codex/skills/seo-cycle/` (без `__pycache__`). Секретов в нём нет — ключи только в `.env` проектов.
+**Что шарить:** GitHub repo `turvodnik/seo-cycle`. Секретов в нём нет — ключи только в `.env` проектов.
 
 **Способы:**
 1. **Git-репозиторий (рекомендуется).**
    ```bash
-   cd ~/.codex/skills/seo-cycle
+   cd ~/.codex/vendor/seo-cycle
    git init && git add -A && git commit -m "seo-cycle skill"
-   # запушить в GitHub. Получатель клонирует в ~/.codex/skills/seo-cycle/
+   # запушить в GitHub. Получатель ставит shared core через install-codex.sh.
    ```
-2. **Архив.** `cd ~/.codex/skills && zip -r seo-cycle.zip seo-cycle -x '*__pycache__*'` → получатель распаковывает в `~/.codex/skills/`, затем создаёт symlink в `~/.claude/skills/` при необходимости.
+2. **Одна команда установки.** `curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install-codex.sh | bash` обновляет shared core. `bootstrap-codex.sh` потом создаёт project-local symlinks в нужном проекте.
 3. **Claude Code plugin.** Обернуть в плагин с `plugin.json` и раздать через marketplace/`/plugin install` (см. docs плагинов Claude Code).
 
 **Получатель после установки:**
 ```bash
 pip3 install pyyaml requests pillow beautifulsoup4 google-auth
 cd <свой-проект>
-~/.codex/skills/seo-cycle/scripts/init-project.sh   # wizard → seo-cycle.yaml
+./.codex/skills/seo-cycle/scripts/init-project.sh   # wizard → seo-cycle.yaml
 # заполнить .env своими ключами (см. .env.example)
-python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py
+python3 ./.codex/skills/seo-cycle/scripts/validate-config.py
 ```
 Дальше — в Claude Code или Codex: «запусти SEO-цикл для категории X».
 
