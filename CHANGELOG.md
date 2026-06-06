@@ -1,5 +1,13 @@
 # Changelog — seo-cycle
 
+## [1.42.1] — 2026-06-06
+
+### Bootstrap reliability
+
+- Fixed one-command `curl ... bootstrap-codex.sh | bash` setup so `init-project.sh` reads from `/dev/tty` when available and otherwise uses safe defaults instead of consuming the remaining bootstrap script as wizard answers.
+- Added `init-project.sh --non-interactive` / `--defaults` for clean smoke tests and CI-like setup runs.
+- Added a regression test proving piped stdin cannot pollute generated `seo-cycle.yaml` values.
+
 ## [1.42.0] — 2026-06-06
 
 ### Core quality and token efficiency
