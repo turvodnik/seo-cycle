@@ -133,6 +133,62 @@ policy_files:
   project_intake: seo/project-intake.yaml
   project_intake_report: seo/project-intake-report.md
   project_profile: seo/project-profile.generated.yaml
+  ai_brand_audit_report: seo/vnext/ai-brand-audit.md
+  ai_brand_audit_json: seo/vnext/ai-brand-audit.json
+  latest_ai_brand_audit: seo/vnext/latest-ai-brand-audit.md
+  latest_ai_brand_audit_json: seo/vnext/latest-ai-brand-audit.json
+  answer_units_audit_report: seo/vnext/answer-units-audit.md
+  answer_units_audit_json: seo/vnext/answer-units-audit.json
+  latest_answer_units_audit: seo/vnext/latest-answer-units-audit.md
+  latest_answer_units_audit_json: seo/vnext/latest-answer-units-audit.json
+  eeat_evidence_map_report: seo/vnext/eeat-evidence-map.md
+  eeat_evidence_map_json: seo/vnext/eeat-evidence-map.json
+  latest_eeat_evidence_map: seo/vnext/latest-eeat-evidence-map.md
+  latest_eeat_evidence_map_json: seo/vnext/latest-eeat-evidence-map.json
+  geo_kpi_model_report: seo/vnext/geo-kpi-model.md
+  geo_kpi_model_json: seo/vnext/geo-kpi-model.json
+  latest_geo_kpi_model: seo/vnext/latest-geo-kpi-model.md
+  latest_geo_kpi_model_json: seo/vnext/latest-geo-kpi-model.json
+  log_bot_audit_report: seo/vnext/log-bot-audit.md
+  log_bot_audit_json: seo/vnext/log-bot-audit.json
+  latest_log_bot_audit: seo/vnext/latest-log-bot-audit.md
+  latest_log_bot_audit_json: seo/vnext/latest-log-bot-audit.json
+  ai_bot_access_check_report: seo/vnext/ai-bot-access-check.md
+  ai_bot_access_check_json: seo/vnext/ai-bot-access-check.json
+  latest_ai_bot_access_check: seo/vnext/latest-ai-bot-access-check.md
+  latest_ai_bot_access_check_json: seo/vnext/latest-ai-bot-access-check.json
+  technical_guardrails_audit_report: seo/vnext/technical-guardrails-audit.md
+  technical_guardrails_audit_json: seo/vnext/technical-guardrails-audit.json
+  latest_technical_guardrails_audit: seo/vnext/latest-technical-guardrails-audit.md
+  latest_technical_guardrails_audit_json: seo/vnext/latest-technical-guardrails-audit.json
+  snippet_sitemap_audit_report: seo/vnext/snippet-sitemap-audit.md
+  snippet_sitemap_audit_json: seo/vnext/snippet-sitemap-audit.json
+  latest_snippet_sitemap_audit: seo/vnext/latest-snippet-sitemap-audit.md
+  latest_snippet_sitemap_audit_json: seo/vnext/latest-snippet-sitemap-audit.json
+  traffic_drop_diagnostics_report: seo/vnext/traffic-drop-diagnostics.md
+  traffic_drop_diagnostics_json: seo/vnext/traffic-drop-diagnostics.json
+  latest_traffic_drop_diagnostics: seo/vnext/latest-traffic-drop-diagnostics.md
+  latest_traffic_drop_diagnostics_json: seo/vnext/latest-traffic-drop-diagnostics.json
+  cannibalization_audit_report: seo/vnext/cannibalization-audit.md
+  cannibalization_audit_json: seo/vnext/cannibalization-audit.json
+  latest_cannibalization_audit: seo/vnext/latest-cannibalization-audit.md
+  latest_cannibalization_audit_json: seo/vnext/latest-cannibalization-audit.json
+  ru_commerce_readiness_report: seo/vnext/ru-commerce-readiness.md
+  ru_commerce_readiness_json: seo/vnext/ru-commerce-readiness.json
+  latest_ru_commerce_readiness: seo/vnext/latest-ru-commerce-readiness.md
+  latest_ru_commerce_readiness_json: seo/vnext/latest-ru-commerce-readiness.json
+  offpage_risk_audit_report: seo/vnext/offpage-risk-audit.md
+  offpage_risk_audit_json: seo/vnext/offpage-risk-audit.json
+  latest_offpage_risk_audit: seo/vnext/latest-offpage-risk-audit.md
+  latest_offpage_risk_audit_json: seo/vnext/latest-offpage-risk-audit.json
+  conversion_sxo_audit_report: seo/vnext/conversion-sxo-audit.md
+  conversion_sxo_audit_json: seo/vnext/conversion-sxo-audit.json
+  latest_conversion_sxo_audit: seo/vnext/latest-conversion-sxo-audit.md
+  latest_conversion_sxo_audit_json: seo/vnext/latest-conversion-sxo-audit.json
+  expert_source_pack_report: seo/vnext/expert-source-pack.md
+  expert_source_pack_json: seo/vnext/expert-source-pack.json
+  latest_expert_source_pack: seo/vnext/latest-expert-source-pack.md
+  latest_expert_source_pack_json: seo/vnext/latest-expert-source-pack.json
 
 # -----------------------------------------------------------------------------
 # 3b. Governance — лимиты токенов, денег, подписок и автоматизаций
@@ -212,6 +268,116 @@ governance:
       - whole_site_paid_nlp
       - whole_catalog_generation
       - destructive_indexing_change
+
+# -----------------------------------------------------------------------------
+# 3c. SEO/AEO/GEO vNext — report-only модули расширенного оркестратора
+# -----------------------------------------------------------------------------
+# Все блоки ниже безопасны по умолчанию: они генерируют локальные отчёты и
+# JSONL-контракты, но не публикуют, не ставят счётчики, не отправляют URL в
+# индекс и не запускают платные API без отдельного approval/budget policy.
+vnext:
+  default_mode: report_only
+  publish_default: disabled
+  paid_api_default: disabled
+  raw_data_in_context: false
+  vector_dir: seo/research/vnext/vector
+
+ai_brand_audit:
+  enabled: true
+  mode: report_only
+  cache_enabled: true
+  surfaces: [chatgpt, perplexity, yandex_neuro, google_ai]
+  cadence: monthly
+
+answer_units:
+  enabled: true
+  mode: report_only
+  formula: thesis_context_proof_conclusion
+  attach_to: [cluster, sub_intent, synthetic_prompt, evidence]
+
+server_logs:
+  enabled: true
+  mode: manual_upload
+  ingestion_mode: manual_upload
+  goaccess_optional: true
+  raw_logs_in_context: false
+  bot_patterns: [googlebot, yandexbot, bingbot, gptbot, claudebot, perplexitybot, applebot]
+
+ai_bot_access_check:
+  enabled: true
+  mode: explicit_live_check
+  default_url_path: "/"
+  request_timeout_seconds: 10
+  include_categories: [llm, search, social, seo_tool, other]
+  paid_api_required: false
+  writes_to_site: false
+
+eeat_evidence:
+  enabled: true
+  mode: report_only
+  schema_targets: [Organization, Person, Product, LocalBusiness]
+  same_as_required_for_trust_claims: true
+
+geo_kpi:
+  enabled: true
+  mode: report_only
+  metrics: [ai_mention_rate, citation_share, answer_accuracy, source_diversity, conversion_quality]
+  branded_and_nonbranded_prompts: true
+
+technical_guardrails:
+  enabled: true
+  mode: report_only
+  checks: [robots, sitemap, canonical, noindex, redirects, ajax_js_seo, schema_visible_text]
+
+snippet_sitemap:
+  enabled: true
+  mode: report_only
+  checks: [xml_sitemap, html_sitemap, title_links, meta_description, snippet_controls, orphan_pages]
+
+traffic_diagnostics:
+  enabled: true
+  mode: report_only
+  checks: [indexation, demand_shift, technical_breakage, updates, competitors, snippets, ctr]
+
+cannibalization:
+  enabled: true
+  mode: report_only
+  group_by: [query, entity, sub_intent, page_target]
+
+local_seo:
+  enabled: true
+  mode: report_only
+  platforms: [yandex_maps, google_business_profile, bing_places, 2gis]
+  checks: [nap, categories, photos, reviews, local_landing_pages, review_moderation]
+
+ru_commerce:
+  enabled: true
+  mode: report_only
+  yandex_commerce_protocol: optional
+  yandex_tag_manager_preferred_for_rf: true
+  checks: [merchant_feed, product_schema, snippets, ycp_readiness, alice_readiness]
+
+offpage_risk:
+  enabled: true
+  mode: report_only
+  pbn_and_drops_default: risk_audit_only
+  checks: [donors, acceptors, anchors, yandex_webmaster_links, content_islands]
+
+conversion_sxo:
+  enabled: true
+  mode: report_only
+  checks: [bounce_rate, cr, pricing_ux, lead_blocks, faq, trust_blocks, commercial_factors]
+
+expert_sources:
+  enabled: true
+  mode: report_only
+  notebooklm_url: https://notebooklm.google.com/notebook/8ad724f9-72ab-43be-8fcd-77239f0cc2e4
+  source_packs:
+    - seo_agents
+    - google_ai_guidance
+    - ru_seo_expert_articles
+    - notebooklm_video_transcripts
+  full_transcripts_in_context: false
 
 # -----------------------------------------------------------------------------
 # 4. Project type & mode — что это за сайт и какой режим цикла

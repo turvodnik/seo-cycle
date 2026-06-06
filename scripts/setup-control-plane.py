@@ -166,6 +166,11 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "automation_plan_json": "seo/automations/automation-plan.json",
         "automation_crontab": "seo/automations/crontab.txt",
         "latest_task_route": "seo/setup/latest-task-route.md",
+        "ai_brand_audit_report": "seo/vnext/ai-brand-audit.md",
+        "answer_units_audit_report": "seo/vnext/answer-units-audit.md",
+        "ai_bot_access_check_report": "seo/vnext/ai-bot-access-check.md",
+        "technical_guardrails_audit_report": "seo/vnext/technical-guardrails-audit.md",
+        "expert_source_pack_report": "seo/vnext/expert-source-pack.md",
     }
     policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
     rows = []
@@ -314,6 +319,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     spend_guard = report.get("spend_guard", {})
     task_route = report.get("task_route", {})
     usage = report.get("usage_ledger", {})
+    vnext_reports = report.get("vnext_reports", {})
     tool_summary = tool_stack.get("summary", {}).get("by_decision", {}) if isinstance(tool_stack.get("summary"), dict) else {}
     lines = [
         "# seo-cycle setup control plane",
@@ -349,6 +355,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Setup questionnaire rows: {(setup_gap_audit.get('questionnaire') or {}).get('row_count')}",
         f"- Recommended automations: {len((automation_recommendations.get('policy_overlay') or {}).get('planned_automations', {}))}",
         f"- Automation install allowed: {automation.get('allowed')}",
+        f"- vNext starter reports: {len(vnext_reports)}",
     ]
     if automation.get("blockers"):
         lines.append(f"- Automation blockers: {', '.join(automation['blockers'])}")
@@ -380,6 +387,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             "- Start from `seo/setup/context-pack.md` for task-scoped handoff before opening larger reports.",
             "- Keep raw API/browser output on disk under `seo/`; load only distillates/top-N into model context.",
             "- Run expensive sources only after cache checks and budget policy review.",
+            "- vNext reports are local diagnostics only; raw transcripts/logs stay on disk and paid/API/publish actions remain disabled.",
             "- Do not install tracking tags, launch ads, submit indexes, or publish content without the relevant approval gates.",
         ]
     )
@@ -566,6 +574,18 @@ def main() -> int:
         access_key_command.extend(["--format", "json"])
     steps.append(run_step("access key assistant", access_key_command, project_root))
 
+    for script_name, step_name in (
+        ("expert-source-pack.py", "vnext expert source pack"),
+        ("ai-brand-audit.py", "vnext ai brand audit"),
+        ("answer-units-audit.py", "vnext answer units"),
+        ("technical-guardrails-audit.py", "vnext technical guardrails"),
+    ):
+        command = [sys.executable, str(root / "scripts" / script_name), str(cfg_path)]
+        if args.write:
+            command.append("--write")
+        command.extend(["--format", "json"])
+        steps.append(run_step(step_name, command, project_root))
+
     validation_step = run_step("validate config", [sys.executable, str(root / "scripts/validate-config.py"), str(cfg_path)], project_root)
     steps.append(validation_step)
 
@@ -648,6 +668,22 @@ def main() -> int:
     access_key_file = project_root / "seo" / "setup" / "access-key-assistant.json"
     if not access_key_assistant and access_key_file.exists():
         access_key_assistant = json.loads(access_key_file.read_text(encoding="utf-8"))
+    vnext_reports: dict[str, Any] = {}
+    for step in steps:
+        if not step["name"].startswith("vnext "):
+            continue
+        report = load_json_output(step)
+        if not report:
+            slug = step["name"].removeprefix("vnext ").replace(" ", "-")
+            report_file = project_root / "seo" / "vnext" / f"{slug}.json"
+            if report_file.exists():
+                report = json.loads(report_file.read_text(encoding="utf-8"))
+        if report:
+            vnext_reports[report.get("audit_id", step["name"])] = {
+                "status": report.get("status"),
+                "score": report.get("score"),
+                "paths": report.get("paths", {}),
+            }
     validation = parse_validation(validation_step)
     artifacts = artifact_status(project_root, cfg)
     paid_missing = enabled_paid_missing_env(governance)
@@ -676,6 +712,7 @@ def main() -> int:
         "access_key_assistant": access_key_assistant,
         "context_pack": context_pack,
         "setup_gap_audit": setup_gap_audit,
+        "vnext_reports": vnext_reports,
         "paid_missing_env": paid_missing,
         "artifacts": artifacts,
         "steps": [
@@ -687,6 +724,10 @@ def main() -> int:
             for step in steps
         ],
     }
+    blocking_exit_codes = [step for step in steps if step["exit_code"] not in (0,)]
+    validation_errors = validation.get("errors", 0)
+    has_blocking_step = any(step["name"] not in {"validate config"} for step in blocking_exit_codes)
+    report["status"] = "blocked" if validation_errors or has_blocking_step else "ok"
     report["next_actions"] = next_actions(validation, governance, sources, tool_stack, growth_roadmap, onboarding, launch_plan, setup_blueprint, upgrade_assistant, access_key_assistant, context_pack, setup_gap_audit, spend_guard, automation, artifacts, args.apply_profile)
 
     if args.write:
@@ -697,9 +738,7 @@ def main() -> int:
     else:
         print(render_markdown(report), end="")
 
-    blocking_exit_codes = [step for step in steps if step["exit_code"] not in (0,)]
-    validation_errors = validation.get("errors", 0)
-    return 1 if validation_errors or any(step["name"] not in {"validate config"} for step in blocking_exit_codes) else 0
+    return 1 if report["status"] == "blocked" else 0
 
 
 if __name__ == "__main__":

@@ -1,5 +1,23 @@
 # Changelog — seo-cycle
 
+## [1.41.0] — 2026-06-06
+
+### Live AI bot access check
+
+- Added `scripts/ai-bot-access-check.py`, a report-only checker for robots.txt and real HTTP access across LLM, search, social, SEO-tool, and other crawler User-Agent strings.
+- Added `seo/vnext/ai-bot-access-check.md/json` policy paths, template config, validation defaults, setup-control-plane artifact visibility, and upgrade assistant surfacing.
+- Added local HTTP-server tests for robots blocks and WAF-like User-Agent blocks without external network calls.
+
+## [1.40.0] — 2026-06-06
+
+### SEO/AEO/GEO vNext report layer
+
+- Added report-only vNext generators for AI Brand Audit, Answer Units, E-E-A-T evidence, GEO KPI, server log/AI bot audit, technical guardrails, snippets/sitemap, traffic drops, cannibalization, RU commerce/Yandex readiness, off-page risk, conversion/SXO, and expert source packs.
+- Added shared `scripts/vnext_audit_core.py` with JSON/Markdown output, safe default guardrails, optional robots/log/CSV parsers, source attribution, and `seo/vnext/*.md/json` artifacts.
+- Extended `config/project.template.yaml` with vNext config flags, output policy paths, source-pack settings, and vector record locations.
+- Wired vNext into `setup-control-plane.py`, `project-upgrade-assistant.py`, `validate-config.py`, README, INSTALL, SKILL.md, Codex runtime docs, and a dedicated vNext runbook.
+- Added smoke tests for all vNext generators, robots noindex detection, AI/search bot log parsing, traffic drop parsing, cannibalization parsing, and upgrade assistant surfacing.
+
 ## [1.39.0] — 2026-06-06
 
 ### NotebookLM knowledge bridge

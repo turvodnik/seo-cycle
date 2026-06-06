@@ -305,6 +305,62 @@ def check_project_policies(cfg: dict, env: dict, project_root: pathlib.Path, che
         "project_intake": "seo/project-intake.yaml",
         "project_intake_report": "seo/project-intake-report.md",
         "project_profile": "seo/project-profile.generated.yaml",
+        "ai_brand_audit_report": "seo/vnext/ai-brand-audit.md",
+        "ai_brand_audit_json": "seo/vnext/ai-brand-audit.json",
+        "latest_ai_brand_audit": "seo/vnext/latest-ai-brand-audit.md",
+        "latest_ai_brand_audit_json": "seo/vnext/latest-ai-brand-audit.json",
+        "answer_units_audit_report": "seo/vnext/answer-units-audit.md",
+        "answer_units_audit_json": "seo/vnext/answer-units-audit.json",
+        "latest_answer_units_audit": "seo/vnext/latest-answer-units-audit.md",
+        "latest_answer_units_audit_json": "seo/vnext/latest-answer-units-audit.json",
+        "eeat_evidence_map_report": "seo/vnext/eeat-evidence-map.md",
+        "eeat_evidence_map_json": "seo/vnext/eeat-evidence-map.json",
+        "latest_eeat_evidence_map": "seo/vnext/latest-eeat-evidence-map.md",
+        "latest_eeat_evidence_map_json": "seo/vnext/latest-eeat-evidence-map.json",
+        "geo_kpi_model_report": "seo/vnext/geo-kpi-model.md",
+        "geo_kpi_model_json": "seo/vnext/geo-kpi-model.json",
+        "latest_geo_kpi_model": "seo/vnext/latest-geo-kpi-model.md",
+        "latest_geo_kpi_model_json": "seo/vnext/latest-geo-kpi-model.json",
+        "log_bot_audit_report": "seo/vnext/log-bot-audit.md",
+        "log_bot_audit_json": "seo/vnext/log-bot-audit.json",
+        "latest_log_bot_audit": "seo/vnext/latest-log-bot-audit.md",
+        "latest_log_bot_audit_json": "seo/vnext/latest-log-bot-audit.json",
+        "ai_bot_access_check_report": "seo/vnext/ai-bot-access-check.md",
+        "ai_bot_access_check_json": "seo/vnext/ai-bot-access-check.json",
+        "latest_ai_bot_access_check": "seo/vnext/latest-ai-bot-access-check.md",
+        "latest_ai_bot_access_check_json": "seo/vnext/latest-ai-bot-access-check.json",
+        "technical_guardrails_audit_report": "seo/vnext/technical-guardrails-audit.md",
+        "technical_guardrails_audit_json": "seo/vnext/technical-guardrails-audit.json",
+        "latest_technical_guardrails_audit": "seo/vnext/latest-technical-guardrails-audit.md",
+        "latest_technical_guardrails_audit_json": "seo/vnext/latest-technical-guardrails-audit.json",
+        "snippet_sitemap_audit_report": "seo/vnext/snippet-sitemap-audit.md",
+        "snippet_sitemap_audit_json": "seo/vnext/snippet-sitemap-audit.json",
+        "latest_snippet_sitemap_audit": "seo/vnext/latest-snippet-sitemap-audit.md",
+        "latest_snippet_sitemap_audit_json": "seo/vnext/latest-snippet-sitemap-audit.json",
+        "traffic_drop_diagnostics_report": "seo/vnext/traffic-drop-diagnostics.md",
+        "traffic_drop_diagnostics_json": "seo/vnext/traffic-drop-diagnostics.json",
+        "latest_traffic_drop_diagnostics": "seo/vnext/latest-traffic-drop-diagnostics.md",
+        "latest_traffic_drop_diagnostics_json": "seo/vnext/latest-traffic-drop-diagnostics.json",
+        "cannibalization_audit_report": "seo/vnext/cannibalization-audit.md",
+        "cannibalization_audit_json": "seo/vnext/cannibalization-audit.json",
+        "latest_cannibalization_audit": "seo/vnext/latest-cannibalization-audit.md",
+        "latest_cannibalization_audit_json": "seo/vnext/latest-cannibalization-audit.json",
+        "ru_commerce_readiness_report": "seo/vnext/ru-commerce-readiness.md",
+        "ru_commerce_readiness_json": "seo/vnext/ru-commerce-readiness.json",
+        "latest_ru_commerce_readiness": "seo/vnext/latest-ru-commerce-readiness.md",
+        "latest_ru_commerce_readiness_json": "seo/vnext/latest-ru-commerce-readiness.json",
+        "offpage_risk_audit_report": "seo/vnext/offpage-risk-audit.md",
+        "offpage_risk_audit_json": "seo/vnext/offpage-risk-audit.json",
+        "latest_offpage_risk_audit": "seo/vnext/latest-offpage-risk-audit.md",
+        "latest_offpage_risk_audit_json": "seo/vnext/latest-offpage-risk-audit.json",
+        "conversion_sxo_audit_report": "seo/vnext/conversion-sxo-audit.md",
+        "conversion_sxo_audit_json": "seo/vnext/conversion-sxo-audit.json",
+        "latest_conversion_sxo_audit": "seo/vnext/latest-conversion-sxo-audit.md",
+        "latest_conversion_sxo_audit_json": "seo/vnext/latest-conversion-sxo-audit.json",
+        "expert_source_pack_report": "seo/vnext/expert-source-pack.md",
+        "expert_source_pack_json": "seo/vnext/expert-source-pack.json",
+        "latest_expert_source_pack": "seo/vnext/latest-expert-source-pack.md",
+        "latest_expert_source_pack_json": "seo/vnext/latest-expert-source-pack.json",
     }
     configured = cfg.get("policy_files", {}) or {}
     if not isinstance(configured, dict):
@@ -498,6 +554,39 @@ def check_v11_extensions(cfg: dict, env: dict, checklist: list, warnings: list):
         warnings.append(f"backlinks.enabled=true с source=manual, но файл {bl.get('file')} не существует")
 
 
+def check_vnext_guardrails(cfg: dict, checklist: list, warnings: list):
+    """Report-only safety checks for SEO/AEO/GEO vNext modules."""
+    modules = [
+        "ai_brand_audit",
+        "answer_units",
+        "server_logs",
+        "eeat_evidence",
+        "geo_kpi",
+        "technical_guardrails",
+        "snippet_sitemap",
+        "traffic_diagnostics",
+        "cannibalization",
+        "local_seo",
+        "ru_commerce",
+        "offpage_risk",
+        "conversion_sxo",
+        "expert_sources",
+    ]
+    vnext = cfg.get("vnext", {}) if isinstance(cfg.get("vnext"), dict) else {}
+    if vnext and vnext.get("raw_data_in_context") is True:
+        warnings.append("vnext.raw_data_in_context=true — full transcripts/logs should stay on disk; use distillates/JSONL.")
+    if vnext and vnext.get("paid_api_default") not in (None, "disabled", "approval_only"):
+        warnings.append("vnext.paid_api_default should be disabled or approval_only.")
+    for module in modules:
+        block = cfg.get(module, {}) if isinstance(cfg.get(module), dict) else {}
+        if not block:
+            continue
+        if block.get("writes_to_site"):
+            warnings.append(f"{module}.writes_to_site=true — vNext modules must stay report-only by default.")
+        if block.get("paid_api_required") and (cfg.get("governance", {}).get("budget_policy", {}).get("monthly_paid_api_usd_cap", 0) in (0, "0", None)):
+            checklist.append(f"Утвердить paid API budget/approval перед запуском {module}.paid_api_required=true")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("config", nargs="?", help="Путь к seo-cycle.yaml (по умолчанию — поиск в текущей директории)")
@@ -551,6 +640,7 @@ def main():
     check_content_rules(cfg, warnings)
     check_artifacts(cfg, project_root, warnings)
     check_v11_extensions(cfg, env, checklist, warnings)
+    check_vnext_guardrails(cfg, checklist, warnings)
     check_observability_env(cfg, env, checklist, warnings)
 
     print(f"== seo-cycle config validation ==")

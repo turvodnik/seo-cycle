@@ -46,6 +46,11 @@ python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py <project-root>/seo-
 python3 ~/.codex/skills/seo-cycle/scripts/setup-answer-plan.py <project-root>/seo-cycle.yaml --write  # после заполнения setup-questionnaire.csv
 python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py <project-root>/seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/expert-source-pack.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/ai-brand-audit.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/answer-units-audit.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/technical-guardrails-audit.py <project-root>/seo-cycle.yaml --write
+python3 ~/.codex/skills/seo-cycle/scripts/ai-bot-access-check.py <project-root>/seo-cycle.yaml --url https://example.com/ --write
 
 # 5. Добавь API-ключи в .env только по списку из access-key assistant
 $EDITOR <project-root>/.env
@@ -64,6 +69,7 @@ $EDITOR <project-root>/.env
 Затем открой `seo/setup/tool-stack-report.md`: там видно, какие Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструменты можно использовать сразу, какие требуют approval, а какие отключены из-за региона, бюджета или RF tracking policy.
 Перед платными/API/LLM/subscription действиями открой `seo/setup/spend-guard.md`: там allowed/approval/blocked по сервисам, остатки лимитов и точные `usage-ledger.py check` preflight-команды.
 Затем открой `seo/setup/growth-roadmap.md`: там top-N приоритетов по техническому SEO, search evidence, ecommerce/local, контенту/сущностям, AI visibility, CRO/маркетингу и automations.
+Для расширенного SEO/AEO/GEO слоя открой `seo/vnext/expert-source-pack.md`, `seo/vnext/ai-brand-audit.md`, `seo/vnext/answer-units-audit.md` и `seo/vnext/technical-guardrails-audit.md`. Остальные vNext отчёты запускай точечно: `eeat-evidence-map.py`, `geo-kpi-model.py`, `log-bot-audit.py`, `ai-bot-access-check.py`, `snippet-sitemap-audit.py`, `traffic-drop-diagnostics.py`, `cannibalization-audit.py`, `ru-commerce-readiness.py`, `offpage-risk-audit.py`, `conversion-sxo-audit.py`. Все они report-only и не меняют сайт; `ai-bot-access-check.py` делает live HTTP-запросы и поэтому запускается явно.
 Подробный файл первого запуска — `seo/setup/onboarding-playbook.md`: там разделены шаги агента, human-secret ввод, review и approval.
 
 **OAuth setup для GSC/GA4/PSI/Метрики/Яндекса** → см. `docs/oauth-setup.md`.

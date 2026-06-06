@@ -102,6 +102,32 @@ FEATURES: list[dict[str, Any]] = [
         "command": "python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write && python3 ~/.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled",
         "notes": "Real cron/schedules remain disabled unless policy and explicit approval allow them.",
     },
+    {
+        "id": "seo_aeo_geo_vnext",
+        "title": "SEO/AEO/GEO vNext report layer",
+        "policy_keys": [
+            "ai_brand_audit_report",
+            "answer_units_audit_report",
+            "eeat_evidence_map_report",
+            "geo_kpi_model_report",
+            "log_bot_audit_report",
+            "ai_bot_access_check_report",
+            "ai_bot_access_check_json",
+            "technical_guardrails_audit_report",
+            "snippet_sitemap_audit_report",
+            "traffic_drop_diagnostics_report",
+            "cannibalization_audit_report",
+            "ru_commerce_readiness_report",
+            "offpage_risk_audit_report",
+            "conversion_sxo_audit_report",
+            "expert_source_pack_report",
+        ],
+        "artifacts": ["seo/vnext/ai-brand-audit.md", "seo/vnext/expert-source-pack.md", "seo/vnext/technical-guardrails-audit.md"],
+        "question": "Enable report-only SEO/AEO/GEO vNext audits: AI Brand, Answer Units, E-E-A-T, GEO KPI, logs, live AI bot access, technical, local/RU commerce, off-page, SXO, and expert sources?",
+        "default_answer": "yes_report_only",
+        "command": "python3 ~/.codex/skills/seo-cycle/scripts/expert-source-pack.py --write && python3 ~/.codex/skills/seo-cycle/scripts/ai-brand-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/technical-guardrails-audit.py --write",
+        "notes": "Additive and safe by default: no publishing, paid APIs, index submission, tracking tags, or ads. Live AI bot access check is explicit/manual because it sends public HTTP requests.",
+    },
 ]
 
 
