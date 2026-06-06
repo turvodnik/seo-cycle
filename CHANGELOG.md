@@ -1,5 +1,12 @@
 # Changelog — seo-cycle
 
+## [1.44.1] — 2026-06-06
+
+### Compatibility
+
+- Fixed source artifact timestamps on clean macOS/system Python 3.9 installs by replacing `datetime.UTC` with `datetime.timezone.utc`.
+- Added a regression test for the UTC timestamp helper used by technical/source collectors.
+
 ## [1.44.0] — 2026-06-06
 
 ### Technical site tools

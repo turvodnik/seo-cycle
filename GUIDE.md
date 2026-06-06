@@ -267,7 +267,7 @@ CloakBrowser/CloakMCP и другие stealth/anti-bot инструменты н
 
 ## <a id="инструменты"></a>7. Инструменты (что делает · команда · результат)
 
-> Все скрипты лежат в `~/.codex/skills/seo-cycle/scripts/`. Запуск: `python3 <script>.py` или `bash <script>.sh`.
+> Все скрипты лежат в `~/.codex/skills/seo-cycle/scripts/`. Запуск: `python3 <script>.py` или `bash <script>.sh`. Core-скрипты поддерживают системный Python 3.9+; UTC timestamps пишутся через совместимый timezone-aware helper.
 
 ### 7.0 Локальный AI/dev support-набор
 | Инструмент | Что делает | Команда | Результат |
@@ -754,7 +754,7 @@ CloakBrowser/CloakMCP and other stealth/anti-bot tools are not part of the stand
 
 ## <a id="en-tools"></a>7. Tools (what · command · output)
 
-> All scripts live in `~/.codex/skills/seo-cycle/scripts/`. Run via `python3 <script>.py` or `bash <script>.sh`.
+> All scripts live in `~/.codex/skills/seo-cycle/scripts/`. Run via `python3 <script>.py` or `bash <script>.sh`. Core scripts support system Python 3.9+; UTC timestamps use a compatible timezone-aware helper.
 
 ### 7.0 Local AI/dev support toolchain
 | Tool | What | Command | Output |

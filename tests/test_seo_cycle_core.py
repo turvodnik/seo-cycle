@@ -21,6 +21,7 @@ from seo_cycle_core.source_artifacts import (
     make_vector_record,
     read_cached_distillate,
     stable_cache_key,
+    utc_now_iso,
     write_source_artifacts,
 )
 from seo_cycle_core.subprocesses import run_json
@@ -49,6 +50,11 @@ class SeoCycleCoreTest(unittest.TestCase):
         self.assertEqual(numeric("bad", 7), 7)
         self.assertEqual(nested_get({"a": {"b": 3}}, "a.b"), 3)
         self.assertIsNone(nested_get({"a": {}}, "a.b"))
+
+    def test_utc_now_iso_is_python39_compatible(self) -> None:
+        value = utc_now_iso()
+
+        self.assertRegex(value, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
     def test_report_bundle_writes_stable_markdown_json_and_latest_files(self) -> None:
         paths = {
