@@ -15,6 +15,7 @@ RUN_INIT=1
 REGISTER=0
 START_CODEX=0
 INSTALL_SCOPE="${SEO_CYCLE_INSTALL_SCOPE:-local}"
+WITH_WORDPRESS_MCP="${SEO_CYCLE_WITH_WORDPRESS_MCP:-0}"
 REPO="${SEO_CYCLE_REPO:-https://github.com/turvodnik/seo-cycle}"
 KW_REPO="${SEO_KEYWORDS_REPO:-https://github.com/turvodnik/seo-keywords}"
 SHARED_DIR="${SEO_CYCLE_SHARED_DIR:-$HOME/.codex/vendor}"
@@ -36,6 +37,9 @@ Options:
   --local          Use shared vendor core + project-local skills/config (default).
   --vendor-local   Clone full seo-cycle core into PROJECT/.codex/skills.
   --global-skill   Legacy: also expose seo-cycle in global ~/.codex/skills.
+  --with-wordpress-mcp
+                  Also create project-local WordPress/Novomira MCP config.
+                  Default is off; run only in projects that need it.
   -h, --help       Show this help.
 EOF
 }
@@ -68,6 +72,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --global|--global-skill)
             INSTALL_SCOPE=global-skill
+            shift
+            ;;
+        --with-wordpress-mcp)
+            WITH_WORDPRESS_MCP=1
             shift
             ;;
         -h|--help)
@@ -317,8 +325,10 @@ run_existing_project_upgrade() {
         || echo "ℹ access-key-assistant failed; run it manually after checking tool stack"
     python3 "$CORE/scripts/setup-control-plane.py" "$cfg_path" --write --skip-intake \
         || echo "ℹ setup-control-plane reported validation/setup issues; open seo/setup/setup-control-plane.md"
-    python3 "$CORE/scripts/project-mcp-config.py" "$cfg_path" --write \
-        || echo "ℹ project-mcp-config failed; run it manually after checking .env"
+    if [ "$WITH_WORDPRESS_MCP" = "1" ]; then
+        python3 "$CORE/scripts/project-mcp-config.py" "$cfg_path" --write \
+            || echo "ℹ project-mcp-config failed; run it manually after checking .env"
+    fi
 }
 
 echo "════════════════════════════════════════════════"
@@ -358,7 +368,11 @@ if [ "$RUN_INIT" = "1" ]; then
     if [ -n "$cfg_path" ]; then
         run_existing_project_upgrade "$PROJECT_DIR" "$cfg_path"
     else
-        "$CORE/scripts/init-project.sh"
+        if [ "$WITH_WORDPRESS_MCP" = "1" ]; then
+            SEO_CYCLE_WITH_WORDPRESS_MCP=1 "$CORE/scripts/init-project.sh"
+        else
+            "$CORE/scripts/init-project.sh"
+        fi
         ensure_env_file "$PROJECT_DIR"
         ensure_project_skill_links "$PROJECT_DIR"
         ensure_project_overlay "$PROJECT_DIR"
@@ -371,6 +385,7 @@ echo "  ✓ Codex bootstrap finished"
 echo "════════════════════════════════════════════════"
 echo "Core: $CORE"
 echo "Project: $PROJECT_DIR"
+echo "WordPress/Novomira MCP: optional; run project-mcp-config.py or bootstrap with --with-wordpress-mcp only where needed."
 echo ""
 echo "Next Codex command:"
 echo "  cd \"$PROJECT_DIR\""

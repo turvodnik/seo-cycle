@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.46.1] — 2026-06-06
+
+### Optional WordPress MCP
+
+- Changed Codex bootstrap/init behavior so WordPress/Novomira MCP is not created automatically, even project-locally.
+- Added explicit `bootstrap-codex.sh --with-wordpress-mcp` for projects that need WordPress/Novomira MCP.
+- Kept `project-mcp-config.py --write` as the manual project-local setup command; global MCP config remains untouched.
+- Documented WordPress REST API + Application Password as the primary publishing/admin channel; Novomira MCP is a manual fallback/extension for special abilities.
+
 ## [1.46.0] — 2026-06-06
 
 ### Project-local Codex and WordPress MCP

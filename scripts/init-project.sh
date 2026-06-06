@@ -334,9 +334,11 @@ python3 "$SKILL_ROOT/scripts/setup-control-plane.py" "$TARGET" --write --skip-in
     && echo "✓ setup control plane создан: context-pack/setup-blueprint/setup-gap-audit/setup-questionnaire/setup-answer-plan path/launch-plan/spend-guard/setup/task-route/usage-ledger/tool-stack/growth-roadmap/onboarding + automation recommendations" \
     || echo "ℹ setup control plane не создан — запусти scripts/setup-control-plane.py --write"
 
-python3 "$SKILL_ROOT/scripts/project-mcp-config.py" "$TARGET" --write >/dev/null 2>&1 \
-    && echo "✓ project-local MCP config создан: .codex/config.toml (секреты читаются из .env)" \
-    || echo "ℹ project-local MCP config не создан — запусти scripts/project-mcp-config.py --write"
+if [ "${SEO_CYCLE_WITH_WORDPRESS_MCP:-0}" = "1" ]; then
+    python3 "$SKILL_ROOT/scripts/project-mcp-config.py" "$TARGET" --write >/dev/null 2>&1 \
+        && echo "✓ project-local MCP config создан: .codex/config.toml (секреты читаются из .env)" \
+        || echo "ℹ project-local MCP config не создан — запусти scripts/project-mcp-config.py --write"
+fi
 
 # Дозапись проекта в общий реестр (идемпотентно — по path)
 REGISTRY="$SKILL_ROOT/config/projects-registry.yaml"
@@ -377,10 +379,9 @@ echo "     # обновить: python3 ./.codex/skills/seo-cycle/scripts/access-
 echo "  4. Заполни .env только нужными API ключами (см. docs/oauth-setup.md в скилле)"
 echo "     # Codex: SEO_RUNTIME=codex, SEO_SEARCH_RUNTIME=direct"
 echo "     # Claude: SEO_RUNTIME=claude, SEO_SEARCH_RUNTIME=codex_external"
-echo "     # WordPress MCP/Novomira: WP_API_URL, WP_API_USERNAME, WP_API_PASSWORD"
-echo "  5. Проверь project-local MCP config для Codex:"
-echo "     .codex/config.toml"
-echo "     # обновить: python3 ./.codex/skills/seo-cycle/scripts/project-mcp-config.py --write"
+echo "  5. Если этому проекту нужен WordPress/Novomira MCP, настрой его явно:"
+echo "     python3 ./.codex/skills/seo-cycle/scripts/project-mcp-config.py --write"
+echo "     # затем заполни локальные WP_API_URL, WP_API_USERNAME, WP_API_PASSWORD или client-specific config"
 echo "  6. Обнови policy-файлы в seo/ при подключении NeuronWriter, Google NLP, GSC/Яндекс/Бинг и автоматизаций"
 echo "  7. Запусти валидатор:"
 echo "     python3 ./.codex/skills/seo-cycle/scripts/validate-config.py"

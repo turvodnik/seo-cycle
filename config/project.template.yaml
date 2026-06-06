@@ -767,7 +767,10 @@ publishing:
   enabled: true
   cms: wordpress
 
-  # Environment variables — где лежат креды (никогда не храним прямо в yaml)
+  # Environment variables — WordPress REST API is the primary publishing/admin
+  # channel. Never store credentials directly in yaml.
+  # Novomira/WordPress MCP is an optional project-local fallback and is configured
+  # separately via project-mcp-config.py only when needed.
   env_vars:
     base_url: WP_BASE_URL
     user: WP_USER

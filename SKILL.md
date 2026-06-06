@@ -469,7 +469,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/eeat-render.py 06-drafts/<name>.publis
 
 | CMS | Скилл / подход |
 |---|---|
-| WordPress | REST API + Application Password как основной независимый канал; MCP/`emwoody-publish-*` как удобный интерфейс; SSH/WP-CLI fallback для backup/cache/meta/server repairs |
+| WordPress | REST API + Application Password как основной независимый канал; project-specific publish skills могут оборачивать REST; Novomira/WordPress MCP только если явно подключён для специальных abilities; SSH/WP-CLI fallback для backup/cache/meta/server repairs |
 | Shopify | (TBD — Liquid + Storefront API) |
 | Webflow | (TBD — CMS Collections API) |
 | Next.js/static | git commit в content/ + redeploy |
@@ -484,7 +484,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/eeat-render.py 06-drafts/<name>.publis
 6. Verify через GET + браузер: публичный HTML не должен содержать недекоративные `<img>` без `alt`, inline images без caption и запрещённые тексты на/под изображениями. Если кеш/оптимизатор/lazy-load подменяет first-screen/above-the-fold inline image на плейсхолдер в браузере, исключи только это критичное inline image из lazy-load (`skip-lazy`/`data-no-lazy` или CMS-аналог) и перепроверь screenshot. Остальные inline images ниже первого экрана оставляй lazy-loaded.
 7. Лог в `artifacts.publish_log`
 
-**WordPress channel policy:** не завязывай публикацию только на MCP-сервер. Если `publishing.cms=wordpress`, держи REST API publisher через Application Password как основной повторяемый путь; MCP используй когда он доступен в клиенте; SSH/WP-CLI оставляй для восстановления, purge cache, backup, незарегистрированных REST meta и серверных исправлений.
+**WordPress channel policy:** не завязывай публикацию только на MCP-сервер. Если `publishing.cms=wordpress`, REST API через Application Password — основной повторяемый путь для постов, страниц, товаров, media, meta и plugin REST endpoints. Novomira/WordPress MCP не включай автоматически; используй только как project-local fallback/extension, когда REST API недостаточно или нужны специальные abilities (например Bricks-структуры). SSH/WP-CLI оставляй для восстановления, purge cache, backup, незарегистрированных REST meta и серверных исправлений.
 
 **Маркетинговый мостик (если `marketing.enabled`):** после публикации — поднять конверсию страницы через плагин `marketing-skills` (`page-cro` / `form-cro` / `popup-cro`). Каналы привлечения/удержания (`paid-ads`, `social-content`, `email-sequence`, `referral-program`) — **с РФ-адаптацией** (Яндекс.Директ / VK / Telegram / Метрика / 2ГИС вместо западных). Карта мостиков и замен каналов — `docs/marketing-bridges.md`.
 

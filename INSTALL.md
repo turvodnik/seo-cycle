@@ -8,7 +8,7 @@
 # Вариант A — Codex-first bootstrap одной командой (рекомендуется)
 cd <project-root>
 curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash
-# shared update в ~/.codex/vendor + локальные skill symlinks + wizard + .env + project-local MCP + setup reports
+# shared update в ~/.codex/vendor + локальные skill symlinks + wizard + .env + setup reports
 
 # Вариант B — Claude Code bootstrap
 cd <project-root>
@@ -42,7 +42,6 @@ python3 ~/.codex/vendor/seo-cycle/scripts/setup-onboarding.py <project-root>/seo
 python3 ~/.codex/vendor/seo-cycle/scripts/setup-blueprint.py <project-root>/seo-cycle.yaml --write
 python3 ~/.codex/vendor/seo-cycle/scripts/project-upgrade-assistant.py <project-root>/seo-cycle.yaml --write
 python3 ~/.codex/vendor/seo-cycle/scripts/access-key-assistant.py <project-root>/seo-cycle.yaml --write
-python3 ~/.codex/vendor/seo-cycle/scripts/project-mcp-config.py <project-root>/seo-cycle.yaml --write
 python3 ~/.codex/vendor/seo-cycle/scripts/setup-gap-audit.py <project-root>/seo-cycle.yaml --write
 python3 ~/.codex/vendor/seo-cycle/scripts/setup-answer-plan.py <project-root>/seo-cycle.yaml --write  # после заполнения setup-questionnaire.csv
 python3 ~/.codex/vendor/seo-cycle/scripts/launch-plan.py <project-root>/seo-cycle.yaml --write
@@ -65,9 +64,9 @@ $EDITOR <project-root>/.env
 # «давай запустим SEO-цикл для категории X»
 ```
 
-`bootstrap-codex.sh` по умолчанию ставит seo-cycle как **shared core + project-local entrypoints**: общий код в `~/.codex/vendor/seo-cycle`, а в проекте только symlink `./.codex/skills/seo-cycle`, `./.agents/skills/seo-cycle`, `./.claude/skills/seo-cycle`. Если проект не bootstrap'или, seo-cycle skills в нём не появляются и не читаются. Полный vendor clone в проект доступен через `--vendor-local`; legacy global skill exposure только через `--global-skill`. Project bootstrap запускает `init-project.sh`, создаёт `.env` из `.env.example`, добавляет `.env` в `.gitignore`, пишет `SEO_RUNTIME=codex`, `SEO_SEARCH_RUNTIME=direct` и генерирует project-local `.codex/config.toml` для WordPress/Novomira MCP без секретов. `bootstrap-claude.sh` делает Claude-вариант и создаёт `CLAUDE.md`, если его ещё нет. Wizard спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
+`bootstrap-codex.sh` по умолчанию ставит seo-cycle как **shared core + project-local entrypoints**: общий код в `~/.codex/vendor/seo-cycle`, а в проекте только symlink `./.codex/skills/seo-cycle`, `./.agents/skills/seo-cycle`, `./.claude/skills/seo-cycle`. Если проект не bootstrap'или, seo-cycle skills в нём не появляются и не читаются. Полный vendor clone в проект доступен через `--vendor-local`; legacy global skill exposure только через `--global-skill`. Project bootstrap запускает `init-project.sh`, создаёт `.env` из `.env.example`, добавляет `.env` в `.gitignore`, пишет `SEO_RUNTIME=codex`, `SEO_SEARCH_RUNTIME=direct`. WordPress/Novomira MCP не создаётся автоматически; включай его только явной командой или флагом `--with-wordpress-mcp`. `bootstrap-claude.sh` делает Claude-вариант и создаёт `CLAUDE.md`, если его ещё нет. Wizard спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
 
-WordPress/Novomira MCP не надо добавлять в глобальный `~/.codex/config.toml` под каждый сайт. Для каждого проекта запускай:
+WordPress/Novomira MCP не надо добавлять в глобальный `~/.codex/config.toml` и не надо включать во всех проектах. Для проекта, где он нужен, запускай:
 
 ```bash
 cd <project-root>
@@ -82,7 +81,17 @@ WP_API_USERNAME=...
 WP_API_PASSWORD=...
 ```
 
-Так один и тот же MCP runner остаётся общим, но URL/логин/ключ всегда берутся из текущего проекта и не перезаписывают другие сайты.
+Так MCP появляется только в текущем проекте, а URL/логин/ключ не перезаписывают другие сайты.
+
+Основной канал для WordPress остаётся REST API + Application Password:
+
+```bash
+WP_BASE_URL=https://example.com
+WP_USER=...
+WP_APP_PASSWORD=...
+```
+
+Через него делаем стандартные операции: создавать/обновлять посты, страницы, товары, media, meta и использовать REST endpoints плагинов. Novomira MCP подключается только точечно, когда REST API недостаточно или нужны специальные abilities.
 
 `scripts/install-ai-toolchain.sh --codex` ставит только безопасный локальный support-набор: GitHub Spec Kit CLI, Microsoft MarkItDown, Graphify и CodeGraph + Codex-интеграции Graphify/CodeGraph. Он не ставит stealth/anti-bot браузеры, платные API, memory-сервисы и не пишет секреты. Проверка: `bash ./.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --check` из установленного проекта или `bash ~/.codex/vendor/seo-cycle/scripts/install-ai-toolchain.sh --check` для shared core.
 
@@ -307,14 +316,14 @@ GOOGLE_NLP_POLICY_FILE=seo/entities/google-nlp-policy.yaml
 # AnswerThePublic
 TOKEN_ANSWERTHEPUBLIC=atp_pk_live_...
 
-# WordPress (если publishing.cms = wordpress)
+# WordPress REST API — основной канал, если publishing.cms = wordpress
 WP_BASE_URL=https://example.com
 WP_USER=admin
 WP_APP_PASSWORD=xxxx xxxx xxxx xxxx
 WOO_REST_API_KEY=ck_...
 WOO_REST_API_SECRET=cs_...
 
-# WordPress MCP / Novomira (project-local .codex/config.toml)
+# WordPress MCP / Novomira — optional fallback, only when explicitly installed
 WP_API_URL=https://example.com/wp-json/mcp/novamira
 WP_API_USERNAME=...
 WP_API_PASSWORD=...
