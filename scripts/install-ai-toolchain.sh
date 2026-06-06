@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: install-ai-toolchain.sh [--codex] [--check]
+Usage: install-ai-toolchain.sh [--codex] [--notebooklm] [--check]
 
 Installs the optional local AI/SEO support toolchain:
 - GitHub Spec Kit CLI for spec-driven development
@@ -15,18 +15,23 @@ This script does not install stealth/anti-bot browsers, paid APIs, or memory
 services. It never writes secrets.
 
 Options:
-  --codex   Install Codex integrations for Graphify and CodeGraph
-  --check   Print installed versions/status only
+  --codex       Install Codex integrations for Graphify and CodeGraph
+  --notebooklm  Add NotebookLM MCP as an explicit gated knowledge-source bridge
+  --check       Print installed versions/status only
 EOF
 }
 
 install_codex=false
+install_notebooklm=false
 check_only=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --codex)
       install_codex=true
+      ;;
+    --notebooklm)
+      install_notebooklm=true
       ;;
     --check)
       check_only=true
@@ -78,6 +83,11 @@ print_status() {
   else
     echo "codex codegraph MCP: not configured"
   fi
+  if grep -q '^\[mcp_servers\.notebooklm\]' "$HOME/.codex/config.toml" 2>/dev/null; then
+    echo "codex notebooklm MCP: configured"
+  else
+    echo "codex notebooklm MCP: not configured"
+  fi
 }
 
 if [[ "$check_only" == true ]]; then
@@ -106,6 +116,37 @@ if [[ "$install_codex" == true ]]; then
 
   echo "Installing CodeGraph Codex MCP config..."
   codegraph install --target codex --location global --yes
+fi
+
+if [[ "$install_notebooklm" == true ]]; then
+  echo "Checking NotebookLM MCP package..."
+  npm view notebooklm-mcp version >/dev/null
+
+  if [[ "$install_codex" == true ]]; then
+    mkdir -p "$HOME/.codex"
+    touch "$HOME/.codex/config.toml"
+    if grep -q '^\[mcp_servers\.notebooklm\]' "$HOME/.codex/config.toml"; then
+      echo "NotebookLM MCP already present in ~/.codex/config.toml"
+    else
+      cat >> "$HOME/.codex/config.toml" <<'EOF'
+
+[mcp_servers.notebooklm]
+command = "npx"
+args = ["notebooklm-mcp@latest"]
+startup_timeout_sec = 60
+tool_timeout_sec = 900
+
+[mcp_servers.notebooklm.env]
+NOTEBOOKLM_PROFILE = "standard"
+NOTEBOOKLM_DISABLED_TOOLS = "cleanup_data,re_auth,add_source,generate_audio,get_audio_status,download_audio"
+NOTEBOOKLM_AI_MARKER = "true"
+HEADLESS = "true"
+EOF
+      echo "Added NotebookLM MCP to ~/.codex/config.toml"
+    fi
+  else
+    echo "NotebookLM package is available. Re-run with --codex --notebooklm to add Codex MCP config."
+  fi
 fi
 
 print_status

@@ -22,6 +22,9 @@ curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install-co
 # 0b. Опционально: установи локальный AI/dev toolchain для Codex/spec/research задач
 bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex
 
+# 0c. Опционально: добавь NotebookLM MCP для curated expert knowledge base
+bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex --notebooklm
+
 # 1. Скопируй шаблон конфига в корень проекта
 cp ~/.codex/skills/seo-cycle/config/project.template.yaml \
    <project-root>/seo-cycle.yaml
@@ -54,6 +57,8 @@ $EDITOR <project-root>/.env
 `install-codex.sh` ставит canonical checkout в `~/.codex/skills/seo-cycle`, создаёт `~/.codex/skills/codex-primary-runtime`, а `~/.claude/skills/seo-cycle` и `~/.agents/skills/seo-cycle` делает symlink на Codex-ядро. `bootstrap-codex.sh` дополнительно запускает `init-project.sh` в текущем проекте, создаёт `.env` из `.env.example`, добавляет `.env` в `.gitignore` и пишет `SEO_RUNTIME=codex`, `SEO_SEARCH_RUNTIME=direct`. `bootstrap-claude.sh` делает то же, но пишет `SEO_RUNTIME=claude`, `SEO_SEARCH_RUNTIME=codex_external` и создаёт `CLAUDE.md`, если его ещё нет. Wizard спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
 
 `scripts/install-ai-toolchain.sh --codex` ставит только безопасный локальный support-набор: GitHub Spec Kit CLI, Microsoft MarkItDown, Graphify и CodeGraph + Codex-интеграции Graphify/CodeGraph. Он не ставит stealth/anti-bot браузеры, платные API, memory-сервисы и не пишет секреты. Проверка: `bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --check`.
+
+`--notebooklm` — отдельный явный флаг для подключения NotebookLM MCP как gated bridge к curated expert knowledge base. Он добавляет MCP-сервер в `~/.codex/config.toml`, но не получает доступ к notebook без первичного Google login через `setup_auth`. По умолчанию включён `standard` profile и отключены destructive/write/audio tools.
 
 После wizard сначала открой `seo/setup/context-pack.md`: это самый короткий task-scoped вход для Claude/Codex. Затем открой `seo/setup/setup-blueprint.md`: там компактная матрица стран/регионов/поисковиков/типа бизнеса/marketing/ads/tools/budget/automations и first-read файлы. Для существующих проектов открой `seo/setup/upgrade-assistant.md` и `seo/setup/upgrade-questionnaire.csv`: там yes/no/defer вопросы по новым функциям без автоперезаписи `seo-cycle.yaml`. Затем открой `seo/setup/access-key-assistant.md`: там только нужные этому проекту ключи/токены, ссылки и env names, без secret values. Затем открой `seo/setup/setup-questionnaire.csv` или `seo/setup/setup-gap-audit.md`: там readiness score и вопросы по незаполненным бизнес/рынок/local/ecommerce/budget/tool деталям, без хранения секретов. После заполнения CSV запусти `setup-answer-plan.py --write` и открой `seo/setup/setup-answer-plan.md`: это review-only план ручных правок, без автоприменения и без сохранения secret-like ответов. Если нужно больше контекста, открой `seo/setup/launch-plan.md`: компактный первый экран проекта с market/business matrix, token/budget/subscription controls, tool packs, env names, approval gates, automations и execution order.
 Затем открой `seo/setup/tool-stack-report.md`: там видно, какие Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструменты можно использовать сразу, какие требуют approval, а какие отключены из-за региона, бюджета или RF tracking policy.

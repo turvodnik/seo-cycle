@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.39.0] — 2026-06-06
+
+### NotebookLM knowledge bridge
+
+- Added explicit `--notebooklm` support to `scripts/install-ai-toolchain.sh` for connecting NotebookLM MCP as a gated curated expert knowledge source.
+- The installer appends a `notebooklm` MCP server to `~/.codex/config.toml` only when `--codex --notebooklm` is passed.
+- Default NotebookLM MCP config uses the `standard` profile and disables cleanup/re-auth/source-ingestion/audio tools to keep the first integration read/query oriented.
+- Documented NotebookLM as expert-synthesis input for SEO/AEO/GEO, requiring Google `setup_auth`, citations/source excerpts, and downstream fact-check before implementation.
+
 ## [1.38.0] — 2026-06-06
 
 ### Optional AI/dev support toolchain
