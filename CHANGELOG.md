@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.38.0] — 2026-06-06
+
+### Optional AI/dev support toolchain
+
+- Added `scripts/install-ai-toolchain.sh` to install the approved local support stack: GitHub Spec Kit CLI, Microsoft MarkItDown, Graphify, and CodeGraph.
+- The installer can also configure Codex integrations with `--codex`: Graphify skill under `~/.agents/skills/graphify` and CodeGraph MCP in `~/.codex/config.toml`.
+- Documented when to use each tool: Spec Kit for large `seo-cycle` feature work, MarkItDown for trusted evidence ingestion, Graphify for mixed code/docs/research graphs, and CodeGraph for local code-symbol navigation.
+- Explicitly excluded stealth/anti-bot browsers, paid APIs, and external memory services from the standard install path.
+- Updated README, INSTALL, SKILL.md, GUIDE RU/EN, and `.gitignore` rules for local `.codegraph/` and `graphify-out/` caches.
+
 ## [1.37.0] — 2026-06-05
 
 ### Existing-project upgrades and access setup

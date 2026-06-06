@@ -239,11 +239,38 @@ python3 ~/.codex/skills/seo-cycle/scripts/cycle-state.py show      # прогр�
 - Для РФ-проектов не ставь зарубежные analytics/tracking tags или pixels без явного разрешения policy. GSC, Bing Webmaster, PageSpeed/CrUX, sitemap/robots checks и off-site API audits допустимы без установки кода аналитики.
 - Никогда не выводи API keys, OAuth tokens, service-account JSON или значения `.env`; только имена переменных и пути.
 
+### 6.1 Optional AI/dev support toolchain
+
+Для развития самого `seo-cycle`, больших изменений, evidence ingestion и графовой навигации используй локальный support-набор:
+
+```bash
+bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex
+bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --check
+```
+
+| Инструмент | Когда использовать | Правило безопасности |
+|---|---|---|
+| GitHub Spec Kit (`specify`) | Большие изменения в `seo-cycle`: constitution → spec → plan → tasks → implementation | Не заменяет SEO-фазы и не нужен для мелких правок |
+| Microsoft MarkItDown (`markitdown`) | PDF/XLSX/DOCX/PPTX/HTML/YouTube → Markdown для evidence/fact-check/entity extraction | Только trusted local files или явно разрешённые URL |
+| Graphify (`graphify`) | Mixed graph по коду, docs, markdown, research artifacts и media | Держать `graphify-out/` локальным кэшем, не коммитить без причины |
+| CodeGraph (`codegraph`) | Local code-symbol graph + Codex MCP, когда нужно быстро понять код без массового чтения файлов | `.codegraph/` локальный индекс, не коммитить |
+
+CloakBrowser/CloakMCP и другие stealth/anti-bot инструменты не входят в стандартный набор. Для SEO-сбора соблюдай robots, rate limits, project policy и source terms.
+
 ---
 
 ## <a id="инструменты"></a>7. Инструменты (что делает · команда · результат)
 
 > Все скрипты лежат в `~/.codex/skills/seo-cycle/scripts/`. Запуск: `python3 <script>.py` или `bash <script>.sh`.
+
+### 7.0 Локальный AI/dev support-набор
+| Инструмент | Что делает | Команда | Результат |
+|---|---|---|---|
+| `install-ai-toolchain.sh` | Ставит Spec Kit, MarkItDown, Graphify, CodeGraph и Codex-интеграции Graphify/CodeGraph | `bash install-ai-toolchain.sh --codex` / `--check` | Локальные CLI, Graphify skill, CodeGraph MCP config |
+| `specify` | Spec-driven workflow для крупных изменений в `seo-cycle` | `specify init <project> --integration codex` | `.specify/`, Codex skills/commands для spec/plan/tasks |
+| `markitdown` | Конвертация trusted документов в Markdown для evidence layer | `markitdown source.pdf -o evidence.md` | Markdown-дистиллят для fact-check/entity extraction |
+| `graphify` | Граф знаний по code/docs/research/media | `graphify update . --no-cluster` / `$graphify` | `graphify-out/graph.json`, graph reports/query |
+| `codegraph` | Локальный code-symbol graph + MCP для Codex | `codegraph init .` / `codegraph status .` | `.codegraph/` SQLite index, MCP `codegraph` |
 
 ### 7.1 Управление источниками и конфигом
 | Скрипт | Что делает | Команда | Результат |
@@ -677,11 +704,38 @@ Rules:
 - For Russian/RF projects, do not add foreign analytics/tracking tags or pixels without explicit policy approval. GSC, Bing Webmaster, PageSpeed/CrUX, sitemap/robots checks, and off-site API audits are acceptable because they do not install analytics code.
 - Never print API keys, OAuth tokens, service-account JSON, or `.env` values; use variable names and paths only.
 
+### 6.1 Optional AI/dev support toolchain
+
+For `seo-cycle` development, larger changes, evidence ingestion, and graph-based navigation, use the local support toolchain:
+
+```bash
+bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex
+bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --check
+```
+
+| Tool | When to use | Safety rule |
+|---|---|---|
+| GitHub Spec Kit (`specify`) | Large `seo-cycle` changes: constitution → spec → plan → tasks → implementation | Does not replace SEO phases and is not needed for small edits |
+| Microsoft MarkItDown (`markitdown`) | PDF/XLSX/DOCX/PPTX/HTML/YouTube → Markdown for evidence/fact-check/entity extraction | Trusted local files or explicitly approved URLs only |
+| Graphify (`graphify`) | Mixed graph across code, docs, markdown, research artifacts, and media | Keep `graphify-out/` as a local cache unless there is a clear reason to commit it |
+| CodeGraph (`codegraph`) | Local code-symbol graph + Codex MCP for understanding code without broad file reads | `.codegraph/` is a local index and must not be committed |
+
+CloakBrowser/CloakMCP and other stealth/anti-bot tools are not part of the standard set. For SEO collection, follow robots, rate limits, project policy, and source terms.
+
 ---
 
 ## <a id="en-tools"></a>7. Tools (what · command · output)
 
 > All scripts live in `~/.codex/skills/seo-cycle/scripts/`. Run via `python3 <script>.py` or `bash <script>.sh`.
+
+### 7.0 Local AI/dev support toolchain
+| Tool | What | Command | Output |
+|---|---|---|---|
+| `install-ai-toolchain.sh` | Installs Spec Kit, MarkItDown, Graphify, CodeGraph, and Codex integrations for Graphify/CodeGraph | `bash install-ai-toolchain.sh --codex` / `--check` | Local CLIs, Graphify skill, CodeGraph MCP config |
+| `specify` | Spec-driven workflow for large `seo-cycle` changes | `specify init <project> --integration codex` | `.specify/`, Codex skills/commands for spec/plan/tasks |
+| `markitdown` | Converts trusted documents to Markdown for the evidence layer | `markitdown source.pdf -o evidence.md` | Markdown distillate for fact-check/entity extraction |
+| `graphify` | Knowledge graph across code/docs/research/media | `graphify update . --no-cluster` / `$graphify` | `graphify-out/graph.json`, graph reports/query |
+| `codegraph` | Local code-symbol graph + MCP for Codex | `codegraph init .` / `codegraph status .` | `.codegraph/` SQLite index, MCP `codegraph` |
 
 ### 7.1 Source & config management
 | Script | What | Command | Output |
