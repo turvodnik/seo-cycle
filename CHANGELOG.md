@@ -1,5 +1,13 @@
 # Changelog — seo-cycle
 
+## [1.45.1] — 2026-06-06
+
+### Technical run reliability
+
+- Fixed `ai-bot-access-check.py` so crawler checks treat closed HTTP connections as `unreachable` findings instead of crashing.
+- Fixed `technical-site-audit.py` so the rollup includes technical vNext reports from `seo/vnext/` such as AI bot access, guardrails and snippet/sitemap audits.
+- Added regression tests for closed crawler connections and vNext report aggregation.
+
 ## [1.45.0] — 2026-06-06
 
 ### Technical SEO Evidence Layer

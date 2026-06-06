@@ -30,8 +30,10 @@ DEFAULT_SLUGS = [
 
 
 def load_report(project_root: pathlib.Path, slug: str) -> dict[str, Any] | None:
-    base = project_root / "seo" / "technical"
-    for path in (base / f"latest-{slug}.json", base / f"{slug}.json"):
+    candidates = []
+    for base in (project_root / "seo" / "technical", project_root / "seo" / "vnext"):
+        candidates.extend([base / f"latest-{slug}.json", base / f"{slug}.json"])
+    for path in candidates:
         if path.exists():
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))

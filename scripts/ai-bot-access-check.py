@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import http.client
 import json
 import pathlib
 import re
@@ -167,7 +168,7 @@ def fetch(url: str, user_agent: str, timeout: float) -> dict[str, Any]:
             "body": body.decode("utf-8", errors="replace"),
             "error": str(exc),
         }
-    except (urllib.error.URLError, TimeoutError, socket.timeout, ssl.SSLError) as exc:
+    except (urllib.error.URLError, TimeoutError, socket.timeout, ssl.SSLError, http.client.RemoteDisconnected) as exc:
         return {"ok": False, "status_code": None, "final_url": url, "redirected": False, "body": "", "error": str(exc)}
 
 

@@ -43,6 +43,10 @@ class BotAccessHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body.encode("utf-8"))
             return
+        if "Amazonbot" in user_agent:
+            self.close_connection = True
+            self.connection.close()
+            return
         body = "ok"
         self.send_response(200)
         self.send_header("Content-Type", "text/plain")
@@ -80,7 +84,7 @@ class AiBotAccessCheckTest(unittest.TestCase):
                 "--url",
                 url,
                 "--bots",
-                "GPTBot,ClaudeBot,OAI-SearchBot,Googlebot",
+                "GPTBot,ClaudeBot,Amazonbot,OAI-SearchBot,Googlebot",
                 "--timeout",
                 "2",
                 "--write",
@@ -100,10 +104,12 @@ class AiBotAccessCheckTest(unittest.TestCase):
 
         self.assertEqual(by_name["GPTBot"]["outcome"], "robots_block")
         self.assertEqual(by_name["ClaudeBot"]["outcome"], "waf_block")
+        self.assertEqual(by_name["Amazonbot"]["outcome"], "unreachable")
         self.assertEqual(by_name["OAI-SearchBot"]["outcome"], "available")
         self.assertEqual(by_name["Googlebot"]["outcome"], "available")
         self.assertEqual(report["summary"]["robots_block"], 1)
         self.assertEqual(report["summary"]["waf_block"], 1)
+        self.assertEqual(report["summary"]["unreachable"], 1)
         self.assertTrue((self.tmp / "seo" / "vnext" / "ai-bot-access-check.md").exists())
         self.assertTrue((self.tmp / "seo" / "vnext" / "latest-ai-bot-access-check.json").exists())
 

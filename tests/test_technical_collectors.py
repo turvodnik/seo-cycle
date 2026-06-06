@@ -332,12 +332,33 @@ project_type: ecommerce
         lighthouse_path.write_text(json.dumps(lighthouse), encoding="utf-8")
         self.run_script("lighthouse-audit.py", "--input-json", str(lighthouse_path), "--url", "https://technical.test/")
 
+        vnext_dir = self.tmp / "seo" / "vnext"
+        vnext_dir.mkdir(parents=True, exist_ok=True)
+        (vnext_dir / "ai-bot-access-check.json").write_text(
+            json.dumps(
+                {
+                    "audit_id": "ai_bot_access_check",
+                    "status": "attention_required",
+                    "summary": {"unreachable": 1},
+                    "findings": [
+                        {
+                            "id": "llm_crawlers_blocked",
+                            "severity": "high",
+                            "message": "1 LLM crawler is blocked or unavailable.",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
         report = self.run_script("technical-site-audit.py")
 
         self.assertEqual(report["status"], "attention_required")
         self.assertGreaterEqual(report["summary"]["source_count"], 2)
         self.assertIn("link-audit", report["sources"])
         self.assertIn("lighthouse-audit", report["sources"])
+        self.assertIn("ai_bot_access_check", report["sources"])
         self.assertTrue((self.tmp / "seo" / "technical" / "technical-site-audit.md").exists())
 
 
