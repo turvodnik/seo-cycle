@@ -373,6 +373,26 @@ def check_project_policies(cfg: dict, env: dict, project_root: pathlib.Path, che
         "expert_source_pack_json": "seo/vnext/expert-source-pack.json",
         "latest_expert_source_pack": "seo/vnext/latest-expert-source-pack.md",
         "latest_expert_source_pack_json": "seo/vnext/latest-expert-source-pack.json",
+        "link_audit_report": "seo/technical/link-audit.md",
+        "link_audit_json": "seo/technical/link-audit.json",
+        "latest_link_audit": "seo/technical/latest-link-audit.md",
+        "latest_link_audit_json": "seo/technical/latest-link-audit.json",
+        "redirect_map_audit_report": "seo/technical/redirect-map-audit.md",
+        "redirect_map_audit_json": "seo/technical/redirect-map-audit.json",
+        "latest_redirect_map_audit": "seo/technical/latest-redirect-map-audit.md",
+        "latest_redirect_map_audit_json": "seo/technical/latest-redirect-map-audit.json",
+        "lighthouse_audit_report": "seo/technical/lighthouse-audit.md",
+        "lighthouse_audit_json": "seo/technical/lighthouse-audit.json",
+        "latest_lighthouse_audit": "seo/technical/latest-lighthouse-audit.md",
+        "latest_lighthouse_audit_json": "seo/technical/latest-lighthouse-audit.json",
+        "serpstat_audit_report": "seo/technical/serpstat-audit.md",
+        "serpstat_audit_json": "seo/technical/serpstat-audit.json",
+        "latest_serpstat_audit": "seo/technical/latest-serpstat-audit.md",
+        "latest_serpstat_audit_json": "seo/technical/latest-serpstat-audit.json",
+        "labrika_source_pack_report": "seo/technical/labrika-source-pack.md",
+        "labrika_source_pack_json": "seo/technical/labrika-source-pack.json",
+        "latest_labrika_source_pack": "seo/technical/latest-labrika-source-pack.md",
+        "latest_labrika_source_pack_json": "seo/technical/latest-labrika-source-pack.json",
     }
     configured = cfg.get("policy_files", {}) or {}
     if not isinstance(configured, dict):
@@ -575,6 +595,7 @@ def check_vnext_guardrails(cfg: dict, checklist: list, warnings: list):
         "eeat_evidence",
         "geo_kpi",
         "technical_guardrails",
+        "technical_site_tools",
         "snippet_sitemap",
         "traffic_diagnostics",
         "cannibalization",
@@ -597,6 +618,10 @@ def check_vnext_guardrails(cfg: dict, checklist: list, warnings: list):
             warnings.append(f"{module}.writes_to_site=true — vNext modules must stay report-only by default.")
         if block.get("paid_api_required") and (cfg.get("governance", {}).get("budget_policy", {}).get("monthly_paid_api_usd_cap", 0) in (0, "0", None)):
             checklist.append(f"Утвердить paid API budget/approval перед запуском {module}.paid_api_required=true")
+        if block.get("paid_api_default") not in (None, "disabled", "approval_only"):
+            warnings.append(f"{module}.paid_api_default should be disabled or approval_only.")
+        if block.get("live_http_default") not in (None, "disabled", "approval_only"):
+            warnings.append(f"{module}.live_http_default should be disabled or approval_only.")
 
 
 def main():

@@ -38,6 +38,11 @@ python3 ~/.codex/skills/seo-cycle/scripts/traffic-drop-diagnostics.py seo-cycle.
 python3 ~/.codex/skills/seo-cycle/scripts/cannibalization-audit.py seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/log-bot-audit.py seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/ai-bot-access-check.py seo-cycle.yaml --url https://example.com/ --write
+python3 ~/.codex/skills/seo-cycle/scripts/link-audit.py seo-cycle.yaml --input-json linkinator.json --url https://example.com/ --write
+python3 ~/.codex/skills/seo-cycle/scripts/redirect-map-audit.py seo-cycle.yaml --input redirects.csv --base-url https://example.com --write
+python3 ~/.codex/skills/seo-cycle/scripts/lighthouse-audit.py seo-cycle.yaml --input-json lighthouse.json --url https://example.com/ --write
+python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py seo-cycle.yaml --action basic-info --report-id 123456 --write
+python3 ~/.codex/skills/seo-cycle/scripts/labrika-source-pack.py seo-cycle.yaml --export-file labrika-export.md --write
 python3 ~/.codex/skills/seo-cycle/scripts/ru-commerce-readiness.py seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/offpage-risk-audit.py seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/conversion-sxo-audit.py seo-cycle.yaml --write
@@ -51,11 +56,14 @@ python3 ~/.codex/skills/seo-cycle/scripts/log-bot-audit.py seo-cycle.yaml --log 
 python3 ~/.codex/skills/seo-cycle/scripts/ai-bot-access-check.py seo-cycle.yaml --url https://example.com/ --categories llm,search --write
 python3 ~/.codex/skills/seo-cycle/scripts/traffic-drop-diagnostics.py seo-cycle.yaml --input traffic.csv --write
 python3 ~/.codex/skills/seo-cycle/scripts/cannibalization-audit.py seo-cycle.yaml --input cannibalization.csv --write
+python3 ~/.codex/skills/seo-cycle/scripts/link-audit.py seo-cycle.yaml --live --url https://example.com/ --write
+python3 ~/.codex/skills/seo-cycle/scripts/lighthouse-audit.py seo-cycle.yaml --live --url https://example.com/ --write
+SERPSTAT_API_KEY=... python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py seo-cycle.yaml --action start --project-id 123 --live --write
 ```
 
 ## Output
 
-Reports are written to `seo/vnext/*.md` and `seo/vnext/*.json`.
+Reports are written to `seo/vnext/*.md`, `seo/vnext/*.json`, `seo/technical/*.md`, and `seo/technical/*.json`.
 
 Vector-ready records are expected under:
 
@@ -95,9 +103,22 @@ the classic multi-pass files to build `similarity.jsonl` and
 | Server logs | `log-bot-audit.py` | Search/AI bot and crawl waste summary |
 | AI bot access | `ai-bot-access-check.py` | Live robots.txt + HTTP User-Agent access report |
 | Technical guardrails | `technical-guardrails-audit.py` | robots/indexability/AJAX/schema checks |
+| Broken links | `link-audit.py` | linkinator export/live distillate for 4xx/5xx, redirects, HTTP links |
+| Redirect maps | `redirect-map-audit.py` | CSV redirect-map chains, loops, missing targets, optional live check |
+| Lighthouse/CWV | `lighthouse-audit.py` | Lighthouse JSON/live distillate for performance, SEO, accessibility, CWV |
+| Serpstat Site Audit | `serpstat-audit.py` | guarded project/list/create/start/basic-info/category API adapter |
+| Labrika export | `labrika-source-pack.py` | manual/browser export ingestion until public API is confirmed |
 | Snippet/sitemap | `snippet-sitemap-audit.py` | XML/HTML sitemap and snippet controls |
 | Traffic drops | `traffic-drop-diagnostics.py` | traffic-loss playbook |
 | Cannibalization | `cannibalization-audit.py` | query to URL conflict detection |
 | RU commerce | `ru-commerce-readiness.py` | Yandex Merchant/YCP/Alice readiness |
 | Off-page risk | `offpage-risk-audit.py` | donor/acceptor/content island/PBN risk |
 | SXO/conversion | `conversion-sxo-audit.py` | CR, pricing UX, trust, FAQ, lead blocks |
+
+## Technical site tools policy
+
+- `link-audit.py` accepts `--input-json` from `linkinator` by default. `--live` runs `npx -y linkinator` and sends public HTTP requests.
+- `redirect-map-audit.py` reads CSV exports with `old_url/new_url`, `source/target`, or `from/to`; live checks are explicit.
+- `lighthouse-audit.py` prefers a local Lighthouse JSON report or optional Lighthouse MCP workflow. `--live` runs Lighthouse through `npx`.
+- `serpstat-audit.py` is guarded. Without `--live` and `SERPSTAT_API_KEY`, it writes a planned request only. `create-project` consumes one project credit; `start` consumes audit credits by checked pages.
+- `labrika-source-pack.py` treats Labrika as manual/browser export evidence. Do not assume API automation until Labrika support provides public API/export details.

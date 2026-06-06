@@ -292,6 +292,11 @@ CloakBrowser/CloakMCP и другие stealth/anti-bot инструменты н
 | `notebooklm-health.py` | Проверяет NotebookLM MCP/tools и fallback browser/manual export | `python3 notebooklm-health.py --write` | `seo/setup/notebooklm-health.md/json`, latest copies |
 | `perplexity-collect.py` | Кэширует Perplexity export/raw response, пишет bounded distillate с citations и vector record; API paid disabled by default | `python3 perplexity-collect.py --topic "Плита ОСП" --raw-file response.md --write` | `seo/research/raw/perplexity/*.json`, `seo/research/distillates/perplexity/*.md/json`, `seo/research/vector/source_pack.jsonl` |
 | `notebooklm-source-pack.py` | Ингестит NotebookLM MCP/browser/manual export как curated expert evidence, не как ranking signal | `python3 notebooklm-source-pack.py --topic "SEO" --export-file notebook.md --write` | `seo/research/raw/notebooklm/*.json`, `seo/research/distillates/notebooklm/*.md/json`, `seo/research/vector/source_pack.jsonl` |
+| `link-audit.py` | Дистиллирует `linkinator` JSON или явный live crawl: broken links, redirects, HTTP links | `python3 link-audit.py --input-json linkinator.json --url https://example.com/ --write` | `seo/technical/link-audit.md/json`, raw/distillate/vector source records |
+| `redirect-map-audit.py` | Проверяет CSV redirect map на chains, loops, self-redirects, missing targets и optional live status | `python3 redirect-map-audit.py --input redirects.csv --base-url https://example.com --write` | `seo/technical/redirect-map-audit.md/json`, raw/distillate/vector source records |
+| `lighthouse-audit.py` | Дистиллирует Lighthouse JSON или явный live run: performance, SEO, accessibility, CWV, opportunities | `python3 lighthouse-audit.py --input-json lighthouse.json --url https://example.com/ --write` | `seo/technical/lighthouse-audit.md/json`, raw/distillate/vector source records |
+| `serpstat-audit.py` | Guarded Serpstat API adapter: projects/create/start/basic-info/categories/scan-urls; live только с `SERPSTAT_API_KEY` | `python3 serpstat-audit.py --action basic-info --report-id 123 --write` / `--live` | `seo/technical/serpstat-audit.md/json`, raw/distillate/vector source records |
+| `labrika-source-pack.py` | Ингестит Labrika manual/browser export как third-party technical evidence, пока public API не подтверждён | `python3 labrika-source-pack.py --export-file labrika.md --write` | `seo/technical/labrika-source-pack.md/json`, `seo/research/raw/labrika/*`, vector records |
 | `setup-blueprint.py` | Строит компактную per-project матрицу настройки: страны, регионы, поисковики, бизнес, marketing/ads/tracking, tools, budget, subscriptions, automations, guardrails | `python3 setup-blueprint.py --write` | `seo/setup-blueprint.generated.yaml`, `seo/setup/setup-blueprint.md/json`, `seo/setup/setup-matrix.csv`, latest copies |
 | `project-upgrade-assistant.py` | Проверяет существующий проект против текущего template/control-plane surface и строит review-only yes/no/defer worksheet | `python3 project-upgrade-assistant.py --write` | `seo/setup/upgrade-assistant.md/json`, `seo/setup/upgrade-questionnaire.csv`, latest copies |
 | `access-key-assistant.py` | Строит список нужных ключей/токенов по tool-stack и `.env`: env names, provider links, короткие шаги, без secret values | `python3 access-key-assistant.py --write` | `seo/setup/access-key-assistant.md/json/csv`, latest copies |
@@ -458,6 +463,11 @@ python3 serpstat-fetch.py keywords-info "X" --se g_ru
 python3 spyfu-fetch.py usage                      # расход $ SpyFu
 bash llm-cli-collect.sh "тема"                    # сбор Antigravity+Codex
 python3 yandex-suggest.py "X" --region 213 --depth 2
+python3 link-audit.py --input-json linkinator.json --url https://example.com/ --write
+python3 redirect-map-audit.py --input redirects.csv --base-url https://example.com --write
+python3 lighthouse-audit.py --input-json lighthouse.json --url https://example.com/ --write
+python3 serpstat-audit.py --action basic-info --report-id 123456 --write
+python3 labrika-source-pack.py --export-file labrika.md --write
 
 # E-E-A-T / качество
 python3 check-stop-words.py draft.md
@@ -769,6 +779,11 @@ CloakBrowser/CloakMCP and other stealth/anti-bot tools are not part of the stand
 | `notebooklm-health.py` | Checks NotebookLM MCP/tools and browser/manual export fallback | `python3 notebooklm-health.py --write` | `seo/setup/notebooklm-health.md/json`, latest copies |
 | `perplexity-collect.py` | Caches Perplexity export/raw response, writes bounded distillate with citations and a vector record; paid API disabled by default | `python3 perplexity-collect.py --topic "OSB board" --raw-file response.md --write` | `seo/research/raw/perplexity/*.json`, `seo/research/distillates/perplexity/*.md/json`, `seo/research/vector/source_pack.jsonl` |
 | `notebooklm-source-pack.py` | Ingests NotebookLM MCP/browser/manual export as curated expert evidence, not as a ranking signal | `python3 notebooklm-source-pack.py --topic "SEO" --export-file notebook.md --write` | `seo/research/raw/notebooklm/*.json`, `seo/research/distillates/notebooklm/*.md/json`, `seo/research/vector/source_pack.jsonl` |
+| `link-audit.py` | Distills `linkinator` JSON or explicit live crawl: broken links, redirects, HTTP links | `python3 link-audit.py --input-json linkinator.json --url https://example.com/ --write` | `seo/technical/link-audit.md/json`, raw/distillate/vector source records |
+| `redirect-map-audit.py` | Audits CSV redirect maps for chains, loops, self-redirects, missing targets, and optional live status | `python3 redirect-map-audit.py --input redirects.csv --base-url https://example.com --write` | `seo/technical/redirect-map-audit.md/json`, raw/distillate/vector source records |
+| `lighthouse-audit.py` | Distills Lighthouse JSON or explicit live run: performance, SEO, accessibility, CWV, opportunities | `python3 lighthouse-audit.py --input-json lighthouse.json --url https://example.com/ --write` | `seo/technical/lighthouse-audit.md/json`, raw/distillate/vector source records |
+| `serpstat-audit.py` | Guarded Serpstat API adapter: projects/create/start/basic-info/categories/scan-urls; live only with `SERPSTAT_API_KEY` | `python3 serpstat-audit.py --action basic-info --report-id 123 --write` / `--live` | `seo/technical/serpstat-audit.md/json`, raw/distillate/vector source records |
+| `labrika-source-pack.py` | Ingests Labrika manual/browser export as third-party technical evidence until public API is confirmed | `python3 labrika-source-pack.py --export-file labrika.md --write` | `seo/technical/labrika-source-pack.md/json`, `seo/research/raw/labrika/*`, vector records |
 | `setup-blueprint.py` | Builds a compact per-project setup matrix for countries, regions, engines, business, marketing/ads/tracking, tools, budget, subscriptions, automations, and guardrails | `python3 setup-blueprint.py --write` | `seo/setup-blueprint.generated.yaml`, `seo/setup/setup-blueprint.md/json`, `seo/setup/setup-matrix.csv`, latest copies |
 | `project-upgrade-assistant.py` | Checks an existing project against the current template/control-plane surface and writes a review-only yes/no/defer worksheet | `python3 project-upgrade-assistant.py --write` | `seo/setup/upgrade-assistant.md/json`, `seo/setup/upgrade-questionnaire.csv`, latest copies |
 | `access-key-assistant.py` | Builds needed key/token steps from tool-stack and `.env`: env names, provider links, short steps, no secret values | `python3 access-key-assistant.py --write` | `seo/setup/access-key-assistant.md/json/csv`, latest copies |
@@ -935,6 +950,11 @@ python3 serpstat-fetch.py keywords-info "X" --se g_ru
 python3 spyfu-fetch.py usage
 bash llm-cli-collect.sh "topic"
 python3 yandex-suggest.py "X" --region 213 --depth 2
+python3 link-audit.py --input-json linkinator.json --url https://example.com/ --write
+python3 redirect-map-audit.py --input redirects.csv --base-url https://example.com --write
+python3 lighthouse-audit.py --input-json lighthouse.json --url https://example.com/ --write
+python3 serpstat-audit.py --action basic-info --report-id 123456 --write
+python3 labrika-source-pack.py --export-file labrika.md --write
 
 # E-E-A-T / quality
 python3 check-stop-words.py draft.md

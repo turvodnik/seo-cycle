@@ -137,6 +137,11 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "ai_bot_access_check_report": "seo/vnext/ai-bot-access-check.md",
         "technical_guardrails_audit_report": "seo/vnext/technical-guardrails-audit.md",
         "expert_source_pack_report": "seo/vnext/expert-source-pack.md",
+        "link_audit_report": "seo/technical/link-audit.md",
+        "redirect_map_audit_report": "seo/technical/redirect-map-audit.md",
+        "lighthouse_audit_report": "seo/technical/lighthouse-audit.md",
+        "serpstat_audit_report": "seo/technical/serpstat-audit.md",
+        "labrika_source_pack_report": "seo/technical/labrika-source-pack.md",
     }
     policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
     rows = []
@@ -302,6 +307,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     task_route = report.get("task_route", {})
     usage = report.get("usage_ledger", {})
     vnext_reports = report.get("vnext_reports", {})
+    technical_reports = report.get("technical_reports", {})
     tool_summary = tool_stack.get("summary", {}).get("by_decision", {}) if isinstance(tool_stack.get("summary"), dict) else {}
     lines = [
         "# seo-cycle setup control plane",
@@ -341,6 +347,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Recommended automations: {len((automation_recommendations.get('policy_overlay') or {}).get('planned_automations', {}))}",
         f"- Automation install allowed: {automation.get('allowed')}",
         f"- vNext starter reports: {len(vnext_reports)}",
+        f"- Technical site reports: {len(technical_reports)}",
     ]
     if automation.get("blockers"):
         lines.append(f"- Automation blockers: {', '.join(automation['blockers'])}")
@@ -567,6 +574,19 @@ def main() -> int:
         steps.append(run_step(step_name, command, project_root))
 
     for script_name, step_name in (
+        ("link-audit.py", "technical link audit"),
+        ("redirect-map-audit.py", "technical redirect map audit"),
+        ("lighthouse-audit.py", "technical lighthouse audit"),
+        ("serpstat-audit.py", "technical serpstat audit"),
+        ("labrika-source-pack.py", "technical labrika source pack"),
+    ):
+        command = [sys.executable, str(root / "scripts" / script_name), str(cfg_path)]
+        if args.write:
+            command.append("--write")
+        command.extend(["--format", "json"])
+        steps.append(run_step(step_name, command, project_root))
+
+    for script_name, step_name in (
         ("perplexity-health.py", "perplexity health"),
         ("notebooklm-health.py", "notebooklm health"),
         ("token-waste-audit.py", "token waste audit"),
@@ -691,6 +711,18 @@ def main() -> int:
                 "score": report.get("score"),
                 "paths": report.get("paths", {}),
             }
+    technical_reports: dict[str, Any] = {}
+    for step in steps:
+        if not step["name"].startswith("technical "):
+            continue
+        report = load_json_output(step)
+        if not report:
+            continue
+        technical_reports[report.get("audit_id", step["name"])] = {
+            "status": report.get("status"),
+            "summary": report.get("summary", {}),
+            "paths": report.get("paths", {}),
+        }
     validation = parse_validation(validation_step)
     artifacts = artifact_status(project_root, cfg)
     paid_missing = enabled_paid_missing_env(governance)
@@ -723,6 +755,7 @@ def main() -> int:
         "notebooklm_health": notebooklm_health,
         "setup_gap_audit": setup_gap_audit,
         "vnext_reports": vnext_reports,
+        "technical_reports": technical_reports,
         "paid_missing_env": paid_missing,
         "artifacts": artifacts,
         "steps": [

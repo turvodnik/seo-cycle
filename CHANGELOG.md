@@ -1,5 +1,17 @@
 # Changelog — seo-cycle
 
+## [1.44.0] — 2026-06-06
+
+### Technical site tools
+
+- Added `scripts/link-audit.py` for `linkinator` JSON/live broken-link, redirect, HTTP-link and external-link distillates under `seo/technical/` plus raw/distillate/vector source artifacts.
+- Added `scripts/redirect-map-audit.py` for CSV redirect-map checks: chains, loops, self-redirects, missing targets and optional live URL status.
+- Added `scripts/lighthouse-audit.py` for Lighthouse JSON/live Core Web Vitals, performance, SEO, accessibility and opportunity distillates.
+- Added `scripts/serpstat-audit.py` as a guarded Serpstat Site Audit adapter for projects/create/start/basic-info/categories/scan-urls; live calls require `--live` plus `SERPSTAT_API_KEY` and credit/budget approval.
+- Added `scripts/labrika-source-pack.py` for Labrika manual/browser export ingestion until public API automation is confirmed.
+- Wired technical reports into project templates, validation defaults, task routing, setup control plane, upgrade assistant, README, INSTALL, GUIDE and vNext docs.
+- Added regression tests for link, redirect, Lighthouse, Serpstat guarded/input, and Labrika export collectors.
+
 ## [1.43.0] — 2026-06-06
 
 ### Source artifacts and provider collectors

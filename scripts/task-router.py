@@ -46,11 +46,22 @@ TASKS: dict[str, dict[str, Any]] = {
         "automation": "none",
     },
     "technical_audit": {
-        "keywords": ["audit", "crawl", "robots", "sitemap", "canonical", "index", "индекс", "аудит", "ошибк", "noindex", "bricks"],
+        "keywords": ["audit", "crawl", "robots", "sitemap", "canonical", "index", "redirect", "lighthouse", "links", "индекс", "аудит", "ошибк", "редирект", "ссылк", "noindex", "bricks"],
         "phases": ["phase1_site_audit"],
-        "sources": ["google_search_console", "yandex_webmaster_history", "bing_webmaster", "pagespeed_crux", "schema_crawl"],
-        "safe_actions": ["robots_sitemap_check", "public_pagespeed_check", "read_only_index_status"],
-        "approval": ["index_submission", "destructive_indexing_change", "bulk_noindex_or_robots_change"],
+        "sources": [
+            "google_search_console",
+            "yandex_webmaster_history",
+            "bing_webmaster",
+            "pagespeed_crux",
+            "schema_crawl",
+            "linkinator",
+            "redirect_map",
+            "lighthouse",
+            "serpstat",
+            "labrika",
+        ],
+        "safe_actions": ["robots_sitemap_check", "public_pagespeed_check", "read_only_index_status", "link_audit_from_export", "redirect_map_static_audit", "lighthouse_json_distillate", "labrika_export_ingestion"],
+        "approval": ["index_submission", "destructive_indexing_change", "bulk_noindex_or_robots_change", "live_public_crawl", "paid_api_run"],
         "automation": "weekly_read_only_health",
     },
     "keyword_research": {
@@ -193,7 +204,7 @@ def intake_tool_enabled(intake: dict[str, Any], source: str) -> bool:
 
 
 def source_enabled(cfg: dict[str, Any], intake: dict[str, Any], source: str, active: dict[str, Any]) -> bool:
-    if source in {"robots_sitemap", "schema_crawl", "pagespeed_crux", "wordpress", "woocommerce", "review_velocity", "automation_policy", "governance"}:
+    if source in {"robots_sitemap", "schema_crawl", "pagespeed_crux", "wordpress", "woocommerce", "review_velocity", "automation_policy", "governance", "linkinator", "redirect_map", "lighthouse", "labrika"}:
         return True
     if intake_tool_enabled(intake, source):
         return True

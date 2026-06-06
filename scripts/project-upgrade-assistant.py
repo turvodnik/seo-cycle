@@ -149,6 +149,33 @@ FEATURES: list[dict[str, Any]] = [
         "command": "python3 ~/.codex/skills/seo-cycle/scripts/expert-source-pack.py --write && python3 ~/.codex/skills/seo-cycle/scripts/ai-brand-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/technical-guardrails-audit.py --write",
         "notes": "Additive and safe by default: no publishing, paid APIs, index submission, tracking tags, or ads. Live AI bot access check is explicit/manual because it sends public HTTP requests.",
     },
+    {
+        "id": "technical_site_tools",
+        "title": "Technical site tools: links, redirects, Lighthouse, Serpstat, Labrika",
+        "policy_keys": [
+            "link_audit_report",
+            "link_audit_json",
+            "redirect_map_audit_report",
+            "redirect_map_audit_json",
+            "lighthouse_audit_report",
+            "lighthouse_audit_json",
+            "serpstat_audit_report",
+            "serpstat_audit_json",
+            "labrika_source_pack_report",
+            "labrika_source_pack_json",
+        ],
+        "artifacts": [
+            "seo/technical/link-audit.md",
+            "seo/technical/redirect-map-audit.md",
+            "seo/technical/lighthouse-audit.md",
+            "seo/technical/serpstat-audit.md",
+            "seo/technical/labrika-source-pack.md",
+        ],
+        "question": "Enable technical-site report pack for broken links, redirect maps, Lighthouse/CWV, guarded Serpstat Site Audit, and Labrika export ingestion?",
+        "default_answer": "yes_report_only",
+        "command": "python3 ~/.codex/skills/seo-cycle/scripts/link-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/redirect-map-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/lighthouse-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/labrika-source-pack.py --write",
+        "notes": "Report-only by default. Live HTTP crawls require --live; Serpstat API requires --live plus SERPSTAT_API_KEY and credit/budget approval. Labrika stays manual/export until a public API is confirmed.",
+    },
 ]
 
 
