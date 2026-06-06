@@ -1,5 +1,11 @@
 # Changelog — seo-cycle
 
+## [1.42.2] — 2026-06-06
+
+### Bootstrap reliability
+
+- Silenced false `/dev/tty: Device not configured` warnings in headless one-command smoke runs by probing `/dev/tty` before prompting.
+
 ## [1.42.1] — 2026-06-06
 
 ### Bootstrap reliability

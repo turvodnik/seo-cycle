@@ -58,8 +58,8 @@ read_answer() {
 
     if [ "$NON_INTERACTIVE" = "1" ]; then
         answer="$default_value"
-    elif [ -r /dev/tty ] && IFS= read -r -p "$prompt" answer </dev/tty 2>/dev/null; then
-        :
+    elif [ -r /dev/tty ] && { : </dev/tty; } 2>/dev/null; then
+        IFS= read -r -p "$prompt" answer </dev/tty || answer=""
     else
         if [ "$USED_DEFAULT_STDIN_NOTICE" = "0" ]; then
             echo "ℹ интерактивный stdin недоступен — беру safe defaults"
