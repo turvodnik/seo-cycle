@@ -7,6 +7,7 @@ import pathlib
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -50,6 +51,51 @@ class InitProjectTest(unittest.TestCase):
         self.assertEqual(cfg["project"]["domain"], "example.com")
         self.assertEqual(cfg["locale"]["language"], "ru")
         self.assertTrue((tmp / "seo" / "setup" / "setup-control-plane.md").exists())
+
+    def test_local_codex_init_validates_without_global_skill_or_paid_keys(self) -> None:
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-cycle-local-codex-"))
+        home = pathlib.Path(tempfile.mkdtemp(prefix="seo-cycle-home-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        self.addCleanup(lambda: shutil.rmtree(home, ignore_errors=True))
+
+        skill_dir = tmp / ".codex" / "skills"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "seo-cycle").symlink_to(ROOT)
+
+        proc = subprocess.run(
+            ["bash", str(INIT_PROJECT)],
+            cwd=tmp,
+            input="\n".join(["gsse", "gsse.ru", "ГРАДСТРОЙСЕРВИС", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]),
+            text=True,
+            capture_output=True,
+            env={
+                **os.environ,
+                "HOME": str(home),
+                "SEO_RUNTIME": "codex",
+                "SEO_SEARCH_RUNTIME": "direct",
+                "SEO_CYCLE_SKIP_REGISTRY": "1",
+            },
+            check=True,
+        )
+        self.assertIn("Создан seo-cycle.yaml", proc.stdout)
+
+        validation = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "validate-config.py"), str(tmp / "seo-cycle.yaml")],
+            cwd=tmp,
+            text=True,
+            capture_output=True,
+            env={
+                **os.environ,
+                "HOME": str(home),
+                "SEO_RUNTIME": "codex",
+                "SEO_SEARCH_RUNTIME": "direct",
+            },
+            check=True,
+        )
+
+        self.assertIn("✓ Конфиг полностью валиден", validation.stdout)
+        self.assertNotIn("WARNINGS", validation.stdout)
+        self.assertNotIn("ЧЕК-ЛИСТ", validation.stdout)
 
 
 if __name__ == "__main__":

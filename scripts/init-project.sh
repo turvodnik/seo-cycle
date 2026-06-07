@@ -294,6 +294,40 @@ copy_policy_template "$POLICY_TEMPLATE_DIR/tool-budget.template.yaml" "seo/tool-
 copy_policy_template "$POLICY_TEMPLATE_DIR/automation-policy.template.yaml" "seo/automation-policy.yaml"
 copy_policy_template "$POLICY_TEMPLATE_DIR/project-intake.template.yaml" "seo/project-intake.yaml"
 
+ensure_validation_artifact_roots() {
+    mkdir -p seo/research/perplexity/results seo/cycles blog categories
+    if [ ! -f "seo/publish-log.csv" ]; then
+        printf "date,type,url,title,status,notes\n" > "seo/publish-log.csv"
+        echo "✓ seo/publish-log.csv создан"
+    fi
+}
+
+generate_validation_reports() {
+    local script
+    python3 "$SKILL_ROOT/scripts/setup-answer-plan.py" "$TARGET" --write >/dev/null 2>&1 \
+        || echo "ℹ setup-answer-plan не создан — запусти scripts/setup-answer-plan.py --write"
+
+    for script in \
+        eeat-evidence-map.py \
+        geo-kpi-model.py \
+        log-bot-audit.py \
+        snippet-sitemap-audit.py \
+        traffic-drop-diagnostics.py \
+        cannibalization-audit.py \
+        ru-commerce-readiness.py \
+        offpage-risk-audit.py \
+        conversion-sxo-audit.py
+    do
+        python3 "$SKILL_ROOT/scripts/$script" "$TARGET" --write >/dev/null 2>&1 \
+            || echo "ℹ $script не создал baseline report — запусти вручную при необходимости"
+    done
+
+    python3 "$SKILL_ROOT/scripts/ai-bot-access-check.py" "$TARGET" --write --timeout 3 --limit 5 >/dev/null 2>&1 \
+        || echo "ℹ ai-bot-access-check baseline не создан — live-проверку можно запустить позже"
+}
+
+ensure_validation_artifact_roots
+
 if [ -f "seo/tool-budget.yaml" ]; then
     sed_in_place "s|monthly_total_usd_cap: 0|monthly_total_usd_cap: $PAID_API_BUDGET|" "seo/tool-budget.yaml"
     sed_in_place "s|monthly_paid_api_usd_cap: 0|monthly_paid_api_usd_cap: $PAID_API_BUDGET|" "seo/tool-budget.yaml"
@@ -333,6 +367,8 @@ fi
 python3 "$SKILL_ROOT/scripts/setup-control-plane.py" "$TARGET" --write --skip-intake >/dev/null 2>&1 \
     && echo "✓ setup control plane создан: context-pack/setup-blueprint/setup-gap-audit/setup-questionnaire/setup-answer-plan path/launch-plan/spend-guard/setup/task-route/usage-ledger/tool-stack/growth-roadmap/onboarding + automation recommendations" \
     || echo "ℹ setup control plane не создан — запусти scripts/setup-control-plane.py --write"
+
+generate_validation_reports
 
 if [ "${SEO_CYCLE_WITH_WORDPRESS_MCP:-0}" = "1" ]; then
     python3 "$SKILL_ROOT/scripts/project-mcp-config.py" "$TARGET" --write >/dev/null 2>&1 \
