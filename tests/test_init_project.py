@@ -81,7 +81,7 @@ class InitProjectTest(unittest.TestCase):
 
         validation = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "validate-config.py"), str(tmp / "seo-cycle.yaml")],
-            cwd=tmp,
+            cwd=ROOT,
             text=True,
             capture_output=True,
             env={

@@ -93,7 +93,7 @@ def load_region_profile(profile_id: str) -> dict | None:
         return yaml.safe_load(f) or {}
 
 
-def check_sources(cfg: dict, env: dict, checklist: list, warnings: list):
+def check_sources(cfg: dict, env: dict, project_root: pathlib.Path, checklist: list, warnings: list):
     sources = cfg.get("sources", {})
     if not sources:
         warnings.append("Секция sources пуста — Phase 2 не сможет собрать данные")
@@ -119,7 +119,7 @@ def check_sources(cfg: dict, env: dict, checklist: list, warnings: list):
             warnings.append(f"Профиль {profile_id} + override не дали ни одного активного источника")
         for name in sorted(active):
             merged = sources.get(name, {}) if isinstance(sources.get(name), dict) else {}
-            check_one_source(name, merged, env, checklist, warnings)
+            check_one_source(name, merged, env, project_root, checklist, warnings)
         return
 
     # === Legacy-режим: активность по локальному enabled ===
@@ -133,18 +133,18 @@ def check_sources(cfg: dict, env: dict, checklist: list, warnings: list):
             for sub_name, sub_cfg in src_cfg.items():
                 if isinstance(sub_cfg, dict) and sub_cfg.get("enabled"):
                     enabled_count += 1
-                    check_one_source(f"{src_name}.{sub_name}", sub_cfg, env, checklist, warnings)
+                    check_one_source(f"{src_name}.{sub_name}", sub_cfg, env, project_root, checklist, warnings)
             continue
 
         if src_cfg.get("enabled"):
             enabled_count += 1
-            check_one_source(src_name, src_cfg, env, checklist, warnings)
+            check_one_source(src_name, src_cfg, env, project_root, checklist, warnings)
 
     if enabled_count == 0:
         warnings.append("Ни один источник в sources не enabled — Phase 2 будет пустой")
 
 
-def check_one_source(name: str, cfg: dict, env: dict, checklist: list, warnings: list):
+def check_one_source(name: str, cfg: dict, env: dict, project_root: pathlib.Path, checklist: list, warnings: list):
     # API key check
     api_env = cfg.get("api_key_env")
     if api_env and not env.get(api_env):
@@ -161,6 +161,8 @@ def check_one_source(name: str, cfg: dict, env: dict, checklist: list, warnings:
         path = cfg.get(key)
         if path:
             expanded = pathlib.Path(os.path.expanduser(path))
+            if not expanded.is_absolute():
+                expanded = project_root / expanded
             if not expanded.exists():
                 warnings.append(f"{name}.{key} → {path} не существует (либо создай, либо отключи источник)")
 
@@ -512,7 +514,7 @@ def check_governance(cfg: dict, project_root: pathlib.Path, checklist: list, war
         checklist.append("Сгенерировать и проверить schedule artifacts: python3 ~/.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled")
 
 
-def check_content_rules(cfg: dict, warnings: list):
+def check_content_rules(cfg: dict, project_root: pathlib.Path, warnings: list):
     rules = cfg.get("content_rules", {})
     if rules.get("stock_first", {}).get("enabled") and cfg.get("project_type") not in ("ecommerce", "local_business"):
         warnings.append(f"content_rules.stock_first.enabled=true, но project_type={cfg.get('project_type')!r} — обычно stock-first нужен только для ecommerce")
@@ -520,6 +522,8 @@ def check_content_rules(cfg: dict, warnings: list):
         results_dir = rules["fact_check"].get("results_dir")
         if results_dir:
             p = pathlib.Path(results_dir)
+            if not p.is_absolute():
+                p = project_root / p
             if not p.exists():
                 warnings.append(f"content_rules.fact_check.results_dir={results_dir} не существует — будет создан автоматом при первом fact-check")
 
@@ -689,12 +693,12 @@ def main():
     checklist: list[str] = []
 
     check_required(cfg, errors, warnings)
-    check_sources(cfg, env, checklist, warnings)
+    check_sources(cfg, env, project_root, checklist, warnings)
     check_publishing(cfg, env, checklist, warnings)
     check_images(cfg, env, project_root, checklist, warnings)
     check_project_policies(cfg, env, project_root, checklist, warnings)
     check_governance(cfg, project_root, checklist, warnings)
-    check_content_rules(cfg, warnings)
+    check_content_rules(cfg, project_root, warnings)
     check_artifacts(cfg, project_root, warnings)
     check_v11_extensions(cfg, env, checklist, warnings)
     check_vnext_guardrails(cfg, checklist, warnings)
