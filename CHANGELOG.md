@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.49.0] — 2026-06-12
+
+### Safe old-project upgrades
+
+- Added `scripts/project-upgrade-apply.py`, a safe dry-run/apply helper for old projects. It reads `seo/setup/upgrade-questionnaire.csv`, adds reviewed missing `policy_files` keys from the current template, creates a backup before apply, and never changes secrets, paid tools, schedules, publishing, indexing, or business settings.
+- Added project-upgrade-apply policy paths to the project template and setup-control-plane artifact visibility.
+- Added project-upgrade-apply to `project-upgrade-assistant.py` so old projects can discover the safer upgrade path.
+- Added regression coverage proving dry-run does not edit configs and apply restores reviewed policy keys with a backup.
+
 ## [1.48.0] — 2026-06-12
 
 ### Project journey gate

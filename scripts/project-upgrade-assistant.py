@@ -63,6 +63,22 @@ FEATURES: list[dict[str, Any]] = [
         "notes": "Fill CSV with non-secret answers, then run setup-answer-plan.py --write.",
     },
     {
+        "id": "safe_upgrade_apply",
+        "title": "Safe upgrade apply helper",
+        "policy_keys": [
+            "project_upgrade_apply_report",
+            "project_upgrade_apply_json",
+            "project_upgrade_apply_csv",
+            "latest_project_upgrade_apply",
+            "latest_project_upgrade_apply_json",
+        ],
+        "artifacts": ["seo/setup/project-upgrade-apply.md"],
+        "question": "Enable the safe updater that applies reviewed missing policy_files keys with a backup?",
+        "default_answer": "yes",
+        "command": "python3 ~/.codex/skills/seo-cycle/scripts/project-upgrade-apply.py --write",
+        "notes": "Dry-run by default. Use --apply only after reviewing upgrade-questionnaire.csv; it only adds missing policy_files keys and never changes secrets, paid tools, schedules, publishing, or indexing.",
+    },
+    {
         "id": "project_journey",
         "title": "Project journey gate",
         "policy_keys": [

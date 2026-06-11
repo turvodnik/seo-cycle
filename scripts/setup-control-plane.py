@@ -94,6 +94,11 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "upgrade_assistant_json": "seo/setup/upgrade-assistant.json",
         "upgrade_questionnaire_csv": "seo/setup/upgrade-questionnaire.csv",
         "latest_upgrade_assistant": "seo/setup/latest-upgrade-assistant.md",
+        "project_upgrade_apply_report": "seo/setup/project-upgrade-apply.md",
+        "project_upgrade_apply_json": "seo/setup/project-upgrade-apply.json",
+        "project_upgrade_apply_csv": "seo/setup/project-upgrade-apply.csv",
+        "latest_project_upgrade_apply": "seo/setup/latest-project-upgrade-apply.md",
+        "latest_project_upgrade_apply_json": "seo/setup/latest-project-upgrade-apply.json",
         "access_key_assistant": "seo/setup/access-key-assistant.md",
         "access_key_assistant_json": "seo/setup/access-key-assistant.json",
         "access_key_assistant_csv": "seo/setup/access-key-assistant.csv",
@@ -256,7 +261,10 @@ def next_actions(
         actions.insert(0, f"Open `seo/setup/access-key-assistant.md`: {access_key_assistant['summary']['tasks']} project-specific key/token setup tasks detected.")
 
     if upgrade_assistant.get("summary", {}).get("review_needed", 0):
-        actions.insert(0, f"Open `seo/setup/upgrade-questionnaire.csv`: {upgrade_assistant['summary']['review_needed']} upgraded features need yes/no/defer review.")
+        actions.insert(
+            0,
+            f"Open `seo/setup/upgrade-questionnaire.csv`: {upgrade_assistant['summary']['review_needed']} upgraded features need yes/no/defer review; then run `project-upgrade-apply.py --write` for a dry-run before any `--apply`.",
+        )
 
     if context_pack.get("rendered_chars"):
         actions.insert(0, f"Start each session from `seo/setup/context-pack.md` ({context_pack['rendered_chars']} chars) before opening larger setup reports.")

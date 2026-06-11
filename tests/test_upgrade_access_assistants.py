@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "config" / "project.template.yaml"
 UPGRADE = ROOT / "scripts" / "project-upgrade-assistant.py"
+UPGRADE_APPLY = ROOT / "scripts" / "project-upgrade-apply.py"
 ACCESS = ROOT / "scripts" / "access-key-assistant.py"
 
 
@@ -75,6 +76,60 @@ class UpgradeAccessAssistantsTest(unittest.TestCase):
         self.assertEqual(before, cfg_path.read_text(encoding="utf-8"))
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "upgrade-assistant.md").exists())
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "upgrade-questionnaire.csv").exists())
+
+    def test_upgrade_apply_adds_reviewed_policy_keys_with_backup(self) -> None:
+        cfg_path = self.make_project()
+        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        for key in (
+            "project_journey_report",
+            "project_journey_json",
+            "project_journey_checklist",
+            "latest_project_journey",
+            "latest_project_journey_json",
+            "project_upgrade_apply_report",
+            "project_upgrade_apply_json",
+            "project_upgrade_apply_csv",
+            "latest_project_upgrade_apply",
+            "latest_project_upgrade_apply_json",
+        ):
+            cfg["policy_files"].pop(key, None)
+        cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        before = cfg_path.read_text(encoding="utf-8")
+
+        subprocess.run(
+            [sys.executable, str(UPGRADE), str(cfg_path), "--write", "--format", "json"],
+            cwd=cfg_path.parent,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        dry_run = subprocess.run(
+            [sys.executable, str(UPGRADE_APPLY), str(cfg_path), "--write", "--use-defaults", "--format", "json"],
+            cwd=cfg_path.parent,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        dry_report = json.loads(dry_run.stdout)
+        self.assertGreater(dry_report["summary"]["planned_changes"], 0)
+        self.assertEqual(before, cfg_path.read_text(encoding="utf-8"))
+
+        applied = subprocess.run(
+            [sys.executable, str(UPGRADE_APPLY), str(cfg_path), "--write", "--apply", "--use-defaults", "--format", "json"],
+            cwd=cfg_path.parent,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        report = json.loads(applied.stdout)
+        updated = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+
+        self.assertGreater(report["summary"]["applied_changes"], 0)
+        self.assertTrue(pathlib.Path(report["backup"]).exists())
+        self.assertIn("project_journey_report", updated["policy_files"])
+        self.assertIn("project_upgrade_apply_report", updated["policy_files"])
+        self.assertTrue((cfg_path.parent / "seo" / "setup" / "project-upgrade-apply.md").exists())
+        self.assertNotIn("=", "\n".join(report["planned_policy_files"][0].values()))
 
     def test_access_key_assistant_is_project_specific_and_secret_free(self) -> None:
         cfg_path = self.make_project()
