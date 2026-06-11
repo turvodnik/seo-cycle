@@ -1,0 +1,116 @@
+# Research Package Quality + Page Outline v2
+
+This runbook turns the comparison of two SEO tools into a repeatable `seo-cycle`
+workflow.
+
+## Why
+
+Site-level research packages are strong at deciding **what to build**:
+semantic core, clusters, page types, URL architecture, internal links, entity map,
+technical requirements.
+
+Single-page outlines are strong at deciding **how to write one page**:
+H2/H3 structure, word counts, entities per section, visual blocks, copywriter
+notes, Answer Units, FAQ, and E-E-A-T tone.
+
+`seo-cycle` now requires both layers for important pages.
+
+## Quality Gate
+
+Run before handing a package to content, design, development, or an agent:
+
+```bash
+python3 scripts/research-package-quality.py ./research-package --write
+```
+
+For a short startup checklist without the full audit body:
+
+```bash
+python3 scripts/research-package-quality.py ./research-package --format plan
+```
+
+`--write` now saves:
+
+- `research-package-quality.md`;
+- `research-package-quality.json`;
+- `research-package-action-plan.md`.
+
+The report includes a 10-criterion scorecard:
+
+- structure and architecture;
+- keyword universe and cleanliness;
+- SERP and intent validation;
+- cluster and URL mapping;
+- entity and semantic coverage;
+- copywriter-ready brief depth;
+- E-E-A-T and proof layer;
+- GEO/AEO/AI citability;
+- technical implementation readiness;
+- internal consistency and handoff.
+
+Each finding becomes a remediation step with priority, target files, mode,
+command, and definition of done.
+
+The gate fails on critical issues:
+
+- missing required package files;
+- empty SERP validation for MVP/checked keywords;
+- semantic-core URL or cluster drift after reclustering.
+
+High-priority cleanup:
+
+- prompt/spam-like GSC rows;
+- duplicate `page-briefs.md` and `mvp-page-briefs.md`;
+- orphan internal URLs;
+- shallow page briefs.
+
+Medium findings:
+
+- entity-map markdown/yaml drift;
+- raw, duplicated Google NLP output not aggregated;
+- collected `ai_overview` features not used in GEO/page requirements.
+- missing E-E-A-T/evidence layer in briefs/specs.
+
+## Deep Page Brief
+
+After the package passes the gate, generate one deep outline per MVP/P1 page:
+
+```bash
+python3 scripts/page-outline-v2.py ./research-package \
+  --page "/tools/virtual-hair-color-try-on/" \
+  --write
+```
+
+Batch modes:
+
+```bash
+python3 scripts/page-outline-v2.py ./research-package --all-mvp --write
+python3 scripts/page-outline-v2.py ./research-package --priority P1 --write
+```
+
+The output includes:
+
+- computed word-count totals from sections;
+- entities and keywords per section;
+- visual elements;
+- copywriter notes;
+- Answer Unit requirements;
+- evidence requirements;
+- schema;
+- internal links;
+- GEO requirements;
+- E-E-A-T guard that blocks invented first-person expertise by default.
+
+Use `--expert-author` only when the project has a real named expert/author and
+the page can prove that expertise.
+
+## Pipeline
+
+1. Build or receive a research package.
+2. Run `research-package-quality.py`.
+3. Open `research-package-action-plan.md` and follow the automatic steps.
+4. Fix critical/high findings.
+5. Generate `page-outline-v2.py --all-mvp` or `--priority P1`.
+6. Review the generated outline before writing, design, schema, or approval.
+7. Keep raw data on disk; pass only quality reports and page outlines into the
+   active LLM context.

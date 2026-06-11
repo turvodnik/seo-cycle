@@ -1,5 +1,18 @@
 # Changelog — seo-cycle
 
+## [1.47.0] — 2026-06-12
+
+### Research package quality and deep page briefs
+
+- Added `scripts/research-package-quality.py`, a quality gate for site-level SEO research packages that catches the comparison-audit failure modes: empty SERP validation for MVP/checked keywords, semantic-core URL/cluster drift after reclustering, dirty prompt-like GSC rows, duplicate page briefs, orphan internal URLs, entity-map markdown/YAML drift, raw Google NLP duplication and unused AI Overview/GEO signals.
+- Added a 10-criterion scorecard, `research-package-action-plan.md`, and `--format plan` so every package run produces a clear automatic next-step checklist with priority, target files, command and definition of done.
+- Added an explicit E-E-A-T/evidence gap check for packages that do not define proof, sources, schema/trust signals or no-fabrication rules.
+- Added `scripts/page-outline-v2.py` to turn a validated research package into section-level H2/H3 page briefs with computed word-count totals, entities, keywords, visual elements, copywriter notes, Answer Units, evidence requirements, schema, internal links, GEO requirements and a no-fabricated-E-E-A-T guard by default.
+- Added batch outline modes: `page-outline-v2.py <package> --all-mvp --write` and `--priority P1 --write`.
+- Added `docs/research-package-quality.md` runbook for the package → quality gate → deep page outline pipeline.
+- Updated SKILL, README and GUIDE so research packages must pass quality gate before handoff, and MVP/P1 pages should receive a `page-outline-v2` brief before writing/publishing.
+- Added regression tests covering the third-party audit findings and the deep outline contract.
+
 ## [1.46.1] — 2026-06-06
 
 ### Optional WordPress MCP
