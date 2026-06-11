@@ -1,0 +1,675 @@
+#!/usr/bin/env python3
+"""Report the step-by-step path from project setup to SEO execution.
+
+The journey is intentionally read-only by default. It inspects existing
+project artifacts, identifies the current stage, and tells the agent exactly
+what is missing before the next stage can start.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import datetime as dt
+import io
+import json
+import pathlib
+import sys
+from typing import Any
+
+from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for, rel_path, write_text
+
+
+def utc_now() -> str:
+    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def read_json(path: pathlib.Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def rel_display(project_root: pathlib.Path, path: pathlib.Path) -> str:
+    try:
+        return str(path.relative_to(project_root))
+    except ValueError:
+        return str(path)
+
+
+def artifact_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
+    return policy_path(cfg, project_root, key, default)
+
+
+def artifact_exists(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> tuple[str, bool]:
+    path = artifact_path(cfg, project_root, key, default)
+    return rel_display(project_root, path), path.exists()
+
+
+def stage(
+    *,
+    stage_id: str,
+    order: int,
+    title: str,
+    objective: str,
+    evidence: list[str],
+    missing: list[str] | None = None,
+    blockers: list[str] | None = None,
+    warnings: list[str] | None = None,
+    commands: list[str] | None = None,
+    exit_criteria: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": stage_id,
+        "order": order,
+        "title": title,
+        "objective": objective,
+        "status": "pending",
+        "evidence": evidence,
+        "missing_artifacts": missing or [],
+        "blockers": blockers or [],
+        "warnings": warnings or [],
+        "next_commands": commands or [],
+        "exit_criteria": exit_criteria or [],
+    }
+
+
+def detect_research_package(project_root: pathlib.Path, raw: str | None) -> pathlib.Path | None:
+    if raw:
+        path = pathlib.Path(raw).expanduser().resolve()
+        return path.parent if path.is_file() else path
+    candidates = [
+        project_root / "seo" / "research-package",
+        project_root / "research-package",
+        project_root / "seo" / "research",
+    ]
+    for candidate in candidates:
+        if (candidate / "semantic-architecture-final.json").exists():
+            return candidate
+    for base in (project_root / "seo", project_root):
+        if not base.exists():
+            continue
+        for architecture in base.glob("*/semantic-architecture-final.json"):
+            return architecture.parent
+    return None
+
+
+def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> dict[str, Any]:
+    required = [
+        "semantic-core.csv",
+        "content-plan.csv",
+        "final-clusters.md",
+        "semantic-architecture-final.json",
+        "entity-map.md",
+        "entity-map.yaml",
+    ]
+    if not package:
+        return {
+            "package_dir": None,
+            "exists": False,
+            "required": {name: False for name in required},
+            "missing_required": required,
+            "quality": {},
+            "quality_exists": False,
+            "outline_count": 0,
+        }
+    required_status = {name: (package / name).exists() for name in required}
+    quality_path = package / "research-package-quality.json"
+    outline_dir = package / "page-outlines-v2"
+    outline_count = len(list(outline_dir.glob("*.json"))) if outline_dir.exists() else 0
+    return {
+        "package_dir": rel_display(project_root, package),
+        "exists": package.exists(),
+        "required": required_status,
+        "missing_required": [name for name, exists in required_status.items() if not exists],
+        "quality": read_json(quality_path),
+        "quality_exists": quality_path.exists(),
+        "outline_count": outline_count,
+    }
+
+
+def json_summary(path: pathlib.Path) -> dict[str, Any]:
+    return read_json(path) if path.exists() else {}
+
+
+def setup_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, Any]:
+    checks = [
+        ("project_intake", "seo/project-intake.yaml"),
+        ("setup_blueprint", "seo/setup/setup-blueprint.md"),
+        ("setup_gap_audit_json", "seo/setup/setup-gap-audit.json"),
+        ("setup_control_plane", "seo/setup/setup-control-plane.md"),
+    ]
+    evidence = []
+    missing = []
+    for key, default in checks:
+        path, exists = artifact_exists(cfg, project_root, key, default)
+        evidence.append(f"{path}: {'exists' if exists else 'missing'}")
+        if not exists:
+            missing.append(path)
+    gap = json_summary(artifact_path(cfg, project_root, "setup_gap_audit_json", "seo/setup/setup-gap-audit.json"))
+    missing_gaps = int(((gap.get("summary") or {}) if isinstance(gap.get("summary"), dict) else {}).get("missing") or 0)
+    blockers = []
+    if missing_gaps:
+        blockers.append(f"{missing_gaps} setup questionnaire fields are still unanswered.")
+    return stage(
+        stage_id="setup_foundation",
+        order=1,
+        title="Setup foundation",
+        objective="Project identity, market, governance, and setup questionnaire are known.",
+        evidence=evidence,
+        missing=missing,
+        blockers=blockers,
+        commands=[
+            "python3 ~/.codex/skills/seo-cycle/scripts/setup-control-plane.py --write",
+            "Fill seo/setup/setup-questionnaire.csv, then run setup-answer-plan.py --write when gaps remain.",
+        ],
+        exit_criteria=[
+            "seo/project-intake.yaml exists.",
+            "seo/setup/setup-gap-audit.json has 0 missing required setup fields or a reviewed exception.",
+            "seo/setup/setup-control-plane.md exists.",
+        ],
+    )
+
+
+def governance_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, Any]:
+    checks = [
+        ("tool_stack_report", "seo/setup/tool-stack-report.md"),
+        ("access_key_assistant", "seo/setup/access-key-assistant.md"),
+        ("spend_guard_report", "seo/setup/spend-guard.md"),
+        ("launch_plan_report", "seo/setup/launch-plan.md"),
+    ]
+    evidence = []
+    missing = []
+    for key, default in checks:
+        path, exists = artifact_exists(cfg, project_root, key, default)
+        evidence.append(f"{path}: {'exists' if exists else 'missing'}")
+        if not exists:
+            missing.append(path)
+    access = json_summary(artifact_path(cfg, project_root, "access_key_assistant_json", "seo/setup/access-key-assistant.json"))
+    tasks = int(((access.get("summary") or {}) if isinstance(access.get("summary"), dict) else {}).get("tasks") or 0)
+    approval = int(((access.get("summary") or {}) if isinstance(access.get("summary"), dict) else {}).get("approval_required") or 0)
+    warnings = []
+    if tasks:
+        warnings.append(f"{tasks} access/key setup tasks are listed; {approval} require approval.")
+    return stage(
+        stage_id="access_budget_governance",
+        order=2,
+        title="Access, budget, and governance",
+        objective="Needed tools are selected, secrets are listed by env name only, and spend gates are clear.",
+        evidence=evidence,
+        missing=missing,
+        warnings=warnings,
+        commands=[
+            "python3 ~/.codex/skills/seo-cycle/scripts/access-key-assistant.py --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py --write",
+        ],
+        exit_criteria=[
+            "Required provider env names are known and secrets are stored only in .env/provider consoles.",
+            "Paid/API/LLM/ads gates are either approved or explicitly deferred.",
+        ],
+    )
+
+
+def evidence_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, Any]:
+    checks = [
+        ("expert_source_pack_report", "seo/vnext/expert-source-pack.md"),
+        ("perplexity_health_report", "seo/setup/perplexity-health.md"),
+        ("notebooklm_health_report", "seo/setup/notebooklm-health.md"),
+    ]
+    evidence = []
+    missing = []
+    for key, default in checks:
+        path, exists = artifact_exists(cfg, project_root, key, default)
+        evidence.append(f"{path}: {'exists' if exists else 'missing'}")
+        if not exists:
+            missing.append(path)
+    perplexity = json_summary(artifact_path(cfg, project_root, "perplexity_health_json", "seo/setup/perplexity-health.json"))
+    notebook = json_summary(artifact_path(cfg, project_root, "notebooklm_health_json", "seo/setup/notebooklm-health.json"))
+    warnings = []
+    if perplexity.get("status") == "degraded_source":
+        warnings.append("Perplexity is degraded; use Codex/Antigravity/NotebookLM fallback.")
+    if notebook.get("status") in {"fallback_required", "unavailable"}:
+        warnings.append("NotebookLM MCP is unavailable; use browser/manual export source-pack fallback.")
+    return stage(
+        stage_id="expert_evidence_sources",
+        order=3,
+        title="Expert evidence sources",
+        objective="Expert sources and AI research providers are available as cached distillates, not raw context dumps.",
+        evidence=evidence,
+        missing=missing,
+        warnings=warnings,
+        commands=[
+            "python3 ~/.codex/skills/seo-cycle/scripts/perplexity-health.py --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/notebooklm-health.py --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/expert-source-pack.py --write",
+        ],
+        exit_criteria=[
+            "At least one expert/source-pack path is available or an explicit degraded fallback is logged.",
+            "Raw transcripts and long exports stay on disk; only distillates enter prompt context.",
+        ],
+    )
+
+
+def technical_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, Any]:
+    checks = [
+        ("technical_site_audit_report", "seo/technical/technical-site-audit.md"),
+        ("link_audit_report", "seo/technical/link-audit.md"),
+        ("redirect_map_audit_report", "seo/technical/redirect-map-audit.md"),
+    ]
+    evidence = []
+    missing = []
+    for key, default in checks:
+        path, exists = artifact_exists(cfg, project_root, key, default)
+        evidence.append(f"{path}: {'exists' if exists else 'missing'}")
+        if not exists:
+            missing.append(path)
+    return stage(
+        stage_id="technical_baseline",
+        order=4,
+        title="Technical baseline",
+        objective="Crawl, redirects, indexability, performance, and search-console inspections are known before content work.",
+        evidence=evidence,
+        missing=missing,
+        commands=[
+            "python3 ~/.codex/skills/seo-cycle/scripts/link-audit.py --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/redirect-map-audit.py --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/technical-site-audit.py --write",
+        ],
+        exit_criteria=[
+            "Broken links/redirects/indexability/CWV risks are logged or explicitly deferred.",
+            "Technical blockers are separated from content recommendations.",
+        ],
+    )
+
+
+def research_stage(project_root: pathlib.Path, package: dict[str, Any]) -> dict[str, Any]:
+    missing = []
+    if not package["exists"]:
+        missing.append("seo/research-package/semantic-architecture-final.json")
+    missing.extend(f"{package.get('package_dir') or 'seo/research-package'}/{name}" for name in package.get("missing_required", []))
+    evidence = [f"research package: {package.get('package_dir') or 'missing'}"]
+    evidence.extend(f"{name}: {'exists' if exists else 'missing'}" for name, exists in package.get("required", {}).items())
+    return stage(
+        stage_id="research_architecture",
+        order=5,
+        title="Research architecture",
+        objective="Macro plan exists: semantic core, clusters, URLs, page types, entities, and content plan.",
+        evidence=evidence,
+        missing=missing,
+        commands=[
+            "Create or import a research package under seo/research-package/.",
+            "Use GSC/DataForSEO/SERP/entity sources to fill semantic-core.csv, content-plan.csv, and semantic-architecture-final.json.",
+        ],
+        exit_criteria=[
+            "Research package required files exist.",
+            "Architecture chooses page types from SERP evidence, not model preference.",
+        ],
+    )
+
+
+def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
+    quality = package.get("quality", {})
+    package_dir = package.get("package_dir") or "seo/research-package"
+    missing = [] if package.get("quality_exists") else [f"{package_dir}/research-package-quality.json"]
+    blockers = []
+    if quality.get("status") == "fail":
+        critical = int(((quality.get("counts") or {}) if isinstance(quality.get("counts"), dict) else {}).get("critical_findings") or 0)
+        high = int(((quality.get("counts") or {}) if isinstance(quality.get("counts"), dict) else {}).get("high_findings") or 0)
+        blockers.append(f"Research package quality gate is fail: critical={critical}, high={high}.")
+        for finding in quality.get("findings", [])[:5]:
+            if isinstance(finding, dict):
+                blockers.append(f"{finding.get('severity', 'finding')}: {finding.get('id')} — {finding.get('title')}")
+    evidence = [
+        f"{package_dir}/research-package-quality.json: {'exists' if package.get('quality_exists') else 'missing'}",
+        f"quality status: {quality.get('status', 'not_run')}",
+        f"10-point score: {quality.get('ten_point_score', 'n/a')}",
+    ]
+    return stage(
+        stage_id="research_quality_gate",
+        order=6,
+        title="Research quality gate",
+        objective="The macro package passes the comparison-audit failure checks before writing begins.",
+        evidence=evidence,
+        missing=missing,
+        blockers=blockers,
+        commands=[f"python3 ~/.codex/skills/seo-cycle/scripts/research-package-quality.py {package_dir} --write --format plan"],
+        exit_criteria=[
+            "No critical findings remain.",
+            "SERP validation, URL mapping, GSC cleanup, entity map, GEO signals, and E-E-A-T evidence are either clean or explicitly accepted.",
+        ],
+    )
+
+
+def brief_stage(package: dict[str, Any]) -> dict[str, Any]:
+    package_dir = package.get("package_dir") or "seo/research-package"
+    quality = package.get("quality", {})
+    blockers = []
+    if quality.get("status") == "fail":
+        blockers.append("Deep briefs are blocked until research-package-quality has no critical findings.")
+    missing = []
+    if not package.get("outline_count"):
+        missing.append(f"{package_dir}/page-outlines-v2/*.json")
+    return stage(
+        stage_id="deep_page_briefs",
+        order=7,
+        title="Deep page briefs",
+        objective="Every MVP/P1 page has a section-level brief with word counts, entities, Answer Units, proof, schema, and no-fabrication guard.",
+        evidence=[f"page-outlines-v2 json files: {package.get('outline_count', 0)}"],
+        missing=missing,
+        blockers=blockers,
+        commands=[
+            f"python3 ~/.codex/skills/seo-cycle/scripts/page-outline-v2.py {package_dir} --all-mvp --write",
+            f"python3 ~/.codex/skills/seo-cycle/scripts/page-outline-v2.py {package_dir} --priority P1 --write",
+        ],
+        exit_criteria=[
+            "MVP/P1 pages have outline v2 files.",
+            "The generated brief preserves SERP-selected page type and forbids fabricated expertise.",
+        ],
+    )
+
+
+def implementation_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, Any]:
+    launch = json_summary(artifact_path(cfg, project_root, "latest_launch_plan", "seo/setup/latest-launch-plan.json"))
+    gates = launch.get("approval_gates", []) if isinstance(launch.get("approval_gates"), list) else []
+    warnings = [f"Approval gates still apply before publish/index/ads/tracking: {', '.join(gates)}"] if gates else []
+    return stage(
+        stage_id="implementation_review",
+        order=8,
+        title="Implementation and publication review",
+        objective="Approved content/technical changes are implemented only after final review and project-specific gates.",
+        evidence=[f"approval gates: {', '.join(gates) or 'none'}"],
+        warnings=warnings,
+        commands=[
+            "python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task \"implement approved SEO changes\" --write",
+            "Run final Codex review before WordPress REST/API publishing or code changes.",
+        ],
+        exit_criteria=[
+            "Only approved changes are applied.",
+            "Publishing, index submission, tracking, ads, or paid API calls have explicit approval.",
+        ],
+    )
+
+
+def monitoring_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, Any]:
+    checks = [
+        ("latest_usage_report", "seo/setup/latest-usage-ledger.md"),
+        ("growth_roadmap_report", "seo/setup/growth-roadmap.md"),
+        ("automation_recommendations", "seo/automations/automation-recommendations.md"),
+    ]
+    evidence = []
+    missing = []
+    for key, default in checks:
+        path, exists = artifact_exists(cfg, project_root, key, default)
+        evidence.append(f"{path}: {'exists' if exists else 'missing'}")
+        if not exists:
+            missing.append(path)
+    return stage(
+        stage_id="monitoring_iteration",
+        order=9,
+        title="Monitoring and iteration",
+        objective="After launch, measurement, bot/index health, AI visibility, and refresh tasks feed the next cycle.",
+        evidence=evidence,
+        missing=missing,
+        commands=[
+            "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py report --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write",
+        ],
+        exit_criteria=[
+            "Monitoring sources and next refresh cadence are defined.",
+            "Automation remains report-only unless policy allows schedules.",
+        ],
+    )
+
+
+def assign_status(stages: list[dict[str, Any]]) -> None:
+    first_open = None
+    for item in stages:
+        if item["missing_artifacts"] or item["blockers"]:
+            first_open = item
+            break
+        item["status"] = "done"
+    if first_open is None:
+        return
+    first_open["status"] = "blocked" if first_open["blockers"] else "current"
+    for item in stages:
+        if item["order"] > first_open["order"]:
+            item["status"] = "pending"
+
+
+def build_action_plan(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    current = next((item for item in stages if item["status"] in {"current", "blocked"}), None)
+    if current is None:
+        return [
+            {
+                "step": 1,
+                "priority": "P0-final",
+                "stage": "monitoring_iteration",
+                "action": "Project journey is complete for this cycle; start monitoring and next refresh.",
+                "command": "python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py --write",
+                "done": "Next cycle target is selected from monitored evidence.",
+            }
+        ]
+    plan = [
+        {
+            "step": 1,
+            "priority": "P0-current",
+            "stage": current["id"],
+            "action": f"Work only on current stage: {current['title']}.",
+            "command": current["next_commands"][0] if current["next_commands"] else "Review current stage blockers.",
+            "done": "; ".join(current["exit_criteria"]) or "Current stage has no missing artifacts or blockers.",
+        }
+    ]
+    for idx, command in enumerate(current.get("next_commands", [])[1:4], start=2):
+        plan.append(
+            {
+                "step": idx,
+                "priority": f"P1-{idx:02d}",
+                "stage": current["id"],
+                "action": "Follow-up command for the same stage.",
+                "command": command,
+                "done": "Command output is reviewed and missing/blocking items are reduced.",
+            }
+        )
+    plan.append(
+        {
+            "step": len(plan) + 1,
+            "priority": "P0-verify",
+            "stage": current["id"],
+            "action": "Rerun project journey before moving forward.",
+            "command": "python3 ~/.codex/skills/seo-cycle/scripts/project-journey.py --write",
+            "done": "The current stage becomes done and the next stage is shown.",
+        }
+    )
+    return plan
+
+
+def build_report(cfg_path: pathlib.Path, *, goal: str, research_package: str | None = None) -> dict[str, Any]:
+    project_root = project_root_for(cfg_path)
+    cfg = load_yaml(cfg_path)
+    package = package_state(project_root, detect_research_package(project_root, research_package))
+    stages = [
+        setup_stage(cfg, project_root),
+        governance_stage(cfg, project_root),
+        evidence_stage(cfg, project_root),
+        technical_stage(cfg, project_root),
+        research_stage(project_root, package),
+        quality_stage(package),
+        brief_stage(package),
+        implementation_stage(cfg, project_root),
+        monitoring_stage(cfg, project_root),
+    ]
+    assign_status(stages)
+    current = next((item for item in stages if item["status"] in {"current", "blocked"}), None)
+    done_count = sum(1 for item in stages if item["status"] == "done")
+    status = "ready" if current is None else "blocked" if current["status"] == "blocked" else "needs_work"
+    report = {
+        "audit_id": "project_journey",
+        "version": 1,
+        "generated": utc_now(),
+        "goal": goal,
+        "status": status,
+        "journey_score": round(done_count / len(stages) * 10, 1),
+        "config": str(cfg_path),
+        "project_root": str(project_root),
+        "project": cfg.get("project", {}),
+        "research_package": package,
+        "current_stage": current,
+        "next_stage": next((item for item in stages if item["order"] == (current or {}).get("order", len(stages)) + 1), None)
+        if current
+        else None,
+        "missing_for_next_step": (current or {}).get("missing_artifacts", []) + (current or {}).get("blockers", []),
+        "stages": stages,
+        "action_plan": build_action_plan(stages),
+        "rules": [
+            "Do not skip a blocked/current stage just because a later artifact exists.",
+            "Use distillates and generated reports as context; keep raw CSV/JSON/logs on disk.",
+            "Publishing, indexing, tracking, ads, paid API, and schedules require explicit approval gates.",
+            "Research package quality must pass before deep briefs can drive content production.",
+        ],
+        "paths": {},
+    }
+    return report
+
+
+def render_markdown(report: dict[str, Any]) -> str:
+    project = report.get("project", {})
+    current = report.get("current_stage") or {}
+    lines = [
+        "# seo-cycle project journey",
+        "",
+        f"- Generated: {report.get('generated')}",
+        f"- Goal: {report.get('goal')}",
+        f"- Status: `{report.get('status')}`",
+        f"- Journey score: `{report.get('journey_score')}/10`",
+        f"- Project: {project.get('name', '?')} ({project.get('domain', '?')})",
+        f"- Current stage: `{current.get('id', 'complete')}` {current.get('title', '')}",
+        "",
+        "## What Is Missing Now",
+    ]
+    missing = report.get("missing_for_next_step", [])
+    if missing:
+        lines.extend(f"- {item}" for item in missing)
+    else:
+        lines.append("- Nothing is blocking the next stage in this cycle.")
+    lines.extend(["", "## Automatic Action Plan"])
+    for item in report.get("action_plan", []):
+        lines.extend(
+            [
+                f"### Step {item['step']}: {item['action']}",
+                "",
+                f"- Priority: `{item['priority']}`",
+                f"- Stage: `{item['stage']}`",
+                f"- Command: {item['command']}",
+                f"- Done: {item['done']}",
+                "",
+            ]
+        )
+    lines.extend(["", "## Journey Stages", "| # | Stage | Status | Missing | Blockers | Next command |", "| --- | --- | --- | --- | --- | --- |"])
+    for item in report.get("stages", []):
+        missing_count = len(item.get("missing_artifacts", []))
+        blocker_count = len(item.get("blockers", []))
+        command = item.get("next_commands", [""])[0] if item.get("next_commands") else ""
+        lines.append(f"| {item['order']} | {item['title']} | `{item['status']}` | {missing_count} | {blocker_count} | `{command}` |")
+    lines.extend(["", "## Stage Details"])
+    for item in report.get("stages", []):
+        lines.extend([f"### {item['order']}. {item['title']}", "", f"- Status: `{item['status']}`", f"- Objective: {item['objective']}"])
+        if item.get("evidence"):
+            lines.append("- Evidence:")
+            lines.extend(f"  - {value}" for value in item["evidence"])
+        if item.get("missing_artifacts"):
+            lines.append("- Missing:")
+            lines.extend(f"  - {value}" for value in item["missing_artifacts"])
+        if item.get("blockers"):
+            lines.append("- Blockers:")
+            lines.extend(f"  - {value}" for value in item["blockers"])
+        if item.get("warnings"):
+            lines.append("- Warnings:")
+            lines.extend(f"  - {value}" for value in item["warnings"])
+        if item.get("exit_criteria"):
+            lines.append("- Exit criteria:")
+            lines.extend(f"  - {value}" for value in item["exit_criteria"])
+        lines.append("")
+    lines.extend(["## Rules"])
+    lines.extend(f"- {rule}" for rule in report.get("rules", []))
+    return "\n".join(lines) + "\n"
+
+
+def checklist_csv(report: dict[str, Any]) -> str:
+    buffer = io.StringIO()
+    fields = ["order", "stage", "status", "missing_count", "blocker_count", "first_command", "exit_criteria"]
+    writer = csv.DictWriter(buffer, fieldnames=fields)
+    writer.writeheader()
+    for item in report.get("stages", []):
+        writer.writerow(
+            {
+                "order": item.get("order"),
+                "stage": item.get("id"),
+                "status": item.get("status"),
+                "missing_count": len(item.get("missing_artifacts", [])),
+                "blocker_count": len(item.get("blockers", [])),
+                "first_command": (item.get("next_commands") or [""])[0],
+                "exit_criteria": " | ".join(item.get("exit_criteria", [])),
+            }
+        )
+    return buffer.getvalue()
+
+
+def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
+    setup_dir = project_root / "seo" / "setup"
+    paths = {
+        "markdown": setup_dir / "project-journey.md",
+        "json": setup_dir / "project-journey.json",
+        "checklist": setup_dir / "project-journey-checklist.csv",
+        "latest_markdown": setup_dir / "latest-project-journey.md",
+        "latest_json": setup_dir / "latest-project-journey.json",
+    }
+    report["paths"] = {key: str(path) for key, path in paths.items()}
+    markdown = render_markdown(report)
+    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+    write_text(paths["markdown"], markdown)
+    write_text(paths["json"], json_text)
+    write_text(paths["checklist"], checklist_csv(report))
+    write_text(paths["latest_markdown"], markdown)
+    write_text(paths["latest_json"], json_text)
+    return paths["markdown"]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Show the current seo-cycle stage and what is missing before the next step.")
+    parser.add_argument("config", nargs="?", help="Path to seo-cycle.yaml")
+    parser.add_argument("--goal", default="complete the next safe SEO cycle", help="Human-readable target goal for the journey.")
+    parser.add_argument("--research-package", help="Optional research package directory or file.")
+    parser.add_argument("--write", action="store_true", help="Write seo/setup/project-journey artifacts.")
+    parser.add_argument("--fail-on-blocker", action="store_true", help="Exit 1 when the current journey stage is blocked.")
+    parser.add_argument("--format", choices=("md", "json"), default="md")
+    args = parser.parse_args(argv)
+
+    if args.config:
+        cfg_path = pathlib.Path(args.config).expanduser().resolve()
+    else:
+        found = find_config(pathlib.Path.cwd())
+        if not found:
+            print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
+            return 2
+        cfg_path = found.resolve()
+    if not cfg_path.exists():
+        print(f"ERROR: {cfg_path} not found", file=sys.stderr)
+        return 2
+
+    project_root = project_root_for(cfg_path)
+    report = build_report(cfg_path, goal=args.goal, research_package=args.research_package)
+    if args.write:
+        write_outputs(project_root, report)
+    if args.format == "json":
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(render_markdown(report), end="")
+    return 1 if args.fail_on_blocker and report["status"] == "blocked" else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

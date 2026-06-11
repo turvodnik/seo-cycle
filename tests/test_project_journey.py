@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""Smoke tests for the project journey gate."""
+
+from __future__ import annotations
+
+import json
+import pathlib
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    yaml = None
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+TEMPLATE = ROOT / "config" / "project.template.yaml"
+JOURNEY = ROOT / "scripts" / "project-journey.py"
+
+
+@unittest.skipIf(yaml is None, "PyYAML is required")
+class ProjectJourneyTest(unittest.TestCase):
+    def make_project(self) -> pathlib.Path:
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-cycle-journey-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        cfg_path = tmp / "seo-cycle.yaml"
+        cfg = yaml.safe_load(TEMPLATE.read_text(encoding="utf-8"))
+        cfg["project"]["name"] = "Journey Test"
+        cfg["project"]["domain"] = "journey.test"
+        cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        return cfg_path
+
+    def run_journey(self, cfg_path: pathlib.Path) -> dict:
+        proc = subprocess.run(
+            [sys.executable, str(JOURNEY), str(cfg_path), "--write", "--format", "json"],
+            cwd=cfg_path.parent,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        return json.loads(proc.stdout)
+
+    def test_new_project_starts_at_setup_foundation_with_next_command(self) -> None:
+        cfg_path = self.make_project()
+        report = self.run_journey(cfg_path)
+
+        self.assertEqual(report["status"], "needs_work")
+        self.assertEqual(report["current_stage"]["id"], "setup_foundation")
+        self.assertIn("setup-control-plane.py --write", report["action_plan"][0]["command"])
+        self.assertTrue((cfg_path.parent / "seo" / "setup" / "project-journey.md").exists())
+        self.assertTrue((cfg_path.parent / "seo" / "setup" / "project-journey-checklist.csv").exists())
+
+    def test_failed_research_quality_blocks_deep_briefs(self) -> None:
+        cfg_path = self.make_project()
+        root = cfg_path.parent
+        setup = root / "seo" / "setup"
+        vnext = root / "seo" / "vnext"
+        tech = root / "seo" / "technical"
+        package = root / "seo" / "research-package"
+        for directory in (setup, vnext, tech, package):
+            directory.mkdir(parents=True, exist_ok=True)
+
+        (root / "seo" / "project-intake.yaml").write_text("project: {}\n", encoding="utf-8")
+        (setup / "setup-blueprint.md").write_text("# blueprint\n", encoding="utf-8")
+        (setup / "setup-gap-audit.json").write_text(json.dumps({"summary": {"missing": 0}, "score": 100}), encoding="utf-8")
+        (setup / "setup-control-plane.md").write_text("# control\n", encoding="utf-8")
+        (setup / "tool-stack-report.md").write_text("# tools\n", encoding="utf-8")
+        (setup / "access-key-assistant.md").write_text("# access\n", encoding="utf-8")
+        (setup / "access-key-assistant.json").write_text(json.dumps({"summary": {"tasks": 0, "approval_required": 0}}), encoding="utf-8")
+        (setup / "spend-guard.md").write_text("# spend\n", encoding="utf-8")
+        (setup / "launch-plan.md").write_text("# launch\n", encoding="utf-8")
+        (setup / "latest-launch-plan.json").write_text(json.dumps({"approval_gates": []}), encoding="utf-8")
+        (setup / "perplexity-health.md").write_text("# perplexity\n", encoding="utf-8")
+        (setup / "perplexity-health.json").write_text(json.dumps({"status": "ok"}), encoding="utf-8")
+        (setup / "notebooklm-health.md").write_text("# notebook\n", encoding="utf-8")
+        (setup / "notebooklm-health.json").write_text(json.dumps({"status": "ok"}), encoding="utf-8")
+        (vnext / "expert-source-pack.md").write_text("# sources\n", encoding="utf-8")
+        (tech / "technical-site-audit.md").write_text("# technical\n", encoding="utf-8")
+        (tech / "link-audit.md").write_text("# links\n", encoding="utf-8")
+        (tech / "redirect-map-audit.md").write_text("# redirects\n", encoding="utf-8")
+
+        for name in (
+            "semantic-core.csv",
+            "content-plan.csv",
+            "final-clusters.md",
+            "semantic-architecture-final.json",
+            "entity-map.md",
+            "entity-map.yaml",
+        ):
+            (package / name).write_text("{}\n" if name.endswith(".json") else "ok\n", encoding="utf-8")
+        (package / "research-package-quality.json").write_text(
+            json.dumps(
+                {
+                    "status": "fail",
+                    "ten_point_score": 5.2,
+                    "counts": {"critical_findings": 1, "high_findings": 0},
+                    "findings": [
+                        {
+                            "id": "serp_validation_incomplete",
+                            "severity": "critical",
+                            "title": "SERP validation is empty.",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        report = self.run_journey(cfg_path)
+
+        self.assertEqual(report["status"], "blocked")
+        self.assertEqual(report["current_stage"]["id"], "research_quality_gate")
+        self.assertTrue(any("serp_validation_incomplete" in item for item in report["missing_for_next_step"]))
+        deep = next(stage for stage in report["stages"] if stage["id"] == "deep_page_briefs")
+        self.assertEqual(deep["status"], "pending")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

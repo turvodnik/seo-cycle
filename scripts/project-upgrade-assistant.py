@@ -63,6 +63,22 @@ FEATURES: list[dict[str, Any]] = [
         "notes": "Fill CSV with non-secret answers, then run setup-answer-plan.py --write.",
     },
     {
+        "id": "project_journey",
+        "title": "Project journey gate",
+        "policy_keys": [
+            "project_journey_report",
+            "project_journey_json",
+            "project_journey_checklist",
+            "latest_project_journey",
+            "latest_project_journey_json",
+        ],
+        "artifacts": ["seo/setup/project-journey.md", "seo/setup/project-journey-checklist.csv"],
+        "question": "Enable the automatic step-by-step project journey that shows the current stage, missing inputs, blockers, next command, and exit criteria?",
+        "default_answer": "yes",
+        "command": "python3 ~/.codex/skills/seo-cycle/scripts/project-journey.py --write",
+        "notes": "Read-only by default. It prevents skipping from setup/research into writing/publishing when quality gates or approvals are missing.",
+    },
+    {
         "id": "access_key_assistant",
         "title": "Access key/token assistant",
         "policy_keys": ["access_key_assistant", "access_key_assistant_json", "access_key_assistant_csv"],

@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.48.0] — 2026-06-12
+
+### Project journey gate
+
+- Added `scripts/project-journey.py`, a read-only step-by-step journey gate from setup to monitoring: it reports the current stage, missing artifacts, blockers, next command, exit criteria and a bounded action plan.
+- Wired project journey artifacts into `config/project.template.yaml`, `setup-control-plane.py`, and `project-upgrade-assistant.py` so existing projects see the new journey as an upgradeable surface.
+- The journey explicitly blocks deep briefs when the research package quality gate fails and prevents agents from skipping setup/research/evidence stages just because later files exist.
+- Added regression tests for new-project guidance and failed research-package quality gating.
+
 ## [1.47.0] — 2026-06-12
 
 ### Research package quality and deep page briefs

@@ -102,6 +102,11 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "launch_plan_report": "seo/setup/launch-plan.md",
         "launch_checklist": "seo/setup/launch-checklist.csv",
         "latest_launch_plan": "seo/setup/latest-launch-plan.md",
+        "project_journey_report": "seo/setup/project-journey.md",
+        "project_journey_json": "seo/setup/project-journey.json",
+        "project_journey_checklist": "seo/setup/project-journey-checklist.csv",
+        "latest_project_journey": "seo/setup/latest-project-journey.md",
+        "latest_project_journey_json": "seo/setup/latest-project-journey.json",
         "context_pack_report": "seo/setup/context-pack.md",
         "context_pack_json": "seo/setup/context-pack.json",
         "latest_context_pack": "seo/setup/latest-context-pack.md",
@@ -181,6 +186,7 @@ def next_actions(
     setup_blueprint: dict[str, Any],
     upgrade_assistant: dict[str, Any],
     access_key_assistant: dict[str, Any],
+    project_journey: dict[str, Any],
     context_pack: dict[str, Any],
     setup_gap_audit: dict[str, Any],
     spend_guard: dict[str, Any],
@@ -192,6 +198,12 @@ def next_actions(
     apply_profile: bool,
 ) -> list[str]:
     actions: list[str] = []
+    if project_journey.get("current_stage"):
+        current = project_journey["current_stage"]
+        actions.insert(
+            0,
+            f"Open `seo/setup/project-journey.md`: current stage `{current.get('id')}` status={current.get('status')}; missing/blockers={len(project_journey.get('missing_for_next_step', []))}.",
+        )
     if validation.get("errors", 0) > 0:
         actions.append("Fix validation errors before running any SEO cycle.")
     if validation.get("checklist", 0) > 0:
@@ -303,6 +315,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     setup_blueprint = report.get("setup_blueprint", {})
     upgrade_assistant = report.get("upgrade_assistant", {})
     access_key_assistant = report.get("access_key_assistant", {})
+    project_journey = report.get("project_journey", {})
     context_pack = report.get("context_pack", {})
     setup_gap_audit = report.get("setup_gap_audit", {})
     spend_guard = report.get("spend_guard", {})
@@ -342,6 +355,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Setup blueprint chars/matrix rows: {setup_blueprint.get('rendered_chars')}/{len(setup_blueprint.get('decision_matrix', []))}",
         f"- Upgrade review-needed/features: {(upgrade_assistant.get('summary') or {}).get('review_needed')}/{(upgrade_assistant.get('summary') or {}).get('features')}",
         f"- Access key tasks/approval: {(access_key_assistant.get('summary') or {}).get('tasks')}/{(access_key_assistant.get('summary') or {}).get('approval_required')}",
+        f"- Project journey: {project_journey.get('status')} / stage={(project_journey.get('current_stage') or {}).get('id')}",
+        f"- Project journey score: {project_journey.get('journey_score')}",
         f"- Context pack chars: {context_pack.get('rendered_chars')}",
         f"- Token waste findings: {len(token_waste_audit.get('findings', []))}",
         f"- Perplexity health: {perplexity_health.get('status')}",
@@ -566,6 +581,12 @@ def main() -> int:
         access_key_command.extend(["--format", "json"])
     steps.append(run_step("access key assistant", access_key_command, project_root))
 
+    project_journey_command = [sys.executable, str(root / "scripts/project-journey.py"), str(cfg_path), "--goal", args.task]
+    if args.write:
+        project_journey_command.append("--write")
+    project_journey_command.extend(["--format", "json"])
+    steps.append(run_step("project journey", project_journey_command, project_root))
+
     for script_name, step_name in (
         ("expert-source-pack.py", "vnext expert source pack"),
         ("ai-brand-audit.py", "vnext ai brand audit"),
@@ -705,6 +726,11 @@ def main() -> int:
     access_key_file = project_root / "seo" / "setup" / "access-key-assistant.json"
     if not access_key_assistant and access_key_file.exists():
         access_key_assistant = json.loads(access_key_file.read_text(encoding="utf-8"))
+    project_journey_step = next((step for step in steps if step["name"] == "project journey"), {})
+    project_journey = load_json_output(project_journey_step)
+    project_journey_file = project_root / "seo" / "setup" / "project-journey.json"
+    if not project_journey and project_journey_file.exists():
+        project_journey = json.loads(project_journey_file.read_text(encoding="utf-8"))
     vnext_reports: dict[str, Any] = {}
     for step in steps:
         if not step["name"].startswith("vnext "):
@@ -759,6 +785,7 @@ def main() -> int:
         "setup_blueprint": setup_blueprint,
         "upgrade_assistant": upgrade_assistant,
         "access_key_assistant": access_key_assistant,
+        "project_journey": project_journey,
         "context_pack": context_pack,
         "token_waste_audit": token_waste_audit,
         "perplexity_health": perplexity_health,
@@ -792,6 +819,7 @@ def main() -> int:
         setup_blueprint,
         upgrade_assistant,
         access_key_assistant,
+        project_journey,
         context_pack,
         setup_gap_audit,
         spend_guard,
