@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.54.0] — 2026-06-12
+
+### Research package repair layer
+
+- Added repair-layer CLI scripts for the exact comparison-report gaps: `semantic-core-clean.py`, `semantic-core-resync.py`, `entity-map-sync.py`, `google-nlp-aggregate.py`, `orphan-url-resolver.py`, `serp-validation-plan.py`, and `spoke-opportunity-audit.py`.
+- Added quality gates for downstream work: `entity-graph-quality.py` validates relation duplicates/orphans and entity weight provenance; `draft-quality-gate.py` checks drafts against page outlines for missing H2/H3, required links, source/proof slots and unsafe first-person expertise.
+- Added shared `research_package_repair_core.py` helpers so repair scripts use one CSV/JSON/URL/entity normalization layer and produce stable JSON/Markdown/CSV/JSONL artifacts.
+- Added regression coverage for the full repair flow using the comparison-report fixture: dirty GSC cleanup, URL/cluster resync, entity-map parity, Google NLP aggregation, orphan URL backlog, SERP validation planning, phase-2 spokes, entity graph findings and draft gate findings.
+- Updated README/GUIDE/SKILL/runbook so the package flow is now: quality gate -> repair layer -> page-outline v2 -> page-outline quality -> draft quality gate.
+
 ## [1.53.0] — 2026-06-12
 
 ### Draft-ready copywriting handoff

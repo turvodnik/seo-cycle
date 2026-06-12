@@ -72,6 +72,49 @@ Medium findings:
 - collected `ai_overview` features not used in GEO/page requirements.
 - missing E-E-A-T/evidence layer in briefs/specs.
 
+## Repair Layer
+
+Run repair scripts after `research-package-quality.py` finds cleanup or
+consistency issues, and before generating fresh page outlines:
+
+```bash
+python3 scripts/semantic-core-clean.py ./research-package --write
+python3 scripts/semantic-core-resync.py ./research-package --write
+python3 scripts/entity-map-sync.py ./research-package --write
+python3 scripts/google-nlp-aggregate.py ./research-package --write
+python3 scripts/orphan-url-resolver.py ./research-package --write
+python3 scripts/serp-validation-plan.py ./research-package --write
+python3 scripts/spoke-opportunity-audit.py ./research-package --write
+python3 scripts/entity-graph-quality.py ./research-package --write
+```
+
+Outputs:
+
+- `semantic-core.cleaned.csv` and `semantic-core.rejected.csv` separate
+  prompt/spam-like GSC rows from usable keyword rows.
+- `semantic-core.resynced.csv` aligns old cluster IDs and URLs to the final
+  architecture after reclustering.
+- `entity-map.md` is rendered from `entity-map.yaml`, so Markdown/YAML cannot
+  silently diverge.
+- `entity_coverage.jsonl` aggregates Google NLP mentions, salience, variants
+  and types into a compact downstream entity-coverage layer.
+- `content-plan.orphan-backlog.csv` turns referenced-but-missing URLs into
+  reviewable backlog rows or remove/replace-link actions.
+- `serp-validation-plan.csv` lists queries whose page-type decisions still need
+  SERP evidence.
+- `spoke-opportunities.csv` promotes measured long-tail demand into phase-2
+  hub-and-spoke opportunities.
+- `entity-graph-quality.md/json` catches duplicate triples, orphan relation
+  endpoints and entity weights without an explicit source.
+
+After repair, rerun:
+
+```bash
+python3 scripts/research-package-quality.py ./research-package --write
+```
+
+Treat remaining critical findings as blockers for outline generation.
+
 ## Deep Page Brief
 
 After the package passes the gate, generate one deep outline per MVP/P1 page:
@@ -167,20 +210,38 @@ seo-cycle architecture: micro-level copywriter guidance is generated only after
 SERP/page-type, URL, cluster, internal-link, entity and no-fabrication context is
 locked by the research package.
 
+## Draft Quality Gate
+
+After a draft is written from `copywriting_playbook` and
+`writer_prompt_packet`, validate it against the exact outline:
+
+```bash
+python3 scripts/draft-quality-gate.py ./draft.md \
+  --outline ./research-package/page-outlines-v2/page.json \
+  --write
+```
+
+The gate flags missing H2/H3 sections, required internal links, proof/source
+slots, FAQ mismatches and unsafe first-person expertise claims. It is a final
+copywriting safety check before schema, CMS publishing or approval.
+
 ## Pipeline
 
 1. Build or receive a research package.
 2. Run `research-package-quality.py`.
 3. Open `research-package-action-plan.md` and follow the automatic steps.
-4. Fix critical/high findings.
-5. Generate `page-outline-v2.py --all-mvp` or `--priority P1`.
-6. Run `page-outline-quality.py --write` and follow its action plan.
-7. Rerun `project-journey.py --write`; proceed only when the current stage
+4. Run the repair-layer scripts for the relevant findings.
+5. Rerun `research-package-quality.py --write` and fix remaining critical/high
+   findings.
+6. Generate `page-outline-v2.py --all-mvp` or `--priority P1`.
+7. Run `page-outline-quality.py --write` and follow its action plan.
+8. Rerun `project-journey.py --write`; proceed only when the current stage
    moves past `deep_page_briefs`.
-8. For drafting, pass only the page outline plus its `copywriting_playbook` and
+9. For drafting, pass only the page outline plus its `copywriting_playbook` and
    `writer_prompt_packet` into the active LLM context.
-9. Review the generated outline before writing, design, schema, or approval.
-10. Keep raw data on disk; open raw CSV/JSON/SERP only when a source slot or
+10. Run `draft-quality-gate.py` on the finished draft.
+11. Review the generated outline before writing, design, schema, or approval.
+12. Keep raw data on disk; open raw CSV/JSON/SERP only when a source slot or
     fact-check queue item asks for a specific source.
 
 ## Updating Existing Projects
