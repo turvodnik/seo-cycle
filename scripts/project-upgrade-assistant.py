@@ -95,6 +95,21 @@ FEATURES: list[dict[str, Any]] = [
         "notes": "Read-only by default. It prevents skipping from setup/research into writing/publishing when quality gates or approvals are missing.",
     },
     {
+        "id": "page_outline_quality_gate",
+        "title": "Page outline quality gate",
+        "policy_keys": [
+            "page_outline_quality_report",
+            "page_outline_quality_json",
+            "latest_page_outline_quality",
+            "latest_page_outline_quality_json",
+        ],
+        "artifacts": ["seo/research-package/page-outline-quality.md"],
+        "question": "Enable the automatic page-outline quality gate before writing or publishing MVP/P1 pages?",
+        "default_answer": "yes",
+        "command": "python3 ~/.codex/skills/seo-cycle/scripts/page-outline-quality.py seo/research-package --write --format markdown",
+        "notes": "Checks page briefs for word-count drift, missing SERP/page-type lock, SEO meta, schema, internal links, Answer Units, evidence, entity orphans, visuals, and fabricated first-person expertise.",
+    },
+    {
         "id": "access_key_assistant",
         "title": "Access key/token assistant",
         "policy_keys": ["access_key_assistant", "access_key_assistant_json", "access_key_assistant_csv"],

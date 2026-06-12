@@ -44,18 +44,7 @@ class ProjectJourneyTest(unittest.TestCase):
         )
         return json.loads(proc.stdout)
 
-    def test_new_project_starts_at_setup_foundation_with_next_command(self) -> None:
-        cfg_path = self.make_project()
-        report = self.run_journey(cfg_path)
-
-        self.assertEqual(report["status"], "needs_work")
-        self.assertEqual(report["current_stage"]["id"], "setup_foundation")
-        self.assertIn("setup-control-plane.py --write", report["action_plan"][0]["command"])
-        self.assertTrue((cfg_path.parent / "seo" / "setup" / "project-journey.md").exists())
-        self.assertTrue((cfg_path.parent / "seo" / "setup" / "project-journey-checklist.csv").exists())
-
-    def test_failed_research_quality_blocks_deep_briefs(self) -> None:
-        cfg_path = self.make_project()
+    def seed_ready_project(self, cfg_path: pathlib.Path, *, research_quality: dict | None = None) -> pathlib.Path:
         root = cfg_path.parent
         setup = root / "seo" / "setup"
         vnext = root / "seo" / "vnext"
@@ -94,20 +83,44 @@ class ProjectJourneyTest(unittest.TestCase):
             (package / name).write_text("{}\n" if name.endswith(".json") else "ok\n", encoding="utf-8")
         (package / "research-package-quality.json").write_text(
             json.dumps(
-                {
-                    "status": "fail",
-                    "ten_point_score": 5.2,
-                    "counts": {"critical_findings": 1, "high_findings": 0},
-                    "findings": [
-                        {
-                            "id": "serp_validation_incomplete",
-                            "severity": "critical",
-                            "title": "SERP validation is empty.",
-                        }
-                    ],
+                research_quality
+                or {
+                    "status": "pass",
+                    "ten_point_score": 10,
+                    "counts": {"critical_findings": 0, "high_findings": 0},
+                    "findings": [],
                 }
             ),
             encoding="utf-8",
+        )
+        return package
+
+    def test_new_project_starts_at_setup_foundation_with_next_command(self) -> None:
+        cfg_path = self.make_project()
+        report = self.run_journey(cfg_path)
+
+        self.assertEqual(report["status"], "needs_work")
+        self.assertEqual(report["current_stage"]["id"], "setup_foundation")
+        self.assertIn("setup-control-plane.py --write", report["action_plan"][0]["command"])
+        self.assertTrue((cfg_path.parent / "seo" / "setup" / "project-journey.md").exists())
+        self.assertTrue((cfg_path.parent / "seo" / "setup" / "project-journey-checklist.csv").exists())
+
+    def test_failed_research_quality_blocks_deep_briefs(self) -> None:
+        cfg_path = self.make_project()
+        self.seed_ready_project(
+            cfg_path,
+            research_quality={
+                "status": "fail",
+                "ten_point_score": 5.2,
+                "counts": {"critical_findings": 1, "high_findings": 0},
+                "findings": [
+                    {
+                        "id": "serp_validation_incomplete",
+                        "severity": "critical",
+                        "title": "SERP validation is empty.",
+                    }
+                ],
+            },
         )
 
         report = self.run_journey(cfg_path)
@@ -117,6 +130,43 @@ class ProjectJourneyTest(unittest.TestCase):
         self.assertTrue(any("serp_validation_incomplete" in item for item in report["missing_for_next_step"]))
         deep = next(stage for stage in report["stages"] if stage["id"] == "deep_page_briefs")
         self.assertEqual(deep["status"], "pending")
+
+    def test_page_outline_quality_is_required_before_implementation(self) -> None:
+        cfg_path = self.make_project()
+        package = self.seed_ready_project(cfg_path)
+        outline_dir = package / "page-outlines-v2"
+        outline_dir.mkdir()
+        (outline_dir / "sample.json").write_text(json.dumps({"outline_id": "page_outline_v2"}), encoding="utf-8")
+
+        report = self.run_journey(cfg_path)
+
+        self.assertEqual(report["status"], "needs_work")
+        self.assertEqual(report["current_stage"]["id"], "deep_page_briefs")
+        self.assertIn("seo/research-package/page-outline-quality.json", report["missing_for_next_step"])
+        self.assertTrue(any("page-outline-quality.py" in command for command in report["current_stage"]["next_commands"]))
+
+        (package / "page-outline-quality.json").write_text(
+            json.dumps(
+                {
+                    "status": "fail",
+                    "ten_point_score": 6.4,
+                    "counts": {"critical_findings": 1, "high_findings": 2},
+                    "findings": [
+                        {
+                            "id": "unsafe_first_person_expertise",
+                            "severity": "critical",
+                            "title": "Outline asks for fake expertise.",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        blocked = self.run_journey(cfg_path)
+
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertEqual(blocked["current_stage"]["id"], "deep_page_briefs")
+        self.assertTrue(any("unsafe_first_person_expertise" in item for item in blocked["missing_for_next_step"]))
 
 
 if __name__ == "__main__":

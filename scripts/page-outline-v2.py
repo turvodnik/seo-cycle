@@ -209,6 +209,27 @@ def schema_for_page(page_type: str) -> list[str]:
     return schema
 
 
+def seo_meta_for_page(page: dict[str, Any], primary: str, page_type: str) -> dict[str, Any]:
+    title = str(page.get("page_title") or page.get("name") or primary or "").strip()
+    url = str(page.get("url") or page.get("suggested_url") or "").strip()
+    title_tag = title if title else primary
+    if primary and primary.lower() not in title_tag.lower():
+        title_tag = f"{title_tag}: {primary}"
+    page_type_label = "tool" if "tool" in page_type.lower() else "guide"
+    meta_description = (
+        f"Use this {page_type_label} to answer {primary} with SERP-matched structure, entity coverage, "
+        "source-backed proof, FAQ, schema, and internal links."
+    ).strip()
+    return {
+        "title_tag": title_tag[:62],
+        "meta_description": meta_description[:155],
+        "slug": url.rstrip("/").split("/")[-1] if url else slugify(primary),
+        "canonical": url,
+        "alt_text_guidance": "Alt text must describe the actual screenshot/table/result state and include the page task only when natural.",
+        "source_note": "Generated from final research architecture; do not change page type without SERP re-validation.",
+    }
+
+
 def template_sections(page_type: str) -> list[dict[str, Any]]:
     lower = page_type.lower()
     if "tool" in lower:
@@ -324,6 +345,7 @@ def build_outline(package: pathlib.Path, selector: str | None, *, expert_author:
     total_min = sum(section["word_count_min"] for section in sections)
     total_max = sum(section["word_count_max"] for section in sections)
     schema = schema_for_page(page_type)
+    seo_meta = seo_meta_for_page({**cluster, **content}, primary, page_type)
     return {
         "outline_id": "page_outline_v2",
         "generated_at": utc_now(),
@@ -342,6 +364,7 @@ def build_outline(package: pathlib.Path, selector: str | None, *, expert_author:
             "mvp": str(content.get("mvp") or cluster.get("mvp")).lower() in {"true", "1", "yes"},
         },
         "computed_word_count": {"min": total_min, "max": total_max},
+        "seo_meta": seo_meta,
         "entities": page_entities,
         "schema": schema,
         "internal_links": internal_links,
@@ -392,6 +415,14 @@ def render_markdown(outline: dict[str, Any]) -> str:
         f"- Page type: `{page.get('page_type')}`",
         f"- Computed word count: `{outline['computed_word_count']['min']}-{outline['computed_word_count']['max']}`",
         f"- E-E-A-T mode: `{outline['eeat_guard']['expert_author_mode']}`",
+        "",
+        "## SEO Meta",
+        "",
+        f"- Title tag: `{outline.get('seo_meta', {}).get('title_tag')}`",
+        f"- Meta description: `{outline.get('seo_meta', {}).get('meta_description')}`",
+        f"- Slug: `{outline.get('seo_meta', {}).get('slug')}`",
+        f"- Canonical: `{outline.get('seo_meta', {}).get('canonical')}`",
+        f"- Alt text guidance: {outline.get('seo_meta', {}).get('alt_text_guidance')}",
         "",
         "## Schema",
         "",

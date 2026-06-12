@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.50.0] — 2026-06-12
+
+### Page outline quality gate
+
+- Added `scripts/page-outline-quality.py`, a 10-criterion page brief validator that catches the comparison-audit failure modes: word-count drift, missing SERP/page-type lock, shallow copywriter handoff, missing SEO meta/schema/internal links, weak Answer Units/GEO, orphan entities, missing visuals, and fabricated first-person expertise.
+- Extended `page-outline-v2.py` with SEO meta output: title tag, meta description, slug, canonical and alt-text guidance, so generated briefs are ready for technical SEO review before writing.
+- Wired page-outline quality into `project-journey.py`: after MVP/P1 outline generation the automatic journey now requires `page-outline-quality.json`, reports blockers, and shows the exact next command before implementation can start.
+- Added page-outline quality policy paths to the project template, setup-control-plane visibility, and project-upgrade assistant so existing projects can adopt the gate through the safe upgrade flow.
+- Updated docs and regression tests for generated-outline pass, unsafe-outline failure, and journey blocking before implementation.
+
 ## [1.49.0] — 2026-06-12
 
 ### Safe old-project upgrades

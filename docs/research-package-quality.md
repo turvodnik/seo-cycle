@@ -91,6 +91,7 @@ python3 scripts/page-outline-v2.py ./research-package --priority P1 --write
 The output includes:
 
 - computed word-count totals from sections;
+- SEO meta: title tag, meta description, slug, canonical, and alt-text guidance;
 - entities and keywords per section;
 - visual elements;
 - copywriter notes;
@@ -104,6 +105,38 @@ The output includes:
 Use `--expert-author` only when the project has a real named expert/author and
 the page can prove that expertise.
 
+## Page Outline Quality Gate
+
+Run immediately after generating MVP/P1 outlines and before writing, design,
+schema, approvals, or publishing:
+
+```bash
+python3 scripts/page-outline-quality.py ./research-package --write --format markdown
+```
+
+`--write` saves:
+
+- `page-outline-quality.md`;
+- `page-outline-quality.json`;
+- `latest-page-outline-quality.md`;
+- `latest-page-outline-quality.json`.
+
+The gate uses a 10-criterion scorecard for:
+
+- word-count integrity;
+- SERP/page-type and intent lock;
+- entity coverage and graph usefulness;
+- copywriter actionability;
+- E-E-A-T no-fabrication safety;
+- GEO/AEO Answer Units;
+- technical SEO wrapper;
+- internal links and cannibalization guard;
+- visual/UX guidance;
+- machine-readable handoff.
+
+Critical findings block downstream writing/publishing. High/medium findings
+become action-plan steps and should be accepted only after review.
+
 ## Pipeline
 
 1. Build or receive a research package.
@@ -111,6 +144,9 @@ the page can prove that expertise.
 3. Open `research-package-action-plan.md` and follow the automatic steps.
 4. Fix critical/high findings.
 5. Generate `page-outline-v2.py --all-mvp` or `--priority P1`.
-6. Review the generated outline before writing, design, schema, or approval.
-7. Keep raw data on disk; pass only quality reports and page outlines into the
+6. Run `page-outline-quality.py --write` and follow its action plan.
+7. Rerun `project-journey.py --write`; proceed only when the current stage
+   moves past `deep_page_briefs`.
+8. Review the generated outline before writing, design, schema, or approval.
+9. Keep raw data on disk; pass only quality reports and page outlines into the
    active LLM context.

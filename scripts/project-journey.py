@@ -113,10 +113,13 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
             "missing_required": required,
             "quality": {},
             "quality_exists": False,
+            "outline_quality": {},
+            "outline_quality_exists": False,
             "outline_count": 0,
         }
     required_status = {name: (package / name).exists() for name in required}
     quality_path = package / "research-package-quality.json"
+    outline_quality_path = package / "page-outline-quality.json"
     outline_dir = package / "page-outlines-v2"
     outline_count = len(list(outline_dir.glob("*.json"))) if outline_dir.exists() else 0
     return {
@@ -126,6 +129,8 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
         "missing_required": [name for name, exists in required_status.items() if not exists],
         "quality": read_json(quality_path),
         "quality_exists": quality_path.exists(),
+        "outline_quality": read_json(outline_quality_path),
+        "outline_quality_exists": outline_quality_path.exists(),
         "outline_count": outline_count,
     }
 
@@ -346,27 +351,50 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
 def brief_stage(package: dict[str, Any]) -> dict[str, Any]:
     package_dir = package.get("package_dir") or "seo/research-package"
     quality = package.get("quality", {})
+    outline_quality = package.get("outline_quality", {})
     blockers = []
+    warnings = []
     if quality.get("status") == "fail":
         blockers.append("Deep briefs are blocked until research-package-quality has no critical findings.")
+    if outline_quality.get("status") == "fail":
+        counts = outline_quality.get("counts") if isinstance(outline_quality.get("counts"), dict) else {}
+        blockers.append(
+            "Page outlines quality gate is fail: "
+            f"critical={int(counts.get('critical_findings') or 0)}, high={int(counts.get('high_findings') or 0)}."
+        )
+        for finding in outline_quality.get("findings", [])[:5]:
+            if isinstance(finding, dict):
+                blockers.append(f"{finding.get('severity', 'finding')}: {finding.get('id')} — {finding.get('title')}")
+    elif outline_quality.get("status") == "warn":
+        warnings.append("Page outlines have non-critical findings; review page-outline-quality action plan before writing.")
     missing = []
     if not package.get("outline_count"):
         missing.append(f"{package_dir}/page-outlines-v2/*.json")
+    if package.get("outline_count") and not package.get("outline_quality_exists"):
+        missing.append(f"{package_dir}/page-outline-quality.json")
     return stage(
         stage_id="deep_page_briefs",
         order=7,
         title="Deep page briefs",
-        objective="Every MVP/P1 page has a section-level brief with word counts, entities, Answer Units, proof, schema, and no-fabrication guard.",
-        evidence=[f"page-outlines-v2 json files: {package.get('outline_count', 0)}"],
+        objective="Every MVP/P1 page has a validated section-level brief with word counts, entities, Answer Units, proof, schema, SEO meta, and no-fabrication guard.",
+        evidence=[
+            f"page-outlines-v2 json files: {package.get('outline_count', 0)}",
+            f"{package_dir}/page-outline-quality.json: {'exists' if package.get('outline_quality_exists') else 'missing'}",
+            f"outline quality status: {outline_quality.get('status', 'not_run')}",
+            f"outline 10-point score: {outline_quality.get('ten_point_score', 'n/a')}",
+        ],
         missing=missing,
         blockers=blockers,
+        warnings=warnings,
         commands=[
             f"python3 ~/.codex/skills/seo-cycle/scripts/page-outline-v2.py {package_dir} --all-mvp --write",
             f"python3 ~/.codex/skills/seo-cycle/scripts/page-outline-v2.py {package_dir} --priority P1 --write",
+            f"python3 ~/.codex/skills/seo-cycle/scripts/page-outline-quality.py {package_dir} --write --format markdown",
         ],
         exit_criteria=[
             "MVP/P1 pages have outline v2 files.",
-            "The generated brief preserves SERP-selected page type and forbids fabricated expertise.",
+            "page-outline-quality.json exists and has no critical findings.",
+            "The generated brief preserves SERP-selected page type, SEO meta/schema/internal links, Answer Units, and forbids fabricated expertise.",
         ],
     )
 

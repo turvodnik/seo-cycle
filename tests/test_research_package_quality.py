@@ -34,6 +34,7 @@ def load_script(path: pathlib.Path, name: str):
 
 QUALITY = load_script(SCRIPTS / "research-package-quality.py", "research_package_quality")
 OUTLINE = load_script(SCRIPTS / "page-outline-v2.py", "page_outline_v2")
+OUTLINE_QUALITY = load_script(SCRIPTS / "page-outline-quality.py", "page_outline_quality")
 
 
 class ResearchPackageQualityTest(unittest.TestCase):
@@ -212,8 +213,72 @@ class ResearchPackageQualityTest(unittest.TestCase):
         section = outline["sections"][0]
         self.assertIn("copywriter_notes", section)
         self.assertIn("evidence_required", section)
+        self.assertIn("seo_meta", outline)
+        self.assertIn("title_tag", outline["seo_meta"])
+        self.assertIn("meta_description", outline["seo_meta"])
         self.assertIn("no_fabricated_first_person", outline["eeat_guard"]["expert_author_mode"])
         self.assertTrue(any("Do not invent" in note for note in section["copywriter_notes"]))
+
+    def test_page_outline_quality_gate_passes_generated_outline(self) -> None:
+        outline = OUTLINE.build_outline(self.package, "/tools/virtual-hair-color-try-on/")
+        OUTLINE.write_outline(self.package, outline)
+
+        report = OUTLINE_QUALITY.audit(self.package)
+
+        self.assertEqual(report["status"], "pass")
+        self.assertEqual(report["ten_point_score"], 10.0)
+        self.assertEqual(len(report["scorecard"]), 10)
+        self.assertFalse(report["findings"])
+
+    def test_page_outline_quality_gate_flags_unsafe_shallow_outline(self) -> None:
+        outline_dir = self.package / "page-outlines-v2"
+        outline_dir.mkdir()
+        bad_outline = {
+            "outline_id": "page_outline_v2",
+            "page": {
+                "title": "Bad outline",
+                "url": "/bad/",
+                "primary_keyword": "bad outline",
+                "page_type": "Guide",
+            },
+            "computed_word_count": {"min": 900, "max": 1100},
+            "sections": [
+                {
+                    "level": 2,
+                    "title": "Intro",
+                    "summary": "Thin intro.",
+                    "word_count_min": 50,
+                    "word_count_max": 80,
+                    "copywriter_notes": ["In my years working with clients, this always works."],
+                    "entities_to_cover": [],
+                    "entity_connections": [],
+                    "evidence_required": [],
+                    "visual_elements": "",
+                    "answer_unit": {"required": False},
+                }
+            ],
+            "entities": [{"name": "Orphan Entity"}],
+            "schema": [],
+            "internal_links": [],
+            "geo_requirements": [],
+            "eeat_guard": {"expert_author_mode": "no_fabricated_first_person"},
+        }
+        (outline_dir / "bad.json").write_text(json.dumps(bad_outline), encoding="utf-8")
+
+        report = OUTLINE_QUALITY.audit(self.package)
+        ids = {finding["id"] for finding in report["findings"]}
+
+        self.assertEqual(report["status"], "fail")
+        self.assertIn("word_count_mismatch", ids)
+        self.assertIn("missing_page_context", ids)
+        self.assertIn("missing_seo_meta", ids)
+        self.assertIn("missing_schema", ids)
+        self.assertIn("missing_internal_links", ids)
+        self.assertIn("missing_answer_units", ids)
+        self.assertIn("unsafe_first_person_expertise", ids)
+        self.assertIn("orphan_entities", ids)
+        self.assertIn("missing_visual_guidance", ids)
+        self.assertLess(report["ten_point_score"], 10)
 
     def test_page_outline_v2_batch_generates_all_mvp_briefs(self) -> None:
         outlines = OUTLINE.build_outlines(self.package, all_mvp=True)
