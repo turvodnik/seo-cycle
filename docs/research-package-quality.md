@@ -11,8 +11,8 @@ technical requirements.
 
 Single-page outlines are strong at deciding **how to write one page**:
 H2/H3 structure, word counts, entities per section, intro/conclusion, visual
-blocks, copywriter notes, source slots, acceptance criteria, Answer Units, FAQ,
-and E-E-A-T tone.
+blocks, copywriter notes, copywriting playbook, writer prompt packet, source
+slots, acceptance criteria, Answer Units, FAQ, and E-E-A-T tone.
 
 `seo-cycle` now requires both layers for important pages.
 
@@ -100,6 +100,10 @@ The output includes:
 - numbered visual plan with placement and dedupe keys;
 - section bridges so the page reads as one funnel, not isolated blocks;
 - writer handoff with must-do, must-not, fact-check queue, and safe memorable lines;
+- `copywriting_playbook`: page job, before/after reader state, tone contract,
+  angle stack, draft sequence, banned patterns, and revision checklist;
+- `writer_prompt_packet`: low-token role, input/output contracts, forbidden
+  actions, acceptance gate, and starter prompt for the next writing agent;
 - deterministic H3 subsection plans under every H2, where H3 word counts add up
   to the parent H2 range;
 - section copywriting details: reader question, opening angle, do-write,
@@ -154,7 +158,9 @@ become action-plan steps and should be accepted only after review.
 The gate now also blocks outlines that look complete at the macro level but are
 still weak for copywriting: missing intro/conclusion briefs, missing H3
 subsections, H3 totals that drift from the parent H2, vague section writing
-instructions, missing source slots, or missing acceptance criteria.
+instructions, missing source slots, missing acceptance criteria, missing
+copywriting playbook, missing revision checklist, or missing writer prompt
+packet.
 
 This combines the useful competitor-outline advantages with the stronger
 seo-cycle architecture: micro-level copywriter guidance is generated only after
@@ -171,6 +177,23 @@ locked by the research package.
 6. Run `page-outline-quality.py --write` and follow its action plan.
 7. Rerun `project-journey.py --write`; proceed only when the current stage
    moves past `deep_page_briefs`.
-8. Review the generated outline before writing, design, schema, or approval.
-9. Keep raw data on disk; pass only quality reports and page outlines into the
-   active LLM context.
+8. For drafting, pass only the page outline plus its `copywriting_playbook` and
+   `writer_prompt_packet` into the active LLM context.
+9. Review the generated outline before writing, design, schema, or approval.
+10. Keep raw data on disk; open raw CSV/JSON/SERP only when a source slot or
+    fact-check queue item asks for a specific source.
+
+## Updating Existing Projects
+
+From an already bootstrapped project root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash -s -- --skip-init
+python3 ./.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py --write
+python3 ./.codex/skills/seo-cycle/scripts/project-upgrade-apply.py --write
+python3 ./.codex/skills/seo-cycle/scripts/setup-control-plane.py --write
+```
+
+Review `seo/setup/upgrade-questionnaire.csv` before any `--apply`. The updater
+does not add secrets, paid API approval, tracking tags, publishing, or schedule
+installation automatically.

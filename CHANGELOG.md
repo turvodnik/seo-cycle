@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.53.0] — 2026-06-12
+
+### Draft-ready copywriting handoff
+
+- Extended `page-outline-v2.py` with `copywriting_playbook`: page job, before/after reader state, tone contract, angle stack, draft sequence, banned patterns and a final revision checklist.
+- Added `writer_prompt_packet` for low-token drafting handoff: role, input/output contracts, forbidden actions, acceptance gate and starter prompt for the next AI/copywriter step.
+- Extended `page-outline-quality.py` so weak outlines now fail when they lack a copywriting playbook, revision checklist or writer prompt packet.
+- Updated docs for users and AI agents with the latest package -> outline -> quality -> writing flow and old-project update commands.
+
 ## [1.52.0] — 2026-06-12
 
 ### Copywriter-grade brief depth

@@ -62,6 +62,9 @@ FINDING_CRITERIA = {
     "weak_visual_plan": ("visual_ux_guidance", "handoff_machine_readability"),
     "missing_geo_requirements": ("geo_answer_units",),
     "missing_writer_handoff": ("copywriter_actionability", "handoff_machine_readability"),
+    "missing_copywriting_playbook": ("copywriter_actionability", "handoff_machine_readability"),
+    "missing_revision_checklist": ("copywriter_actionability", "handoff_machine_readability"),
+    "missing_writer_prompt_packet": ("copywriter_actionability", "handoff_machine_readability"),
     "missing_h3_subsections": ("copywriter_actionability", "handoff_machine_readability"),
     "subsection_word_count_mismatch": ("word_count_integrity", "copywriter_actionability"),
     "weak_copywriting_details": ("copywriter_actionability",),
@@ -94,6 +97,9 @@ REMEDIATION = {
     "weak_visual_plan": "Add a numbered visual plan with placement, dedupe keys, alt guidance and source requirements.",
     "missing_geo_requirements": "Add answer-first, FAQ, proof block and synthetic AI prompt requirements.",
     "missing_writer_handoff": "Add writer_handoff with reader task, voice, must-do, must-not and safe memorable lines.",
+    "missing_copywriting_playbook": "Add a copywriting_playbook with reader state, tone contract, angle stack, draft sequence and revision checklist.",
+    "missing_revision_checklist": "Add a concrete revision_checklist before the draft moves to design/schema/publishing.",
+    "missing_writer_prompt_packet": "Add a writer_prompt_packet with input/output contracts, forbidden actions and acceptance gate for low-token drafting.",
     "missing_fact_check_queue": "Add a fact_check_queue for SERP, claims, expert proof, schema and technical/privacy checks.",
     "missing_trust_limitations": "Add trust_limitations covering page-type, evidence, technical/privacy and decision limits.",
     "missing_synthetic_prompts": "Add synthetic AI prompts for non-branded, page-type, comparison and trust checks.",
@@ -175,6 +181,8 @@ def text_blob(outline: dict[str, Any]) -> str:
     chunks = [
         json.dumps(outline.get("page", {}), ensure_ascii=False),
         json.dumps(outline.get("writer_handoff", {}), ensure_ascii=False),
+        json.dumps(outline.get("copywriting_playbook", {}), ensure_ascii=False),
+        json.dumps(outline.get("writer_prompt_packet", {}), ensure_ascii=False),
         json.dumps(outline.get("key_takeaways", []), ensure_ascii=False),
         json.dumps(outline.get("faq", []), ensure_ascii=False),
     ]
@@ -333,6 +341,54 @@ def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, A
             title="Outline lacks a copywriter-ready handoff contract.",
             outline=title,
             evidence={"missing": missing_handoff},
+        )
+
+    playbook = outline.get("copywriting_playbook") if isinstance(outline.get("copywriting_playbook"), dict) else {}
+    tone_contract = playbook.get("tone_contract") if isinstance(playbook.get("tone_contract"), dict) else {}
+    target_reader_state = playbook.get("target_reader_state") if isinstance(playbook.get("target_reader_state"), dict) else {}
+    missing_playbook = [
+        key
+        for key in ("page_job", "angle_stack", "draft_sequence", "revision_checklist")
+        if not playbook.get(key)
+    ]
+    if not target_reader_state.get("before") or not target_reader_state.get("after"):
+        missing_playbook.append("target_reader_state")
+    if not tone_contract.get("voice") or not tone_contract.get("rhythm") or not tone_contract.get("banned_patterns"):
+        missing_playbook.append("tone_contract")
+    if missing_playbook:
+        add_finding(
+            findings,
+            finding_id="missing_copywriting_playbook",
+            severity="high",
+            title="Outline lacks a complete copywriting playbook.",
+            outline=title,
+            evidence={"missing": sorted(set(missing_playbook))},
+        )
+    revision_checklist = playbook.get("revision_checklist") if isinstance(playbook.get("revision_checklist"), list) else []
+    if len(revision_checklist) < 6:
+        add_finding(
+            findings,
+            finding_id="missing_revision_checklist",
+            severity="medium",
+            title="Outline lacks a useful final revision checklist for drafting.",
+            outline=title,
+            evidence={"revision_checklist": len(revision_checklist)},
+        )
+
+    prompt_packet = outline.get("writer_prompt_packet") if isinstance(outline.get("writer_prompt_packet"), dict) else {}
+    missing_prompt = [
+        key
+        for key in ("role", "input_contract", "output_contract", "forbidden_actions", "acceptance_gate", "starter_prompt")
+        if not prompt_packet.get(key)
+    ]
+    if missing_prompt:
+        add_finding(
+            findings,
+            finding_id="missing_writer_prompt_packet",
+            severity="medium",
+            title="Outline lacks a low-token writer prompt packet.",
+            outline=title,
+            evidence={"missing": missing_prompt},
         )
 
     fact_check_queue = writer_handoff.get("fact_check_queue") if isinstance(writer_handoff.get("fact_check_queue"), list) else []

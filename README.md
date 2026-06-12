@@ -1,6 +1,6 @@
 # seo-cycle
 
-**Версия 1.52.0** · универсальный SEO/контент-цикл-оркестратор для Codex CLI и Claude Code.
+**Версия 1.53.0** · универсальный SEO/контент-цикл-оркестратор для Codex CLI и Claude Code.
 
 Полный цикл продвижения сайта — от стратегии и сбора семантики до публикации, fact-check, мониторинга и итераций — управляемый через декларативный конфиг `seo-cycle.yaml`. Адаптируется под любой проект: язык, регион, поисковики, тип сайта, CMS, набор источников.
 
@@ -20,6 +20,11 @@ bash ~/.codex/vendor/seo-cycle/scripts/install-ai-toolchain.sh --codex --noteboo
 
 # Claude Code variant:
 curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-claude.sh | bash
+
+# Existing project: update shared core and refresh the local setup surface
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash -s -- --skip-init
+python3 ./.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py --write
+python3 ./.codex/skills/seo-cycle/scripts/setup-control-plane.py --write
 ```
 
 Codex — canonical runtime. Project bootstrap теперь **local-entrypoint + shared-core**: общий код обновляется в `~/.codex/vendor/seo-cycle`, а в конкретном проекте создаются только локальные entrypoints `./.codex/skills/seo-cycle`, `./.agents/skills/seo-cycle`, `./.claude/skills/seo-cycle` как symlink на shared core. Если проект не bootstrap'или, seo-cycle skills в нём не появляются и не читаются. Legacy global skill links доступны только через явный `--global-skill`. Bootstrap запускает wizard, создаёт `seo-cycle.yaml`, `.env.example`, `.env`, `AGENTS.md`, policy-файлы, setup blueprint/matrix, upgrade assistant, access-key assistant, context pack, spend guard, onboarding, roadmap и automation recommendations. Секреты не заполняются автоматически.
@@ -96,7 +101,7 @@ WordPress-публикация и администрирование по умо
 | **WordPress publishing/admin** | Primary channel is WordPress REST API with Application Password: posts, pages, products, media, meta and plugin REST endpoints. Novomira MCP is fallback/extension only when explicitly installed for a project. |
 | **Project-local MCP** | Optional only: `project-mcp-config.py --write` creates `./.codex/config.toml` for WordPress/Novomira MCP in the current project. It is never installed globally and is not created by default bootstrap. |
 | **Perplexity/NotebookLM evidence** | `perplexity-health.py --write` и `notebooklm-health.py --write` проверяют persistent app/browser/API/fallback режимы без хранения паролей. `perplexity-collect.py` и `notebooklm-source-pack.py` пишут raw/cache на диск, bounded distillates с citations и vector records; downstream prompts используют только distillates. |
-| **Research package quality + deep briefs** | `research-package-quality.py <package> --write` фейлит site-level research package при пустой SERP-валидации, URL/cluster drift, грязном GSC, дублях briefs, orphan URLs, entity-map drift, неагрегированном Google NLP, неиспользованных AI Overview/GEO signals и слабом E-E-A-T/evidence layer. Даёт 10-критериальный scorecard и `research-package-action-plan.md`; короткий режим запуска: `--format plan`. `page-outline-v2.py <package> --all-mvp --write` или `--priority P1 --write` превращает правильную архитектуру в секционные H2/H3 брифы с computed word count, H3 word-count allocation, intro/conclusion brief, SEO meta, Key Takeaways, FAQ, visual plan, section bridges, writer handoff, copywriting details, source slots, acceptance criteria, entities, Answer Units, evidence, schema, internal links, synthetic prompts и no-fabricated-E-E-A-T guard. `page-outline-quality.py <package> --write` проверяет эти briefs до writing/publishing и даёт автоматический action plan. |
+| **Research package quality + deep briefs** | `research-package-quality.py <package> --write` фейлит site-level research package при пустой SERP-валидации, URL/cluster drift, грязном GSC, дублях briefs, orphan URLs, entity-map drift, неагрегированном Google NLP, неиспользованных AI Overview/GEO signals и слабом E-E-A-T/evidence layer. Даёт 10-критериальный scorecard и `research-package-action-plan.md`; короткий режим запуска: `--format plan`. `page-outline-v2.py <package> --all-mvp --write` или `--priority P1 --write` превращает правильную архитектуру в секционные H2/H3 брифы с computed word count, H3 word-count allocation, intro/conclusion brief, SEO meta, Key Takeaways, FAQ, visual plan, section bridges, writer handoff, `copywriting_playbook`, `writer_prompt_packet`, copywriting details, source slots, acceptance criteria, entities, Answer Units, evidence, schema, internal links, synthetic prompts и no-fabricated-E-E-A-T guard. `page-outline-quality.py <package> --write` проверяет эти briefs до writing/publishing и даёт автоматический action plan. |
 | **Low-token task routing** | `task-router.py --task "..."` строит точный маршрут под задачу: фазы, источники, approval gates, blocked actions, automation и context caps; пишет `seo/setup/latest-task-route.md/json`. |
 | **Usage/budget ledger** | `usage-ledger.py report/check/record` ведёт append-only расход токенов, USD, credits, units, requests, browser minutes; пишет `seo/usage/usage-ledger.jsonl` и `seo/setup/latest-usage-ledger.md/json`. |
 | **Spend/subscription guard** | `spend-guard.py --write` показывает allowed/approval/blocked по каждому платному/API/LLM/subscription сервису, остатки лимитов и готовые `usage-ledger.py check` preflight-команды. |

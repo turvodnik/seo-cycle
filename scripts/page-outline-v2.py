@@ -588,6 +588,90 @@ def writer_handoff_for_page(primary: str, page_type: str, internal_links: list[s
     }
 
 
+def copywriting_playbook_for_page(primary: str, page_type: str, internal_links: list[str], expert_author: bool) -> dict[str, Any]:
+    return {
+        "page_job": f"Turn the SERP-locked `{page_type}` page for `{primary}` into a publishable draft without changing URL, intent, or cluster scope.",
+        "target_reader_state": {
+            "before": "The reader has a concrete task and wants the shortest credible path to a decision.",
+            "after": "The reader understands the answer, limits, proof, next action, and which sibling page to use for adjacent questions.",
+        },
+        "tone_contract": {
+            "voice": "clear, concrete, useful, source-backed",
+            "rhythm": "short answer first, then proof, then next step",
+            "paragraph_rule": "Keep paragraphs scannable; split whenever a new decision, proof point, or objection starts.",
+            "banned_patterns": [
+                "generic SEO introduction",
+                "unsupported best/ultimate claims",
+                "invented expert anecdotes",
+                "sibling-cluster detours",
+                "brand or product claims without proof slots",
+            ],
+            "authority_mode": "named expert proof allowed" if expert_author else "neutral third-person authority only",
+        },
+        "angle_stack": [
+            {"angle": "intent", "instruction": f"Make the first useful answer match `{page_type}` intent, not a generic article format."},
+            {"angle": "proof", "instruction": "Attach proof notes to facts, numbers, brand/product claims, limitations, and comparisons."},
+            {"angle": "trust", "instruction": "Make limitations explicit before the reader has to infer them."},
+            {"angle": "conversion", "instruction": "Use CTAs only after the reader has enough context to choose the next step."},
+            {"angle": "internal_links", "instruction": "Use planned internal links as exits, not as extra mini-articles inside this page."},
+        ],
+        "draft_sequence": [
+            "Confirm URL, primary keyword, page type, intent, internal links, and schema from the outline.",
+            "Draft title/meta/H1 alignment before body copy.",
+            "Write the intro and Key Takeaways first so the page can answer quickly.",
+            "Draft H2 sections in order, following each H3 subsection plan and its word allocation.",
+            "Insert source/proof notes while drafting, not after the text is finished.",
+            "Write FAQ answers in answer-first format and align visible text with FAQPage schema.",
+            "Write the conclusion only after internal links and CTA fit are clear.",
+            "Run the revision checklist before handing the draft to design, schema, or publishing.",
+        ],
+        "revision_checklist": [
+            "SERP/page-type, URL, intent, and primary keyword still match the research package.",
+            "Intro answers the task before broad background.",
+            "Each H2 includes its planned H3 subsections and respects word-count allocation.",
+            "Every section has at least one answer-first sentence and one proof/source slot where needed.",
+            "No fabricated first-person expertise, client story, test result, credential, or quote appears.",
+            "All sibling topics are routed through internal links instead of being expanded.",
+            "Visual/table/screenshot requests are concrete and have alt guidance.",
+            "FAQ visible text, schema recommendation, and source-backed claims agree.",
+            "Conclusion adds no new unsupported claim and gives one next action.",
+            "Draft can be checked by page-outline-quality before publishing.",
+        ],
+    }
+
+
+def writer_prompt_packet_for_page(primary: str, page_type: str, expert_author: bool) -> dict[str, Any]:
+    return {
+        "role": "SEO/AEO copywriter using a validated research package outline",
+        "input_contract": [
+            "Use the page-outline-v2 JSON/Markdown as the primary brief.",
+            "Use only approved source URLs, dataset rows, screenshots, expert proof, or project docs for factual claims.",
+            "Do not load raw research files into LLM context unless the outline or quality report asks for a specific source.",
+        ],
+        "output_contract": [
+            "Return publishable page copy with H1/H2/H3 structure preserved.",
+            "Keep source/proof notes inline or in a fact-check queue for all factual claims.",
+            "Preserve planned internal links, schema intent, FAQ answers, visual slots, and CTA boundaries.",
+        ],
+        "forbidden_actions": [
+            "Do not change page type, target URL, or primary intent.",
+            "Do not invent expertise, client stories, tests, credentials, quotes, statistics, prices, or product capabilities.",
+            "Do not merge sibling clusters into the page body.",
+            "Do not remove limitations or privacy/safety constraints.",
+        ],
+        "acceptance_gate": [
+            "Run page-outline-quality after outline changes.",
+            "Run stop-words/fact-check/NeuronWriter gates if configured for the project.",
+            "Block publishing until missing proof, schema mismatch, unsafe E-E-A-T, or internal-link issues are resolved.",
+        ],
+        "expert_author_mode": "real_expert_allowed" if expert_author else "no_fabricated_first_person",
+        "starter_prompt": (
+            f"Draft the `{primary}` `{page_type}` page from the supplied page-outline-v2 brief. "
+            "Preserve structure and constraints, write answer-first, add proof notes, and do not fabricate expertise."
+        ),
+    }
+
+
 def trust_limitations_for_page(primary: str, page_type: str) -> list[dict[str, str]]:
     return [
         {
@@ -704,6 +788,8 @@ def build_outline(package: pathlib.Path, selector: str | None, *, expert_author:
     faq = faq_for_page(primary, page_type)
     visual_plan = visual_plan_for_sections(sections, primary)
     writer_handoff = writer_handoff_for_page(primary, page_type, internal_links)
+    copywriting_playbook = copywriting_playbook_for_page(primary, page_type, internal_links, expert_author)
+    writer_prompt_packet = writer_prompt_packet_for_page(primary, page_type, expert_author)
     trust_limitations = trust_limitations_for_page(primary, page_type)
     synthetic_prompts = synthetic_prompts_for_page(primary, page_type)
     return {
@@ -731,6 +817,8 @@ def build_outline(package: pathlib.Path, selector: str | None, *, expert_author:
         "faq": faq,
         "visual_plan": visual_plan,
         "writer_handoff": writer_handoff,
+        "copywriting_playbook": copywriting_playbook,
+        "writer_prompt_packet": writer_prompt_packet,
         "trust_limitations": trust_limitations,
         "synthetic_prompts": synthetic_prompts,
         "competitor_advantages_applied": [
@@ -741,6 +829,8 @@ def build_outline(package: pathlib.Path, selector: str | None, *, expert_author:
             "safe memorable lines without fabricated expertise",
             "entity weights with explicit source basis",
             "trust and limitations sectioning",
+            "copywriting playbook with tone, angle stack, draft sequence, and revision checklist",
+            "writer prompt packet for low-token drafting handoff",
             "machine-readable JSON handoff plus Markdown rendering",
         ],
         "entities": page_entities,
@@ -843,6 +933,49 @@ def render_markdown(outline: dict[str, Any]) -> str:
     lines.extend(f"  - {item}" for item in outline.get("writer_handoff", {}).get("fact_check_queue", []))
     lines.append("- Safe memorable lines:")
     lines.extend(f"  - {item}" for item in outline.get("writer_handoff", {}).get("memorable_lines", []))
+    playbook = outline.get("copywriting_playbook", {})
+    lines.extend(
+        [
+            "",
+            "## Copywriting Playbook",
+            "",
+            f"- Page job: {playbook.get('page_job')}",
+            f"- Reader before: {playbook.get('target_reader_state', {}).get('before')}",
+            f"- Reader after: {playbook.get('target_reader_state', {}).get('after')}",
+            f"- Voice: {playbook.get('tone_contract', {}).get('voice')}",
+            f"- Rhythm: {playbook.get('tone_contract', {}).get('rhythm')}",
+            f"- Paragraph rule: {playbook.get('tone_contract', {}).get('paragraph_rule')}",
+            f"- Authority mode: {playbook.get('tone_contract', {}).get('authority_mode')}",
+            "- Banned patterns:",
+        ]
+    )
+    lines.extend(f"  - {item}" for item in playbook.get("tone_contract", {}).get("banned_patterns", []))
+    lines.append("- Angle stack:")
+    for item in playbook.get("angle_stack", []):
+        lines.append(f"  - {item.get('angle')}: {item.get('instruction')}")
+    lines.append("- Draft sequence:")
+    lines.extend(f"  - {item}" for item in playbook.get("draft_sequence", []))
+    lines.append("- Revision checklist:")
+    lines.extend(f"  - {item}" for item in playbook.get("revision_checklist", []))
+    packet = outline.get("writer_prompt_packet", {})
+    lines.extend(
+        [
+            "",
+            "## Writer Prompt Packet",
+            "",
+            f"- Role: {packet.get('role')}",
+            f"- Expert author mode: `{packet.get('expert_author_mode')}`",
+            f"- Starter prompt: {packet.get('starter_prompt')}",
+            "- Input contract:",
+        ]
+    )
+    lines.extend(f"  - {item}" for item in packet.get("input_contract", []))
+    lines.append("- Output contract:")
+    lines.extend(f"  - {item}" for item in packet.get("output_contract", []))
+    lines.append("- Forbidden actions:")
+    lines.extend(f"  - {item}" for item in packet.get("forbidden_actions", []))
+    lines.append("- Acceptance gate:")
+    lines.extend(f"  - {item}" for item in packet.get("acceptance_gate", []))
     lines.extend(
         [
             "",
