@@ -143,6 +143,7 @@ class UpgradeAccessAssistantsTest(unittest.TestCase):
                         "yandex_webmaster": {"decision": "enabled", "approval_gates": []},
                         "bing_webmaster": {"decision": "enabled", "approval_gates": []},
                         "neuronwriter": {"decision": "approval_required", "approval_gates": ["paid_api_run"]},
+                        "xmlriver": {"decision": "approval_required", "approval_gates": ["paid_api_run"]},
                         "yandex_metrika": {"decision": "disabled", "approval_gates": []},
                         "gemini": {"decision": "disabled", "approval_gates": []},
                     }
@@ -184,7 +185,9 @@ class UpgradeAccessAssistantsTest(unittest.TestCase):
         self.assertNotIn("yandex_metrika", task_ids)
         self.assertIn("bing_webmaster", task_ids)
         self.assertIn("neuronwriter", task_ids)
+        self.assertIn("xmlriver", task_ids)
         self.assertEqual(task_ids["neuronwriter"]["missing_env"], ["NEURON_API_KEY"])
+        self.assertEqual(task_ids["xmlriver"]["missing_env"], ["XMLRIVER_USER_ID", "XMLRIVER_API_KEY"])
         self.assertNotIn("placeholder-present-value", proc.stdout)
         self.assertNotIn("placeholder-present-value", rendered)
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "access-key-assistant.csv").exists())

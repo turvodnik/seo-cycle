@@ -370,7 +370,7 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
     if float(budget.get("monthly_paid_api_usd_cap") or 0) <= 0 and tool_decisions(tool_stack, "approval_required"):
         add_gap(gaps, "budget.monthly_paid_api_usd_cap", "Укажи месячный paid API/LLM бюджет или оставь paid инструменты только approval-only.", "budget", "medium")
     if not subscriptions:
-        add_gap(gaps, "budget.subscriptions", "Заполни подписки и остатки: NeuronWriter, Keys.so, Serpstat, SpyFu, DataForSEO.", "budget", "medium")
+        add_gap(gaps, "budget.subscriptions", "Заполни подписки и остатки: NeuronWriter, Keys.so, Serpstat, SpyFu, DataForSEO, XMLRiver.", "budget", "medium")
     if not spend_guard.get("service_guards"):
         add_gap(gaps, "budget.spend_guard", "Запусти spend-guard.py --write перед платными/API/LLM действиями.", "budget", "high")
 

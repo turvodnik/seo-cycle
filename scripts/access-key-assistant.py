@@ -231,6 +231,20 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         ],
         "notes": "Quota-based; always run spend guard first.",
     },
+    "xmlriver": {
+        "title": "XMLRiver user ID and API key",
+        "env": ["XMLRIVER_USER_ID", "XMLRIVER_API_KEY"],
+        "tools": ["xmlriver"],
+        "url": "https://xmlriver.com/",
+        "doc": "docs/oauth-setup.md#13-xmlriver",
+        "steps": [
+            "Register or open the XMLRiver account.",
+            "Open collection settings and confirm Google/Yandex/Wordstat parameters needed by this project.",
+            "Copy only the numeric user ID and API key into .env as XMLRIVER_USER_ID and XMLRIVER_API_KEY.",
+            "Run spend-guard/usage-ledger preflight before any --live --allow-paid XMLRiver call.",
+        ],
+        "notes": "Use exported XML/JSON or cached distillates by default. Live XMLRiver requests are paid API calls and stay approval-gated.",
+    },
     "answerthepublic": {
         "title": "AnswerThePublic token",
         "env": ["TOKEN_ANSWERTHEPUBLIC"],

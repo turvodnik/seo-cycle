@@ -278,6 +278,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 10
 | `NEURON_LIMITS_FILE` | NeuronWriter лимиты | path | опц., default `seo/neuronwriter-limits.yaml` |
 | `KEYSO_API_TOKEN` | Keys.so | string | опц., RU/Yandex keyword evidence |
 | `SERPSTAT_API_KEY` | Serpstat | string | опц., quota-based keyword/competitor evidence |
+| `XMLRIVER_USER_ID`, `XMLRIVER_API_KEY` | XMLRiver | string | опц., approval-gated SERP/Wordstat API |
 | `TOKEN_ANSWERTHEPUBLIC` | ATP | string | опц. (только en/us) |
 | `GEMINI_API_KEY` | Gemini API | string | опц., AI comparison layer |
 | `DEEPSEEK_API_KEY` | DeepSeek API | string | опц., AI comparison layer |
@@ -292,8 +293,37 @@ python3 ~/.codex/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 10
 - **NeuronWriter**: открой account/API settings, скопируй API key только в `.env` как `NEURON_API_KEY`. Project ID и лимиты фиксируй в `seo/neuronwriter-limits.yaml`, не в отчётах.
 - **Keys.so**: токен только в `.env` как `KEYSO_API_TOKEN`; до первого запуска задай request caps/reserve в `seo/tool-budget.yaml`.
 - **Serpstat**: API key только в `.env` как `SERPSTAT_API_KEY`; перед запуском проверь credits через spend guard/usage ledger.
+- **XMLRiver**: user id и API key только в `.env` как `XMLRIVER_USER_ID` и `XMLRIVER_API_KEY`. По умолчанию используй экспортированные XML/JSON через `xmlriver-source-pack.py --input-file`; live-запросы только с `--live --allow-paid` после spend guard/usage ledger. Health: `xmlriver-health.py --write`.
 - **AnswerThePublic**: `TOKEN_ANSWERTHEPUBLIC` только если вопросная семантика действительно нужна и регион/язык поддерживается.
 - **DataForSEO/SpyFu**: подключать отдельно по policy; без бюджета и approval не запускать.
+
+### 11.1. XMLRiver
+
+XMLRiver полезен как дешёвый enrichment provider для Google/Yandex SERP blocks, Wordstat New, рекламы, shopping/цен, карт, подсказок, Related Questions/Searches, коммерческих блоков и AI Overview. Важное правило: это paid API, поэтому `seo-cycle` не делает live-запросы автоматически.
+
+Подключение:
+
+1. Зарегистрируйся на [xmlriver.com](https://xmlriver.com/).
+2. В кабинете открой настройки сбора и включи нужные блоки для Google/Yandex/Wordstat.
+3. В `.env` проекта добавь:
+   ```bash
+   XMLRIVER_USER_ID=...
+   XMLRIVER_API_KEY=...
+   ```
+4. Проверь readiness:
+   ```bash
+   python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-health.py --write
+   ```
+5. Безопасный импорт готового ответа:
+   ```bash
+   python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-source-pack.py --query "Плита ОСП" --engine yandex --input-file serp.xml --write
+   python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-source-pack.py --query "Плита ОСП" --engine wordstat --input-file wordstat.json --input-format json --write
+   ```
+6. Live-запрос только после approval:
+   ```bash
+   python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service xmlriver --category paid_api --requests 1 --fail-on-block
+   python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-source-pack.py --query "Плита ОСП" --engine yandex --additional searchsters,rs_y,y_of --live --allow-paid --write
+   ```
 
 ## 12. AI API keys
 

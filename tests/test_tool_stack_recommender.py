@@ -68,6 +68,8 @@ class ToolStackRecommenderTest(unittest.TestCase):
         self.assertEqual(decisions["google_search_console"]["decision"], "enabled")
         self.assertEqual(decisions["google_cloud_nlp"]["decision"], "approval_required")
         self.assertEqual(decisions["neuronwriter"]["decision"], "approval_required")
+        self.assertEqual(decisions["xmlriver"]["decision"], "approval_required")
+        self.assertIn("paid_api_run", decisions["xmlriver"]["approval_gates"])
         self.assertEqual(decisions["google_analytics_4"]["decision"], "disabled")
         self.assertEqual(decisions["microsoft_clarity"]["decision"], "disabled")
         self.assertIn(decisions["yandex_merchant"]["decision"], {"enabled", "report_only"})
@@ -86,6 +88,8 @@ class ToolStackRecommenderTest(unittest.TestCase):
         self.assertEqual(decisions["bing_places"]["decision"], "enabled")
         self.assertEqual(decisions["google_business_profile"]["decision"], "enabled")
         self.assertEqual(decisions["yandex_wordstat"]["decision"], "not_applicable")
+        self.assertEqual(decisions["xmlriver"]["decision"], "approval_required")
+        self.assertIn("paid_api_run", decisions["xmlriver"]["approval_gates"])
         self.assertEqual(decisions["yandex_merchant"]["decision"], "not_applicable")
         self.assertEqual(decisions["google_merchant"]["decision"], "not_applicable")
 

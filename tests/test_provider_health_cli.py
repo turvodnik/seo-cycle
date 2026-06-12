@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -15,6 +16,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PERPLEXITY = ROOT / "scripts" / "perplexity-health.py"
 NOTEBOOKLM = ROOT / "scripts" / "notebooklm-health.py"
+XMLRIVER = ROOT / "scripts" / "xmlriver-health.py"
 
 
 class ProviderHealthCliTest(unittest.TestCase):
@@ -82,6 +84,34 @@ expert_sources:
         self.assertEqual(report["status"], "fallback_required")
         self.assertEqual(report["health"]["access_mode"], "browser_export")
         self.assertTrue(report["not_ranking_signal"])
+
+    def test_xmlriver_write_reports_env_names_prices_and_hides_secrets(self) -> None:
+        env = os.environ.copy()
+        env.update({"XMLRIVER_USER_ID": "12345", "XMLRIVER_API_KEY": "secret-key-value"})
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(XMLRIVER),
+                str(self.cfg_path),
+                "--write",
+                "--format",
+                "json",
+            ],
+            cwd=self.tmp,
+            check=True,
+            text=True,
+            capture_output=True,
+            env=env,
+        )
+        self.assertNotIn("secret-key-value", proc.stdout)
+        report = json.loads(proc.stdout)
+
+        self.assertEqual(report["status"], "available")
+        self.assertEqual(report["env_names"], ["XMLRIVER_USER_ID", "XMLRIVER_API_KEY"])
+        self.assertTrue(report["credentials_present"])
+        self.assertEqual(report["price_reference"]["basic"]["yandex"], 25)
+        self.assertIn("wordstat_new", report["capabilities"])
+        self.assertTrue((self.tmp / "seo" / "setup" / "xmlriver-health.json").exists())
 
 
 if __name__ == "__main__":

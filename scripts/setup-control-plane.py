@@ -147,6 +147,10 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "notebooklm_health_json": "seo/setup/notebooklm-health.json",
         "latest_notebooklm_health": "seo/setup/latest-notebooklm-health.md",
         "latest_notebooklm_health_json": "seo/setup/latest-notebooklm-health.json",
+        "xmlriver_health_report": "seo/setup/xmlriver-health.md",
+        "xmlriver_health_json": "seo/setup/xmlriver-health.json",
+        "latest_xmlriver_health": "seo/setup/latest-xmlriver-health.md",
+        "latest_xmlriver_health_json": "seo/setup/latest-xmlriver-health.json",
         "setup_gap_audit_report": "seo/setup/setup-gap-audit.md",
         "setup_gap_audit_json": "seo/setup/setup-gap-audit.json",
         "latest_setup_gap_audit": "seo/setup/latest-setup-gap-audit.md",
@@ -219,6 +223,7 @@ def next_actions(
     token_waste_audit: dict[str, Any],
     perplexity_health: dict[str, Any],
     notebooklm_health: dict[str, Any],
+    xmlriver_health: dict[str, Any],
     artifacts: list[dict[str, Any]],
     apply_profile: bool,
 ) -> list[str]:
@@ -317,6 +322,9 @@ def next_actions(
     if notebooklm_health.get("status") in {"fallback_required", "unavailable"}:
         actions.append("NotebookLM MCP is not fully available; use browser/manual export and source-pack ingestion for expert evidence.")
 
+    if xmlriver_health.get("status") == "needs_credentials":
+        actions.append("XMLRiver is available as a cheap Google/Yandex/Wordstat source, but needs `XMLRIVER_USER_ID` and `XMLRIVER_API_KEY` before live paid requests.")
+
     missing_artifacts = [row["key"] for row in artifacts if not row.get("exists")]
     if missing_artifacts:
         actions.append(f"Generate/review missing setup artifacts: {', '.join(missing_artifacts)}.")
@@ -350,6 +358,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     token_waste_audit = report.get("token_waste_audit", {})
     perplexity_health = report.get("perplexity_health", {})
     notebooklm_health = report.get("notebooklm_health", {})
+    xmlriver_health = report.get("xmlriver_health", {})
     task_route = report.get("task_route", {})
     usage = report.get("usage_ledger", {})
     vnext_reports = report.get("vnext_reports", {})
@@ -389,6 +398,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Token waste findings: {len(token_waste_audit.get('findings', []))}",
         f"- Perplexity health: {perplexity_health.get('status')}",
         f"- NotebookLM health: {notebooklm_health.get('status')}",
+        f"- XMLRiver health: {xmlriver_health.get('status')}",
         f"- Setup gap score: {setup_gap_audit.get('score')}",
         f"- Setup gaps missing: {(setup_gap_audit.get('summary') or {}).get('missing')}",
         f"- Setup questionnaire rows: {(setup_gap_audit.get('questionnaire') or {}).get('row_count')}",
@@ -648,6 +658,7 @@ def main() -> int:
     for script_name, step_name in (
         ("perplexity-health.py", "perplexity health"),
         ("notebooklm-health.py", "notebooklm health"),
+        ("xmlriver-health.py", "xmlriver health"),
         ("token-waste-audit.py", "token waste audit"),
     ):
         command = [sys.executable, str(root / "scripts" / script_name), str(cfg_path)]
@@ -734,6 +745,11 @@ def main() -> int:
     notebooklm_file = project_root / "seo" / "setup" / "notebooklm-health.json"
     if not notebooklm_health and notebooklm_file.exists():
         notebooklm_health = json.loads(notebooklm_file.read_text(encoding="utf-8"))
+    xmlriver_step = next((step for step in steps if step["name"] == "xmlriver health"), {})
+    xmlriver_health = load_json_output(xmlriver_step)
+    xmlriver_file = project_root / "seo" / "setup" / "xmlriver-health.json"
+    if not xmlriver_health and xmlriver_file.exists():
+        xmlriver_health = json.loads(xmlriver_file.read_text(encoding="utf-8"))
     setup_gap_step = next((step for step in steps if step["name"] == "setup gap audit"), {})
     setup_gap_audit = load_json_output(setup_gap_step)
     setup_gap_file = project_root / "seo" / "setup" / "setup-gap-audit.json"
@@ -818,6 +834,7 @@ def main() -> int:
         "token_waste_audit": token_waste_audit,
         "perplexity_health": perplexity_health,
         "notebooklm_health": notebooklm_health,
+        "xmlriver_health": xmlriver_health,
         "setup_gap_audit": setup_gap_audit,
         "vnext_reports": vnext_reports,
         "technical_reports": technical_reports,
@@ -855,6 +872,7 @@ def main() -> int:
         token_waste_audit,
         perplexity_health,
         notebooklm_health,
+        xmlriver_health,
         artifacts,
         args.apply_profile,
     )

@@ -241,13 +241,18 @@ def evidence_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str,
         evidence.append(f"{path}: {'exists' if exists else 'missing'}")
         if not exists:
             missing.append(path)
+    xmlriver_path, xmlriver_exists = artifact_exists(cfg, project_root, "xmlriver_health_report", "seo/setup/xmlriver-health.md")
+    evidence.append(f"{xmlriver_path}: {'exists' if xmlriver_exists else 'optional_missing'}")
     perplexity = json_summary(artifact_path(cfg, project_root, "perplexity_health_json", "seo/setup/perplexity-health.json"))
     notebook = json_summary(artifact_path(cfg, project_root, "notebooklm_health_json", "seo/setup/notebooklm-health.json"))
+    xmlriver = json_summary(artifact_path(cfg, project_root, "xmlriver_health_json", "seo/setup/xmlriver-health.json"))
     warnings = []
     if perplexity.get("status") == "degraded_source":
         warnings.append("Perplexity is degraded; use Codex/Antigravity/NotebookLM fallback.")
     if notebook.get("status") in {"fallback_required", "unavailable"}:
         warnings.append("NotebookLM MCP is unavailable; use browser/manual export source-pack fallback.")
+    if xmlriver.get("status") == "needs_credentials":
+        warnings.append("XMLRiver live SERP/Wordstat enrichment needs XMLRIVER_USER_ID/XMLRIVER_API_KEY and paid API approval.")
     return stage(
         stage_id="expert_evidence_sources",
         order=3,
@@ -259,6 +264,7 @@ def evidence_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str,
         commands=[
             "python3 ~/.codex/skills/seo-cycle/scripts/perplexity-health.py --write",
             "python3 ~/.codex/skills/seo-cycle/scripts/notebooklm-health.py --write",
+            "python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-health.py --write",
             "python3 ~/.codex/skills/seo-cycle/scripts/expert-source-pack.py --write",
         ],
         exit_criteria=[

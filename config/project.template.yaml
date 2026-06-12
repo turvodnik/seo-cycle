@@ -159,6 +159,10 @@ policy_files:
   notebooklm_health_json: seo/setup/notebooklm-health.json
   latest_notebooklm_health: seo/setup/latest-notebooklm-health.md
   latest_notebooklm_health_json: seo/setup/latest-notebooklm-health.json
+  xmlriver_health_report: seo/setup/xmlriver-health.md
+  xmlriver_health_json: seo/setup/xmlriver-health.json
+  latest_xmlriver_health: seo/setup/latest-xmlriver-health.md
+  latest_xmlriver_health_json: seo/setup/latest-xmlriver-health.json
   setup_gap_audit_report: seo/setup/setup-gap-audit.md
   setup_gap_audit_json: seo/setup/setup-gap-audit.json
   latest_setup_gap_audit: seo/setup/latest-setup-gap-audit.md
@@ -535,6 +539,27 @@ notebooklm_provider:
   ranking_signal: false
   access_modes: [mcp, browser_export, manual_export, source_pack_ingestion]
   full_transcripts_in_context: false
+
+xmlriver_provider:
+  enabled: false
+  api_default: disabled_until_live_allow_paid
+  env_names: [XMLRIVER_USER_ID, XMLRIVER_API_KEY]
+  cache_enabled: true
+  cache_key_parts: [query, engine, region, additional, ai, ads]
+  raw_path: seo/research/raw/xmlriver/
+  distillate_path: seo/research/distillates/xmlriver/
+  vector_path: seo/research/vector/source_pack.jsonl
+  live_requires: [spend_guard_ok, usage_ledger_preflight, "--live", "--allow-paid"]
+  default_engines: [yandex, google, wordstat]
+  guarded_capabilities:
+    - google_serp_blocks
+    - yandex_serp_blocks
+    - wordstat_new
+    - ads_blocks
+    - shopping_prices
+    - maps
+    - suggest
+    - ai_overview_blocks
 
 # -----------------------------------------------------------------------------
 # 4. Project type & mode — что это за сайт и какой режим цикла

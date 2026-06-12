@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.57.0] — 2026-06-12
+
+### XMLRiver guarded provider
+
+- Added `scripts/xmlriver-source-pack.py` as a guarded XMLRiver adapter for Google/Yandex SERP XML, Yandex Search, and Wordstat New JSON. It ingests exported XML/JSON by default, writes raw/distillate/vector source-pack artifacts, parses organic results, SERP features and Wordstat query groups, and only performs live HTTP with explicit `--live --allow-paid`.
+- Added `scripts/xmlriver-health.py` for report-only readiness: env names, secret-free credential status, official price reference, capabilities, and guardrails. `setup-control-plane.py` now runs it with the other provider health checks.
+- Wired XMLRiver into `tool-stack-recommender.py`, `access-key-assistant.py`, spend guard via generated tool-stack decisions, project templates, upgrade assistant and docs. It is approval-gated as paid API by default and never prints `XMLRIVER_API_KEY`.
+- Added regression coverage for XMLRiver source-pack ingestion, secret-free guarded request plans, provider health, tool-stack recommendations and access-key assistant tasks.
+
 ## [1.56.0] — 2026-06-12
 
 ### Research package import and outline upgrades
