@@ -40,6 +40,11 @@ QUALITY_CRITERIA = (
     {"id": "handoff_machine_readability", "label": "Machine-readable handoff"},
 )
 
+V3_QUALITY_CRITERIA = QUALITY_CRITERIA + (
+    {"id": "serp_safe_ux", "label": "SERP-safe UX and page ordering"},
+    {"id": "entity_triplet_export", "label": "Entity/triplet export readiness"},
+)
+
 FINDING_CRITERIA = {
     "no_outline_json": ("handoff_machine_readability",),
     "unstructured_html_outline": ("handoff_machine_readability", "technical_seo_wrap"),
@@ -73,6 +78,11 @@ FINDING_CRITERIA = {
     "missing_fact_check_queue": ("eeat_no_fabrication", "copywriter_actionability"),
     "missing_trust_limitations": ("eeat_no_fabrication", "geo_answer_units"),
     "missing_synthetic_prompts": ("geo_answer_units", "handoff_machine_readability"),
+    "tool_first_order_violation": ("serp_safe_ux", "copywriter_actionability"),
+    "weak_visual_inventory": ("visual_ux_guidance", "handoff_machine_readability"),
+    "missing_copywriter_ready_contract": ("copywriter_actionability", "handoff_machine_readability"),
+    "missing_triplet_export": ("entity_triplet_export", "entity_coverage"),
+    "missing_section_v3_fields": ("copywriter_actionability", "handoff_machine_readability"),
 }
 
 REMEDIATION = {
@@ -108,6 +118,11 @@ REMEDIATION = {
     "weak_copywriting_details": "Add section copywriting details: reader question, opening angle, do-write, do-not-write, safe phrases and CTA.",
     "missing_source_slots": "Add source_slots that map claim types to required proof.",
     "missing_acceptance_criteria": "Add concrete acceptance criteria for each section before handoff.",
+    "tool_first_order_violation": "Regenerate with page-outline-v3.py so tool/app pages start with tool_ux_above_the_fold before longform copy.",
+    "weak_visual_inventory": "Add v3 visual_inventory items with type, placement, purpose, source_requirement, alt guidance and dedupe key.",
+    "missing_copywriter_ready_contract": "Regenerate with page-outline-v3.py --write so copywriter-ready output can be produced.",
+    "missing_triplet_export": "Add v3 entity_triplets and write vector/page_outline_triplets.jsonl during outline generation.",
+    "missing_section_v3_fields": "Regenerate v3 outlines so each section and H3 has word_count, source_slots, acceptance criteria and answer units.",
 }
 
 
@@ -156,12 +171,16 @@ def outline_title(outline: dict[str, Any], fallback: str) -> str:
 def outlines_from_json(data: dict[str, Any]) -> list[dict[str, Any]]:
     if data.get("outline_id") == "page_outline_v2_batch" and isinstance(data.get("outlines"), list):
         return [item for item in data["outlines"] if isinstance(item, dict)]
+    if data.get("outline_id") == "page_outline_v3_batch" and isinstance(data.get("outlines"), list):
+        return [item for item in data["outlines"] if isinstance(item, dict)]
     if data.get("outline_id") == "page_outline_v2":
+        return [data]
+    if data.get("outline_id") == "page_outline_v3":
         return [data]
     return []
 
 
-def discover_outline_files(raw: str | pathlib.Path) -> tuple[list[pathlib.Path], list[pathlib.Path]]:
+def discover_outline_files(raw: str | pathlib.Path, version: str = "auto") -> tuple[list[pathlib.Path], list[pathlib.Path]]:
     path = pathlib.Path(raw).expanduser().resolve()
     if path.is_file():
         if path.suffix.lower() == ".json":
@@ -169,9 +188,12 @@ def discover_outline_files(raw: str | pathlib.Path) -> tuple[list[pathlib.Path],
         return [], [path]
     candidates = []
     md_candidates = []
-    if (path / "page-outlines-v2").exists():
+    if version in {"auto", "v2"} and (path / "page-outlines-v2").exists():
         candidates.extend(sorted((path / "page-outlines-v2").glob("*.json")))
         md_candidates.extend(sorted((path / "page-outlines-v2").glob("*.md")))
+    if version in {"auto", "v3"} and (path / "page-outlines-v3").exists():
+        candidates.extend(sorted((path / "page-outlines-v3").glob("*.json")))
+        md_candidates.extend(sorted((path / "page-outlines-v3").glob("*.md")))
     candidates.extend(sorted(path.glob("*.json")))
     md_candidates.extend(sorted(path.glob("*.md")))
     return list(dict.fromkeys(candidates)), list(dict.fromkeys(md_candidates))
@@ -192,7 +214,7 @@ def text_blob(outline: dict[str, Any]) -> str:
     return "\n".join(chunks)
 
 
-def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, Any]]:
+def validate_outline(outline: dict[str, Any], fallback: str, version: str = "auto") -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     title = outline_title(outline, fallback)
     page = outline.get("page") if isinstance(outline.get("page"), dict) else {}
@@ -624,15 +646,113 @@ def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, A
             outline=title,
             evidence={"synthetic_prompts": len(synthetic_prompts)},
         )
+    outline_version = "v3" if outline.get("outline_id") == "page_outline_v3" or outline.get("version") == "v3" else "v2"
+    if version == "v3" or outline_version == "v3":
+        findings.extend(validate_v3_outline(outline, title))
     return findings
 
 
-def scorecard(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    scores = {criterion["id"]: 10 for criterion in QUALITY_CRITERIA}
-    blockers: dict[str, list[str]] = {criterion["id"]: [] for criterion in QUALITY_CRITERIA}
+def validate_v3_outline(outline: dict[str, Any], title: str) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    page = outline.get("page") if isinstance(outline.get("page"), dict) else {}
+    page_type = str(page.get("page_type") or "").strip().lower()
+    sections = outline.get("sections") if isinstance(outline.get("sections"), list) else []
+    order = ((outline.get("serp_safe_layout") or {}) if isinstance(outline.get("serp_safe_layout"), dict) else {}).get("order")
+    tool_like = page_type in {"tool", "app", "tool/app", "quiz", "analyzer", "webapplication"}
+    first_role = (sections[0].get("section_role") if sections and isinstance(sections[0], dict) else None)
+    if tool_like and (not isinstance(order, list) or not order or order[0] != "tool_ux_above_the_fold" or first_role != "tool_ux_above_the_fold"):
+        add_finding(
+            findings,
+            finding_id="tool_first_order_violation",
+            severity="critical",
+            title="Tool/app page does not put tool UX above longform copy.",
+            outline=title,
+            evidence={"page_type": page_type, "order": order, "first_section_role": first_role},
+        )
+    visual_inventory = outline.get("visual_inventory") if isinstance(outline.get("visual_inventory"), list) else []
+    weak_visuals = [
+        item
+        for item in visual_inventory
+        if not isinstance(item, dict)
+        or not item.get("type")
+        or not item.get("placement")
+        or not item.get("purpose")
+        or not item.get("source_requirement")
+        or not item.get("alt_text_guidance")
+        or not item.get("dedupe_key")
+    ]
+    if len(visual_inventory) < 6 or weak_visuals:
+        add_finding(
+            findings,
+            finding_id="weak_visual_inventory",
+            severity="high",
+            title="v3 outline lacks a concrete visual/table/callout inventory.",
+            outline=title,
+            evidence={"visual_inventory": len(visual_inventory), "weak_visuals": len(weak_visuals)},
+        )
+    if not outline.get("copywriter_ready_contract"):
+        add_finding(
+            findings,
+            finding_id="missing_copywriter_ready_contract",
+            severity="high",
+            title="v3 outline lacks the copywriter-ready handoff contract.",
+            outline=title,
+            evidence={"copywriter_ready_contract": None},
+        )
+    if not outline.get("entity_triplets"):
+        add_finding(
+            findings,
+            finding_id="missing_triplet_export",
+            severity="high",
+            title="v3 outline lacks reusable entity triplet records.",
+            outline=title,
+            evidence={"entity_triplets": len(outline.get("entity_triplets") or [])},
+        )
+    required = (
+        "word_count",
+        "entities_to_cover",
+        "keywords",
+        "summary",
+        "visual_elements",
+        "copywriter_notes",
+        "entity_connections",
+        "answer_unit",
+        "source_slots",
+        "acceptance_criteria",
+    )
+    missing = []
+    for section in sections:
+        if not isinstance(section, dict):
+            continue
+        section_missing = [key for key in required if not section.get(key)]
+        if section_missing:
+            missing.append({"section": section.get("title"), "missing": section_missing})
+        for subsection in section.get("h3_subsections") or []:
+            if isinstance(subsection, dict):
+                sub_missing = [key for key in required if not subsection.get(key)]
+                if sub_missing:
+                    missing.append({"section": section.get("title"), "subsection": subsection.get("title"), "missing": sub_missing})
+    if missing:
+        add_finding(
+            findings,
+            finding_id="missing_section_v3_fields",
+            severity="high",
+            title="v3 sections or H3 subsections are missing copywriter-ready fields.",
+            outline=title,
+            evidence={"missing": missing[:10]},
+        )
+    return findings
+
+
+def scorecard(findings: list[dict[str, Any]], version: str = "auto") -> list[dict[str, Any]]:
+    criteria = V3_QUALITY_CRITERIA if version == "v3" else QUALITY_CRITERIA
+    scores = {criterion["id"]: 10 for criterion in criteria}
+    blockers: dict[str, list[str]] = {criterion["id"]: [] for criterion in criteria}
     for finding in findings:
         penalty = SEVERITY_PENALTY.get(str(finding.get("severity")), 1)
         for criterion_id in FINDING_CRITERIA.get(str(finding.get("id")), ("handoff_machine_readability",)):
+            if criterion_id not in scores:
+                continue
             scores[criterion_id] = max(0, scores[criterion_id] - penalty)
             blockers[criterion_id].append(str(finding.get("id")))
     return [
@@ -643,12 +763,12 @@ def scorecard(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "status": "excellent" if scores[criterion["id"]] == 10 else "needs_work" if scores[criterion["id"]] < 9 else "review",
             "blocking_findings": sorted(set(blockers[criterion["id"]])),
         }
-        for criterion in QUALITY_CRITERIA
+        for criterion in criteria
     ]
 
 
-def audit(raw: str | pathlib.Path) -> dict[str, Any]:
-    json_files, md_files = discover_outline_files(raw)
+def audit(raw: str | pathlib.Path, version: str = "auto") -> dict[str, Any]:
+    json_files, md_files = discover_outline_files(raw, version=version)
     findings: list[dict[str, Any]] = []
     outlines: list[dict[str, Any]] = []
     for md_file in md_files:
@@ -666,7 +786,7 @@ def audit(raw: str | pathlib.Path) -> dict[str, Any]:
         data = read_json(path)
         for outline in outlines_from_json(data):
             outlines.append(outline)
-            findings.extend(validate_outline(outline, str(path)))
+            findings.extend(validate_outline(outline, str(path), version=version))
     if not outlines:
         add_finding(
             findings,
@@ -681,12 +801,16 @@ def audit(raw: str | pathlib.Path) -> dict[str, Any]:
     high = sum(1 for item in findings if item["severity"] == "high")
     medium = sum(1 for item in findings if item["severity"] == "medium")
     score = max(0, 100 - critical * 20 - high * 10 - medium * 5)
-    cards = scorecard(findings)
+    resolved_version = version
+    if resolved_version == "auto":
+        resolved_version = "v3" if any(outline.get("outline_id") == "page_outline_v3" or outline.get("version") == "v3" for outline in outlines) else "v2"
+    cards = scorecard(findings, version=resolved_version)
     status = "fail" if critical else "warn" if findings else "pass"
     return {
         "audit_id": "page_outline_quality",
         "title": "Page Outline Quality Gate",
         "generated_at": utc_now(),
+        "outline_version": resolved_version,
         "status": status,
         "score": score,
         "ten_point_score": round(sum(item["score"] for item in cards) / max(1, len(cards)), 1),
@@ -786,15 +910,16 @@ def write_outputs(input_path: pathlib.Path, report: dict[str, Any], output_dir: 
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Audit page-outline-v2 JSON/Markdown quality before writing or publishing.")
-    parser.add_argument("input", help="A page-outline-v2 JSON file, batch JSON, page-outlines-v2 directory, or research package directory.")
+    parser = argparse.ArgumentParser(description="Audit page-outline JSON/Markdown quality before writing or publishing.")
+    parser.add_argument("input", help="A page-outline JSON file, batch JSON, page-outlines-v2/v3 directory, or research package directory.")
+    parser.add_argument("--version", choices=["auto", "v2", "v3"], default="auto", help="Outline version to discover and validate.")
     parser.add_argument("--write", action="store_true", help="Write page-outline-quality.md/json next to the input or under --output-dir.")
     parser.add_argument("--output-dir", help="Optional output directory.")
     parser.add_argument("--format", choices=["json", "markdown"], default="json")
     args = parser.parse_args(argv)
 
     input_path = pathlib.Path(args.input).expanduser().resolve()
-    report = audit(input_path)
+    report = audit(input_path, version=args.version)
     if args.write:
         write_outputs(input_path, report, pathlib.Path(args.output_dir).expanduser().resolve() if args.output_dir else None)
     if args.format == "markdown":

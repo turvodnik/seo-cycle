@@ -189,6 +189,48 @@ class ProjectJourneyTest(unittest.TestCase):
         self.assertEqual(blocked["current_stage"]["id"], "deep_page_briefs")
         self.assertTrue(any("unsafe_first_person_expertise" in item for item in blocked["missing_for_next_step"]))
 
+    def test_v3_copywriter_briefs_are_required_before_draft_stage(self) -> None:
+        cfg_path = self.make_project()
+        package = self.seed_ready_project(cfg_path)
+        outline_dir = package / "page-outlines-v3"
+        outline_dir.mkdir()
+        (outline_dir / "sample.json").write_text(
+            json.dumps({"outline_id": "page_outline_v3", "version": "v3"}),
+            encoding="utf-8",
+        )
+
+        report = self.run_journey(cfg_path)
+
+        self.assertEqual(report["status"], "needs_work")
+        self.assertEqual(report["current_stage"]["id"], "deep_page_briefs_v3")
+        self.assertIn("seo/research-package/page-outline-quality.json", report["missing_for_next_step"])
+        self.assertTrue(any("page-outline-v3.py" in command for command in report["current_stage"]["next_commands"]))
+        self.assertTrue(any("--version v3" in command for command in report["current_stage"]["next_commands"]))
+
+        (package / "page-outline-quality.json").write_text(
+            json.dumps(
+                {
+                    "status": "fail",
+                    "outline_version": "v3",
+                    "ten_point_score": 7.0,
+                    "counts": {"critical_findings": 1, "high_findings": 1},
+                    "findings": [
+                        {
+                            "id": "tool_first_order_violation",
+                            "severity": "critical",
+                            "title": "Tool/app page does not put tool UX first.",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        blocked = self.run_journey(cfg_path)
+
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertEqual(blocked["current_stage"]["id"], "deep_page_briefs_v3")
+        self.assertTrue(any("tool_first_order_violation" in item for item in blocked["missing_for_next_step"]))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

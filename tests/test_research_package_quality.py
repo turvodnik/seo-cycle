@@ -36,6 +36,7 @@ def load_script(path: pathlib.Path, name: str):
 QUALITY = load_script(SCRIPTS / "research-package-quality.py", "research_package_quality")
 OUTLINE = load_script(SCRIPTS / "page-outline-v2.py", "page_outline_v2")
 OUTLINE_QUALITY = load_script(SCRIPTS / "page-outline-quality.py", "page_outline_quality")
+OUTLINE_V3_PATH = SCRIPTS / "page-outline-v3.py"
 
 
 class ResearchPackageQualityTest(unittest.TestCase):
@@ -383,6 +384,129 @@ class ResearchPackageQualityTest(unittest.TestCase):
         self.assertFalse((self.package / "mvp-page-briefs.md").exists())
         self.assertTrue(any(path.name.startswith("page-briefs.") for path in archive_dir.iterdir()))
         self.assertTrue(any(path.name.startswith("mvp-page-briefs.") for path in archive_dir.iterdir()))
+
+    def test_page_outline_v3_generates_tool_first_copywriter_ready_and_triplets(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(OUTLINE_V3_PATH),
+                str(self.package),
+                "--page",
+                "/tools/virtual-hair-color-try-on/",
+                "--write",
+                "--format",
+                "json",
+            ],
+            cwd=self.package,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        outline = json.loads(proc.stdout)
+        copywriter_path = pathlib.Path(outline["paths"]["copywriter_ready"])
+        triplets_path = self.package / "vector" / "page_outline_triplets.jsonl"
+
+        self.assertEqual(outline["outline_id"], "page_outline_v3")
+        self.assertEqual(outline["version"], "v3")
+        self.assertEqual(outline["serp_safe_layout"]["order"][0], "tool_ux_above_the_fold")
+        self.assertEqual(outline["sections"][0]["section_role"], "tool_ux_above_the_fold")
+        self.assertTrue(copywriter_path.exists())
+        self.assertTrue(triplets_path.exists())
+        self.assertIn("Copywriter Ready Brief", copywriter_path.read_text(encoding="utf-8"))
+        self.assertIn("FAQ Answer Guidelines", copywriter_path.read_text(encoding="utf-8"))
+        self.assertNotIn("open semantic-core.csv", copywriter_path.read_text(encoding="utf-8").lower())
+        self.assertGreaterEqual(len(outline["visual_inventory"]), 6)
+
+        for section in outline["sections"]:
+            for key in (
+                "word_count",
+                "entities_to_cover",
+                "keywords",
+                "summary",
+                "visual_elements",
+                "copywriter_notes",
+                "entity_connections",
+                "answer_unit",
+                "source_slots",
+                "acceptance_criteria",
+            ):
+                self.assertIn(key, section)
+            self.assertGreaterEqual(len(section["h3_subsections"]), 2)
+            for subsection in section["h3_subsections"]:
+                for key in (
+                    "word_count",
+                    "entities_to_cover",
+                    "keywords",
+                    "summary",
+                    "visual_elements",
+                    "copywriter_notes",
+                    "entity_connections",
+                    "answer_unit",
+                    "source_slots",
+                    "acceptance_criteria",
+                ):
+                    self.assertIn(key, subsection)
+
+    def test_page_outline_v3_quality_gate_blocks_non_tool_first_and_fake_expertise(self) -> None:
+        outline_dir = self.package / "page-outlines-v3"
+        outline_dir.mkdir()
+        bad = OUTLINE.build_outline(self.package, "/tools/virtual-hair-color-try-on/")
+        bad["outline_id"] = "page_outline_v3"
+        bad["version"] = "v3"
+        bad["serp_safe_layout"] = {"order": ["supporting_longform", "tool_ux_above_the_fold"]}
+        bad["sections"][0]["section_role"] = "supporting_longform"
+        bad["sections"][0]["copywriter_notes"].append("In my years working with clients, this always works.")
+        bad["visual_inventory"] = []
+        (outline_dir / "bad.json").write_text(json.dumps(bad), encoding="utf-8")
+
+        report = OUTLINE_QUALITY.audit(self.package, version="v3")
+        ids = {finding["id"] for finding in report["findings"]}
+
+        self.assertEqual(report["status"], "fail")
+        self.assertIn("tool_first_order_violation", ids)
+        self.assertIn("unsafe_first_person_expertise", ids)
+        self.assertIn("weak_visual_inventory", ids)
+        self.assertTrue(any(item["id"] == "serp_safe_ux" for item in report["scorecard"]))
+
+    def test_page_outline_quality_cli_accepts_version_v3(self) -> None:
+        subprocess.run(
+            [
+                sys.executable,
+                str(OUTLINE_V3_PATH),
+                str(self.package),
+                "--page",
+                "/tools/virtual-hair-color-try-on/",
+                "--write",
+                "--format",
+                "json",
+            ],
+            cwd=self.package,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPTS / "page-outline-quality.py"),
+                str(self.package),
+                "--version",
+                "v3",
+                "--write",
+                "--format",
+                "json",
+            ],
+            cwd=self.package,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        report = json.loads(proc.stdout)
+
+        self.assertEqual(report["status"], "pass")
+        self.assertEqual(report["outline_version"], "v3")
+        self.assertTrue((self.package / "page-outline-quality.json").exists())
 
 
 if __name__ == "__main__":

@@ -130,12 +130,12 @@ python3 scripts/research-package-quality.py ./research-package --write
 
 Treat remaining critical findings as blockers for outline generation.
 
-## Deep Page Brief
+## Deep Page Brief v3
 
 After the package passes the gate, generate one deep outline per MVP/P1 page:
 
 ```bash
-python3 scripts/page-outline-v2.py ./research-package \
+python3 scripts/page-outline-v3.py ./research-package \
   --page "/tools/virtual-hair-color-try-on/" \
   --write
 ```
@@ -143,18 +143,20 @@ python3 scripts/page-outline-v2.py ./research-package \
 Batch modes:
 
 ```bash
-python3 scripts/page-outline-v2.py ./research-package --all-mvp --write
-python3 scripts/page-outline-v2.py ./research-package --priority P1 --write
-python3 scripts/page-outline-v2.py ./research-package --all-mvp --write --archive-legacy-briefs
+python3 scripts/page-outline-v3.py ./research-package --all-mvp --write
+python3 scripts/page-outline-v3.py ./research-package --priority P1 --write
 ```
 
-Use `--archive-legacy-briefs` only after reviewing the generated v2 outlines.
-It moves duplicate `page-briefs.md` and `mvp-page-briefs.md` into
-`archive/legacy-briefs/`; without that explicit flag, legacy files stay in
-place.
+`page-outline-v2.py` remains supported for older projects. Use its
+`--archive-legacy-briefs` only after reviewing generated outlines; without that
+explicit flag, legacy files stay in place.
 
 The output includes:
 
+- `page-outlines-v3/<slug>.md/json`;
+- `copywriter-ready/<slug>.md` for writers who should not open CSV/JSON;
+- `vector/page_outline_triplets.jsonl` with reusable entity relation records;
+- SERP-safe ordering: tool/app/quiz pages start with `tool_ux_above_the_fold`;
 - computed word-count totals from sections;
 - metrics rollup from the preferred semantic core: volume, clicks, impressions,
   priority score, matched rows, and top supporting keywords so writers do not
@@ -195,7 +197,7 @@ Run immediately after generating MVP/P1 outlines and before writing, design,
 schema, approvals, or publishing:
 
 ```bash
-python3 scripts/page-outline-quality.py ./research-package --write --format markdown
+python3 scripts/page-outline-quality.py ./research-package --version v3 --write --format markdown
 ```
 
 `--write` saves:
@@ -218,6 +220,8 @@ The gate uses a 10-criterion scorecard for:
 - internal links and cannibalization guard;
 - visual/UX guidance;
 - machine-readable handoff.
+- v3-only SERP-safe UX/page ordering;
+- v3-only entity/triplet export readiness.
 
 Critical findings block downstream writing/publishing. High/medium findings
 become action-plan steps and should be accepted only after review.
@@ -260,8 +264,8 @@ copywriting safety check before schema, CMS publishing or approval.
    `serp-validation-import.py --input-json/--input-csv --write`.
 6. Rerun `research-package-quality.py --write` and fix remaining critical/high
    findings.
-7. Generate `page-outline-v2.py --all-mvp` or `--priority P1`.
-8. Run `page-outline-quality.py --write` and follow its action plan.
+7. Generate `page-outline-v3.py --all-mvp` or `--priority P1`.
+8. Run `page-outline-quality.py --version v3 --write` and follow its action plan.
 9. Rerun `project-journey.py --write`; proceed only when the current stage
    moves past `deep_page_briefs`.
 10. For drafting, pass only the page outline plus its `copywriting_playbook` and

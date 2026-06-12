@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.58.0] — 2026-06-12
+
+### Deep Copywriter Brief v3
+
+- Added `scripts/page-outline-v3.py`, a copywriter-ready layer on top of the existing evidence-backed v2 outline. It writes `page-outlines-v3/<slug>.md/json`, `copywriter-ready/<slug>.md`, and `vector/page_outline_triplets.jsonl`.
+- v3 enforces SERP-safe page ordering: tool/app/quiz pages start with `tool_ux_above_the_fold`, followed by a short AEO guide and supporting longform below the tool.
+- Added section and H3-level copywriter fields: word counts, entities, keywords, summaries, visuals, copywriter notes, entity connections, Answer Units, source slots, and acceptance criteria.
+- Extended `page-outline-quality.py` with `--version v3`, v3 discovery, v3-only findings, and extra scorecard criteria for SERP-safe UX and entity/triplet export readiness.
+- Updated `project-journey.py` so the modern path routes through `deep_page_briefs_v3` before implementation while preserving v2 compatibility for older packages.
+
 ## [1.57.0] — 2026-06-12
 
 ### XMLRiver guarded provider
