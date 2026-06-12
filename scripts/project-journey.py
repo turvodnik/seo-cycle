@@ -48,6 +48,18 @@ def artifact_exists(cfg: dict[str, Any], project_root: pathlib.Path, key: str, d
     return rel_display(project_root, path), path.exists()
 
 
+def unique_paths(paths: list[pathlib.Path]) -> list[pathlib.Path]:
+    seen: set[str] = set()
+    result = []
+    for path in paths:
+        key = str(path.resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(path)
+    return sorted(result)
+
+
 def stage(
     *,
     stage_id: str,
@@ -116,6 +128,14 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
             "outline_quality": {},
             "outline_quality_exists": False,
             "outline_count": 0,
+            "outline_v3_count": 0,
+            "copywriter_ready_count": 0,
+            "draft_count": 0,
+            "draft_quality_count": 0,
+            "draft_quality_errors": 0,
+            "draft_quality_warnings": 0,
+            "draft_quality_missing": [],
+            "draft_quality_findings": [],
         }
     required_status = {name: (package / name).exists() for name in required}
     quality_path = package / "research-package-quality.json"
@@ -125,8 +145,46 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
     outline_quality_path = package / "page-outline-quality.json"
     outline_dir = package / "page-outlines-v2"
     outline_v3_dir = package / "page-outlines-v3"
+    copywriter_ready_dir = package / "copywriter-ready"
     outline_count = len(list(outline_dir.glob("*.json"))) if outline_dir.exists() else 0
     outline_v3_count = len(list(outline_v3_dir.glob("*.json"))) if outline_v3_dir.exists() else 0
+    copywriter_ready_count = len(list(copywriter_ready_dir.glob("*.md"))) if copywriter_ready_dir.exists() else 0
+    draft_paths = unique_paths(
+        [
+            *list((package / "drafts").glob("*.md")),
+            *list((package / "06-drafts").glob("*.md")),
+            *list((project_root / "seo" / "drafts").glob("*.md")),
+            *list((project_root / "06-drafts").glob("*.md")),
+        ]
+    )
+    draft_paths = [path for path in draft_paths if ".draft-quality-gate" not in path.name]
+    draft_quality_missing = []
+    draft_quality_findings: list[dict[str, Any]] = []
+    draft_quality_count = 0
+    draft_quality_errors = 0
+    draft_quality_warnings = 0
+    for draft_path in draft_paths:
+        gate_path = draft_path.with_suffix(".draft-quality-gate.json")
+        if not gate_path.exists():
+            draft_quality_missing.append(rel_display(project_root, gate_path))
+            continue
+        draft_quality_count += 1
+        report = read_json(gate_path)
+        for finding in report.get("findings", []) if isinstance(report.get("findings"), list) else []:
+            if not isinstance(finding, dict):
+                continue
+            severity = str(finding.get("severity") or "").lower()
+            row = {
+                "draft": rel_display(project_root, draft_path),
+                "id": finding.get("id"),
+                "severity": severity,
+                "message": finding.get("message") or finding.get("title"),
+            }
+            draft_quality_findings.append(row)
+            if severity in {"error", "critical"}:
+                draft_quality_errors += 1
+            elif severity in {"warning", "warn", "high", "medium", "low"}:
+                draft_quality_warnings += 1
     return {
         "package_dir": rel_display(project_root, package),
         "exists": package.exists(),
@@ -145,6 +203,14 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
         "outline_quality_exists": outline_quality_path.exists(),
         "outline_count": outline_count,
         "outline_v3_count": outline_v3_count,
+        "copywriter_ready_count": copywriter_ready_count,
+        "draft_count": len(draft_paths),
+        "draft_paths": [rel_display(project_root, path) for path in draft_paths],
+        "draft_quality_count": draft_quality_count,
+        "draft_quality_errors": draft_quality_errors,
+        "draft_quality_warnings": draft_quality_warnings,
+        "draft_quality_missing": draft_quality_missing,
+        "draft_quality_findings": draft_quality_findings,
     }
 
 
@@ -495,6 +561,7 @@ def brief_stage_v3(package: dict[str, Any]) -> dict[str, Any]:
     outline_quality = package.get("outline_quality", {})
     outline_version = outline_quality.get("outline_version")
     v3_count = int(package.get("outline_v3_count") or 0)
+    copywriter_count = int(package.get("copywriter_ready_count") or 0)
     blockers = []
     warnings = []
     if quality.get("status") == "fail":
@@ -509,10 +576,12 @@ def brief_stage_v3(package: dict[str, Any]) -> dict[str, Any]:
             if isinstance(finding, dict):
                 blockers.append(f"{finding.get('severity', 'finding')}: {finding.get('id')} — {finding.get('title')}")
     elif outline_quality.get("status") == "warn" and outline_version == "v3":
-        warnings.append("Page outline v3 has non-critical findings; review page-outline-quality action plan before writing.")
+        blockers.append("Page outline v3 has non-critical findings; improve or explicitly accept them before writing.")
     missing = []
     if not v3_count:
         missing.append(f"{package_dir}/page-outlines-v3/*.json")
+    if v3_count and not copywriter_count:
+        missing.append(f"{package_dir}/copywriter-ready/*.md")
     if v3_count and (not package.get("outline_quality_exists") or outline_version != "v3"):
         missing.append(f"{package_dir}/page-outline-quality.json")
     return stage(
@@ -522,7 +591,7 @@ def brief_stage_v3(package: dict[str, Any]) -> dict[str, Any]:
         objective="Every MVP/P1 page has a copywriter-ready v3 brief with SERP-safe ordering, H2/H3 details, visuals, FAQ guidelines, triplets, and no-fabrication guard.",
         evidence=[
             f"page-outlines-v3 json files: {v3_count}",
-            f"{package_dir}/copywriter-ready/*.md: {'exists' if v3_count else 'missing'}",
+            f"copywriter-ready markdown files: {copywriter_count}",
             f"{package_dir}/page-outline-quality.json: {'exists' if package.get('outline_quality_exists') else 'missing'}",
             f"outline quality version: {outline_version or 'not_run'}",
             f"outline quality status: {outline_quality.get('status', 'not_run')}",
@@ -539,8 +608,82 @@ def brief_stage_v3(package: dict[str, Any]) -> dict[str, Any]:
         exit_criteria=[
             "MVP/P1 pages have page-outline-v3 JSON/Markdown files.",
             "copywriter-ready markdown exists for generated v3 pages.",
-            "page-outline-quality.json has outline_version=v3 and no critical findings.",
+            "page-outline-quality.json has outline_version=v3 and status=pass.",
             "Tool/app pages preserve tool UX above supporting longform content.",
+        ],
+    )
+
+
+def content_draft_stage(package: dict[str, Any]) -> dict[str, Any]:
+    package_dir = package.get("package_dir") or "seo/research-package"
+    outline_quality = package.get("outline_quality", {})
+    outline_version = outline_quality.get("outline_version")
+    outline_status = outline_quality.get("status", "not_run")
+    v3_count = int(package.get("outline_v3_count") or 0)
+    copywriter_count = int(package.get("copywriter_ready_count") or 0)
+    draft_count = int(package.get("draft_count") or 0)
+    draft_quality_count = int(package.get("draft_quality_count") or 0)
+    draft_quality_errors = int(package.get("draft_quality_errors") or 0)
+    draft_quality_warnings = int(package.get("draft_quality_warnings") or 0)
+    blockers = []
+    warnings = []
+    missing = []
+
+    if not v3_count:
+        blockers.append("Content drafting is blocked until page-outline-v3 files exist.")
+    if not copywriter_count:
+        blockers.append("Content drafting is blocked until copywriter-ready markdown exists.")
+    if outline_version != "v3" or outline_status != "pass":
+        blockers.append(
+            "Content drafting is blocked until page-outline-quality.json has outline_version=v3 and status=pass."
+        )
+    if not draft_count:
+        missing.append(f"{package_dir}/drafts/*.md")
+    else:
+        missing.extend(package.get("draft_quality_missing", []))
+    if draft_quality_errors:
+        blockers.append(f"Draft quality gate has {draft_quality_errors} error/critical findings.")
+        for finding in package.get("draft_quality_findings", [])[:8]:
+            if isinstance(finding, dict) and finding.get("severity") in {"error", "critical"}:
+                blockers.append(
+                    f"{finding.get('severity')}: {finding.get('id')} — {finding.get('message')} ({finding.get('draft')})"
+                )
+    if draft_quality_warnings:
+        warnings.append(f"Draft quality gate has {draft_quality_warnings} warning findings to review before publishing.")
+
+    return stage(
+        stage_id="content_draft_gate",
+        order=10,
+        title="Content draft and NeuronWriter gate",
+        objective=(
+            "Turn copywriter-ready v3 briefs into drafts, optionally use NeuronWriter within limits, "
+            "then validate drafts before implementation or publishing."
+        ),
+        evidence=[
+            f"page-outlines-v3 json files: {v3_count}",
+            f"copywriter-ready markdown files: {copywriter_count}",
+            f"outline quality version/status: {outline_version or 'not_run'}/{outline_status}",
+            f"draft markdown files: {draft_count}",
+            f"draft quality reports: {draft_quality_count}",
+            f"draft quality errors: {draft_quality_errors}",
+            f"draft quality warnings: {draft_quality_warnings}",
+        ],
+        missing=missing,
+        blockers=blockers,
+        warnings=warnings,
+        commands=[
+            "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service neuronwriter --category paid_api --content-writer 1 --ai-credits 500 --fail-on-block",
+            f"Create or revise draft markdown under {package_dir}/drafts/ from {package_dir}/copywriter-ready/*.md, copywriting_playbook, writer_prompt_packet and source slots.",
+            f"python3 ~/.codex/skills/seo-cycle/scripts/draft-quality-gate.py {package_dir}/drafts/<slug>.md --outline {package_dir}/page-outlines-v3/<slug>.json --write",
+            "bash ~/.codex/skills/seo-cycle/scripts/nw-cli.sh evaluate <query_id> <draft.html>",
+            "python3 ~/.codex/skills/seo-cycle/scripts/project-journey.py --write",
+        ],
+        exit_criteria=[
+            "Draft markdown exists for the selected MVP/P1 page.",
+            "draft-quality-gate JSON exists next to each draft.",
+            "Draft quality gate has 0 error/critical findings.",
+            "NeuronWriter usage is checked/recorded when it is used; if unavailable, fallback drafting is explicitly logged.",
+            "The next project-journey run marks this stage done before implementation/publishing.",
         ],
     )
 
@@ -551,7 +694,7 @@ def implementation_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dic
     warnings = [f"Approval gates still apply before publish/index/ads/tracking: {', '.join(gates)}"] if gates else []
     return stage(
         stage_id="implementation_review",
-        order=10,
+        order=11,
         title="Implementation and publication review",
         objective="Approved content/technical changes are implemented only after final review and project-specific gates.",
         evidence=[f"approval gates: {', '.join(gates) or 'none'}"],
@@ -582,7 +725,7 @@ def monitoring_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[st
             missing.append(path)
     return stage(
         stage_id="monitoring_iteration",
-        order=11,
+        order=12,
         title="Monitoring and iteration",
         objective="After launch, measurement, bot/index health, AI visibility, and refresh tasks feed the next cycle.",
         evidence=evidence,
@@ -675,6 +818,7 @@ def build_report(cfg_path: pathlib.Path, *, goal: str, research_package: str | N
         repair_stage(package),
         brief_stage(package),
         brief_stage_v3(package),
+        content_draft_stage(package),
         implementation_stage(cfg, project_root),
         monitoring_stage(cfg, project_root),
     ]
@@ -684,7 +828,7 @@ def build_report(cfg_path: pathlib.Path, *, goal: str, research_package: str | N
     status = "ready" if current is None else "blocked" if current["status"] == "blocked" else "needs_work"
     report = {
         "audit_id": "project_journey",
-        "version": 1,
+        "version": 2,
         "generated": utc_now(),
         "goal": goal,
         "status": status,
@@ -705,6 +849,8 @@ def build_report(cfg_path: pathlib.Path, *, goal: str, research_package: str | N
             "Use distillates and generated reports as context; keep raw CSV/JSON/logs on disk.",
             "Publishing, indexing, tracking, ads, paid API, and schedules require explicit approval gates.",
             "Research package quality must pass before deep briefs can drive content production.",
+            "Content drafting must use copywriter-ready v3 outputs and pass draft-quality-gate before implementation or publishing.",
+            "NeuronWriter is optional and guarded: check usage limits before use, then record spend/credits after use.",
         ],
         "paths": {},
     }

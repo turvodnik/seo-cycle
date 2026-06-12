@@ -231,6 +231,112 @@ class ProjectJourneyTest(unittest.TestCase):
         self.assertEqual(blocked["current_stage"]["id"], "deep_page_briefs_v3")
         self.assertTrue(any("tool_first_order_violation" in item for item in blocked["missing_for_next_step"]))
 
+    def seed_passing_v3_brief(self, package: pathlib.Path) -> None:
+        outline_dir = package / "page-outlines-v3"
+        copywriter_dir = package / "copywriter-ready"
+        outline_dir.mkdir(exist_ok=True)
+        copywriter_dir.mkdir(exist_ok=True)
+        (outline_dir / "sample.json").write_text(
+            json.dumps(
+                {
+                    "outline_id": "page_outline_v3",
+                    "version": "v3",
+                    "page": {"url": "/sample/", "primary_keyword": "sample keyword"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        (copywriter_dir / "sample.md").write_text("# Copywriter Ready Brief\n", encoding="utf-8")
+        (package / "page-outline-quality.json").write_text(
+            json.dumps(
+                {
+                    "status": "pass",
+                    "outline_version": "v3",
+                    "ten_point_score": 10,
+                    "counts": {"critical_findings": 0, "high_findings": 0},
+                    "findings": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def test_content_draft_gate_blocks_after_v3_until_draft_and_quality_pass(self) -> None:
+        cfg_path = self.make_project()
+        package = self.seed_ready_project(cfg_path)
+        self.seed_passing_v3_brief(package)
+
+        report = self.run_journey(cfg_path)
+
+        self.assertEqual(report["status"], "needs_work")
+        self.assertEqual(report["current_stage"]["id"], "content_draft_gate")
+        self.assertIn("seo/research-package/drafts/*.md", report["missing_for_next_step"])
+        self.assertTrue(any("usage-ledger.py check --service neuronwriter" in command for command in report["current_stage"]["next_commands"]))
+        self.assertTrue(any("draft-quality-gate.py" in command for command in report["current_stage"]["next_commands"]))
+
+    def test_content_draft_gate_requires_draft_quality_report(self) -> None:
+        cfg_path = self.make_project()
+        package = self.seed_ready_project(cfg_path)
+        self.seed_passing_v3_brief(package)
+        drafts = package / "drafts"
+        drafts.mkdir()
+        (drafts / "sample.md").write_text("# Sample\n\nDraft text.\n", encoding="utf-8")
+
+        report = self.run_journey(cfg_path)
+
+        self.assertEqual(report["status"], "needs_work")
+        self.assertEqual(report["current_stage"]["id"], "content_draft_gate")
+        self.assertTrue(any("draft-quality-gate.json" in item for item in report["missing_for_next_step"]))
+
+    def test_content_draft_gate_blocks_error_findings_before_implementation(self) -> None:
+        cfg_path = self.make_project()
+        package = self.seed_ready_project(cfg_path)
+        self.seed_passing_v3_brief(package)
+        drafts = package / "drafts"
+        drafts.mkdir()
+        draft = drafts / "sample.md"
+        draft.write_text("# Sample\n\nIn my years working with clients...\n", encoding="utf-8")
+        draft.with_suffix(".draft-quality-gate.json").write_text(
+            json.dumps(
+                {
+                    "script": "draft-quality-gate",
+                    "summary": {"findings": 1},
+                    "findings": [
+                        {
+                            "id": "unsafe_first_person_expertise",
+                            "severity": "error",
+                            "message": "Draft uses unsupported first-person claims.",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        report = self.run_journey(cfg_path)
+
+        self.assertEqual(report["status"], "blocked")
+        self.assertEqual(report["current_stage"]["id"], "content_draft_gate")
+        self.assertTrue(any("unsafe_first_person_expertise" in item for item in report["missing_for_next_step"]))
+
+    def test_content_draft_gate_passes_to_monitoring_after_clean_draft_gate(self) -> None:
+        cfg_path = self.make_project()
+        package = self.seed_ready_project(cfg_path)
+        self.seed_passing_v3_brief(package)
+        drafts = package / "drafts"
+        drafts.mkdir()
+        draft = drafts / "sample.md"
+        draft.write_text("# Sample\n\nClean draft.\n", encoding="utf-8")
+        draft.with_suffix(".draft-quality-gate.json").write_text(
+            json.dumps({"script": "draft-quality-gate", "summary": {"findings": 0}, "findings": []}),
+            encoding="utf-8",
+        )
+
+        report = self.run_journey(cfg_path)
+
+        draft_stage = next(stage for stage in report["stages"] if stage["id"] == "content_draft_gate")
+        self.assertEqual(draft_stage["status"], "done")
+        self.assertEqual(report["current_stage"]["id"], "monitoring_iteration")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

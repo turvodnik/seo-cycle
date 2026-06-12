@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a copy draft against a page-outline-v2 brief."""
+"""Validate a copy draft against a page-outline v2/v3 brief."""
 
 from __future__ import annotations
 

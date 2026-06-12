@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.59.0] — 2026-06-12
+
+### Orchestrated writing gate
+
+- Added a dedicated `content_draft_gate` stage to `scripts/project-journey.py` between v3 copywriter briefs and implementation/publishing. The journey now blocks until drafts exist and `draft-quality-gate` has no error/critical findings.
+- `project-journey.py` now detects `copywriter-ready/*.md`, draft markdown under `<package>/drafts/`, `<package>/06-drafts/`, `seo/drafts/`, or `06-drafts/`, and sibling `<draft>.draft-quality-gate.json` reports.
+- The v3 stage now requires actual `copywriter-ready` markdown and treats non-passing v3 outline quality as a blocker before writing.
+- The automatic action plan now includes guarded NeuronWriter usage preflight, draft creation from `copywriter-ready`, draft quality validation, optional NeuronWriter evaluation, and a journey rerun before implementation.
+
 ## [1.58.0] — 2026-06-12
 
 ### Deep Copywriter Brief v3

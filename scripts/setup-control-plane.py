@@ -135,6 +135,7 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "page_outline_quality_json": "seo/research-package/page-outline-quality.json",
         "latest_page_outline_quality": "seo/research-package/latest-page-outline-quality.md",
         "latest_page_outline_quality_json": "seo/research-package/latest-page-outline-quality.json",
+        "content_drafts_dir": "seo/research-package/drafts",
         "context_pack_report": "seo/setup/context-pack.md",
         "context_pack_json": "seo/setup/context-pack.json",
         "latest_context_pack": "seo/setup/latest-context-pack.md",

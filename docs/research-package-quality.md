@@ -245,13 +245,15 @@ After a draft is written from `copywriting_playbook` and
 
 ```bash
 python3 scripts/draft-quality-gate.py ./draft.md \
-  --outline ./research-package/page-outlines-v2/page.json \
+  --outline ./research-package/page-outlines-v3/page.json \
   --write
 ```
 
 The gate flags missing H2/H3 sections, required internal links, proof/source
 slots, FAQ mismatches and unsafe first-person expertise claims. It is a final
-copywriting safety check before schema, CMS publishing or approval.
+copywriting safety check before schema, CMS publishing or approval. `project-journey.py`
+uses the `content_draft_gate` stage to block implementation/publishing until a
+draft exists and this gate has no error/critical findings.
 
 ## Pipeline
 
@@ -267,12 +269,21 @@ copywriting safety check before schema, CMS publishing or approval.
 7. Generate `page-outline-v3.py --all-mvp` or `--priority P1`.
 8. Run `page-outline-quality.py --version v3 --write` and follow its action plan.
 9. Rerun `project-journey.py --write`; proceed only when the current stage
-   moves past `deep_page_briefs`.
-10. For drafting, pass only the page outline plus its `copywriting_playbook` and
-   `writer_prompt_packet` into the active LLM context.
-11. Run `draft-quality-gate.py` on the finished draft.
-12. Review the generated outline before writing, design, schema, or approval.
-13. Keep raw data on disk; open raw CSV/JSON/SERP only when a source slot or
+   moves past `deep_page_briefs_v3`.
+10. For drafting, pass only `copywriter-ready/*.md`, the page outline,
+   `copywriting_playbook`, `writer_prompt_packet`, metrics rollup and requested
+   source slots into the active LLM/copywriter context. Write drafts under
+   `<package>/drafts/*.md`.
+11. Before NeuronWriter usage, run `usage-ledger.py check --service neuronwriter
+   --category paid_api --content-writer 1 --ai-credits 500 --fail-on-block`.
+   Use NeuronWriter for SERP/NLP scoring/evaluate/import when approved; it is
+   not required as the automatic writer.
+12. Run `draft-quality-gate.py` on the finished draft.
+13. Rerun `project-journey.py --write`; proceed only when `content_draft_gate`
+   is done.
+14. Review the generated outline and draft before design, schema, CMS publishing,
+   indexing, ads or approval.
+15. Keep raw data on disk; open raw CSV/JSON/SERP only when a source slot or
     fact-check queue item asks for a specific source.
 
 `project-journey.py` treats `research-package-repair.json` newer than
