@@ -121,6 +121,8 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "google_nlp_entity_coverage": "seo/research-package/entity_coverage.jsonl",
         "orphan_url_backlog": "seo/research-package/content-plan.orphan-backlog.csv",
         "serp_validation_plan": "seo/research-package/serp-validation-plan.csv",
+        "serp_validation_import_report": "seo/research-package/serp-validation-import.md",
+        "serp_validation_import_json": "seo/research-package/serp-validation-import.json",
         "spoke_opportunities": "seo/research-package/spoke-opportunities.csv",
         "research_package_repair_report": "seo/research-package/research-package-repair.md",
         "research_package_repair_json": "seo/research-package/research-package-repair.json",

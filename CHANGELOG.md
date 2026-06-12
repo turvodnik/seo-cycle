@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.56.0] — 2026-06-12
+
+### Research package import and outline upgrades
+
+- Added guarded `scripts/serp-validation-import.py` for reviewed DataForSEO/Serpstat/manual SERP exports. It writes validated SERP evidence back into `semantic-architecture-final.json` only from explicit JSON/CSV input, preserves non-empty validation unless `--force` is used, and writes `serp-validation-import.md/json`.
+- Added a freshness gate to `project-journey.py`: if `research-package-repair.json` is newer than `research-package-quality.json`, the journey blocks at `research_quality_gate` until quality is rerun.
+- Extended `page-outline-v2.py` with `metrics_rollup` per page: matched semantic-core rows, volume, clicks, impressions, priority score and top supporting keywords for copywriters without opening raw CSV.
+- Added explicit `page-outline-v2.py --archive-legacy-briefs`, which archives duplicate `page-briefs.md` / `mvp-page-briefs.md` into `archive/legacy-briefs/` only after a successful `--write`.
+- Updated project templates, setup/control-plane, upgrade assistant and docs for the v1.56 research-package flow.
+
 ## [1.55.0] — 2026-06-12
 
 ### Repair orchestration

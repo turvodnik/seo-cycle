@@ -8,6 +8,7 @@ import importlib.util
 import json
 import pathlib
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -112,12 +113,30 @@ class ResearchPackageQualityTest(unittest.TestCase):
                     "dataforseo_serp_features": "organic|ai_overview",
                     "base_cluster": "virtual_hair_color_try_on",
                     "suggested_url": "/tools/virtual-hair-color-try-on/",
+                    "impressions": "1200",
+                    "clicks": "40",
+                    "volume": "9900",
+                    "priority_score": "91.5",
+                },
+                {
+                    "keyword": "hair color simulator",
+                    "dataforseo_serp_features": "organic",
+                    "base_cluster": "virtual_hair_color_try_on",
+                    "suggested_url": "/tools/virtual-hair-color-try-on/",
+                    "impressions": "400",
+                    "clicks": "12",
+                    "volume": "2400",
+                    "priority_score": "77",
                 },
                 {
                     "keyword": "create a hairstyle analysis graphic using this portrait, show side-by-side hairstyles comparisons",
                     "dataforseo_serp_features": "",
                     "base_cluster": "virtual_hair_color_try_on",
                     "suggested_url": "/hair-color/old-url/",
+                    "impressions": "3",
+                    "clicks": "0",
+                    "volume": "0",
+                    "priority_score": "0",
                 },
             ],
         )
@@ -245,6 +264,12 @@ class ResearchPackageQualityTest(unittest.TestCase):
         self.assertIn("copywriting_details", section)
         self.assertGreaterEqual(len(section["copywriting_details"]["source_slots"]), 2)
         self.assertGreaterEqual(len(section["copywriting_details"]["acceptance_criteria"]), 3)
+        self.assertIn("metrics_rollup", outline)
+        self.assertEqual(outline["metrics_rollup"]["impressions"], 1600.0)
+        self.assertEqual(outline["metrics_rollup"]["clicks"], 52.0)
+        self.assertEqual(outline["metrics_rollup"]["volume"], 12300.0)
+        self.assertEqual(outline["metrics_rollup"]["max_priority_score"], 91.5)
+        self.assertIn("hair color simulator", [item["keyword"] for item in outline["metrics_rollup"]["top_supporting_keywords"]])
         self.assertIn("no_fabricated_first_person", outline["eeat_guard"]["expert_author_mode"])
         self.assertTrue(any("Do not invent" in note for note in section["copywriter_notes"]))
 
@@ -332,6 +357,32 @@ class ResearchPackageQualityTest(unittest.TestCase):
         self.assertEqual(len(outlines), 2)
         self.assertIn("/tools/virtual-hair-color-try-on/", urls)
         self.assertIn("/tools/face-shape-detector/", urls)
+
+    def test_page_outline_v2_can_archive_duplicate_legacy_briefs_after_successful_write(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPTS / "page-outline-v2.py"),
+                str(self.package),
+                "--all-mvp",
+                "--write",
+                "--archive-legacy-briefs",
+                "--format",
+                "json",
+            ],
+            cwd=self.package,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(proc.stdout)
+        archive_dir = self.package / "archive" / "legacy-briefs"
+
+        self.assertEqual(payload["legacy_briefs_archive"]["archived_files"], 2)
+        self.assertFalse((self.package / "page-briefs.md").exists())
+        self.assertFalse((self.package / "mvp-page-briefs.md").exists())
+        self.assertTrue(any(path.name.startswith("page-briefs.") for path in archive_dir.iterdir()))
+        self.assertTrue(any(path.name.startswith("mvp-page-briefs.") for path in archive_dir.iterdir()))
 
 
 if __name__ == "__main__":

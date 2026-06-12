@@ -338,6 +338,54 @@ class RepairLayerTest(unittest.TestCase):
         self.assertIn("cool summer hair colors", {row["keyword"] for row in spoke_rows})
         self.assertTrue(all(row["phase"] == "phase_2" for row in spoke_rows))
 
+    def test_serp_validation_import_updates_architecture_from_guarded_export(self) -> None:
+        export_path = self.package / "serp-export.json"
+        export_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "keyword": "hair color analysis",
+                        "provider": "manual",
+                        "country": "US",
+                        "language": "en",
+                        "device": "desktop",
+                        "features": ["organic", "people_also_ask"],
+                        "top_urls": ["https://example.com/hair-color-analysis"],
+                        "top_titles": ["Hair Color Analysis Guide"],
+                        "dominant_page_type": "Guide",
+                        "notes": "SERP mixes guides and quiz-style tools.",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPTS / "serp-validation-import.py"),
+                str(self.package),
+                "--input-json",
+                str(export_path),
+                "--write",
+                "--format",
+                "json",
+            ],
+            cwd=self.package,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        report = json.loads(proc.stdout)
+        architecture = json.loads((self.package / "semantic-architecture-final.json").read_text(encoding="utf-8"))
+        imported = architecture["dataforseo_serp_validation"]["hair color analysis"]
+
+        self.assertEqual(report["summary"]["imported_queries"], 1)
+        self.assertEqual(imported["provider"], "manual")
+        self.assertEqual(imported["dominant_page_type"], "Guide")
+        self.assertIn("https://example.com/hair-color-analysis", imported["top_urls"])
+        self.assertTrue((self.package / "serp-validation-import.md").exists())
+
     def test_entity_graph_and_draft_quality_gates_find_concrete_failures(self) -> None:
         graph = self.run_script("entity-graph-quality.py")
         ids = {finding["id"] for finding in graph["findings"]}

@@ -65,9 +65,41 @@ def normalize(value: Any) -> str:
     return re.sub(r"[^a-z0-9а-яё]+", "_", str(value or "").strip().lower(), flags=re.IGNORECASE).strip("_")
 
 
+def normalize_key(value: Any) -> str:
+    return re.sub(r"[^a-z0-9а-яё]+", " ", str(value or "").strip().lower(), flags=re.IGNORECASE).strip()
+
+
+def normalize_url(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"^https?://[^/]+", "", text)
+    if not text.startswith("/"):
+        return text.rstrip("/")
+    return "/" + text.strip("/") + "/"
+
+
+def to_float(value: Any) -> float:
+    text = str(value or "").strip().replace(",", ".")
+    if not text:
+        return 0.0
+    try:
+        return float(text)
+    except ValueError:
+        return 0.0
+
+
 def package_dir(raw: str | pathlib.Path) -> pathlib.Path:
     path = pathlib.Path(raw).expanduser().resolve()
     return path.parent if path.is_file() else path
+
+
+def preferred_semantic_core(package: pathlib.Path) -> pathlib.Path:
+    for name in ("semantic-core.resynced.csv", "semantic-core.cleaned.csv", "semantic-core.csv"):
+        path = package / name
+        if path.exists():
+            return path
+    return package / "semantic-core.csv"
 
 
 def load_entities(raw: dict[str, Any]) -> list[dict[str, Any]]:
@@ -200,6 +232,79 @@ def split_keywords(cluster: dict[str, Any]) -> list[str]:
         secondary = [part.strip() for part in secondary.split("|")]
     keywords.extend(secondary)
     return [str(item) for item in keywords if item]
+
+
+def page_metric_rows(
+    package: pathlib.Path,
+    *,
+    page_url: str,
+    keywords: list[str],
+) -> tuple[pathlib.Path, list[dict[str, str]]]:
+    source = preferred_semantic_core(package)
+    rows = read_csv(source)
+    wanted_url = normalize_url(page_url)
+    wanted_keywords = {normalize_key(keyword) for keyword in keywords if normalize_key(keyword)}
+    selected = []
+    for row in rows:
+        keyword = normalize_key(row.get("keyword"))
+        row_url = normalize_url(row.get("suggested_url") or row.get("url"))
+        if row_url and wanted_url and row_url == wanted_url:
+            selected.append(row)
+            continue
+        if keyword and keyword in wanted_keywords:
+            selected.append(row)
+    return source, selected
+
+
+def metric_value(row: dict[str, str], *fields: str) -> float:
+    for field in fields:
+        value = row.get(field)
+        if str(value or "").strip():
+            return to_float(value)
+    return 0.0
+
+
+def metrics_rollup_for_page(package: pathlib.Path, page: dict[str, Any], keywords: list[str]) -> dict[str, Any]:
+    source, rows = page_metric_rows(
+        package,
+        page_url=str(page.get("url") or page.get("suggested_url") or ""),
+        keywords=keywords,
+    )
+    primary_key = normalize_key(page.get("primary_keyword"))
+    totals = {
+        "source_file": str(source),
+        "matched_rows": len(rows),
+        "volume": round(sum(metric_value(row, "volume", "search_volume") for row in rows), 4),
+        "clicks": round(sum(metric_value(row, "clicks") for row in rows), 4),
+        "impressions": round(sum(metric_value(row, "impressions") for row in rows), 4),
+        "max_priority_score": round(max([metric_value(row, "priority_score") for row in rows] or [0.0]), 4),
+    }
+    supporting = []
+    for row in rows:
+        keyword = str(row.get("keyword") or "").strip()
+        if not keyword or normalize_key(keyword) == primary_key:
+            continue
+        supporting.append(
+            {
+                "keyword": keyword,
+                "volume": metric_value(row, "volume", "search_volume"),
+                "clicks": metric_value(row, "clicks"),
+                "impressions": metric_value(row, "impressions"),
+                "priority_score": metric_value(row, "priority_score"),
+            }
+        )
+    supporting.sort(
+        key=lambda item: (
+            float(item.get("priority_score") or 0),
+            float(item.get("impressions") or 0),
+            float(item.get("volume") or 0),
+            str(item.get("keyword") or ""),
+        ),
+        reverse=True,
+    )
+    totals["priority_score"] = totals["max_priority_score"]
+    totals["top_supporting_keywords"] = supporting[:8]
+    return totals
 
 
 def schema_for_page(page_type: str) -> list[str]:
@@ -792,24 +897,26 @@ def build_outline(package: pathlib.Path, selector: str | None, *, expert_author:
     writer_prompt_packet = writer_prompt_packet_for_page(primary, page_type, expert_author)
     trust_limitations = trust_limitations_for_page(primary, page_type)
     synthetic_prompts = synthetic_prompts_for_page(primary, page_type)
+    page_info = {
+        "title": content.get("page_title") or cluster.get("name") or primary,
+        "url": content.get("url") or cluster.get("suggested_url") or cluster.get("url"),
+        "cluster_id": cluster_id,
+        "primary_keyword": primary,
+        "secondary_keywords": keywords[1:],
+        "intent": content.get("intent") or cluster.get("intent"),
+        "funnel_stage": content.get("funnel_stage") or cluster.get("funnel_stage"),
+        "page_type": page_type,
+        "content_format": content.get("content_format") or cluster.get("content_format"),
+        "priority": content.get("priority") or cluster.get("priority"),
+        "mvp": str(content.get("mvp") or cluster.get("mvp")).lower() in {"true", "1", "yes"},
+    }
     return {
         "outline_id": "page_outline_v2",
         "generated_at": utc_now(),
         "package_dir": str(package),
-        "page": {
-            "title": content.get("page_title") or cluster.get("name") or primary,
-            "url": content.get("url") or cluster.get("suggested_url") or cluster.get("url"),
-            "cluster_id": cluster_id,
-            "primary_keyword": primary,
-            "secondary_keywords": keywords[1:],
-            "intent": content.get("intent") or cluster.get("intent"),
-            "funnel_stage": content.get("funnel_stage") or cluster.get("funnel_stage"),
-            "page_type": page_type,
-            "content_format": content.get("content_format") or cluster.get("content_format"),
-            "priority": content.get("priority") or cluster.get("priority"),
-            "mvp": str(content.get("mvp") or cluster.get("mvp")).lower() in {"true", "1", "yes"},
-        },
+        "page": page_info,
         "computed_word_count": {"min": total_min, "max": total_max},
+        "metrics_rollup": metrics_rollup_for_page(package, page_info, keywords),
         "seo_meta": seo_meta,
         "intro_brief": intro_brief_for_page(primary, page_type, expert_author),
         "conclusion_brief": conclusion_brief_for_page(primary, page_type, internal_links),
@@ -892,13 +999,37 @@ def render_markdown(outline: dict[str, Any]) -> str:
         f"- Canonical: `{outline.get('seo_meta', {}).get('canonical')}`",
         f"- Alt text guidance: {outline.get('seo_meta', {}).get('alt_text_guidance')}",
         "",
-        "## Schema",
+        "## Metrics Rollup",
         "",
-        ", ".join(f"`{item}`" for item in outline["schema"]),
-        "",
-        "## Key Takeaways",
-        "",
+        f"- Source file: `{outline.get('metrics_rollup', {}).get('source_file')}`",
+        f"- Matched rows: `{outline.get('metrics_rollup', {}).get('matched_rows', 0)}`",
+        f"- Volume: `{outline.get('metrics_rollup', {}).get('volume', 0)}`",
+        f"- Clicks: `{outline.get('metrics_rollup', {}).get('clicks', 0)}`",
+        f"- Impressions: `{outline.get('metrics_rollup', {}).get('impressions', 0)}`",
+        f"- Priority score: `{outline.get('metrics_rollup', {}).get('priority_score', 0)}`",
+        "- Top supporting keywords:",
     ]
+    supporting = outline.get("metrics_rollup", {}).get("top_supporting_keywords", [])
+    if supporting:
+        for item in supporting:
+            lines.append(
+                f"  - `{item.get('keyword')}`: volume `{item.get('volume')}`, "
+                f"impressions `{item.get('impressions')}`, clicks `{item.get('clicks')}`, "
+                f"priority `{item.get('priority_score')}`"
+            )
+    else:
+        lines.append("  - none supplied")
+    lines.extend(
+        [
+            "",
+            "## Schema",
+            "",
+            ", ".join(f"`{item}`" for item in outline["schema"]),
+            "",
+            "## Key Takeaways",
+            "",
+        ]
+    )
     for item in outline.get("key_takeaways", []):
         lines.append(f"- {item.get('statement')} ({item.get('purpose')})")
     lines.extend(
@@ -1128,6 +1259,40 @@ def write_outline(package: pathlib.Path, outline: dict[str, Any], output_dir: pa
     return {key: str(path) for key, path in paths.items()}
 
 
+def archive_legacy_briefs(package: pathlib.Path) -> dict[str, Any]:
+    candidates = [package / "page-briefs.md", package / "mvp-page-briefs.md"]
+    existing = [path for path in candidates if path.exists()]
+    result: dict[str, Any] = {
+        "status": "skipped",
+        "archived_files": 0,
+        "archived_paths": [],
+        "skipped": [],
+    }
+    if len(existing) < 2:
+        result["skipped"].append("Both page-briefs.md and mvp-page-briefs.md must exist before duplicate archiving.")
+        return result
+    contents = [re.sub(r"\s+", " ", path.read_text(encoding="utf-8")).strip() for path in existing]
+    if len(set(contents)) != 1:
+        result["skipped"].append("Legacy briefs are not duplicates; leaving them in place.")
+        return result
+    archive_dir = package / "archive" / "legacy-briefs"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    stamp = utc_now().replace("-", "").replace(":", "").replace("T", "T").rstrip("Z")
+    archived_paths = []
+    for path in existing:
+        target = archive_dir / f"{path.stem}.{stamp}Z{path.suffix}"
+        path.replace(target)
+        archived_paths.append(str(target))
+    result.update(
+        {
+            "status": "archived",
+            "archived_files": len(archived_paths),
+            "archived_paths": archived_paths,
+        }
+    )
+    return result
+
+
 def batch_payload(outlines: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "outline_id": "page_outline_v2_batch",
@@ -1145,6 +1310,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--priority", action="append", default=[], help="Generate outlines for clusters with this priority, e.g. P1. Can be repeated.")
     parser.add_argument("--expert-author", action="store_true", help="Allow first-person expert framing because a real expert author exists.")
     parser.add_argument("--write", action="store_true", help="Write markdown/json output.")
+    parser.add_argument(
+        "--archive-legacy-briefs",
+        action="store_true",
+        help="After successful --write, move duplicate page-briefs.md/mvp-page-briefs.md into archive/legacy-briefs/.",
+    )
     parser.add_argument("--output-dir", help="Output directory. Defaults to <package>/page-outlines-v2.")
     parser.add_argument("--format", choices=["json", "markdown"], default="json")
     args = parser.parse_args(argv)
@@ -1163,6 +1333,8 @@ def main(argv: list[str] | None = None) -> int:
         for outline in outlines:
             outline["paths"] = write_outline(package, outline, output_dir)
     payload: dict[str, Any] = batch_payload(outlines) if batch_mode else outlines[0]
+    if args.write and args.archive_legacy_briefs:
+        payload["legacy_briefs_archive"] = archive_legacy_briefs(package)
     if args.format == "markdown":
         print(render_batch_markdown(outlines) if batch_mode else render_markdown(outlines[0]))
     else:

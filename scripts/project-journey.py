@@ -120,6 +120,8 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
     required_status = {name: (package / name).exists() for name in required}
     quality_path = package / "research-package-quality.json"
     repair_path = package / "research-package-repair.json"
+    quality_mtime = quality_path.stat().st_mtime if quality_path.exists() else None
+    repair_mtime = repair_path.stat().st_mtime if repair_path.exists() else None
     outline_quality_path = package / "page-outline-quality.json"
     outline_dir = package / "page-outlines-v2"
     outline_count = len(list(outline_dir.glob("*.json"))) if outline_dir.exists() else 0
@@ -130,8 +132,13 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
         "missing_required": [name for name, exists in required_status.items() if not exists],
         "quality": read_json(quality_path),
         "quality_exists": quality_path.exists(),
+        "quality_mtime": quality_mtime,
         "repair": read_json(repair_path),
         "repair_exists": repair_path.exists(),
+        "repair_mtime": repair_mtime,
+        "quality_stale_after_repair": bool(
+            quality_mtime is not None and repair_mtime is not None and repair_mtime > quality_mtime
+        ),
         "outline_quality": read_json(outline_quality_path),
         "outline_quality_exists": outline_quality_path.exists(),
         "outline_count": outline_count,
@@ -322,7 +329,12 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
     quality = package.get("quality", {})
     package_dir = package.get("package_dir") or "seo/research-package"
     missing = [] if package.get("quality_exists") else [f"{package_dir}/research-package-quality.json"]
+    blockers = []
     warnings = []
+    if package.get("quality_stale_after_repair"):
+        blockers.append(
+            "Rerun research-package-quality.py after research-package-repair: repair output is newer than quality output."
+        )
     if quality.get("status") == "fail":
         critical = int(((quality.get("counts") or {}) if isinstance(quality.get("counts"), dict) else {}).get("critical_findings") or 0)
         high = int(((quality.get("counts") or {}) if isinstance(quality.get("counts"), dict) else {}).get("high_findings") or 0)
@@ -332,8 +344,10 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
                 warnings.append(f"{finding.get('severity', 'finding')}: {finding.get('id')} — {finding.get('title')}")
     evidence = [
         f"{package_dir}/research-package-quality.json: {'exists' if package.get('quality_exists') else 'missing'}",
+        f"{package_dir}/research-package-repair.json: {'exists' if package.get('repair_exists') else 'missing'}",
         f"quality status: {quality.get('status', 'not_run')}",
         f"10-point score: {quality.get('ten_point_score', 'n/a')}",
+        f"quality stale after repair: {package.get('quality_stale_after_repair', False)}",
     ]
     return stage(
         stage_id="research_quality_gate",
@@ -342,10 +356,12 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
         objective="The macro package passes the comparison-audit failure checks before writing begins.",
         evidence=evidence,
         missing=missing,
+        blockers=blockers,
         warnings=warnings,
         commands=[f"python3 ~/.codex/skills/seo-cycle/scripts/research-package-quality.py {package_dir} --write --format plan"],
         exit_criteria=[
             "No critical findings remain.",
+            "research-package-quality.py has been rerun after any research-package-repair.py output.",
             "SERP validation, URL mapping, GSC cleanup, entity map, GEO signals, and E-E-A-T evidence are either clean or explicitly accepted.",
         ],
     )
@@ -382,6 +398,11 @@ def repair_stage(package: dict[str, Any]) -> dict[str, Any]:
                 command = REPAIR_COMMANDS.get(finding_id)
                 if command:
                     commands.append(command.format(package_dir=package_dir))
+                if finding_id == "serp_validation_incomplete":
+                    commands.append(
+                        "python3 ~/.codex/skills/seo-cycle/scripts/serp-validation-import.py "
+                        f"{package_dir} --input-json <reviewed-serp-export.json> --write"
+                    )
         commands.append(f"python3 ~/.codex/skills/seo-cycle/scripts/research-package-quality.py {package_dir} --write --format plan")
     failed_steps = int(((repair.get("summary") or {}) if isinstance(repair.get("summary"), dict) else {}).get("failed_steps") or 0)
     if failed_steps:

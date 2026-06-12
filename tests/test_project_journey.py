@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 try:
@@ -132,6 +134,23 @@ class ProjectJourneyTest(unittest.TestCase):
         self.assertTrue(any("serp-validation-plan.py" in command for command in report["current_stage"]["next_commands"]))
         deep = next(stage for stage in report["stages"] if stage["id"] == "deep_page_briefs")
         self.assertEqual(deep["status"], "pending")
+
+    def test_repair_newer_than_quality_requires_quality_rerun(self) -> None:
+        cfg_path = self.make_project()
+        package = self.seed_ready_project(cfg_path)
+        quality_path = package / "research-package-quality.json"
+        repair_path = package / "research-package-repair.json"
+        repair_path.write_text(json.dumps({"summary": {"failed_steps": 0}}), encoding="utf-8")
+        now = time.time()
+        os.utime(quality_path, (now, now))
+        os.utime(repair_path, (now + 10, now + 10))
+
+        report = self.run_journey(cfg_path)
+
+        self.assertEqual(report["status"], "blocked")
+        self.assertEqual(report["current_stage"]["id"], "research_quality_gate")
+        self.assertTrue(any("rerun" in item.lower() for item in report["missing_for_next_step"]))
+        self.assertTrue(any("research-package-quality.py" in command for command in report["current_stage"]["next_commands"]))
 
     def test_page_outline_quality_is_required_before_implementation(self) -> None:
         cfg_path = self.make_project()

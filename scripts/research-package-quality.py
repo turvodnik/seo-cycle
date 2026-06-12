@@ -91,9 +91,9 @@ REMEDIATION_HINTS = {
     },
     "serp_validation_incomplete": {
         "mode": "source_refresh",
-        "target_files": ["serp-validation-plan.csv", "semantic-architecture-final.json"],
-        "command": "serp-validation-plan.py <package> --write",
-        "definition_of_done": "serp-validation-plan.csv lists every missing query/provider/region/device/page-type decision field; imported SERP evidence then fills validation gaps.",
+        "target_files": ["serp-validation-plan.csv", "serp-validation-import.md", "semantic-architecture-final.json"],
+        "command": "serp-validation-plan.py <package> --write; then serp-validation-import.py <package> --input-json <reviewed-serp-export.json> --write",
+        "definition_of_done": "serp-validation-plan.csv lists every missing query/provider/region/device/page-type decision field; reviewed SERP export is imported and semantic-architecture-final.json contains non-empty validation.",
     },
     "semantic_core_url_drift": {
         "mode": "agent_fix",

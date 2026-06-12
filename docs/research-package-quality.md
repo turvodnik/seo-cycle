@@ -92,6 +92,7 @@ python3 scripts/entity-map-sync.py ./research-package --write
 python3 scripts/google-nlp-aggregate.py ./research-package --write
 python3 scripts/orphan-url-resolver.py ./research-package --write
 python3 scripts/serp-validation-plan.py ./research-package --write
+python3 scripts/serp-validation-import.py ./research-package --input-json serp-export.json --write
 python3 scripts/spoke-opportunity-audit.py ./research-package --write
 python3 scripts/entity-graph-quality.py ./research-package --write
 ```
@@ -112,6 +113,10 @@ Outputs:
   reviewable backlog rows or remove/replace-link actions.
 - `serp-validation-plan.csv` lists queries whose page-type decisions still need
   SERP evidence.
+- `serp-validation-import.md/json` records reviewed DataForSEO, Serpstat, or
+  manual SERP exports imported back into `semantic-architecture-final.json`.
+  The importer is guarded: it only reads explicit `--input-json`/`--input-csv`
+  files and preserves non-empty validation unless `--force` is used.
 - `spoke-opportunities.csv` promotes measured long-tail demand into phase-2
   hub-and-spoke opportunities.
 - `entity-graph-quality.md/json` catches duplicate triples, orphan relation
@@ -140,11 +145,20 @@ Batch modes:
 ```bash
 python3 scripts/page-outline-v2.py ./research-package --all-mvp --write
 python3 scripts/page-outline-v2.py ./research-package --priority P1 --write
+python3 scripts/page-outline-v2.py ./research-package --all-mvp --write --archive-legacy-briefs
 ```
+
+Use `--archive-legacy-briefs` only after reviewing the generated v2 outlines.
+It moves duplicate `page-briefs.md` and `mvp-page-briefs.md` into
+`archive/legacy-briefs/`; without that explicit flag, legacy files stay in
+place.
 
 The output includes:
 
 - computed word-count totals from sections;
+- metrics rollup from the preferred semantic core: volume, clicks, impressions,
+  priority score, matched rows, and top supporting keywords so writers do not
+  need to open CSV files;
 - intro and conclusion briefs with word-count ranges, hook/recap strategy, CTA,
   constraints, and internal-link priorities;
 - SEO meta: title tag, meta description, slug, canonical, and alt-text guidance;
@@ -242,18 +256,24 @@ copywriting safety check before schema, CMS publishing or approval.
 3. Open `research-package-action-plan.md` and follow the automatic steps.
 4. Run `research-package-repair.py --write`, or the targeted repair commands
    from the action plan when only one layer needs rerun.
-5. Rerun `research-package-quality.py --write` and fix remaining critical/high
+5. If SERP was checked outside seo-cycle, import the reviewed export with
+   `serp-validation-import.py --input-json/--input-csv --write`.
+6. Rerun `research-package-quality.py --write` and fix remaining critical/high
    findings.
-6. Generate `page-outline-v2.py --all-mvp` or `--priority P1`.
-7. Run `page-outline-quality.py --write` and follow its action plan.
-8. Rerun `project-journey.py --write`; proceed only when the current stage
+7. Generate `page-outline-v2.py --all-mvp` or `--priority P1`.
+8. Run `page-outline-quality.py --write` and follow its action plan.
+9. Rerun `project-journey.py --write`; proceed only when the current stage
    moves past `deep_page_briefs`.
-9. For drafting, pass only the page outline plus its `copywriting_playbook` and
+10. For drafting, pass only the page outline plus its `copywriting_playbook` and
    `writer_prompt_packet` into the active LLM context.
-10. Run `draft-quality-gate.py` on the finished draft.
-11. Review the generated outline before writing, design, schema, or approval.
-12. Keep raw data on disk; open raw CSV/JSON/SERP only when a source slot or
+11. Run `draft-quality-gate.py` on the finished draft.
+12. Review the generated outline before writing, design, schema, or approval.
+13. Keep raw data on disk; open raw CSV/JSON/SERP only when a source slot or
     fact-check queue item asks for a specific source.
+
+`project-journey.py` treats `research-package-repair.json` newer than
+`research-package-quality.json` as a blocker. Rerun the quality gate after any
+repair/import before generating or trusting page outlines.
 
 ## Updating Existing Projects
 
