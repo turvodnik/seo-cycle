@@ -10,8 +10,9 @@ semantic core, clusters, page types, URL architecture, internal links, entity ma
 technical requirements.
 
 Single-page outlines are strong at deciding **how to write one page**:
-H2/H3 structure, word counts, entities per section, visual blocks, copywriter
-notes, Answer Units, FAQ, and E-E-A-T tone.
+H2/H3 structure, word counts, entities per section, intro/conclusion, visual
+blocks, copywriter notes, source slots, acceptance criteria, Answer Units, FAQ,
+and E-E-A-T tone.
 
 `seo-cycle` now requires both layers for important pages.
 
@@ -91,12 +92,18 @@ python3 scripts/page-outline-v2.py ./research-package --priority P1 --write
 The output includes:
 
 - computed word-count totals from sections;
+- intro and conclusion briefs with word-count ranges, hook/recap strategy, CTA,
+  constraints, and internal-link priorities;
 - SEO meta: title tag, meta description, slug, canonical, and alt-text guidance;
 - answer-first Key Takeaways;
 - FAQ answer units ready for FAQPage review;
 - numbered visual plan with placement and dedupe keys;
 - section bridges so the page reads as one funnel, not isolated blocks;
 - writer handoff with must-do, must-not, fact-check queue, and safe memorable lines;
+- deterministic H3 subsection plans under every H2, where H3 word counts add up
+  to the parent H2 range;
+- section copywriting details: reader question, opening angle, do-write,
+  do-not-write, safe phrases, CTA, source slots, and acceptance criteria;
 - entities and keywords per section;
 - visual elements;
 - copywriter notes;
@@ -130,6 +137,7 @@ python3 scripts/page-outline-quality.py ./research-package --write --format mark
 The gate uses a 10-criterion scorecard for:
 
 - word-count integrity;
+- H3/H2 word-count allocation;
 - SERP/page-type and intent lock;
 - entity coverage and graph usefulness;
 - copywriter actionability;
@@ -142,6 +150,11 @@ The gate uses a 10-criterion scorecard for:
 
 Critical findings block downstream writing/publishing. High/medium findings
 become action-plan steps and should be accepted only after review.
+
+The gate now also blocks outlines that look complete at the macro level but are
+still weak for copywriting: missing intro/conclusion briefs, missing H3
+subsections, H3 totals that drift from the parent H2, vague section writing
+instructions, missing source slots, or missing acceptance criteria.
 
 This combines the useful competitor-outline advantages with the stronger
 seo-cycle architecture: micro-level copywriter guidance is generated only after

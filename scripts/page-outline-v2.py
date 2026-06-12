@@ -289,6 +289,22 @@ def section_visual(kind: str, page_type: str) -> str:
     return "Simple diagram/table if it makes the decision easier."
 
 
+def split_range(total_min: int, total_max: int, parts: int) -> list[tuple[int, int]]:
+    if parts <= 1:
+        return [(total_min, total_max)]
+    min_base, min_remainder = divmod(total_min, parts)
+    max_base, max_remainder = divmod(total_max, parts)
+    ranges = []
+    for idx in range(parts):
+        ranges.append(
+            (
+                min_base + (1 if idx < min_remainder else 0),
+                max_base + (1 if idx < max_remainder else 0),
+            )
+        )
+    return ranges
+
+
 def entities_for_section(entity_names: list[str], kind: str, order: int) -> list[str]:
     base_limit = 4 if kind in {"answer", "definition"} else 6
     selected = list(entity_names[:base_limit])
@@ -298,6 +314,150 @@ def entities_for_section(entity_names: list[str], kind: str, order: int) -> list
         if extra not in selected:
             selected.append(extra)
     return selected
+
+
+def intro_brief_for_page(primary: str, page_type: str, expert_author: bool) -> dict[str, Any]:
+    return {
+        "word_count_min": 35,
+        "word_count_max": 70,
+        "hook_strategy": f"Open with the reader's `{primary}` task and confirm the `{page_type}` format quickly.",
+        "promise": "Tell the reader what they will be able to decide or do after the page.",
+        "authority_mode": "real named expert may use first-person proof" if expert_author else "neutral third-person authority; no invented personal experience",
+        "must_include": ["primary task", "why this page format fits the intent", "one next-step cue"],
+        "must_avoid": ["generic history opener", "unsupported superlatives", "first-person expertise without proof"],
+    }
+
+
+def conclusion_brief_for_page(primary: str, page_type: str, internal_links: list[str]) -> dict[str, Any]:
+    return {
+        "word_count_min": 70,
+        "word_count_max": 120,
+        "recap_strategy": f"Restate the safest next action for `{primary}` after the `{page_type}` answer.",
+        "cta": "Send the reader to the next tool, category, product, consultation, or guide that matches the page intent.",
+        "internal_link_priority": internal_links[:3],
+        "must_include": ["decision recap", "limitation reminder when relevant", "one clear next action"],
+        "must_avoid": ["new unproven claims", "new sibling-cluster explanation", "generic motivational closing"],
+    }
+
+
+def subsection_titles(kind: str, section_title: str, primary: str, page_type: str) -> list[tuple[str, str]]:
+    if kind == "answer":
+        return [
+            ("Direct Answer", "Give the shortest answer first and make it quotable."),
+            ("What This Changes", "Explain why the answer matters for the reader's next decision."),
+        ]
+    if kind == "definition":
+        return [
+            ("Plain-Language Definition", f"Define the concept without changing the `{page_type}` intent."),
+            ("Why It Matters", f"Connect the definition to `{primary}` and the user's task."),
+        ]
+    if kind == "howto":
+        return [
+            ("Setup Before the First Step", "State prerequisites, inputs, or conditions before action."),
+            ("Step-by-Step Flow", "Write the sequence a reader can follow without interpretation gaps."),
+            ("Common Failure Point", "Name the most likely mistake and how to avoid it."),
+        ]
+    if kind == "trust":
+        return [
+            ("What Works Reliably", "Separate dependable use cases from edge cases."),
+            ("Known Limits", "State limitations honestly and tie them to proof or testing needs."),
+            ("When to Escalate", "Tell readers when to use another page, source, product, or expert."),
+        ]
+    if kind == "conversion":
+        return [
+            ("Best Next Action", "Clarify the next action after the reader gets value from the page."),
+            ("Comparison or Shortlist", "Help the reader reduce options without merging sibling clusters."),
+            ("CTA Fit Check", "Make the CTA match the page intent and project policy."),
+        ]
+    if kind == "faq":
+        return [
+            ("High-Intent FAQ Answers", "Use 40-60 word answer-first responses."),
+            ("Objection Handling", "Answer trust, cost, effort, accuracy, privacy, or timing objections."),
+            ("Schema Visibility Check", "Keep FAQPage markup aligned with visible FAQ text."),
+        ]
+    if kind in {"list", "visual"}:
+        return [
+            ("Selection Criteria", "Explain how items/examples are chosen."),
+            ("Comparison Block", "Use a scannable table, gallery, or checklist."),
+            ("Reader Decision", "Tell the reader how to choose among the options."),
+        ]
+    return [
+        (section_title, f"Cover this section in service of `{primary}`."),
+        ("Proof and Next Step", "Add source-backed proof and a transition to the next section."),
+    ]
+
+
+def h3_subsections_for_section(
+    section: dict[str, Any],
+    primary: str,
+    page_type: str,
+    section_entities: list[str],
+    section_keywords: list[str],
+) -> list[dict[str, Any]]:
+    titles = subsection_titles(str(section["kind"]), str(section["title"]), primary, page_type)
+    ranges = split_range(int(section["word_count_min"]), int(section["word_count_max"]), len(titles))
+    result = []
+    for idx, ((title, task), (min_words, max_words)) in enumerate(zip(titles, ranges), start=1):
+        result.append(
+            {
+                "order": idx,
+                "level": 3,
+                "title": title,
+                "word_count_min": min_words,
+                "word_count_max": max_words,
+                "reader_question": f"What does the reader need to know about `{primary}` here?",
+                "writing_task": task,
+                "entities_to_cover": section_entities[: max(1, min(3, len(section_entities)))],
+                "keywords": section_keywords[: max(1, min(2, len(section_keywords)))],
+                "answer_first": str(section["kind"]) in {"answer", "definition", "trust", "faq"},
+                "proof_needed": "Use a source URL, dataset row, screenshot, or approved expert proof when making a factual claim.",
+            }
+        )
+    return result
+
+
+def copywriting_details_for_section(
+    section_title: str,
+    kind: str,
+    primary: str,
+    page_type: str,
+    internal_links: list[str],
+    expert_author: bool,
+) -> dict[str, Any]:
+    return {
+        "reader_question": f"What is the fastest useful answer about `{primary}` for this `{section_title}` section?",
+        "opening_angle": f"Start from the reader's decision or task, then explain only the context needed for `{page_type}`.",
+        "do_write": [
+            "Use concrete nouns, visible steps, and source-backed claims.",
+            "Name the limitation before it becomes an objection.",
+            "Use internal links as clean next steps when the topic belongs elsewhere.",
+        ],
+        "do_not_write": [
+            "Do not add generic intro padding.",
+            "Do not invent professional experience, client stories, test results, credentials, or quotes.",
+            "Do not expand sibling clusters inside this section.",
+        ],
+        "safe_phrases": [
+            f"For `{primary}`, the useful answer is the one that reduces the next decision.",
+            "The limit matters because it changes what the reader should do next.",
+            "Use the linked next step when the question belongs to another page.",
+        ],
+        "source_slots": [
+            {"claim_type": "SERP/page-type", "proof": "research package SERP validation or manual SERP note"},
+            {"claim_type": "number, price, metric or date", "proof": "source URL or dataset row"},
+            {"claim_type": "expert statement", "proof": "named expert profile or project-approved author proof"},
+        ],
+        "cta": "Use a next-step CTA only after the answer and proof are clear.",
+        "acceptance_criteria": [
+            "The first two sentences answer the section intent.",
+            "Every factual claim has a proof note or is marked for fact-check.",
+            "No unsupported first-person expertise appears."
+            if not expert_author
+            else "First-person expertise appears only with named proof.",
+            "Sibling topics are handled through internal links, not long detours.",
+        ],
+        "related_internal_links": internal_links[:5],
+    }
 
 
 def key_takeaways_for_page(primary: str, page_type: str, entity_names: list[str]) -> list[dict[str, str]]:
@@ -484,43 +644,57 @@ def build_outline(package: pathlib.Path, selector: str | None, *, expert_author:
             if expert_author
             else "Use neutral/third-person expert framing. Do not invent first-person client stories, testing claims, credentials, or quotes."
         )
-        sections.append(
-            {
-                "order": idx,
-                "level": template["level"],
-                "title": template["title"],
-                "kind": template["kind"],
-                "word_count_min": template["min"],
-                "word_count_max": template["max"],
-                "entities_to_cover": section_entities,
-                "keywords": section_keywords,
-                "summary": f"Cover `{template['kind']}` intent for `{primary}` while preserving page type `{page_type}` selected by research/SERP context.",
-                "visual_elements": section_visual(template["kind"], page_type),
-                "bridge": {
-                    "from_previous": "Open from the previous user question without reintroducing the full topic." if idx > 1 else "Start immediately with the searcher task and answer.",
-                    "to_next": "Close with the next decision the reader must make, then hand off to the following section.",
-                },
-                "copywriter_notes": [
-                    no_fabrication,
-                    "Lead with the user task and answer the intent before expanding into supporting explanation.",
-                    "Use source-backed wording for facts, numbers, brand claims, technical limits, medical/safety/privacy claims, and product comparisons.",
-                    "Keep sibling-cluster topics as internal links, not long detours that create cannibalization.",
-                ],
-                "answer_unit": {
-                    "formula": "thesis -> context -> proof -> next step",
-                    "required": template["kind"] in {"answer", "definition", "trust", "faq"},
-                },
-                "entity_connections": [
-                    f"{section_entities[0]} -> supports_intent -> {primary}" if section_entities else f"{primary} -> maps_to -> {page_type}",
-                    f"{primary} -> belongs_to_cluster -> {cluster_id}",
-                ],
-                "evidence_required": [
-                    "SERP/page-type validation",
-                    "Source URL or dataset row for factual claims",
-                    "Expert/author proof if using first-person professional experience",
-                ],
-            }
+        section = {
+            "order": idx,
+            "level": template["level"],
+            "title": template["title"],
+            "kind": template["kind"],
+            "word_count_min": template["min"],
+            "word_count_max": template["max"],
+            "entities_to_cover": section_entities,
+            "keywords": section_keywords,
+            "summary": f"Cover `{template['kind']}` intent for `{primary}` while preserving page type `{page_type}` selected by research/SERP context.",
+            "visual_elements": section_visual(template["kind"], page_type),
+            "bridge": {
+                "from_previous": "Open from the previous user question without reintroducing the full topic." if idx > 1 else "Start immediately with the searcher task and answer.",
+                "to_next": "Close with the next decision the reader must make, then hand off to the following section.",
+            },
+            "copywriting_details": copywriting_details_for_section(
+                str(template["title"]),
+                str(template["kind"]),
+                primary,
+                page_type,
+                internal_links,
+                expert_author,
+            ),
+            "copywriter_notes": [
+                no_fabrication,
+                "Lead with the user task and answer the intent before expanding into supporting explanation.",
+                "Use source-backed wording for facts, numbers, brand claims, technical limits, medical/safety/privacy claims, and product comparisons.",
+                "Keep sibling-cluster topics as internal links, not long detours that create cannibalization.",
+            ],
+            "answer_unit": {
+                "formula": "thesis -> context -> proof -> next step",
+                "required": template["kind"] in {"answer", "definition", "trust", "faq"},
+            },
+            "entity_connections": [
+                f"{section_entities[0]} -> supports_intent -> {primary}" if section_entities else f"{primary} -> maps_to -> {page_type}",
+                f"{primary} -> belongs_to_cluster -> {cluster_id}",
+            ],
+            "evidence_required": [
+                "SERP/page-type validation",
+                "Source URL or dataset row for factual claims",
+                "Expert/author proof if using first-person professional experience",
+            ],
+        }
+        section["h3_subsections"] = h3_subsections_for_section(
+            section,
+            primary,
+            page_type,
+            section_entities,
+            section_keywords,
         )
+        sections.append(section)
 
     total_min = sum(section["word_count_min"] for section in sections)
     total_max = sum(section["word_count_max"] for section in sections)
@@ -551,6 +725,8 @@ def build_outline(package: pathlib.Path, selector: str | None, *, expert_author:
         },
         "computed_word_count": {"min": total_min, "max": total_max},
         "seo_meta": seo_meta,
+        "intro_brief": intro_brief_for_page(primary, page_type, expert_author),
+        "conclusion_brief": conclusion_brief_for_page(primary, page_type, internal_links),
         "key_takeaways": key_takeaways,
         "faq": faq,
         "visual_plan": visual_plan,
@@ -638,6 +814,21 @@ def render_markdown(outline: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
+            "## Intro Brief",
+            "",
+            f"- Word Count: `{outline.get('intro_brief', {}).get('word_count_min')}-{outline.get('intro_brief', {}).get('word_count_max')}`",
+            f"- Hook strategy: {outline.get('intro_brief', {}).get('hook_strategy')}",
+            f"- Promise: {outline.get('intro_brief', {}).get('promise')}",
+            f"- Authority mode: {outline.get('intro_brief', {}).get('authority_mode')}",
+            "- Must include:",
+        ]
+    )
+    lines.extend(f"  - {item}" for item in outline.get("intro_brief", {}).get("must_include", []))
+    lines.append("- Must avoid:")
+    lines.extend(f"  - {item}" for item in outline.get("intro_brief", {}).get("must_avoid", []))
+    lines.extend(
+        [
+            "",
             "## Writer Handoff",
             "",
             f"- Reader task: {outline.get('writer_handoff', {}).get('reader_task')}",
@@ -693,6 +884,22 @@ def render_markdown(outline: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
+            "## Conclusion Brief",
+            "",
+            f"- Word Count: `{outline.get('conclusion_brief', {}).get('word_count_min')}-{outline.get('conclusion_brief', {}).get('word_count_max')}`",
+            f"- Recap strategy: {outline.get('conclusion_brief', {}).get('recap_strategy')}",
+            f"- CTA: {outline.get('conclusion_brief', {}).get('cta')}",
+            "- Internal link priority:",
+        ]
+    )
+    lines.extend(f"  - `{item}`" for item in outline.get("conclusion_brief", {}).get("internal_link_priority", []))
+    lines.append("- Must include:")
+    lines.extend(f"  - {item}" for item in outline.get("conclusion_brief", {}).get("must_include", []))
+    lines.append("- Must avoid:")
+    lines.extend(f"  - {item}" for item in outline.get("conclusion_brief", {}).get("must_avoid", []))
+    lines.extend(
+        [
+            "",
         "## Internal Links",
         "",
         ]
@@ -721,6 +928,40 @@ def render_markdown(outline: dict[str, Any]) -> str:
             ]
         )
         lines.extend(f"  - {note}" for note in section["copywriter_notes"])
+        details = section.get("copywriting_details", {})
+        lines.extend(
+            [
+                "- Copywriting Details:",
+                f"  - Reader question: {details.get('reader_question')}",
+                f"  - Opening angle: {details.get('opening_angle')}",
+                "  - Do write:",
+            ]
+        )
+        lines.extend(f"    - {item}" for item in details.get("do_write", []))
+        lines.append("  - Do not write:")
+        lines.extend(f"    - {item}" for item in details.get("do_not_write", []))
+        lines.append("  - Safe phrases:")
+        lines.extend(f"    - {item}" for item in details.get("safe_phrases", []))
+        lines.append("  - Source slots:")
+        for slot in details.get("source_slots", []):
+            lines.append(f"    - {slot.get('claim_type')}: {slot.get('proof')}")
+        lines.append(f"  - CTA: {details.get('cta')}")
+        lines.append("  - Acceptance criteria:")
+        lines.extend(f"    - {item}" for item in details.get("acceptance_criteria", []))
+        lines.extend(["- H3 Subsections:"])
+        for subsection in section.get("h3_subsections", []):
+            lines.extend(
+                [
+                    f"  - H{subsection.get('level')} `{subsection.get('title')}` "
+                    f"({subsection.get('word_count_min')}-{subsection.get('word_count_max')} words)",
+                    f"    - Task: {subsection.get('writing_task')}",
+                    f"    - Reader question: {subsection.get('reader_question')}",
+                    f"    - Entities: {', '.join(f'`{item}`' for item in subsection.get('entities_to_cover', [])) or 'none supplied'}",
+                    f"    - Keywords: {', '.join(f'`{item}`' for item in subsection.get('keywords', [])) or 'none supplied'}",
+                    f"    - Answer-first: `{subsection.get('answer_first')}`",
+                    f"    - Proof needed: {subsection.get('proof_needed')}",
+                ]
+            )
         lines.extend(
             [
                 f"- Answer Unit: `{section['answer_unit']['formula']}`; required: `{section['answer_unit']['required']}`",

@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.52.0] — 2026-06-12
+
+### Copywriter-grade brief depth
+
+- Extended `page-outline-v2.py` with copywriting-specific brief assets that were still stronger in the comparison outline: `intro_brief`, `conclusion_brief`, H3 subsection plans under every H2, section reader questions, opening angles, do-write/do-not-write rules, safe phrases, source slots, CTA guidance and acceptance criteria.
+- Added deterministic H3 word-count allocation: subsection min/max totals must add up exactly to the parent H2, avoiding the competitor outline's word-count arithmetic drift.
+- Extended `page-outline-quality.py` with stricter copywriting checks for missing intro/conclusion, missing H3 plans, H3/H2 word-count mismatch, weak copywriting details, missing source slots and missing acceptance criteria.
+- Verified generated page outlines still pass the stricter gate at `10.0/10` on the real hair-stylist research package.
+
 ## [1.51.0] — 2026-06-12
 
 ### Competitor-grade page brief assets

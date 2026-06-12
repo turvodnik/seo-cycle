@@ -224,7 +224,21 @@ class ResearchPackageQualityTest(unittest.TestCase):
         self.assertGreaterEqual(len(outline["trust_limitations"]), 3)
         self.assertGreaterEqual(len(outline["synthetic_prompts"]), 3)
         self.assertIn("coverage_weight", outline["entities"][0])
+        self.assertIn("intro_brief", outline)
+        self.assertIn("conclusion_brief", outline)
         self.assertIn("bridge", section)
+        self.assertGreaterEqual(len(section["h3_subsections"]), 2)
+        self.assertEqual(
+            sum(item["word_count_min"] for item in section["h3_subsections"]),
+            section["word_count_min"],
+        )
+        self.assertEqual(
+            sum(item["word_count_max"] for item in section["h3_subsections"]),
+            section["word_count_max"],
+        )
+        self.assertIn("copywriting_details", section)
+        self.assertGreaterEqual(len(section["copywriting_details"]["source_slots"]), 2)
+        self.assertGreaterEqual(len(section["copywriting_details"]["acceptance_criteria"]), 3)
         self.assertIn("no_fabricated_first_person", outline["eeat_guard"]["expert_author_mode"])
         self.assertTrue(any("Do not invent" in note for note in section["copywriter_notes"]))
 
@@ -280,6 +294,7 @@ class ResearchPackageQualityTest(unittest.TestCase):
         self.assertEqual(report["status"], "fail")
         self.assertIn("word_count_mismatch", ids)
         self.assertIn("missing_page_context", ids)
+        self.assertIn("missing_intro_conclusion", ids)
         self.assertIn("missing_seo_meta", ids)
         self.assertIn("missing_schema", ids)
         self.assertIn("missing_internal_links", ids)
@@ -291,6 +306,10 @@ class ResearchPackageQualityTest(unittest.TestCase):
         self.assertIn("unsafe_first_person_expertise", ids)
         self.assertIn("orphan_entities", ids)
         self.assertIn("missing_section_bridges", ids)
+        self.assertIn("missing_h3_subsections", ids)
+        self.assertIn("weak_copywriting_details", ids)
+        self.assertIn("missing_source_slots", ids)
+        self.assertIn("missing_acceptance_criteria", ids)
         self.assertIn("missing_visual_guidance", ids)
         self.assertIn("weak_visual_plan", ids)
         self.assertIn("missing_trust_limitations", ids)

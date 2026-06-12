@@ -46,6 +46,7 @@ FINDING_CRITERIA = {
     "missing_required_fields": ("handoff_machine_readability", "copywriter_actionability"),
     "word_count_mismatch": ("word_count_integrity", "copywriter_actionability"),
     "missing_page_context": ("serp_intent_lock", "copywriter_actionability"),
+    "missing_intro_conclusion": ("copywriter_actionability", "handoff_machine_readability"),
     "missing_seo_meta": ("technical_seo_wrap",),
     "missing_schema": ("technical_seo_wrap",),
     "missing_internal_links": ("internal_links_cannibalization",),
@@ -61,6 +62,11 @@ FINDING_CRITERIA = {
     "weak_visual_plan": ("visual_ux_guidance", "handoff_machine_readability"),
     "missing_geo_requirements": ("geo_answer_units",),
     "missing_writer_handoff": ("copywriter_actionability", "handoff_machine_readability"),
+    "missing_h3_subsections": ("copywriter_actionability", "handoff_machine_readability"),
+    "subsection_word_count_mismatch": ("word_count_integrity", "copywriter_actionability"),
+    "weak_copywriting_details": ("copywriter_actionability",),
+    "missing_source_slots": ("eeat_no_fabrication", "copywriter_actionability"),
+    "missing_acceptance_criteria": ("copywriter_actionability", "handoff_machine_readability"),
     "missing_fact_check_queue": ("eeat_no_fabrication", "copywriter_actionability"),
     "missing_trust_limitations": ("eeat_no_fabrication", "geo_answer_units"),
     "missing_synthetic_prompts": ("geo_answer_units", "handoff_machine_readability"),
@@ -72,6 +78,7 @@ REMEDIATION = {
     "missing_required_fields": "Regenerate the outline from the research package so page, sections, schema and guards are present.",
     "word_count_mismatch": "Recompute outline computed_word_count from the section min/max totals.",
     "missing_page_context": "Carry page_type, intent, primary_keyword and URL from final research architecture into the outline.",
+    "missing_intro_conclusion": "Add intro_brief and conclusion_brief with word counts, promise/recap, CTA and constraints.",
     "missing_seo_meta": "Add title tag, meta description, slug/canonical and alt text guidance.",
     "missing_schema": "Add schema recommendations such as WebApplication/Article, FAQPage and BreadcrumbList.",
     "missing_internal_links": "Add internal links from final cluster architecture; do not invent unrelated detours.",
@@ -90,6 +97,11 @@ REMEDIATION = {
     "missing_fact_check_queue": "Add a fact_check_queue for SERP, claims, expert proof, schema and technical/privacy checks.",
     "missing_trust_limitations": "Add trust_limitations covering page-type, evidence, technical/privacy and decision limits.",
     "missing_synthetic_prompts": "Add synthetic AI prompts for non-branded, page-type, comparison and trust checks.",
+    "missing_h3_subsections": "Add H3 subsection plans under each H2 with writing task, entities, keywords, proof and answer-first flag.",
+    "subsection_word_count_mismatch": "Make H3 subsection word counts add up exactly to their parent section word count.",
+    "weak_copywriting_details": "Add section copywriting details: reader question, opening angle, do-write, do-not-write, safe phrases and CTA.",
+    "missing_source_slots": "Add source_slots that map claim types to required proof.",
+    "missing_acceptance_criteria": "Add concrete acceptance criteria for each section before handoff.",
 }
 
 
@@ -211,6 +223,23 @@ def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, A
             title="Outline lost required page context from the research architecture.",
             outline=title,
             evidence={"missing": missing_context},
+        )
+
+    intro = outline.get("intro_brief") if isinstance(outline.get("intro_brief"), dict) else {}
+    conclusion = outline.get("conclusion_brief") if isinstance(outline.get("conclusion_brief"), dict) else {}
+    missing_intro_conclusion = []
+    if not intro.get("word_count_min") or not intro.get("word_count_max") or not intro.get("hook_strategy") or not intro.get("promise"):
+        missing_intro_conclusion.append("intro_brief")
+    if not conclusion.get("word_count_min") or not conclusion.get("word_count_max") or not conclusion.get("recap_strategy") or not conclusion.get("cta"):
+        missing_intro_conclusion.append("conclusion_brief")
+    if missing_intro_conclusion:
+        add_finding(
+            findings,
+            finding_id="missing_intro_conclusion",
+            severity="high",
+            title="Outline lacks copy-ready intro or conclusion briefs.",
+            outline=title,
+            evidence={"missing": missing_intro_conclusion},
         )
 
     seo_meta = outline.get("seo_meta") if isinstance(outline.get("seo_meta"), dict) else {}
@@ -357,6 +386,11 @@ def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, A
     sections_without_connections = []
     sections_without_visuals = []
     sections_without_bridges = []
+    sections_without_h3 = []
+    subsection_mismatches = []
+    weak_copywriting = []
+    missing_source_slots = []
+    missing_acceptance = []
     for section in sections:
         if not isinstance(section, dict):
             continue
@@ -373,6 +407,34 @@ def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, A
         bridge = section.get("bridge") if isinstance(section.get("bridge"), dict) else {}
         if not bridge.get("from_previous") or not bridge.get("to_next"):
             sections_without_bridges.append(section.get("title"))
+        h3_subsections = section.get("h3_subsections") if isinstance(section.get("h3_subsections"), list) else []
+        if len(h3_subsections) < 2:
+            sections_without_h3.append(section.get("title"))
+        else:
+            h3_min = sum(int(item.get("word_count_min") or 0) for item in h3_subsections if isinstance(item, dict))
+            h3_max = sum(int(item.get("word_count_max") or 0) for item in h3_subsections if isinstance(item, dict))
+            if h3_min != int(section.get("word_count_min") or 0) or h3_max != int(section.get("word_count_max") or 0):
+                subsection_mismatches.append(
+                    {
+                        "section": section.get("title"),
+                        "section_range": [section.get("word_count_min"), section.get("word_count_max")],
+                        "h3_sum": [h3_min, h3_max],
+                    }
+                )
+        details = section.get("copywriting_details") if isinstance(section.get("copywriting_details"), dict) else {}
+        missing_detail_keys = [
+            key
+            for key in ("reader_question", "opening_angle", "do_write", "do_not_write", "safe_phrases", "cta")
+            if not details.get(key)
+        ]
+        if missing_detail_keys:
+            weak_copywriting.append({"section": section.get("title"), "missing": missing_detail_keys})
+        source_slots = details.get("source_slots") if isinstance(details.get("source_slots"), list) else []
+        if len(source_slots) < 2 or any(not isinstance(item, dict) or not item.get("claim_type") or not item.get("proof") for item in source_slots):
+            missing_source_slots.append(section.get("title"))
+        acceptance = details.get("acceptance_criteria") if isinstance(details.get("acceptance_criteria"), list) else []
+        if len(acceptance) < 3:
+            missing_acceptance.append(section.get("title"))
 
     orphan = sorted(entity for entity in entity_names if entity and entity not in covered_entities)
     if orphan:
@@ -401,6 +463,51 @@ def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, A
             title="Some sections lack bridge instructions.",
             outline=title,
             evidence={"sections": sections_without_bridges[:10]},
+        )
+    if sections_without_h3:
+        add_finding(
+            findings,
+            finding_id="missing_h3_subsections",
+            severity="high",
+            title="Some sections lack copywriter-ready H3 subsection plans.",
+            outline=title,
+            evidence={"sections": sections_without_h3[:10]},
+        )
+    if subsection_mismatches:
+        add_finding(
+            findings,
+            finding_id="subsection_word_count_mismatch",
+            severity="high",
+            title="H3 subsection word counts do not add up to their parent H2 section.",
+            outline=title,
+            evidence={"mismatches": subsection_mismatches[:10]},
+        )
+    if weak_copywriting:
+        add_finding(
+            findings,
+            finding_id="weak_copywriting_details",
+            severity="high",
+            title="Some sections lack concrete copywriting instructions.",
+            outline=title,
+            evidence={"sections": weak_copywriting[:10]},
+        )
+    if missing_source_slots:
+        add_finding(
+            findings,
+            finding_id="missing_source_slots",
+            severity="medium",
+            title="Some sections lack source slots for claim proof.",
+            outline=title,
+            evidence={"sections": missing_source_slots[:10]},
+        )
+    if missing_acceptance:
+        add_finding(
+            findings,
+            finding_id="missing_acceptance_criteria",
+            severity="medium",
+            title="Some sections lack acceptance criteria for copy review.",
+            outline=title,
+            evidence={"sections": missing_acceptance[:10]},
         )
     if sections_without_visuals:
         add_finding(
