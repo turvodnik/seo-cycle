@@ -122,6 +122,8 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "orphan_url_backlog": "seo/research-package/content-plan.orphan-backlog.csv",
         "serp_validation_plan": "seo/research-package/serp-validation-plan.csv",
         "spoke_opportunities": "seo/research-package/spoke-opportunities.csv",
+        "research_package_repair_report": "seo/research-package/research-package-repair.md",
+        "research_package_repair_json": "seo/research-package/research-package-repair.json",
         "entity_graph_quality_report": "seo/research-package/entity-graph-quality.md",
         "entity_graph_quality_json": "seo/research-package/entity-graph-quality.json",
         "page_outline_quality_report": "seo/research-package/page-outline-quality.md",

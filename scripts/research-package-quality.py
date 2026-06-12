@@ -27,6 +27,7 @@ except ImportError:  # pragma: no cover
     yaml = None
 
 from seo_cycle_core.config import write_text
+from research_package_repair_core import repeated_phrase_clean
 
 
 REQUIRED_FILES = (
@@ -90,21 +91,21 @@ REMEDIATION_HINTS = {
     },
     "serp_validation_incomplete": {
         "mode": "source_refresh",
-        "target_files": ["semantic-architecture-final.json"],
-        "command": "Rerun SERP validation for empty MVP keywords with the configured provider, then update dataforseo_serp_validation.",
-        "definition_of_done": "Every MVP keyword has non-empty SERP features and top result URLs/titles.",
+        "target_files": ["serp-validation-plan.csv", "semantic-architecture-final.json"],
+        "command": "serp-validation-plan.py <package> --write",
+        "definition_of_done": "serp-validation-plan.csv lists every missing query/provider/region/device/page-type decision field; imported SERP evidence then fills validation gaps.",
     },
     "semantic_core_url_drift": {
         "mode": "agent_fix",
-        "target_files": ["semantic-core.csv", "semantic-architecture-final.json"],
-        "command": "Rewrite semantic-core.csv suggested_url/base_cluster from semantic-architecture-final.json after final clustering.",
-        "definition_of_done": "No semantic-core row points to an obsolete URL for its final cluster.",
+        "target_files": ["semantic-core.resynced.csv", "semantic-architecture-final.json"],
+        "command": "semantic-core-resync.py <package> --write",
+        "definition_of_done": "semantic-core.resynced.csv maps old cluster IDs/URLs to final architecture IDs/URLs.",
     },
     "dirty_semantic_core_queries": {
         "mode": "agent_fix",
-        "target_files": ["semantic-core.csv"],
-        "command": "Clean prompt-like, malformed, and non-search rows before clustering or volume aggregation.",
-        "definition_of_done": "Semantic core contains user/search queries, not image prompts or LLM task text.",
+        "target_files": ["semantic-core.cleaned.csv", "semantic-core.rejected.csv"],
+        "command": "semantic-core-clean.py <package> --write",
+        "definition_of_done": "semantic-core.cleaned.csv contains search queries and semantic-core.rejected.csv explains removed prompt/spam rows.",
     },
     "duplicate_page_briefs": {
         "mode": "agent_fix",
@@ -114,21 +115,21 @@ REMEDIATION_HINTS = {
     },
     "orphan_internal_urls": {
         "mode": "manual_decision",
-        "target_files": ["content-plan.csv", "site-structure.md", "semantic-architecture-final.json"],
-        "command": "Either add planned pages for referenced URLs or remove those URLs from internal-link/site-structure targets.",
-        "definition_of_done": "Every internal URL is backed by a planned page or explicitly documented as existing/static.",
+        "target_files": ["content-plan.orphan-backlog.csv", "content-plan.csv", "site-structure.md", "semantic-architecture-final.json"],
+        "command": "orphan-url-resolver.py <package> --write",
+        "definition_of_done": "content-plan.orphan-backlog.csv lists create/remove decisions for every referenced URL without a planned page.",
     },
     "entity_map_md_yaml_drift": {
         "mode": "agent_fix",
         "target_files": ["entity-map.md", "entity-map.yaml"],
-        "command": "Render entity-map.md from entity-map.yaml instead of maintaining two divergent sources.",
+        "command": "entity-map-sync.py <package> --write",
         "definition_of_done": "Markdown and YAML expose the same priority entities and attributes.",
     },
     "google_nlp_not_aggregated": {
         "mode": "agent_fix",
-        "target_files": ["semantic-architecture-final.json", "entity-map.yaml"],
-        "command": "Deduplicate Google NLP entities by normalized name and aggregate salience before feeding entity decisions.",
-        "definition_of_done": "Only aggregated entity records are used downstream.",
+        "target_files": ["entity_coverage.jsonl", "semantic-architecture-final.json", "entity-map.yaml"],
+        "command": "google-nlp-aggregate.py <package> --write",
+        "definition_of_done": "entity_coverage.jsonl contains deduplicated entities with mentions, variants, salience sums/averages and type counts.",
     },
     "ai_overview_signals_unused": {
         "mode": "agent_fix",
@@ -349,6 +350,24 @@ def launch_action_plan(report: dict[str, Any]) -> list[dict[str, Any]]:
             "definition_of_done": "Critical findings count is 0.",
         }
     ]
+    repairable = {
+        "serp_validation_incomplete",
+        "semantic_core_url_drift",
+        "dirty_semantic_core_queries",
+        "orphan_internal_urls",
+        "entity_map_md_yaml_drift",
+        "google_nlp_not_aggregated",
+    }
+    if any(item.get("id") in repairable for item in report["findings"]):
+        actions.append(
+            {
+                "step": len(actions) + 1,
+                "priority": "P0-02",
+                "action": "Run the research package repair layer.",
+                "command": "research-package-repair.py <package> --write",
+                "definition_of_done": "Repair report has 0 failed steps and generated cleaned/resynced/backlog/SERP/entity artifacts.",
+            }
+        )
     for item in report["remediation_plan"][:10]:
         actions.append(
             {
@@ -503,7 +522,7 @@ def audit_package(package_dir: pathlib.Path) -> dict[str, Any]:
     google_nlp = sources.get("google_nlp") if isinstance(sources, dict) else None
     if isinstance(google_nlp, dict):
         raw_entities = google_nlp.get("entities") or []
-        names = [norm(item.get("name")) for item in raw_entities if isinstance(item, dict) and norm(item.get("name"))]
+        names = [repeated_phrase_clean(str(item.get("name") or "")) for item in raw_entities if isinstance(item, dict) and norm(item.get("name"))]
         duplicates = {name: count for name, count in Counter(names).items() if count >= 3}
         if duplicates and not sources.get("google_nlp_aggregated"):
             add_finding(

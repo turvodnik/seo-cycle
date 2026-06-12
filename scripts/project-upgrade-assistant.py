@@ -123,6 +123,8 @@ FEATURES: list[dict[str, Any]] = [
             "orphan_url_backlog",
             "serp_validation_plan",
             "spoke_opportunities",
+            "research_package_repair_report",
+            "research_package_repair_json",
             "entity_graph_quality_report",
             "entity_graph_quality_json",
         ],

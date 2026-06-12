@@ -74,8 +74,16 @@ Medium findings:
 
 ## Repair Layer
 
-Run repair scripts after `research-package-quality.py` finds cleanup or
+Run the repair wrapper after `research-package-quality.py` finds cleanup or
 consistency issues, and before generating fresh page outlines:
+
+```bash
+python3 scripts/research-package-repair.py ./research-package --write
+```
+
+The wrapper runs the full repair pack and writes
+`research-package-repair.md/json`. For targeted reruns, use the exact commands
+from `research-package-action-plan.md`:
 
 ```bash
 python3 scripts/semantic-core-clean.py ./research-package --write
@@ -90,6 +98,8 @@ python3 scripts/entity-graph-quality.py ./research-package --write
 
 Outputs:
 
+- `research-package-repair.md/json` summarizes all repair steps, their status,
+  commands, stderr snippets and expected outputs.
 - `semantic-core.cleaned.csv` and `semantic-core.rejected.csv` separate
   prompt/spam-like GSC rows from usable keyword rows.
 - `semantic-core.resynced.csv` aligns old cluster IDs and URLs to the final
@@ -230,7 +240,8 @@ copywriting safety check before schema, CMS publishing or approval.
 1. Build or receive a research package.
 2. Run `research-package-quality.py`.
 3. Open `research-package-action-plan.md` and follow the automatic steps.
-4. Run the repair-layer scripts for the relevant findings.
+4. Run `research-package-repair.py --write`, or the targeted repair commands
+   from the action plan when only one layer needs rerun.
 5. Rerun `research-package-quality.py --write` and fix remaining critical/high
    findings.
 6. Generate `page-outline-v2.py --all-mvp` or `--priority P1`.

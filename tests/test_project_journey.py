@@ -105,7 +105,7 @@ class ProjectJourneyTest(unittest.TestCase):
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "project-journey.md").exists())
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "project-journey-checklist.csv").exists())
 
-    def test_failed_research_quality_blocks_deep_briefs(self) -> None:
+    def test_failed_research_quality_routes_to_repair_layer_before_deep_briefs(self) -> None:
         cfg_path = self.make_project()
         self.seed_ready_project(
             cfg_path,
@@ -126,8 +126,10 @@ class ProjectJourneyTest(unittest.TestCase):
         report = self.run_journey(cfg_path)
 
         self.assertEqual(report["status"], "blocked")
-        self.assertEqual(report["current_stage"]["id"], "research_quality_gate")
+        self.assertEqual(report["current_stage"]["id"], "research_package_repair")
         self.assertTrue(any("serp_validation_incomplete" in item for item in report["missing_for_next_step"]))
+        self.assertTrue(any("research-package-repair.py" in command for command in report["current_stage"]["next_commands"]))
+        self.assertTrue(any("serp-validation-plan.py" in command for command in report["current_stage"]["next_commands"]))
         deep = next(stage for stage in report["stages"] if stage["id"] == "deep_page_briefs")
         self.assertEqual(deep["status"], "pending")
 

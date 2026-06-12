@@ -1,5 +1,15 @@
 # Changelog — seo-cycle
 
+## [1.55.0] — 2026-06-12
+
+### Repair orchestration
+
+- Added `scripts/research-package-repair.py`, a one-command repair wrapper that runs semantic-core cleanup/resync, entity-map sync, Google NLP aggregation, orphan URL backlog, SERP validation plan, phase-2 spoke audit and entity graph quality, then writes `research-package-repair.md/json`.
+- Updated `research-package-quality.py` remediation and launch action plans to point to exact repair commands instead of generic manual instructions, including the new wrapper.
+- Added `research_package_repair` to `project-journey.py` so failed package quality now routes users through a concrete repair stage before deep page briefs.
+- Updated Codex runtime and research-package docs to use the full flow: quality gate -> repair layer -> quality rerun -> page-outline v2 -> page-outline quality -> draft quality gate.
+- Added regression coverage for repair wrapper execution, exact remediation commands and journey repair routing.
+
 ## [1.54.0] — 2026-06-12
 
 ### Research package repair layer

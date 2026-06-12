@@ -119,6 +119,7 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
         }
     required_status = {name: (package / name).exists() for name in required}
     quality_path = package / "research-package-quality.json"
+    repair_path = package / "research-package-repair.json"
     outline_quality_path = package / "page-outline-quality.json"
     outline_dir = package / "page-outlines-v2"
     outline_count = len(list(outline_dir.glob("*.json"))) if outline_dir.exists() else 0
@@ -129,6 +130,8 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
         "missing_required": [name for name, exists in required_status.items() if not exists],
         "quality": read_json(quality_path),
         "quality_exists": quality_path.exists(),
+        "repair": read_json(repair_path),
+        "repair_exists": repair_path.exists(),
         "outline_quality": read_json(outline_quality_path),
         "outline_quality_exists": outline_quality_path.exists(),
         "outline_count": outline_count,
@@ -319,14 +322,14 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
     quality = package.get("quality", {})
     package_dir = package.get("package_dir") or "seo/research-package"
     missing = [] if package.get("quality_exists") else [f"{package_dir}/research-package-quality.json"]
-    blockers = []
+    warnings = []
     if quality.get("status") == "fail":
         critical = int(((quality.get("counts") or {}) if isinstance(quality.get("counts"), dict) else {}).get("critical_findings") or 0)
         high = int(((quality.get("counts") or {}) if isinstance(quality.get("counts"), dict) else {}).get("high_findings") or 0)
-        blockers.append(f"Research package quality gate is fail: critical={critical}, high={high}.")
+        warnings.append(f"Research package quality gate is fail: critical={critical}, high={high}; continue to repair layer.")
         for finding in quality.get("findings", [])[:5]:
             if isinstance(finding, dict):
-                blockers.append(f"{finding.get('severity', 'finding')}: {finding.get('id')} — {finding.get('title')}")
+                warnings.append(f"{finding.get('severity', 'finding')}: {finding.get('id')} — {finding.get('title')}")
     evidence = [
         f"{package_dir}/research-package-quality.json: {'exists' if package.get('quality_exists') else 'missing'}",
         f"quality status: {quality.get('status', 'not_run')}",
@@ -339,11 +342,68 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
         objective="The macro package passes the comparison-audit failure checks before writing begins.",
         evidence=evidence,
         missing=missing,
-        blockers=blockers,
+        warnings=warnings,
         commands=[f"python3 ~/.codex/skills/seo-cycle/scripts/research-package-quality.py {package_dir} --write --format plan"],
         exit_criteria=[
             "No critical findings remain.",
             "SERP validation, URL mapping, GSC cleanup, entity map, GEO signals, and E-E-A-T evidence are either clean or explicitly accepted.",
+        ],
+    )
+
+
+REPAIR_COMMANDS = {
+    "serp_validation_incomplete": "python3 ~/.codex/skills/seo-cycle/scripts/serp-validation-plan.py {package_dir} --write",
+    "semantic_core_url_drift": "python3 ~/.codex/skills/seo-cycle/scripts/semantic-core-resync.py {package_dir} --write",
+    "dirty_semantic_core_queries": "python3 ~/.codex/skills/seo-cycle/scripts/semantic-core-clean.py {package_dir} --write",
+    "orphan_internal_urls": "python3 ~/.codex/skills/seo-cycle/scripts/orphan-url-resolver.py {package_dir} --write",
+    "entity_map_md_yaml_drift": "python3 ~/.codex/skills/seo-cycle/scripts/entity-map-sync.py {package_dir} --write",
+    "google_nlp_not_aggregated": "python3 ~/.codex/skills/seo-cycle/scripts/google-nlp-aggregate.py {package_dir} --write",
+}
+
+
+def repair_stage(package: dict[str, Any]) -> dict[str, Any]:
+    package_dir = package.get("package_dir") or "seo/research-package"
+    quality = package.get("quality", {})
+    repair = package.get("repair", {})
+    quality_failed = quality.get("status") == "fail"
+    missing = []
+    blockers = []
+    commands = [
+        f"python3 ~/.codex/skills/seo-cycle/scripts/research-package-repair.py {package_dir} --write",
+    ]
+    if quality_failed and not package.get("repair_exists"):
+        missing.append(f"{package_dir}/research-package-repair.json")
+    if quality_failed:
+        blockers.append("Research package repair is required before deep briefs.")
+        for finding in quality.get("findings", [])[:8]:
+            if isinstance(finding, dict):
+                finding_id = str(finding.get("id") or "")
+                blockers.append(f"{finding.get('severity', 'finding')}: {finding_id} — {finding.get('title')}")
+                command = REPAIR_COMMANDS.get(finding_id)
+                if command:
+                    commands.append(command.format(package_dir=package_dir))
+        commands.append(f"python3 ~/.codex/skills/seo-cycle/scripts/research-package-quality.py {package_dir} --write --format plan")
+    failed_steps = int(((repair.get("summary") or {}) if isinstance(repair.get("summary"), dict) else {}).get("failed_steps") or 0)
+    if failed_steps:
+        blockers.append(f"research-package-repair has {failed_steps} failed steps.")
+    evidence = [
+        f"{package_dir}/research-package-repair.json: {'exists' if package.get('repair_exists') else 'missing'}",
+        f"quality status: {quality.get('status', 'not_run')}",
+        f"repair failed steps: {failed_steps}",
+    ]
+    return stage(
+        stage_id="research_package_repair",
+        order=7,
+        title="Research package repair",
+        objective="Repair dirty semantic core, URL/cluster drift, entity/NLP drift, orphan URLs, missing SERP validation and phase-2 spoke opportunities before deep briefs.",
+        evidence=evidence,
+        missing=missing,
+        blockers=blockers,
+        commands=commands,
+        exit_criteria=[
+            "research-package-repair.json exists with 0 failed steps when the package previously failed quality.",
+            "research-package-quality.py has been rerun after repair.",
+            "No critical findings remain unless explicitly accepted in policy.",
         ],
     )
 
@@ -374,7 +434,7 @@ def brief_stage(package: dict[str, Any]) -> dict[str, Any]:
         missing.append(f"{package_dir}/page-outline-quality.json")
     return stage(
         stage_id="deep_page_briefs",
-        order=7,
+        order=8,
         title="Deep page briefs",
         objective="Every MVP/P1 page has a validated section-level brief with word counts, entities, Answer Units, proof, schema, SEO meta, and no-fabrication guard.",
         evidence=[
@@ -405,7 +465,7 @@ def implementation_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dic
     warnings = [f"Approval gates still apply before publish/index/ads/tracking: {', '.join(gates)}"] if gates else []
     return stage(
         stage_id="implementation_review",
-        order=8,
+        order=9,
         title="Implementation and publication review",
         objective="Approved content/technical changes are implemented only after final review and project-specific gates.",
         evidence=[f"approval gates: {', '.join(gates) or 'none'}"],
@@ -436,7 +496,7 @@ def monitoring_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[st
             missing.append(path)
     return stage(
         stage_id="monitoring_iteration",
-        order=9,
+        order=10,
         title="Monitoring and iteration",
         objective="After launch, measurement, bot/index health, AI visibility, and refresh tasks feed the next cycle.",
         evidence=evidence,
@@ -526,6 +586,7 @@ def build_report(cfg_path: pathlib.Path, *, goal: str, research_package: str | N
         technical_stage(cfg, project_root),
         research_stage(project_root, package),
         quality_stage(package),
+        repair_stage(package),
         brief_stage(package),
         implementation_stage(cfg, project_root),
         monitoring_stage(cfg, project_root),

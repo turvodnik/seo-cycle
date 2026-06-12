@@ -52,6 +52,18 @@ class RepairLayerTest(unittest.TestCase):
         )
         return json.loads(proc.stdout)
 
+    def run_script_allow_fail(self, script: str, *args: str) -> dict:
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / script), str(self.package), "--write", "--format", "json", *args],
+            cwd=self.package,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if proc.returncode not in {0, 1}:
+            self.fail(f"{script} failed unexpectedly: {proc.stderr}")
+        return json.loads(proc.stdout)
+
     def write_package(self) -> None:
         architecture = {
             "metadata": {
@@ -356,6 +368,30 @@ class RepairLayerTest(unittest.TestCase):
         self.assertIn("unsafe_first_person_expertise", finding_ids)
         self.assertIn("missing_internal_link", finding_ids)
         self.assertIn("missing_proof_slot", finding_ids)
+
+    def test_research_quality_action_plan_points_to_exact_repair_commands(self) -> None:
+        quality = self.run_script_allow_fail("research-package-quality.py")
+        commands = "\n".join(item["command"] for item in quality["remediation_plan"])
+        launch_commands = "\n".join(item["command"] for item in quality["launch_action_plan"])
+
+        self.assertIn("semantic-core-clean.py <package> --write", commands)
+        self.assertIn("semantic-core-resync.py <package> --write", commands)
+        self.assertIn("entity-map-sync.py <package> --write", commands)
+        self.assertIn("google-nlp-aggregate.py <package> --write", commands)
+        self.assertIn("orphan-url-resolver.py <package> --write", commands)
+        self.assertIn("serp-validation-plan.py <package> --write", commands)
+        self.assertIn("research-package-repair.py <package> --write", launch_commands)
+
+    def test_research_package_repair_runs_all_repair_scripts(self) -> None:
+        repair = self.run_script("research-package-repair.py")
+        self.assertEqual(repair["summary"]["failed_steps"], 0)
+        self.assertGreaterEqual(repair["summary"]["completed_steps"], 8)
+        self.assertTrue((self.package / "research-package-repair.json").exists())
+        self.assertTrue((self.package / "semantic-core.cleaned.csv").exists())
+        self.assertTrue((self.package / "semantic-core.resynced.csv").exists())
+        self.assertTrue((self.package / "entity_coverage.jsonl").exists())
+        self.assertTrue((self.package / "serp-validation-plan.csv").exists())
+        self.assertTrue((self.package / "spoke-opportunities.csv").exists())
 
 
 if __name__ == "__main__":
