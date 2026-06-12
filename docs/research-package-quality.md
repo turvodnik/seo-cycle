@@ -92,6 +92,11 @@ The output includes:
 
 - computed word-count totals from sections;
 - SEO meta: title tag, meta description, slug, canonical, and alt-text guidance;
+- answer-first Key Takeaways;
+- FAQ answer units ready for FAQPage review;
+- numbered visual plan with placement and dedupe keys;
+- section bridges so the page reads as one funnel, not isolated blocks;
+- writer handoff with must-do, must-not, fact-check queue, and safe memorable lines;
 - entities and keywords per section;
 - visual elements;
 - copywriter notes;
@@ -100,6 +105,7 @@ The output includes:
 - schema;
 - internal links;
 - GEO requirements;
+- synthetic AI prompts;
 - E-E-A-T guard that blocks invented first-person expertise by default.
 
 Use `--expert-author` only when the project has a real named expert/author and
@@ -136,6 +142,11 @@ The gate uses a 10-criterion scorecard for:
 
 Critical findings block downstream writing/publishing. High/medium findings
 become action-plan steps and should be accepted only after review.
+
+This combines the useful competitor-outline advantages with the stronger
+seo-cycle architecture: micro-level copywriter guidance is generated only after
+SERP/page-type, URL, cluster, internal-link, entity and no-fabrication context is
+locked by the research package.
 
 ## Pipeline
 

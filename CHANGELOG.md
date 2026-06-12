@@ -1,5 +1,14 @@
 # Changelog — seo-cycle
 
+## [1.51.0] — 2026-06-12
+
+### Competitor-grade page brief assets
+
+- Extended `page-outline-v2.py` with the useful micro-brief advantages from the competitor outline while keeping seo-cycle's data-backed architecture: answer-first key takeaways, FAQ answer units, numbered visual plan with dedupe keys, section bridges, writer handoff, safe memorable lines, trust/limitations guidance, synthetic AI prompts, and entity weights with an explicit source basis.
+- Kept the E-E-A-T guard strict: first-person expertise remains blocked unless `--expert-author` is explicitly used, and generated FAQ/handoff text avoids first-person phrasing that could look like fabricated experience.
+- Extended `page-outline-quality.py` so the new assets are enforced by the quality gate: missing takeaways, FAQ, handoff, fact-check queue, visual plan, section bridges, trust limits, or synthetic prompts now produce actionable findings.
+- Updated regression coverage so generated outlines must pass the stricter quality gate, while shallow/unsafe outlines fail on the new criteria.
+
 ## [1.50.0] — 2026-06-12
 
 ### Page outline quality gate

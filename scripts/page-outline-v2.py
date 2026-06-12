@@ -184,7 +184,13 @@ def select_entities(entities: list[dict[str, Any]], cluster_id: str, primary_key
             scored.append((score, entity))
     if not scored:
         scored = [(1, entity) for entity in entities[:limit]]
-    return [entity for _, entity in sorted(scored, key=lambda item: item[0], reverse=True)[:limit]]
+    selected = []
+    for score, entity in sorted(scored, key=lambda item: item[0], reverse=True)[:limit]:
+        enriched = dict(entity)
+        enriched["coverage_weight"] = max(1, min(10, int(score)))
+        enriched["weight_source"] = "entity-map priority + cluster target + primary keyword match"
+        selected.append(enriched)
+    return selected
 
 
 def split_keywords(cluster: dict[str, Any]) -> list[str]:
@@ -283,6 +289,175 @@ def section_visual(kind: str, page_type: str) -> str:
     return "Simple diagram/table if it makes the decision easier."
 
 
+def entities_for_section(entity_names: list[str], kind: str, order: int) -> list[str]:
+    base_limit = 4 if kind in {"answer", "definition"} else 6
+    selected = list(entity_names[:base_limit])
+    extra_entities = entity_names[base_limit:]
+    if extra_entities:
+        extra = extra_entities[(order - 1) % len(extra_entities)]
+        if extra not in selected:
+            selected.append(extra)
+    return selected
+
+
+def key_takeaways_for_page(primary: str, page_type: str, entity_names: list[str]) -> list[dict[str, str]]:
+    core_entity = entity_names[0] if entity_names else primary
+    return [
+        {
+            "statement": f"`{primary}` must satisfy the `{page_type}` intent before adding supporting guide content.",
+            "purpose": "SERP/page-type lock",
+        },
+        {
+            "statement": f"Lead with a direct answer, then support it with `{core_entity}` coverage and proof.",
+            "purpose": "AI citation readiness",
+        },
+        {
+            "statement": "Keep sibling topics as internal links unless the research package assigns them to this URL.",
+            "purpose": "Cannibalization control",
+        },
+        {
+            "statement": "Every factual claim needs a source, dataset row, screenshot, or named expert proof.",
+            "purpose": "E-E-A-T and fact-check",
+        },
+        {
+            "statement": "Use visuals to explain decisions, not as decoration.",
+            "purpose": "Visual UX discipline",
+        },
+        {
+            "statement": "State limits honestly so the page can earn trust and AI citations.",
+            "purpose": "Trust and GEO",
+        },
+    ]
+
+
+def faq_for_page(primary: str, page_type: str) -> list[dict[str, str]]:
+    return [
+        {
+            "question": f"What is the best format for `{primary}`?",
+            "answer_guidance": f"Answer first: this page should be a `{page_type}` because the research package selected that format from intent/SERP context.",
+        },
+        {
+            "question": f"How should readers use this `{page_type}` page?",
+            "answer_guidance": "Start with the shortest task answer, then follow the steps, proof blocks, visuals, and linked next pages.",
+        },
+        {
+            "question": "What should be fact-checked before publication?",
+            "answer_guidance": "Check all numbers, brand claims, product capabilities, technical/privacy claims, expert statements, and comparison claims.",
+        },
+        {
+            "question": "What should stay out of this page?",
+            "answer_guidance": "Do not expand sibling clusters, invent personal experience, add unsupported statistics, or change page type without SERP review.",
+        },
+        {
+            "question": "How is this page prepared for AI answers?",
+            "answer_guidance": "Use answer-first blocks, FAQ schema, entity triplets, proof blocks, and synthetic prompts tied to the cluster.",
+        },
+    ]
+
+
+def visual_plan_for_sections(sections: list[dict[str, Any]], primary: str) -> list[dict[str, str]]:
+    visuals = []
+    counters = {"table": 0, "screenshot": 0, "infographic": 0, "callout": 0, "faq": 0}
+    for section in sections:
+        kind = str(section.get("kind") or "")
+        if kind in {"list", "visual"}:
+            visual_type = "table"
+            label = "Comparison table"
+        elif kind == "howto":
+            visual_type = "screenshot"
+            label = "Step screenshot"
+        elif kind == "trust":
+            visual_type = "callout"
+            label = "Limitations callout"
+        elif kind == "faq":
+            visual_type = "faq"
+            label = "FAQ block"
+        elif kind == "definition":
+            visual_type = "infographic"
+            label = "Definition diagram"
+        else:
+            continue
+        counters[visual_type] += 1
+        visual_id = f"{visual_type.title()} {counters[visual_type]}"
+        visuals.append(
+            {
+                "id": visual_id,
+                "type": visual_type,
+                "label": label,
+                "placement": str(section.get("title")),
+                "dedupe_key": slugify(f"{primary}-{visual_type}-{section.get('title')}"),
+                "alt_text_guidance": "Describe the actual table/screenshot/result state; include the task only when natural.",
+                "source_requirement": "Use project screenshots, SERP evidence, product docs, or verified examples; do not invent UI states.",
+            }
+        )
+    return visuals
+
+
+def writer_handoff_for_page(primary: str, page_type: str, internal_links: list[str]) -> dict[str, Any]:
+    return {
+        "reader_task": f"Help the reader complete the `{primary}` task on a `{page_type}` page without changing the SERP-selected format.",
+        "voice": "clear, expert, source-backed, neutral unless a real named expert is approved",
+        "must_do": [
+            "Answer the user task before broad explanation.",
+            "Use section-level entities and triplets as coverage requirements.",
+            "Add source/proof notes for numbers, brand claims, product claims, and technical/privacy statements.",
+            "Use internal links as next-step routes instead of merging sibling clusters.",
+        ],
+        "must_not": [
+            "Do not fabricate first-person expertise, client stories, tests, credentials, or quotes.",
+            "Do not change page type, target URL, or intent without a new SERP review.",
+            "Do not bury the answer below generic introduction text.",
+            "Do not send users to unplanned URLs.",
+        ],
+        "fact_check_queue": [
+            "SERP/page-type validation",
+            "Primary keyword, URL, and cluster mapping",
+            "All numbers, prices, limits, dates, and product capabilities",
+            "All brand, expert, privacy, safety, and comparison claims",
+            "Schema matches visible content",
+        ],
+        "memorable_lines": [
+            "Use the tool first, then use the guide to make the result trustworthy.",
+            "A good page reduces decision risk before it asks for a conversion.",
+            "Limitations are not weakness; they are proof the page is honest.",
+        ],
+        "internal_link_rules": [
+            f"Use `{link}` only as a next-step route, not as a detour section."
+            for link in internal_links[:8]
+        ],
+    }
+
+
+def trust_limitations_for_page(primary: str, page_type: str) -> list[dict[str, str]]:
+    return [
+        {
+            "topic": "Page-type limits",
+            "instruction": f"Explain what this `{page_type}` page can and cannot solve for `{primary}`.",
+        },
+        {
+            "topic": "Evidence limits",
+            "instruction": "Mark claims that require source URLs, screenshots, logs, API rows, or named expert proof.",
+        },
+        {
+            "topic": "Technical/privacy limits",
+            "instruction": "For tools, uploads, personalization, analytics, or AI features, state consent/privacy boundaries visibly.",
+        },
+        {
+            "topic": "Decision limits",
+            "instruction": "Tell users when to compare alternatives, use a sibling page, or ask a qualified expert.",
+        },
+    ]
+
+
+def synthetic_prompts_for_page(primary: str, page_type: str) -> list[dict[str, str]]:
+    return [
+        {"group": "non_branded", "prompt": f"What is the best way to solve `{primary}`?"},
+        {"group": "page_type", "prompt": f"Should `{primary}` be answered by a `{page_type}` page, guide, or tool?"},
+        {"group": "comparison", "prompt": f"What should I compare before choosing a result for `{primary}`?"},
+        {"group": "trust", "prompt": f"What are the limitations or risks of using a page about `{primary}`?"},
+    ]
+
+
 def build_outline(package: pathlib.Path, selector: str | None, *, expert_author: bool = False) -> dict[str, Any]:
     architecture = read_json(package / "semantic-architecture-final.json")
     content_rows = read_csv(package / "content-plan.csv")
@@ -303,7 +478,7 @@ def build_outline(package: pathlib.Path, selector: str | None, *, expert_author:
     sections = []
     for idx, template in enumerate(template_sections(page_type), start=1):
         section_keywords = [keywords[0]] + keywords[idx : idx + 3] if keywords else []
-        section_entities = entity_names[:4] if template["kind"] in {"answer", "definition"} else entity_names[:6]
+        section_entities = entities_for_section(entity_names, template["kind"], idx)
         no_fabrication = (
             "First-person expert claims are allowed only if the project has a real named expert/author."
             if expert_author
@@ -314,12 +489,17 @@ def build_outline(package: pathlib.Path, selector: str | None, *, expert_author:
                 "order": idx,
                 "level": template["level"],
                 "title": template["title"],
+                "kind": template["kind"],
                 "word_count_min": template["min"],
                 "word_count_max": template["max"],
                 "entities_to_cover": section_entities,
                 "keywords": section_keywords,
                 "summary": f"Cover `{template['kind']}` intent for `{primary}` while preserving page type `{page_type}` selected by research/SERP context.",
                 "visual_elements": section_visual(template["kind"], page_type),
+                "bridge": {
+                    "from_previous": "Open from the previous user question without reintroducing the full topic." if idx > 1 else "Start immediately with the searcher task and answer.",
+                    "to_next": "Close with the next decision the reader must make, then hand off to the following section.",
+                },
                 "copywriter_notes": [
                     no_fabrication,
                     "Lead with the user task and answer the intent before expanding into supporting explanation.",
@@ -346,6 +526,12 @@ def build_outline(package: pathlib.Path, selector: str | None, *, expert_author:
     total_max = sum(section["word_count_max"] for section in sections)
     schema = schema_for_page(page_type)
     seo_meta = seo_meta_for_page({**cluster, **content}, primary, page_type)
+    key_takeaways = key_takeaways_for_page(primary, page_type, entity_names)
+    faq = faq_for_page(primary, page_type)
+    visual_plan = visual_plan_for_sections(sections, primary)
+    writer_handoff = writer_handoff_for_page(primary, page_type, internal_links)
+    trust_limitations = trust_limitations_for_page(primary, page_type)
+    synthetic_prompts = synthetic_prompts_for_page(primary, page_type)
     return {
         "outline_id": "page_outline_v2",
         "generated_at": utc_now(),
@@ -365,6 +551,22 @@ def build_outline(package: pathlib.Path, selector: str | None, *, expert_author:
         },
         "computed_word_count": {"min": total_min, "max": total_max},
         "seo_meta": seo_meta,
+        "key_takeaways": key_takeaways,
+        "faq": faq,
+        "visual_plan": visual_plan,
+        "writer_handoff": writer_handoff,
+        "trust_limitations": trust_limitations,
+        "synthetic_prompts": synthetic_prompts,
+        "competitor_advantages_applied": [
+            "answer-first key takeaways below H1",
+            "FAQ answer units with FAQPage schema readiness",
+            "numbered visual plan with dedupe keys and alt guidance",
+            "section bridges for a single coherent funnel",
+            "safe memorable lines without fabricated expertise",
+            "entity weights with explicit source basis",
+            "trust and limitations sectioning",
+            "machine-readable JSON handoff plus Markdown rendering",
+        ],
         "entities": page_entities,
         "schema": schema,
         "internal_links": internal_links,
@@ -428,9 +630,73 @@ def render_markdown(outline: dict[str, Any]) -> str:
         "",
         ", ".join(f"`{item}`" for item in outline["schema"]),
         "",
-        "## Internal Links",
+        "## Key Takeaways",
         "",
     ]
+    for item in outline.get("key_takeaways", []):
+        lines.append(f"- {item.get('statement')} ({item.get('purpose')})")
+    lines.extend(
+        [
+            "",
+            "## Writer Handoff",
+            "",
+            f"- Reader task: {outline.get('writer_handoff', {}).get('reader_task')}",
+            f"- Voice: {outline.get('writer_handoff', {}).get('voice')}",
+            "- Must do:",
+        ]
+    )
+    lines.extend(f"  - {item}" for item in outline.get("writer_handoff", {}).get("must_do", []))
+    lines.append("- Must not:")
+    lines.extend(f"  - {item}" for item in outline.get("writer_handoff", {}).get("must_not", []))
+    lines.append("- Fact-check queue:")
+    lines.extend(f"  - {item}" for item in outline.get("writer_handoff", {}).get("fact_check_queue", []))
+    lines.append("- Safe memorable lines:")
+    lines.extend(f"  - {item}" for item in outline.get("writer_handoff", {}).get("memorable_lines", []))
+    lines.extend(
+        [
+            "",
+            "## Visual Plan",
+            "",
+        ]
+    )
+    for visual in outline.get("visual_plan", []):
+        lines.append(
+            f"- `{visual.get('id')}` ({visual.get('type')}): {visual.get('label')} in `{visual.get('placement')}`; "
+            f"dedupe `{visual.get('dedupe_key')}`; alt: {visual.get('alt_text_guidance')}"
+        )
+    lines.extend(
+        [
+            "",
+            "## FAQ Answer Units",
+            "",
+        ]
+    )
+    for item in outline.get("faq", []):
+        lines.extend([f"### {item.get('question')}", "", item.get("answer_guidance", ""), ""])
+    lines.extend(
+        [
+            "## Trust and Limitations",
+            "",
+        ]
+    )
+    for item in outline.get("trust_limitations", []):
+        lines.append(f"- **{item.get('topic')}**: {item.get('instruction')}")
+    lines.extend(
+        [
+            "",
+            "## Synthetic AI Prompts",
+            "",
+        ]
+    )
+    for item in outline.get("synthetic_prompts", []):
+        lines.append(f"- `{item.get('group')}`: {item.get('prompt')}")
+    lines.extend(
+        [
+            "",
+        "## Internal Links",
+        "",
+        ]
+    )
     if outline["internal_links"]:
         lines.extend(f"- `{link}`" for link in outline["internal_links"])
     else:
@@ -449,6 +715,8 @@ def render_markdown(outline: dict[str, Any]) -> str:
                 f"- Keywords: {', '.join(f'`{item}`' for item in section['keywords']) or 'none supplied'}",
                 f"- Summary: {section['summary']}",
                 f"- Visual Elements: {section['visual_elements']}",
+                f"- Bridge from previous: {section.get('bridge', {}).get('from_previous')}",
+                f"- Bridge to next: {section.get('bridge', {}).get('to_next')}",
                 "- Copywriter Notes:",
             ]
         )

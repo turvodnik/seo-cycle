@@ -50,12 +50,20 @@ FINDING_CRITERIA = {
     "missing_schema": ("technical_seo_wrap",),
     "missing_internal_links": ("internal_links_cannibalization",),
     "missing_answer_units": ("geo_answer_units", "copywriter_actionability"),
+    "missing_key_takeaways": ("geo_answer_units", "copywriter_actionability"),
+    "missing_faq_assets": ("geo_answer_units", "technical_seo_wrap"),
     "missing_evidence_requirements": ("eeat_no_fabrication", "copywriter_actionability"),
     "unsafe_first_person_expertise": ("eeat_no_fabrication",),
     "orphan_entities": ("entity_coverage",),
     "missing_entity_connections": ("entity_coverage", "handoff_machine_readability"),
+    "missing_section_bridges": ("copywriter_actionability", "handoff_machine_readability"),
     "missing_visual_guidance": ("visual_ux_guidance",),
+    "weak_visual_plan": ("visual_ux_guidance", "handoff_machine_readability"),
     "missing_geo_requirements": ("geo_answer_units",),
+    "missing_writer_handoff": ("copywriter_actionability", "handoff_machine_readability"),
+    "missing_fact_check_queue": ("eeat_no_fabrication", "copywriter_actionability"),
+    "missing_trust_limitations": ("eeat_no_fabrication", "geo_answer_units"),
+    "missing_synthetic_prompts": ("geo_answer_units", "handoff_machine_readability"),
 }
 
 REMEDIATION = {
@@ -68,12 +76,20 @@ REMEDIATION = {
     "missing_schema": "Add schema recommendations such as WebApplication/Article, FAQPage and BreadcrumbList.",
     "missing_internal_links": "Add internal links from final cluster architecture; do not invent unrelated detours.",
     "missing_answer_units": "Add required Answer Units to answer/definition/trust/FAQ sections.",
+    "missing_key_takeaways": "Add answer-first key takeaways immediately below the page summary/H1 handoff.",
+    "missing_faq_assets": "Add FAQ answer units with concise answer guidance and FAQPage schema readiness.",
     "missing_evidence_requirements": "Add source/proof requirements per section, especially for numbers, claims and expert statements.",
     "unsafe_first_person_expertise": "Remove first-person expert anecdotes or switch to real_expert_allowed only with named proof.",
     "orphan_entities": "Either assign each page entity to sections/connections or remove it from the page entity set.",
     "missing_entity_connections": "Add section-level entity triplets/relations tied to the primary intent.",
+    "missing_section_bridges": "Add bridge instructions so sections connect into one funnel instead of isolated blocks.",
     "missing_visual_guidance": "Add concrete visual/table/screenshot guidance per section.",
+    "weak_visual_plan": "Add a numbered visual plan with placement, dedupe keys, alt guidance and source requirements.",
     "missing_geo_requirements": "Add answer-first, FAQ, proof block and synthetic AI prompt requirements.",
+    "missing_writer_handoff": "Add writer_handoff with reader task, voice, must-do, must-not and safe memorable lines.",
+    "missing_fact_check_queue": "Add a fact_check_queue for SERP, claims, expert proof, schema and technical/privacy checks.",
+    "missing_trust_limitations": "Add trust_limitations covering page-type, evidence, technical/privacy and decision limits.",
+    "missing_synthetic_prompts": "Add synthetic AI prompts for non-branded, page-type, comparison and trust checks.",
 }
 
 
@@ -144,7 +160,12 @@ def discover_outline_files(raw: str | pathlib.Path) -> tuple[list[pathlib.Path],
 
 
 def text_blob(outline: dict[str, Any]) -> str:
-    chunks = [json.dumps(outline.get("page", {}), ensure_ascii=False)]
+    chunks = [
+        json.dumps(outline.get("page", {}), ensure_ascii=False),
+        json.dumps(outline.get("writer_handoff", {}), ensure_ascii=False),
+        json.dumps(outline.get("key_takeaways", []), ensure_ascii=False),
+        json.dumps(outline.get("faq", []), ensure_ascii=False),
+    ]
     for section in outline.get("sections", []):
         if isinstance(section, dict):
             chunks.append(json.dumps(section, ensure_ascii=False))
@@ -247,6 +268,55 @@ def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, A
             },
         )
 
+    key_takeaways = outline.get("key_takeaways") if isinstance(outline.get("key_takeaways"), list) else []
+    if len(key_takeaways) < 4 or any(not isinstance(item, dict) or not item.get("statement") for item in key_takeaways):
+        add_finding(
+            findings,
+            finding_id="missing_key_takeaways",
+            severity="high",
+            title="Outline lacks answer-first key takeaways.",
+            outline=title,
+            evidence={"key_takeaways": len(key_takeaways)},
+        )
+
+    faq = outline.get("faq") if isinstance(outline.get("faq"), list) else []
+    if len(faq) < 3 or any(not isinstance(item, dict) or not item.get("question") or not item.get("answer_guidance") for item in faq):
+        add_finding(
+            findings,
+            finding_id="missing_faq_assets",
+            severity="medium",
+            title="Outline lacks FAQ answer-unit assets.",
+            outline=title,
+            evidence={"faq": len(faq)},
+        )
+
+    writer_handoff = outline.get("writer_handoff") if isinstance(outline.get("writer_handoff"), dict) else {}
+    missing_handoff = [
+        key
+        for key in ("reader_task", "voice", "must_do", "must_not", "memorable_lines")
+        if not writer_handoff.get(key)
+    ]
+    if missing_handoff:
+        add_finding(
+            findings,
+            finding_id="missing_writer_handoff",
+            severity="high",
+            title="Outline lacks a copywriter-ready handoff contract.",
+            outline=title,
+            evidence={"missing": missing_handoff},
+        )
+
+    fact_check_queue = writer_handoff.get("fact_check_queue") if isinstance(writer_handoff.get("fact_check_queue"), list) else []
+    if len(fact_check_queue) < 3:
+        add_finding(
+            findings,
+            finding_id="missing_fact_check_queue",
+            severity="medium",
+            title="Outline lacks a useful fact-check queue.",
+            outline=title,
+            evidence={"fact_check_queue": len(fact_check_queue)},
+        )
+
     sections_without_evidence = [
         section.get("title")
         for section in sections
@@ -286,6 +356,7 @@ def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, A
     covered_entities = set()
     sections_without_connections = []
     sections_without_visuals = []
+    sections_without_bridges = []
     for section in sections:
         if not isinstance(section, dict):
             continue
@@ -299,6 +370,9 @@ def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, A
                     covered_entities.add(entity_name)
         if not str(section.get("visual_elements") or "").strip():
             sections_without_visuals.append(section.get("title"))
+        bridge = section.get("bridge") if isinstance(section.get("bridge"), dict) else {}
+        if not bridge.get("from_previous") or not bridge.get("to_next"):
+            sections_without_bridges.append(section.get("title"))
 
     orphan = sorted(entity for entity in entity_names if entity and entity not in covered_entities)
     if orphan:
@@ -319,6 +393,15 @@ def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, A
             outline=title,
             evidence={"sections": sections_without_connections[:10]},
         )
+    if sections_without_bridges:
+        add_finding(
+            findings,
+            finding_id="missing_section_bridges",
+            severity="medium",
+            title="Some sections lack bridge instructions.",
+            outline=title,
+            evidence={"sections": sections_without_bridges[:10]},
+        )
     if sections_without_visuals:
         add_finding(
             findings,
@@ -329,6 +412,26 @@ def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, A
             evidence={"sections": sections_without_visuals[:10]},
         )
 
+    visual_plan = outline.get("visual_plan") if isinstance(outline.get("visual_plan"), list) else []
+    weak_visuals = [
+        item
+        for item in visual_plan
+        if not isinstance(item, dict)
+        or not item.get("id")
+        or not item.get("placement")
+        or not item.get("dedupe_key")
+        or not item.get("alt_text_guidance")
+    ]
+    if len(visual_plan) < 2 or weak_visuals:
+        add_finding(
+            findings,
+            finding_id="weak_visual_plan",
+            severity="medium",
+            title="Outline lacks a numbered, deduped visual plan.",
+            outline=title,
+            evidence={"visuals": len(visual_plan), "weak_visuals": len(weak_visuals)},
+        )
+
     if not outline.get("geo_requirements"):
         add_finding(
             findings,
@@ -337,6 +440,26 @@ def validate_outline(outline: dict[str, Any], fallback: str) -> list[dict[str, A
             title="Outline has no GEO/AEO requirements.",
             outline=title,
             evidence={"geo_requirements": outline.get("geo_requirements")},
+        )
+    trust_limitations = outline.get("trust_limitations") if isinstance(outline.get("trust_limitations"), list) else []
+    if len(trust_limitations) < 3:
+        add_finding(
+            findings,
+            finding_id="missing_trust_limitations",
+            severity="medium",
+            title="Outline lacks explicit trust and limitations guidance.",
+            outline=title,
+            evidence={"trust_limitations": len(trust_limitations)},
+        )
+    synthetic_prompts = outline.get("synthetic_prompts") if isinstance(outline.get("synthetic_prompts"), list) else []
+    if len(synthetic_prompts) < 3:
+        add_finding(
+            findings,
+            finding_id="missing_synthetic_prompts",
+            severity="medium",
+            title="Outline lacks synthetic AI visibility prompts.",
+            outline=title,
+            evidence={"synthetic_prompts": len(synthetic_prompts)},
         )
     return findings
 
