@@ -23,6 +23,7 @@ sources_enable:
   - serpstat
   - spyfu                 # US/UK competitor + PPC аналитика (родной рынок SpyFu)
   - neuronwriter
+  - writerzen
   - llm_cli
   - answerthepublic
   - perplexity

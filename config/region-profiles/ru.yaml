@@ -33,6 +33,7 @@ sources_enable:
   - serpstat              # даёт Google-РФ (g_ru) volume/KD/конкурентов — закрывает дыру Ahrefs/SEMrush
   - keyso                 # Keys.so — Яндекс-данные РФ (Wordstat-частоты, видимость, конкуренты, lost)
   - neuronwriter
+  - writerzen
   - llm_cli
   - answerthepublic
   - perplexity

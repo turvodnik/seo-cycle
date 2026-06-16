@@ -17,6 +17,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 PERPLEXITY = ROOT / "scripts" / "perplexity-health.py"
 NOTEBOOKLM = ROOT / "scripts" / "notebooklm-health.py"
 XMLRIVER = ROOT / "scripts" / "xmlriver-health.py"
+WRITERZEN = ROOT / "scripts" / "writerzen-health.py"
 
 
 class ProviderHealthCliTest(unittest.TestCase):
@@ -112,6 +113,30 @@ expert_sources:
         self.assertEqual(report["price_reference"]["basic"]["yandex"], 25)
         self.assertIn("wordstat_new", report["capabilities"])
         self.assertTrue((self.tmp / "seo" / "setup" / "xmlriver-health.json").exists())
+
+    def test_writerzen_write_reports_browser_export_contract_without_passwords(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(WRITERZEN),
+                str(self.cfg_path),
+                "--browser-available",
+                "--write",
+                "--format",
+                "json",
+            ],
+            cwd=self.tmp,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        report = json.loads(proc.stdout)
+
+        self.assertEqual(report["status"], "available")
+        self.assertFalse(report["stores_password"])
+        self.assertEqual(report["api_default"], "no_public_api_browser_export")
+        self.assertIn("keyword_planner", report["capabilities"])
+        self.assertTrue((self.tmp / "seo" / "setup" / "writerzen-health.json").exists())
 
 
 if __name__ == "__main__":

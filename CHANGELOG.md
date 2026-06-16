@@ -1,5 +1,44 @@
 # Changelog — seo-cycle
 
+## [Unreleased]
+
+## [1.62.0] — 2026-06-16
+
+### Project Knowledge Hub
+
+- Added project-local `scripts/knowledge/` workflow: wiki export, report ingestion, compact context packs, preflight checks, content taste gate, decision log, review/comparison cluster planning, API catalog curation, Graphify corpus/graph refresh, and zvec-ready hybrid search.
+- Added `knowledge_*` policy paths to `config/project.template.yaml` and setup artifact status, so new projects receive the wiki/Graphify/zvec surface by default and old projects can add missing keys through the upgrade assistant.
+- Added `knowledge_hub` to `project-upgrade-assistant.py` as a report-only migration feature. It never stores secrets, publishes content, submits indexing, schedules automations, or calls paid APIs.
+- `wiki-refresh-all.sh` now uses generic report candidates and optional `SEO_CYCLE_WIKI_INGEST_REPORTS`, not project-specific dated paths.
+- `graphify-refresh.sh` now respects project policy paths, tries Antigravity/Gemini CLI/API backends, and degrades safely when Graphify is not installed.
+- `review-cluster-plan.py` now generates default review/comparison candidates from real inventory; project-specific construction or niche comparison seeds live in `seo/knowledge/review-cluster-seeds.json`.
+- Added `docs/knowledge-hub.md` with installation, old-project update, preflight, taste gate, Graphify/zvec, override, and quality-control workflow.
+
+### GSC indexing queue and browser workflow
+
+- Added `gsc-indexing-queue.py`: builds a P0/P1 request-indexing queue from Google Search Console discovered/not-indexed exports, sitemap URLs, WooCommerce product/category exports and Search Analytics page metrics.
+- Added `gsc-indexing-export-browser.py` plus `gsc-indexing-export-runner.mjs` to capture GSC Pages issue exports through a persistent browser profile and optionally pass the downloaded file straight into the queue builder.
+- The queue filters editor/API/cart/checkout/feed/preview/search junk URLs, optionally runs a live HTTP/canonical/noindex technical gate, writes `seo/technical/gsc-indexing-request-queue.csv`, and records a bounded technical report.
+- Added `gsc-request-indexing-browser.py` plus `gsc-request-indexing-runner.mjs` for guarded Search Console URL Inspection UI submission through a persistent browser profile. It stores no passwords; actual button clicking requires explicit `--auto-click`.
+- Added `gsc-indexing-recheck.py` to re-evaluate submitted URLs after 3-7 days against fresh GSC issue exports, indexed-page exports and/or Search Analytics data.
+- Added `indexnow-submit.py` for guarded bulk IndexNow/Bing-compatible URL notifications from the same P0/P1 queue.
+- Added `yandex-recrawl-submit.py` for guarded Yandex Webmaster API v4 `/recrawl/queue` submit and queue-status checks from the same P0/P1 queue.
+- Wired the new reports into project templates, validation, setup artifact status, technical rollup and docs.
+
+### WriterZen browser automation
+
+- Added `writerzen-health.py` for browser/export readiness without API keys or password storage.
+- Added `writerzen-browser-collect.py` and `writerzen-browser-runner.mjs`: the collector uses a persistent browser profile outside project repos, creates WriterZen reports for Topic Discovery / Keyword Explorer / Keyword Planner / Domain Focus, captures CSV/XLSX downloads into `seo/research/writerzen/imports/`, and runs `writerzen-source-pack.py` in the same command.
+- Added `writerzen-source-pack.py` to normalize WriterZen browser exports into raw/distillate/vector artifacts with volume/KD/CPC/intent/Buying Journey/SERP Type/Allintitle/KGR fields and cache hits.
+- Wired WriterZen into region profiles, project template, setup control plane, tool-stack recommender, access-key assistant, docs and `seo-keywords` as a subscription/browser source.
+
+### NeuronWriter plagiarism gate
+
+- Added `plagiarism_checks` to `usage-ledger.py` so NeuronWriter plagiarism checks can be preflighted and recorded separately from content writer analyses and AI credits.
+- `usage-ledger.py` now imports current NeuronWriter used/limit values from `seo/neuronwriter-limits.yaml`, including `content_writer`, `ai_credits`, and `plagiarism_checks`.
+- Added guarded `nw-cli.sh plagiarism <query_id> [draft.html]` support with optional `NW_PLAGIARISM_PATH` for account-specific endpoint paths; there is no default undocumented endpoint, so the standard workflow remains `import-content` followed by the NeuronWriter Editor menu plagiarism check.
+- Updated project templates and docs so NeuronWriter is the primary plagiarism gate; WriterZen plagiarism is fallback/manual export only.
+
 ## [1.59.0] — 2026-06-12
 
 ### Orchestrated writing gate

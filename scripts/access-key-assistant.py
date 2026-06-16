@@ -205,6 +205,21 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         ],
         "notes": "Use only priority pages; no whole-catalog runs without an approved queue.",
     },
+    "writerzen": {
+        "title": "WriterZen browser/export setup",
+        "env": [],
+        "tools": ["writerzen"],
+        "url": "https://app.writerzen.net/",
+        "doc": "docs/oauth-setup.md#112-writerzen-browserexport",
+        "manual_setup": True,
+        "steps": [
+            "Open WriterZen in the browser and log in manually; do not store the password in seo-cycle.",
+            "Run writerzen-browser-collect.py with --topic and --force-new-report so the assistant creates Topic Discovery, Keyword Explorer, Keyword Planner and Domain Focus, downloads CSV/XLSX, and imports them.",
+            "If the WriterZen UI changes, rerun with --manual-fallback-seconds and click Export manually while the script captures the download.",
+            "Run writerzen-health.py --browser-available --write when the logged-in browser session is ready.",
+        ],
+        "notes": "WriterZen has no public API in this workflow. The assistant uses browser/export mode, caches raw exports on disk, and sends only distillates/vector records downstream.",
+    },
     "keyso": {
         "title": "Keys.so API token",
         "env": ["KEYSO_API_TOKEN"],
@@ -403,6 +418,8 @@ def relevant_tools(tool_stack: dict[str, Any]) -> dict[str, dict[str, Any]]:
 def task_needed(catalog_row: dict[str, Any], tools: dict[str, dict[str, Any]], present: set[str]) -> bool:
     if not any(tool in tools for tool in catalog_row.get("tools", [])):
         return False
+    if catalog_row.get("manual_setup"):
+        return True
     return any(name not in present for name in catalog_row.get("env", []))
 
 

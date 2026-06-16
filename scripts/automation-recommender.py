@@ -65,8 +65,8 @@ AUTOMATION_DEFAULTS: dict[str, dict[str, Any]] = {
         "cadence": "weekly",
         "cron": "0 9 * * 1",
         "mode": "report_only",
-        "actions": ["index_status", "crawl_errors", "sitemap_status", "query_delta"],
-        "tools": [],
+        "actions": ["index_status", "crawl_errors", "sitemap_status", "query_delta", "gsc_indexing_queue_recheck", "indexnow_submit_plan", "yandex_recrawl_status"],
+        "tools": ["indexnow", "yandex_webmaster"],
     },
     "bing_index_watch": {
         "cadence": "weekly",

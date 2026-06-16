@@ -46,7 +46,7 @@ TASKS: dict[str, dict[str, Any]] = {
         "automation": "none",
     },
     "technical_audit": {
-        "keywords": ["audit", "crawl", "robots", "sitemap", "canonical", "index", "redirect", "lighthouse", "links", "индекс", "аудит", "ошибк", "редирект", "ссылк", "noindex", "bricks"],
+        "keywords": ["audit", "crawl", "robots", "sitemap", "canonical", "index", "indexnow", "recrawl", "redirect", "lighthouse", "links", "индекс", "переобход", "аудит", "ошибк", "редирект", "ссылк", "noindex", "bricks"],
         "phases": ["phase1_site_audit"],
         "sources": [
             "google_search_console",
@@ -59,12 +59,16 @@ TASKS: dict[str, dict[str, Any]] = {
             "lighthouse",
             "technical_site_audit",
             "gsc_url_inspection",
+            "gsc_indexing_queue",
+            "gsc_indexing_recheck",
+            "indexnow",
+            "yandex_recrawl",
             "bing_url_inspection",
             "serpstat",
             "labrika",
             "technical_mcp_health",
         ],
-        "safe_actions": ["robots_sitemap_check", "public_pagespeed_check", "read_only_index_status", "technical_rollup_from_distillates", "link_audit_from_export", "redirect_map_static_audit", "lighthouse_json_distillate", "gsc_url_inspection_from_export", "bing_url_info_from_export", "labrika_export_ingestion", "technical_mcp_health_check"],
+        "safe_actions": ["robots_sitemap_check", "public_pagespeed_check", "read_only_index_status", "technical_rollup_from_distillates", "link_audit_from_export", "redirect_map_static_audit", "lighthouse_json_distillate", "gsc_url_inspection_from_export", "gsc_indexing_queue_from_exports", "gsc_indexing_recheck_from_exports", "indexnow_submit_plan", "yandex_recrawl_plan", "bing_url_info_from_export", "labrika_export_ingestion", "technical_mcp_health_check"],
         "approval": ["index_submission", "destructive_indexing_change", "bulk_noindex_or_robots_change", "live_public_crawl", "paid_api_run"],
         "automation": "weekly_read_only_health",
     },
@@ -208,7 +212,7 @@ def intake_tool_enabled(intake: dict[str, Any], source: str) -> bool:
 
 
 def source_enabled(cfg: dict[str, Any], intake: dict[str, Any], source: str, active: dict[str, Any]) -> bool:
-    if source in {"robots_sitemap", "schema_crawl", "pagespeed_crux", "wordpress", "woocommerce", "review_velocity", "automation_policy", "governance", "linkinator", "redirect_map", "lighthouse", "technical_site_audit", "gsc_url_inspection", "bing_url_inspection", "labrika", "technical_mcp_health"}:
+    if source in {"robots_sitemap", "schema_crawl", "pagespeed_crux", "wordpress", "woocommerce", "review_velocity", "automation_policy", "governance", "linkinator", "redirect_map", "lighthouse", "technical_site_audit", "gsc_url_inspection", "gsc_indexing_queue", "gsc_indexing_recheck", "indexnow", "yandex_recrawl", "bing_url_inspection", "labrika", "technical_mcp_health"}:
         return True
     if intake_tool_enabled(intake, source):
         return True

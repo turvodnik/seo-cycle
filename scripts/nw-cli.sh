@@ -10,9 +10,13 @@
 #   nw-cli content QUERY_ID                      Get last saved content
 #   nw-cli evaluate QUERY_ID HTML_FILE           Score content without saving
 #   nw-cli import QUERY_ID HTML_FILE             Save content and score
+#   nw-cli plagiarism QUERY_ID [HTML_FILE]       Run account-specific plagiarism API call only when NW_PLAGIARISM_PATH is set
 #
 # Reads NEURON_API_KEY from env or from .env in current/parent dirs (up to 3 levels).
 # Defaults можно переопределить через env: NW_DEFAULT_ENGINE, NW_DEFAULT_LANGUAGE, NW_DEFAULT_MODE.
+# Public NeuronWriter API docs do not list a plagiarism endpoint. Use the UI
+# Editor menu by default. Set NW_PLAGIARISM_PATH only if NeuronWriter support
+# gives you an account-specific documented path.
 # Requires: curl, jq.
 
 set -euo pipefail
@@ -22,12 +26,31 @@ NW_BASE="https://app.neuronwriter.com/neuron-api/0.5/writer"
 DEFAULT_ENGINE="${NW_DEFAULT_ENGINE:-google.com}"
 DEFAULT_LANGUAGE="${NW_DEFAULT_LANGUAGE:-English}"
 DEFAULT_MODE="${NW_DEFAULT_MODE:-top-intent}"
+PLAGIARISM_PATH="${NW_PLAGIARISM_PATH:-}"
 
-# Load NEURON_API_KEY from .env (search up to 3 levels)
+if [[ "${1:-}" == "" || "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help" ]]; then
+  sed -n '2,/^# Requires:/p' "$0" | sed 's/^# \{0,1\}//'
+  exit 0
+fi
+
+# Load NEURON_API_KEY from .env (search up to 3 levels). Do not source the
+# whole file: project .env files often contain values that are not valid shell.
 if [ -z "${NEURON_API_KEY:-}" ]; then
   for envfile in ".env" "../.env" "../../.env"; do
     if [ -f "$envfile" ]; then
-      set -a; source "$envfile" 2>/dev/null || true; set +a
+      value="$(
+        awk '
+          /^[[:space:]]*NEURON_API_KEY[[:space:]]*=/ {
+            sub(/^[[:space:]]*NEURON_API_KEY[[:space:]]*=[[:space:]]*/, "", $0)
+            gsub(/^[\"\047]|[\"\047]$/, "", $0)
+            print
+            exit
+          }
+        ' "$envfile"
+      )"
+      if [ -n "$value" ]; then
+        NEURON_API_KEY="$value"
+      fi
       [ -n "${NEURON_API_KEY:-}" ] && break
     fi
   done
@@ -116,8 +139,37 @@ case "$cmd" in
       req /import-content -d "$body" | jq .
     fi
     ;;
+  plagiarism)
+    qid="${1:?need query_id}"
+    file="${2:-}"
+    if [ -z "$PLAGIARISM_PATH" ]; then
+      cat >&2 <<'EOF'
+Error: public NeuronWriter API docs do not document a plagiarism endpoint.
+Use the NeuronWriter editor UI:
+  1) nw-cli import QUERY_ID file.html
+  2) open query_url in a logged-in browser
+  3) Editor menu → Check for plagiarism
+  4) save the UI report under seo/research/neuronwriter/
+
+If NeuronWriter support gives you an account-specific API path, set:
+  NW_PLAGIARISM_PATH=/your-documented-path
+EOF
+      exit 2
+    fi
+    if [ -n "$file" ] && [ ! -f "$file" ]; then
+      echo "Error: file not found: $file" >&2
+      exit 1
+    fi
+    if [ -n "$file" ]; then
+      html=$(cat "$file")
+      body=$(jq -nc --arg q "$qid" --arg h "$html" '{query:$q, html:$h}')
+    else
+      body=$(jq -nc --arg q "$qid" '{query:$q}')
+    fi
+    req "$PLAGIARISM_PATH" -d "$body" | jq .
+    ;;
   ""|-h|--help|help)
-    sed -n '1,/^# Requires:/p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,/^# Requires:/p' "$0" | sed 's/^# \{0,1\}//'
     ;;
   *)
     echo "Unknown command: $cmd" >&2

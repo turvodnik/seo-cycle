@@ -136,6 +136,29 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "latest_page_outline_quality": "seo/research-package/latest-page-outline-quality.md",
         "latest_page_outline_quality_json": "seo/research-package/latest-page-outline-quality.json",
         "content_drafts_dir": "seo/research-package/drafts",
+        "knowledge_wiki_root": "seo/knowledge/wiki",
+        "knowledge_obsidian_root": "seo/knowledge/obsidian-vault",
+        "knowledge_graph_corpus": "seo/knowledge/graph-corpus",
+        "knowledge_graph_root": "seo/knowledge/graph",
+        "knowledge_hybrid_index_root": "seo/knowledge/zvec",
+        "knowledge_project_manifest": "seo/knowledge/wiki/project-manifest.json",
+        "knowledge_state_summary": "seo/knowledge/wiki/state/latest-summary.md",
+        "knowledge_context_dir": "seo/knowledge/wiki/context",
+        "knowledge_latest_context_pack": "seo/knowledge/wiki/context/latest-context-pack.md",
+        "knowledge_latest_context_pack_json": "seo/knowledge/wiki/context/latest-context-pack.json",
+        "knowledge_content_taste_report": "seo/knowledge/wiki/reports/content-taste-gate.md",
+        "knowledge_content_taste_json": "seo/knowledge/wiki/reports/content-taste-gate.json",
+        "knowledge_wiki_preflight_report": "seo/knowledge/wiki/preflight/wiki-preflight.md",
+        "knowledge_wiki_preflight_json": "seo/knowledge/wiki/preflight/wiki-preflight.json",
+        "knowledge_review_cluster_plan": "seo/knowledge/wiki/frameworks/review-cluster-plan.md",
+        "knowledge_review_cluster_json": "seo/knowledge/wiki/frameworks/review-clusters.json",
+        "knowledge_api_catalog": "seo/knowledge/wiki/api-catalog/api-catalog.json",
+        "knowledge_api_candidates": "seo/knowledge/wiki/api-catalog/api-candidates.jsonl",
+        "knowledge_decision_log": "seo/knowledge/wiki/decisions/decision-log.jsonl",
+        "knowledge_graphify_status": "seo/knowledge/graph/graphify-status.json",
+        "knowledge_graphify_local_graph": "seo/knowledge/graph/graphify-local-graph.json",
+        "knowledge_zvec_status": "seo/knowledge/zvec/zvec-status.json",
+        "knowledge_zvec_db": "seo/knowledge/zvec/hybrid.sqlite",
         "context_pack_report": "seo/setup/context-pack.md",
         "context_pack_json": "seo/setup/context-pack.json",
         "latest_context_pack": "seo/setup/latest-context-pack.md",
@@ -155,6 +178,10 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "xmlriver_health_json": "seo/setup/xmlriver-health.json",
         "latest_xmlriver_health": "seo/setup/latest-xmlriver-health.md",
         "latest_xmlriver_health_json": "seo/setup/latest-xmlriver-health.json",
+        "writerzen_health_report": "seo/setup/writerzen-health.md",
+        "writerzen_health_json": "seo/setup/writerzen-health.json",
+        "latest_writerzen_health": "seo/setup/latest-writerzen-health.md",
+        "latest_writerzen_health_json": "seo/setup/latest-writerzen-health.json",
         "setup_gap_audit_report": "seo/setup/setup-gap-audit.md",
         "setup_gap_audit_json": "seo/setup/setup-gap-audit.json",
         "latest_setup_gap_audit": "seo/setup/latest-setup-gap-audit.md",
@@ -180,6 +207,13 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "redirect_map_audit_report": "seo/technical/redirect-map-audit.md",
         "lighthouse_audit_report": "seo/technical/lighthouse-audit.md",
         "gsc_url_inspection_report": "seo/technical/gsc-url-inspection.md",
+        "gsc_indexing_export_report": "seo/technical/gsc-indexing-export.md",
+        "gsc_indexing_queue_report": "seo/technical/gsc-indexing-queue.md",
+        "gsc_indexing_submit_report": "seo/technical/gsc-indexing-submit.md",
+        "gsc_indexing_recheck_report": "seo/technical/gsc-indexing-recheck.md",
+        "indexnow_submit_report": "seo/technical/indexnow-submit.md",
+        "yandex_recrawl_submit_report": "seo/technical/yandex-recrawl-submit.md",
+        "yandex_recrawl_status_report": "seo/technical/yandex-recrawl-status.md",
         "bing_url_inspection_report": "seo/technical/bing-url-inspection.md",
         "serpstat_audit_report": "seo/technical/serpstat-audit.md",
         "labrika_source_pack_report": "seo/technical/labrika-source-pack.md",
@@ -228,6 +262,7 @@ def next_actions(
     perplexity_health: dict[str, Any],
     notebooklm_health: dict[str, Any],
     xmlriver_health: dict[str, Any],
+    writerzen_health: dict[str, Any],
     artifacts: list[dict[str, Any]],
     apply_profile: bool,
 ) -> list[str]:
@@ -329,6 +364,9 @@ def next_actions(
     if xmlriver_health.get("status") == "needs_credentials":
         actions.append("XMLRiver is available as a cheap Google/Yandex/Wordstat source, but needs `XMLRIVER_USER_ID` and `XMLRIVER_API_KEY` before live paid requests.")
 
+    if writerzen_health.get("status") == "browser_login_required":
+        actions.append("WriterZen is browser/export-only; log in once, then run `writerzen-browser-collect.py --topic \"<seed>\" --force-new-report --manual-fallback-seconds 120 --write` to create reports, download CSV/XLSX and import distillates.")
+
     missing_artifacts = [row["key"] for row in artifacts if not row.get("exists")]
     if missing_artifacts:
         actions.append(f"Generate/review missing setup artifacts: {', '.join(missing_artifacts)}.")
@@ -363,6 +401,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     perplexity_health = report.get("perplexity_health", {})
     notebooklm_health = report.get("notebooklm_health", {})
     xmlriver_health = report.get("xmlriver_health", {})
+    writerzen_health = report.get("writerzen_health", {})
     task_route = report.get("task_route", {})
     usage = report.get("usage_ledger", {})
     vnext_reports = report.get("vnext_reports", {})
@@ -403,6 +442,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Perplexity health: {perplexity_health.get('status')}",
         f"- NotebookLM health: {notebooklm_health.get('status')}",
         f"- XMLRiver health: {xmlriver_health.get('status')}",
+        f"- WriterZen health: {writerzen_health.get('status')}",
         f"- Setup gap score: {setup_gap_audit.get('score')}",
         f"- Setup gaps missing: {(setup_gap_audit.get('summary') or {}).get('missing')}",
         f"- Setup questionnaire rows: {(setup_gap_audit.get('questionnaire') or {}).get('row_count')}",
@@ -663,6 +703,7 @@ def main() -> int:
         ("perplexity-health.py", "perplexity health"),
         ("notebooklm-health.py", "notebooklm health"),
         ("xmlriver-health.py", "xmlriver health"),
+        ("writerzen-health.py", "writerzen health"),
         ("token-waste-audit.py", "token waste audit"),
     ):
         command = [sys.executable, str(root / "scripts" / script_name), str(cfg_path)]
@@ -754,6 +795,11 @@ def main() -> int:
     xmlriver_file = project_root / "seo" / "setup" / "xmlriver-health.json"
     if not xmlriver_health and xmlriver_file.exists():
         xmlriver_health = json.loads(xmlriver_file.read_text(encoding="utf-8"))
+    writerzen_step = next((step for step in steps if step["name"] == "writerzen health"), {})
+    writerzen_health = load_json_output(writerzen_step)
+    writerzen_file = project_root / "seo" / "setup" / "writerzen-health.json"
+    if not writerzen_health and writerzen_file.exists():
+        writerzen_health = json.loads(writerzen_file.read_text(encoding="utf-8"))
     setup_gap_step = next((step for step in steps if step["name"] == "setup gap audit"), {})
     setup_gap_audit = load_json_output(setup_gap_step)
     setup_gap_file = project_root / "seo" / "setup" / "setup-gap-audit.json"
@@ -839,6 +885,7 @@ def main() -> int:
         "perplexity_health": perplexity_health,
         "notebooklm_health": notebooklm_health,
         "xmlriver_health": xmlriver_health,
+        "writerzen_health": writerzen_health,
         "setup_gap_audit": setup_gap_audit,
         "vnext_reports": vnext_reports,
         "technical_reports": technical_reports,
@@ -877,6 +924,7 @@ def main() -> int:
         perplexity_health,
         notebooklm_health,
         xmlriver_health,
+        writerzen_health,
         artifacts,
         args.apply_profile,
     )

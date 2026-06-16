@@ -178,6 +178,21 @@ python3 ~/.codex/skills/seo-cycle/scripts/metrika-fetch.py --days 7 --limit 5
 python3 ~/.codex/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 10
 ```
 
+Переобход важных URL из общей очереди:
+```bash
+python3 ~/.codex/skills/seo-cycle/scripts/yandex-recrawl-submit.py seo-cycle.yaml \
+  --queue-file seo/technical/gsc-indexing-request-queue.csv \
+  --priority P0,P1 \
+  --max 20 \
+  --live \
+  --write
+
+python3 ~/.codex/skills/seo-cycle/scripts/yandex-recrawl-submit.py seo-cycle.yaml \
+  --mode status \
+  --live \
+  --write
+```
+
 ## 6. Google Cloud Natural Language
 
 Используй только как guarded entity audit: сущности, salience, категории, syntax и moderation/sentiment только в рамках `seo/entities/google-nlp-policy.yaml`. Это не "передача сущностей в Google для ранжирования".
@@ -229,6 +244,15 @@ python3 ~/.codex/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 10
    INDEXNOW_KEY=...
    INDEXNOW_KEY_LOCATION=https://example.com/<indexnow-key>.txt
    ```
+4. Отправка URL из общей очереди:
+   ```bash
+   python3 ~/.codex/skills/seo-cycle/scripts/indexnow-submit.py seo-cycle.yaml \
+     --queue-file seo/technical/gsc-indexing-request-queue.csv \
+     --priority P0,P1 \
+     --max 100 \
+     --live \
+     --write
+   ```
 
 ### 8.3. Bing Places и Microsoft Ads
 
@@ -276,6 +300,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 10
 | `NEURON_API_KEY` | NeuronWriter | string | для NW evaluate/import |
 | `NEURON_PROJECT_ID` | NeuronWriter project | string | опц., для ручной привязки проекта |
 | `NEURON_LIMITS_FILE` | NeuronWriter лимиты | path | опц., default `seo/neuronwriter-limits.yaml` |
+| `NW_PLAGIARISM_PATH` | NeuronWriter plagiarism API path | string | опц., только если endpoint отличается от wrapper default |
 | `KEYSO_API_TOKEN` | Keys.so | string | опц., RU/Yandex keyword evidence |
 | `SERPSTAT_API_KEY` | Serpstat | string | опц., quota-based keyword/competitor evidence |
 | `XMLRIVER_USER_ID`, `XMLRIVER_API_KEY` | XMLRiver | string | опц., approval-gated SERP/Wordstat API |
@@ -290,7 +315,8 @@ python3 ~/.codex/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 10
 
 Эти сервисы подключай только если tool-stack ставит их в `enabled`/`report_only`/`approval_required`, а `spend-guard.py --write` не блокирует расход.
 
-- **NeuronWriter**: открой account/API settings, скопируй API key только в `.env` как `NEURON_API_KEY`. Project ID и лимиты фиксируй в `seo/neuronwriter-limits.yaml`, не в отчётах.
+- **NeuronWriter**: открой account/API settings, скопируй API key только в `.env` как `NEURON_API_KEY`. Project ID и лимиты фиксируй в `seo/neuronwriter-limits.yaml`, не в отчётах. Plagiarism checks учитывай как NeuronWriter quota/API: перед финальной проверкой запускай `usage-ledger.py check --service neuronwriter --category paid_api --plagiarism-checks 1 --fail-on-block`, после проверки `record`.
+- **WriterZen**: публичный API не предполагается. Вход выполняется вручную в браузере; `seo-cycle` не хранит пароль и работает с экспортами Topic Discovery / Keyword Explorer / Keyword Planner / Domain Focus. Лимиты плана фиксируй в `seo-cycle.yaml` / `seo/tool-budget.yaml`, raw CSV/XLSX держи в `seo/research/writerzen/imports/`.
 - **Keys.so**: токен только в `.env` как `KEYSO_API_TOKEN`; до первого запуска задай request caps/reserve в `seo/tool-budget.yaml`.
 - **Serpstat**: API key только в `.env` как `SERPSTAT_API_KEY`; перед запуском проверь credits через spend guard/usage ledger.
 - **XMLRiver**: user id и API key только в `.env` как `XMLRIVER_USER_ID` и `XMLRIVER_API_KEY`. По умолчанию используй экспортированные XML/JSON через `xmlriver-source-pack.py --input-file`; live-запросы только с `--live --allow-paid` после spend guard/usage ledger. Health: `xmlriver-health.py --write`.
@@ -324,6 +350,35 @@ XMLRiver полезен как дешёвый enrichment provider для Google/
    python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service xmlriver --category paid_api --requests 1 --fail-on-block
    python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-source-pack.py --query "Плита ОСП" --engine yandex --additional searchsters,rs_y,y_of --live --allow-paid --write
    ```
+
+### 11.2. WriterZen browser/export
+
+WriterZen подключается как browser/export provider: API-ключ не нужен и не хранится. Codex/Claude работает в persistent browser profile вне репозитория, сам создаёт нужные отчёты, ловит downloads, складывает CSV/XLSX в проект и запускает importer.
+
+1. Открой [app.writerzen.net](https://app.writerzen.net/) и войди вручную.
+2. Первый раз запусти health, чтобы зафиксировать browser/export readiness:
+   ```bash
+   python3 ~/.codex/skills/seo-cycle/scripts/writerzen-health.py --browser-available --write
+   ```
+3. Запусти автоматический сбор по теме. Скрипт откроет WriterZen, создаст нужные отчёты, скачает CSV/XLSX в `seo/research/writerzen/imports/` и сразу импортирует:
+   ```bash
+   python3 ~/.codex/skills/seo-cycle/scripts/writerzen-browser-collect.py --topic "Плита ОСП" --force-new-report --manual-fallback-seconds 120 --write
+   ```
+4. По умолчанию он создаёт/скачивает:
+   - Topic Discovery — ширина темы и related topics.
+   - Keyword Explorer — volume, CPC, Allintitle, KGR / Golden Filter, trends.
+   - Keyword Planner — intent, Buying Journey, SERP Type, brand/non-brand, clusters.
+   - Domain Focus — конкуренты, domain/DA-like evidence, ranking windows.
+5. Если UI изменился, включи supervised fallback: скрипт откроет страницу и будет ждать ручного клика Export, а download всё равно поймает и импортирует:
+   ```bash
+   python3 ~/.codex/skills/seo-cycle/scripts/writerzen-browser-collect.py --topic "Плита ОСП" --manual-fallback-seconds 180 --write
+   ```
+6. Если экспорт уже скачан вручную, импортируй его напрямую:
+   ```bash
+   python3 ~/.codex/skills/seo-cycle/scripts/writerzen-source-pack.py --topic "Плита ОСП" --export-file seo/research/writerzen/imports/writerzen-keyword-planner.csv --write
+   ```
+
+Правило контекста: в LLM передавать только `seo/research/distillates/writerzen/latest-summary.md/json` и `seo/research/vector/source_pack.jsonl`, не исходные CSV/XLSX.
 
 ## 12. AI API keys
 

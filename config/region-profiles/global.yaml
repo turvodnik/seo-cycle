@@ -29,6 +29,7 @@ sources_enable:
   - yandex_wordstat
   - yandex_suggest
   - neuronwriter
+  - writerzen
   - llm_cli
   - answerthepublic
   - perplexity

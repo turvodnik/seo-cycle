@@ -54,6 +54,11 @@ spend_policy:
       - final_commercial_pages
       - final_blog_articles
       - outsourced_or_ai_heavy_texts
+    avoid_for:
+      - early_outlines
+      - throwaway_drafts
+      - pages_not_planned_for_publish
+    preflight_command: "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service neuronwriter --category paid_api --plagiarism-checks 1 --fail-on-block"
   monitored_prompts:
     use_for:
       - ai_visibility_brand_queries
@@ -64,7 +69,11 @@ integration_notes:
   default_project: __PROJECT_NAME__
   default_domain: __DOMAIN__
   google_nlp_role: technical_entity_api_audit
-  neuronwriter_role: serp_based_content_editor_and_competitor_nlp
+  neuronwriter_role: serp_based_content_editor_competitor_nlp_scoring_and_plagiarism_gate
   default_engine: google.ru
   default_language: Russian
   default_competitors_mode: top-intent
+  plagiarism_provider: neuronwriter
+  plagiarism_api_mode: guarded
+  plagiarism_endpoint_env: NW_PLAGIARISM_PATH
+  plagiarism_fallback: manual_neuronwriter_ui_or_writerzen_export

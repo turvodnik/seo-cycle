@@ -15,6 +15,8 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PERPLEXITY_COLLECT = ROOT / "scripts" / "perplexity-collect.py"
 NOTEBOOKLM_SOURCE_PACK = ROOT / "scripts" / "notebooklm-source-pack.py"
+WRITERZEN_SOURCE_PACK = ROOT / "scripts" / "writerzen-source-pack.py"
+WRITERZEN_BROWSER_COLLECT = ROOT / "scripts" / "writerzen-browser-collect.py"
 
 
 class ProviderCollectorsTest(unittest.TestCase):
@@ -163,6 +165,80 @@ expert_sources:
         self.assertEqual(report["health"]["access_mode"], "browser_export")
         self.assertTrue(report["not_ranking_signal"])
         self.assertTrue((self.tmp / "seo" / "research" / "distillates" / "notebooklm" / "latest-summary.md").exists())
+
+    def test_writerzen_export_file_writes_keyword_distillate_and_vector(self) -> None:
+        export = self.tmp / "writerzen-keyword-planner.csv"
+        export.write_text(
+            "Keyword,Search Volume,KD,Intent,Buying Journey,SERP Type,Allintitle,KGR,Cluster\n"
+            "virtual hair color try on,12000,23,Commercial,Decision,tool/app,140,0.12,hair color tool\n"
+            "hair color app,5400,35,Commercial,Consideration,tool/app,220,0.22,hair color tool\n"
+            "best virtual hair color,1900,41,Informational,Awareness,listicle,310,0.51,hair color guide\n",
+            encoding="utf-8",
+        )
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(WRITERZEN_SOURCE_PACK),
+                str(self.cfg_path),
+                "--topic",
+                "virtual hair color try on",
+                "--region",
+                "US",
+                "--mode",
+                "keyword_planner",
+                "--export-file",
+                str(export),
+                "--write",
+                "--format",
+                "json",
+            ],
+            cwd=self.tmp,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        report = json.loads(proc.stdout)
+
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["source_type"], "browser_export")
+        self.assertFalse(report["stores_password"])
+        self.assertEqual(report["distillate"]["summary"]["row_count"], 3)
+        self.assertEqual(report["distillate"]["summary"]["top_keywords"][0]["keyword"], "virtual hair color try on")
+        self.assertIn("tool/app", report["distillate"]["summary"]["counts"]["serp_type"])
+        self.assertTrue(pathlib.Path(report["paths"]["raw"]).exists())
+        self.assertTrue((self.tmp / "seo" / "research" / "vector" / "source_pack.jsonl").exists())
+
+    def test_writerzen_browser_collect_dry_run_writes_create_and_import_plan(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(WRITERZEN_BROWSER_COLLECT),
+                str(self.cfg_path),
+                "--topic",
+                "virtual hair color try on",
+                "--reports",
+                "topic_discovery,keyword_planner",
+                "--force-new-report",
+                "--manual-fallback-seconds",
+                "30",
+                "--dry-run",
+                "--write",
+                "--format",
+                "json",
+            ],
+            cwd=self.tmp,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        report = json.loads(proc.stdout)
+
+        self.assertEqual(report["status"], "planned")
+        self.assertFalse(report["plan"]["stores_password"])
+        self.assertTrue(report["plan"]["force_new_report"])
+        self.assertIn("--force-new-report", report["browser_command"])
+        self.assertEqual(report["plan"]["reports"], ["topic_discovery", "keyword_planner"])
+        self.assertTrue((self.tmp / "seo" / "setup" / "writerzen-browser-collect.json").exists())
 
 
 if __name__ == "__main__":

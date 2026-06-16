@@ -223,6 +223,22 @@ class ResearchPackageQualityTest(unittest.TestCase):
             10,
         )
 
+    def test_launch_action_plan_routes_clean_package_to_source_lock_when_required(self) -> None:
+        report = {
+            "findings": [],
+            "source_lock_gate": {
+                "status": "required_before_final_draft",
+                "plan": "seo/research-package/source-lock-plan.md",
+                "queue": "seo/research-package/source-lock-queue.csv",
+            },
+        }
+
+        plan = QUALITY.launch_action_plan(report)
+
+        self.assertEqual(plan[0]["action"], "Complete source-lock before final drafting.")
+        self.assertIn("source-lock-queue.csv", plan[0]["command"])
+        self.assertIn("page-outline-v3.py", plan[1]["command"])
+
     def test_page_outline_v2_generates_section_level_brief(self) -> None:
         outline = OUTLINE.build_outline(self.package, "/tools/virtual-hair-color-try-on/")
 

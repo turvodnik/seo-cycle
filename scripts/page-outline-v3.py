@@ -298,8 +298,61 @@ def upgrade_outline(base: dict[str, Any], *, expert_author: bool = False) -> dic
     return outline
 
 
+def source_lock_addendum(package: pathlib.Path, outline: dict[str, Any]) -> dict[str, Any] | None:
+    architecture_path = package / "semantic-architecture-final.json"
+    if not architecture_path.exists():
+        return None
+    try:
+        architecture = json.loads(architecture_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    cluster_id = outline.get("page", {}).get("cluster_id")
+    for cluster in architecture.get("clusters", []):
+        if not isinstance(cluster, dict) or cluster.get("id") != cluster_id:
+            continue
+        source_lock = cluster.get("source_lock")
+        if not isinstance(source_lock, dict):
+            return None
+        return {
+            "status": source_lock.get("status", "unknown"),
+            "report": source_lock.get("report"),
+            "product_distillate": source_lock.get("product_distillate"),
+            "allowed_technical_claims": ensure_list(source_lock.get("allowed_technical_claims")),
+            "blocked_claims": ensure_list(source_lock.get("blocked_claims")),
+            "draft_rule": (
+                "Use only source-locked technical/product claims for this page. "
+                "If the source-lock report conflicts with generic outline text, the source-lock report wins."
+            ),
+        }
+    return None
+
+
+def attach_source_lock(package: pathlib.Path, outline: dict[str, Any]) -> dict[str, Any]:
+    addendum = source_lock_addendum(package, outline)
+    if not addendum:
+        return outline
+    updated = {**outline, "source_lock_addendum": addendum}
+    writer_handoff = dict(updated.get("writer_handoff") or {})
+    must_do = list(writer_handoff.get("must_do") or [])
+    source_lock_rule = "Apply the source-lock addendum before drafting numbers, product availability, brand claims, and technical recommendations."
+    if source_lock_rule not in must_do:
+        must_do.append(source_lock_rule)
+    must_not = list(writer_handoff.get("must_not") or [])
+    blocked_rule = "Do not use claims listed under source_lock_addendum.blocked_claims unless a newer approved source-lock report replaces them."
+    if blocked_rule not in must_not:
+        must_not.append(blocked_rule)
+    fact_check_queue = list(writer_handoff.get("fact_check_queue") or [])
+    report = addendum.get("report")
+    if report and report not in fact_check_queue:
+        fact_check_queue.insert(0, report)
+    writer_handoff.update({"must_do": must_do, "must_not": must_not, "fact_check_queue": fact_check_queue})
+    updated["writer_handoff"] = writer_handoff
+    return updated
+
+
 def build_outline(package: pathlib.Path, selector: str | None, *, expert_author: bool = False) -> dict[str, Any]:
-    return upgrade_outline(V2.build_outline(package, selector, expert_author=expert_author), expert_author=expert_author)
+    outline = upgrade_outline(V2.build_outline(package, selector, expert_author=expert_author), expert_author=expert_author)
+    return attach_source_lock(package, outline)
 
 
 def build_outlines(
@@ -311,11 +364,11 @@ def build_outlines(
     expert_author: bool = False,
 ) -> list[dict[str, Any]]:
     bases = V2.build_outlines(package, selector, all_mvp=all_mvp, priorities=priorities, expert_author=expert_author)
-    return [upgrade_outline(base, expert_author=expert_author) for base in bases]
+    return [attach_source_lock(package, upgrade_outline(base, expert_author=expert_author)) for base in bases]
 
 
 def render_markdown(outline: dict[str, Any]) -> str:
-    base = V2.render_markdown(outline)
+    base = V2.render_markdown(outline).replace("# Page Outline v2:", "# Page Outline v3:", 1)
     lines = [
         base,
         "",
@@ -333,6 +386,19 @@ def render_markdown(outline: dict[str, Any]) -> str:
             f"- `{visual['id']}` ({visual['type']}): {visual['purpose']} "
             f"Placement: `{visual['placement']}`. Source: {visual['source_requirement']}"
         )
+    addendum = outline.get("source_lock_addendum") if isinstance(outline.get("source_lock_addendum"), dict) else None
+    if addendum:
+        lines.extend(["", "## v3 Source-Lock Addendum", ""])
+        lines.append(f"- Status: `{addendum.get('status')}`")
+        if addendum.get("report"):
+            lines.append(f"- Report: `{addendum.get('report')}`")
+        if addendum.get("product_distillate"):
+            lines.append(f"- Product distillate: `{addendum.get('product_distillate')}`")
+        lines.extend(["", "### Allowed Technical/Product Claims"])
+        lines.extend(f"- {item}" for item in addendum.get("allowed_technical_claims", []))
+        lines.extend(["", "### Blocked Claims"])
+        lines.extend(f"- {item}" for item in addendum.get("blocked_claims", []))
+        lines.extend(["", f"Rule: {addendum.get('draft_rule')}"])
     return "\n".join(lines) + "\n"
 
 
@@ -398,6 +464,19 @@ def render_copywriter_ready(outline: dict[str, Any]) -> str:
         lines.append(f"- `{visual['type']}` in `{visual['placement']}`: {visual['purpose']}")
     lines.extend(["", "## Fact-Check Queue", ""])
     lines.extend(f"- {item}" for item in outline.get("writer_handoff", {}).get("fact_check_queue", []))
+    addendum = outline.get("source_lock_addendum") if isinstance(outline.get("source_lock_addendum"), dict) else None
+    if addendum:
+        lines.extend(["", "## Source-Lock Addendum", ""])
+        lines.append(f"- Status: `{addendum.get('status')}`")
+        if addendum.get("report"):
+            lines.append(f"- Report: `{addendum.get('report')}`")
+        if addendum.get("product_distillate"):
+            lines.append(f"- Product distillate: `{addendum.get('product_distillate')}`")
+        lines.extend(["", "### Allowed Technical/Product Claims"])
+        lines.extend(f"- {item}" for item in addendum.get("allowed_technical_claims", []))
+        lines.extend(["", "### Blocked Claims"])
+        lines.extend(f"- {item}" for item in addendum.get("blocked_claims", []))
+        lines.extend(["", f"Rule: {addendum.get('draft_rule')}"])
     lines.extend(["", "## Banned Claims", ""])
     lines.extend(f"- {item}" for item in outline.get("writer_prompt_packet", {}).get("forbidden_actions", []))
     return "\n".join(lines) + "\n"
@@ -433,10 +512,12 @@ def write_outline(package: pathlib.Path, outline: dict[str, Any], output_dir: pa
         "copywriter_ready": copy_out / f"{slug}.md",
         "triplets_jsonl": pathlib.Path(write_triplets(package, outline)),
     }
-    write_text(paths["markdown"], render_markdown(outline))
-    write_text(paths["json"], json.dumps(outline, ensure_ascii=False, indent=2) + "\n")
-    write_text(paths["copywriter_ready"], render_copywriter_ready(outline))
-    return {key: str(path) for key, path in paths.items()}
+    string_paths = {key: str(path) for key, path in paths.items()}
+    outline_with_paths = {**outline, "paths": string_paths}
+    write_text(paths["markdown"], render_markdown(outline_with_paths))
+    write_text(paths["json"], json.dumps(outline_with_paths, ensure_ascii=False, indent=2) + "\n")
+    write_text(paths["copywriter_ready"], render_copywriter_ready(outline_with_paths))
+    return string_paths
 
 
 def batch_payload(outlines: list[dict[str, Any]]) -> dict[str, Any]:

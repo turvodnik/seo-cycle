@@ -27,6 +27,7 @@ sources_enable:
   - serpstat
   - spyfu                 # GB/DE/FR/... competitor + PPC аналитика
   - neuronwriter
+  - writerzen
   - llm_cli
   - answerthepublic
   - perplexity

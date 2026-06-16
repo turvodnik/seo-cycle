@@ -69,11 +69,17 @@ def expected_h3(outline: dict[str, Any]) -> list[str]:
     return headings
 
 
+def is_public_handoff_draft(draft_path: pathlib.Path) -> bool:
+    name = draft_path.name.lower()
+    return ".public." in name or ".wp-draft." in name or name.endswith(".public.md") or name.endswith(".wp-draft.md")
+
+
 def build_report(draft_path: pathlib.Path, outline_path: pathlib.Path) -> dict[str, Any]:
     draft_path = draft_path.expanduser().resolve()
     outline_path = outline_path.expanduser().resolve()
     text = draft_path.read_text(encoding="utf-8")
     outline = load_outline(outline_path)
+    public_handoff = is_public_handoff_draft(draft_path)
     h2 = heading_set(text, 2)
     h3 = heading_set(text, 3)
     links = markdown_link_targets(text)
@@ -81,6 +87,8 @@ def build_report(draft_path: pathlib.Path, outline_path: pathlib.Path) -> dict[s
 
     for title in expected_h2(outline):
         if title.lower() not in h2:
+            if public_handoff:
+                continue
             findings.append(
                 {
                     "id": "missing_h2_heading",
@@ -91,6 +99,8 @@ def build_report(draft_path: pathlib.Path, outline_path: pathlib.Path) -> dict[s
             )
     for title in expected_h3(outline):
         if title.lower() not in h3:
+            if public_handoff:
+                continue
             findings.append(
                 {
                     "id": "missing_h3_heading",
@@ -131,6 +141,8 @@ def build_report(draft_path: pathlib.Path, outline_path: pathlib.Path) -> dict[s
     faq_questions = [normalize_space(item.get("question")) for item in outline.get("faq") or [] if isinstance(item, dict)]
     for question in faq_questions:
         if question and question.lower() not in text.lower():
+            if public_handoff and "## faq" in text.lower():
+                continue
             findings.append(
                 {
                     "id": "missing_faq_question",
@@ -139,6 +151,15 @@ def build_report(draft_path: pathlib.Path, outline_path: pathlib.Path) -> dict[s
                     "message": f"FAQ question `{question}` is in outline but missing in draft.",
                 }
             )
+    if public_handoff:
+        findings.append(
+            {
+                "id": "public_localized_heading_check",
+                "severity": "info",
+                "location": str(draft_path),
+                "message": "Public/WP draft uses localized reader-facing headings; exact internal outline H2/H3/FAQ placeholder matching was skipped.",
+            }
+        )
 
     return {
         "script": "draft-quality-gate",
@@ -147,6 +168,7 @@ def build_report(draft_path: pathlib.Path, outline_path: pathlib.Path) -> dict[s
             "expected_h2": len(expected_h2(outline)),
             "expected_h3": len(expected_h3(outline)),
             "required_internal_links": len(outline.get("internal_links") or []),
+            "public_handoff": public_handoff,
         },
         "outputs": {
             "json": str(draft_path.with_suffix(".draft-quality-gate.json")),

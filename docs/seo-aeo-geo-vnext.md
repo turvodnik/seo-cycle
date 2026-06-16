@@ -41,6 +41,13 @@ python3 ~/.codex/skills/seo-cycle/scripts/ai-bot-access-check.py seo-cycle.yaml 
 python3 ~/.codex/skills/seo-cycle/scripts/link-audit.py seo-cycle.yaml --input-json linkinator.json --url https://example.com/ --write
 python3 ~/.codex/skills/seo-cycle/scripts/redirect-map-audit.py seo-cycle.yaml --input redirects.csv --base-url https://example.com --write
 python3 ~/.codex/skills/seo-cycle/scripts/gsc-url-inspection.py seo-cycle.yaml --input-json gsc-url-inspection.json --url https://example.com/ --site-url sc-domain:example.com --write
+python3 ~/.codex/skills/seo-cycle/scripts/gsc-indexing-export-browser.py seo-cycle.yaml --issue-url "<GSC Pages issue URL>" --manual-fallback-seconds 120 --build-queue --write
+python3 ~/.codex/skills/seo-cycle/scripts/gsc-indexing-queue.py seo-cycle.yaml --gsc-discovered-file exports/discovered.csv --gsc-performance-file exports/gsc-performance.json --woocommerce-file exports/woocommerce.csv --technical-check --top 20 --write
+python3 ~/.codex/skills/seo-cycle/scripts/gsc-request-indexing-browser.py seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --max 10 --auto-click --write
+python3 ~/.codex/skills/seo-cycle/scripts/gsc-indexing-recheck.py seo-cycle.yaml --submitted-log seo/technical/gsc-indexing-submit.json --gsc-discovered-file exports/discovered-after-7d.csv --gsc-performance-file exports/gsc-performance-after-7d.json --write
+python3 ~/.codex/skills/seo-cycle/scripts/indexnow-submit.py seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --priority P0,P1 --max 100 --live --write
+python3 ~/.codex/skills/seo-cycle/scripts/yandex-recrawl-submit.py seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --priority P0,P1 --max 20 --live --write
+python3 ~/.codex/skills/seo-cycle/scripts/yandex-recrawl-submit.py seo-cycle.yaml --mode status --live --write
 python3 ~/.codex/skills/seo-cycle/scripts/bing-url-inspection.py seo-cycle.yaml --input-json bing-url-info.json --url https://example.com/ --site-url https://example.com/ --write
 python3 ~/.codex/skills/seo-cycle/scripts/technical-mcp-health.py seo-cycle.yaml --write
 python3 ~/.codex/skills/seo-cycle/scripts/lighthouse-audit.py seo-cycle.yaml --input-json lighthouse.json --url https://example.com/ --write
@@ -117,6 +124,12 @@ the classic multi-pass files to build `similarity.jsonl` and
 | Redirect maps | `redirect-map-audit.py` | CSV redirect-map chains, loops, missing targets, optional live check |
 | Lighthouse/CWV | `lighthouse-audit.py` | Lighthouse JSON/live distillate for performance, SEO, accessibility, CWV |
 | Google URL Inspection | `gsc-url-inspection.py` | guarded URL Inspection JSON/live read-only adapter |
+| GSC indexing export | `gsc-indexing-export-browser.py` | captures GSC Pages issue CSV/XLSX downloads through a persistent browser profile |
+| GSC indexing queue | `gsc-indexing-queue.py` | builds P0/P1 queue from discovered/not-indexed export + sitemap + WooCommerce + GSC impressions; filters junk and technical blockers |
+| GSC request indexing helper | `gsc-request-indexing-browser.py` | opens Search Console URL Inspection in a persistent browser profile; `--auto-click` is explicit and guarded |
+| GSC indexing recheck | `gsc-indexing-recheck.py` | 3-7 day follow-up from fresh GSC exports/search data |
+| IndexNow submit | `indexnow-submit.py` | guarded bulk POST to IndexNow/Bing-compatible endpoint using `INDEXNOW_KEY` and queue CSV |
+| Yandex recrawl | `yandex-recrawl-submit.py` | guarded Yandex Webmaster `/recrawl/queue` submit and status check |
 | Bing URL Inspection | `bing-url-inspection.py` | guarded Bing Webmaster `GetUrlInfo` JSON/live read-only adapter |
 | Technical MCP health | `technical-mcp-health.py` | optional readiness check for mcp-gsc, Google Analytics MCP and Lighthouse MCP |
 | Serpstat Site Audit | `serpstat-audit.py` | guarded project/list/create/start/settings/issue reports/export/basic-info/category API adapter |
@@ -134,6 +147,12 @@ the classic multi-pass files to build `similarity.jsonl` and
 - `redirect-map-audit.py` reads CSV exports with `old_url/new_url`, `source/target`, or `from/to`; live checks are explicit.
 - `lighthouse-audit.py` prefers a local Lighthouse JSON report or optional Lighthouse MCP workflow. `--live` runs Lighthouse through `npx`.
 - `gsc-url-inspection.py` is read-only. Without `--live` and `GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN`, it writes a planned request only.
+- `gsc-indexing-export-browser.py` is a browser download helper for the GSC Pages issue export. If `--issue-url` is omitted or the UI changes, use `--manual-fallback-seconds 120`: the browser stays open, you click Export CSV, and the script captures/imports the file.
+- `gsc-indexing-queue.py` is the required pre-submit gate for Google request indexing: export “Discovered - currently not indexed” from GSC, cross it with sitemap, WooCommerce and Search Analytics, filter editor/API/cart/feed/preview URLs, optionally run `--technical-check`, then submit only P0/P1.
+- `gsc-request-indexing-browser.py` uses the Search Console UI, not a hidden API. It stores no passwords and uses `~/.codex/browser-profiles/gsc`. `--auto-click` must be passed explicitly; otherwise it opens the URL Inspection pages and writes a manual-action report.
+- `gsc-indexing-recheck.py` should run after 3-7 days with fresh GSC exports. URLs still in discovered/not-indexed should not be resubmitted blindly; improve content, internal links, sitemap/canonical signals, then rebuild the queue.
+- `indexnow-submit.py` is the stronger automation path for Bing/Yandex-compatible discovery: it sends queue URLs to IndexNow only with explicit `--live` and `INDEXNOW_KEY`; the key value is never written to reports. HTTP 200 means the URL was received, not guaranteed indexed.
+- `yandex-recrawl-submit.py` sends queue URLs to Yandex Webmaster API v4 `/recrawl/queue` only with explicit `--live`, `YANDEX_OAUTH_TOKEN`, `YANDEX_USER_ID`, and `YANDEX_WEBMASTER_HOST_ID`. Use `--mode status` to check the queue later.
 - `bing-url-inspection.py` is read-only. Without `--live` and `BING_WEBMASTER_API_KEY`, it writes a planned request only.
 - `technical-mcp-health.py` only checks optional MCP readiness and never installs servers or reads secret values.
 - `serpstat-audit.py` is guarded. Without `--live` and `SERPSTAT_API_KEY`, it writes a planned request only. `create-project` consumes one project credit; `start` consumes audit credits by checked pages; settings/issues/export stay approval-gated.

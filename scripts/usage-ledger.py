@@ -57,6 +57,7 @@ METRIC_KEYS = [
     "browser_pages",
     "content_writer",
     "ai_credits",
+    "plagiarism_checks",
 ]
 
 
@@ -102,6 +103,15 @@ def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, defau
     return rel_path(project_root, policy_files.get(key, default))
 
 
+def nested_numeric(data: dict[str, Any], path: list[str], default: float = 0.0) -> float:
+    node: Any = data
+    for key in path:
+        if not isinstance(node, dict):
+            return default
+        node = node.get(key)
+    return numeric(node, default)
+
+
 def current_month() -> str:
     return dt.date.today().strftime("%Y-%m")
 
@@ -139,6 +149,7 @@ def metric_payload(args: argparse.Namespace) -> dict[str, float]:
         "browser_pages": args.browser_pages,
         "content_writer": args.content_writer,
         "ai_credits": args.ai_credits,
+        "plagiarism_checks": args.plagiarism_checks,
     }
     return {key: numeric(value) for key, value in raw.items() if numeric(value) != 0}
 
@@ -234,6 +245,41 @@ def imported_usage_events(project_root: pathlib.Path, month: str) -> list[dict[s
     return events
 
 
+def neuronwriter_limits_path(cfg: dict[str, Any], project_root: pathlib.Path) -> pathlib.Path:
+    governance = cfg.get("governance", {}) if isinstance(cfg.get("governance"), dict) else {}
+    subscriptions = governance.get("subscriptions", {}) if isinstance(governance.get("subscriptions"), dict) else {}
+    neuron_sub = subscriptions.get("neuronwriter", {}) if isinstance(subscriptions.get("neuronwriter"), dict) else {}
+    policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
+    raw = neuron_sub.get("limits_file") or policy_files.get("neuronwriter_limits")
+    return rel_path(project_root, raw or "seo/neuronwriter-limits.yaml")
+
+
+def imported_neuronwriter_limits(cfg: dict[str, Any], project_root: pathlib.Path, month: str) -> list[dict[str, Any]]:
+    path = neuronwriter_limits_path(cfg, project_root)
+    if not path.exists():
+        return []
+    data = load_yaml(path)
+    metrics = {
+        "content_writer": nested_numeric(data, ["monthly_limits", "content_writer_analyses", "used"]),
+        "ai_credits": nested_numeric(data, ["monthly_limits", "ai_credits", "used"]),
+        "plagiarism_checks": nested_numeric(data, ["monthly_limits", "plagiarism_checks", "used"]),
+    }
+    metrics = {key: value for key, value in metrics.items() if value}
+    if not metrics:
+        return []
+    return [
+        {
+            "timestamp": path.stat().st_mtime,
+            "month": month,
+            "service": "neuronwriter",
+            "category": "paid_api",
+            "metrics": metrics,
+            "source": str(path),
+            "imported": True,
+        }
+    ]
+
+
 def summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
     totals = empty_totals()
     errors = []
@@ -274,16 +320,40 @@ def service_caps(cfg: dict[str, Any], tool_budget: dict[str, Any]) -> dict[str, 
             caps[service]["content_writer"] = numeric(node.get("monthly_content_writer_limit"))
         if "monthly_ai_credit_limit" in node:
             caps[service]["ai_credits"] = numeric(node.get("monthly_ai_credit_limit"))
+        if "monthly_plagiarism_check_limit" in node:
+            caps[service]["plagiarism_checks"] = numeric(node.get("monthly_plagiarism_check_limit"))
         if "reserve_credits" in node:
             caps[service]["reserve_credits"] = numeric(node.get("reserve_credits"))
         if "reserve_requests" in node:
             caps[service]["reserve_requests"] = numeric(node.get("reserve_requests"))
+        if "reserve_plagiarism_checks" in node:
+            caps[service]["reserve_plagiarism_checks"] = numeric(node.get("reserve_plagiarism_checks"))
 
     # Normalize aliases used by tools and users.
     if "keys_so" in caps and "keyso" not in caps:
         caps["keyso"] = caps["keys_so"]
     if "google_nlp" in caps and "google_cloud_nlp" not in caps:
         caps["google_cloud_nlp"] = caps["google_nlp"]
+    return caps
+
+
+def neuronwriter_policy_caps(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, float]:
+    path = neuronwriter_limits_path(cfg, project_root)
+    if not path.exists():
+        return {}
+    data = load_yaml(path)
+    caps: dict[str, float] = {}
+    content_limit = nested_numeric(data, ["monthly_limits", "content_writer_analyses", "limit"])
+    if content_limit:
+        caps["content_writer"] = content_limit
+        caps["reserve_content_writer"] = nested_numeric(data, ["monthly_limits", "content_writer_analyses", "reserved_until_reset"])
+    ai_limit = nested_numeric(data, ["monthly_limits", "ai_credits", "limit"])
+    if ai_limit:
+        caps["ai_credits"] = ai_limit
+    plagiarism_limit = nested_numeric(data, ["monthly_limits", "plagiarism_checks", "limit"])
+    if plagiarism_limit:
+        caps["plagiarism_checks"] = plagiarism_limit
+        caps["reserve_plagiarism_checks"] = nested_numeric(data, ["monthly_limits", "plagiarism_checks", "reserved_until_reset"])
     return caps
 
 
@@ -310,7 +380,11 @@ def load_state(cfg_path: pathlib.Path, month: str) -> dict[str, Any]:
     tool_budget_path = policy_path(cfg, project_root, "tool_budget", "seo/tool-budget.yaml")
     tool_budget = load_yaml(tool_budget_path)
     ledger_path = policy_path(cfg, project_root, "usage_ledger", "seo/usage/usage-ledger.jsonl")
-    events = read_ledger_events(ledger_path, month) + imported_usage_events(project_root, month)
+    events = read_ledger_events(ledger_path, month) + imported_usage_events(project_root, month) + imported_neuronwriter_limits(cfg, project_root, month)
+    caps = service_caps(cfg, tool_budget)
+    neuron_caps = neuronwriter_policy_caps(cfg, project_root)
+    if neuron_caps:
+        caps.setdefault("neuronwriter", {}).update(neuron_caps)
     return {
         "cfg": cfg,
         "project_root": project_root,
@@ -321,7 +395,7 @@ def load_state(cfg_path: pathlib.Path, month: str) -> dict[str, Any]:
         "events": events,
         "totals": summarize(events),
         "global_caps": global_caps(cfg, tool_budget),
-        "service_caps": service_caps(cfg, tool_budget),
+        "service_caps": caps,
     }
 
 
@@ -384,6 +458,8 @@ def evaluate(state: dict[str, Any], estimate: dict[str, Any] | None = None) -> d
                 reserve = service_cap.get("reserve_credits", reserve)
             if metric == "requests":
                 reserve = service_cap.get("reserve_requests", reserve)
+            if metric == "plagiarism_checks":
+                reserve = service_cap.get("reserve_plagiarism_checks", reserve)
             rows.append(
                 cap_row(
                     service,
@@ -443,8 +519,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Events: {totals.get('events', 0)} manual, {totals.get('imported_events', 0)} imported",
         "",
         "## Totals",
-        "| Scope | USD | Input tokens | Output tokens | Requests | Credits | Units | Rows | Browser min | Pages | Content writer | AI credits |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Scope | USD | Input tokens | Output tokens | Requests | Credits | Units | Rows | Browser min | Pages | Content writer | AI credits | Plagiarism checks |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     scopes = {"overall": totals.get("overall", {})}
     scopes.update(totals.get("categories", {}))
@@ -454,7 +530,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"{metrics.get('output_tokens', 0):.0f} | {metrics.get('requests', 0):.0f} | "
             f"{metrics.get('credits', 0):.0f} | {metrics.get('units', 0):.0f} | {metrics.get('rows', 0):.0f} | "
             f"{metrics.get('browser_minutes', 0):.1f} | {metrics.get('browser_pages', 0):.0f} | "
-            f"{metrics.get('content_writer', 0):.0f} | {metrics.get('ai_credits', 0):.0f} |"
+            f"{metrics.get('content_writer', 0):.0f} | {metrics.get('ai_credits', 0):.0f} | "
+            f"{metrics.get('plagiarism_checks', 0):.0f} |"
         )
 
     lines.extend(["", "## Cap Check", "| Scope | Metric | Used | Estimate | Cap | Reserve | Remaining | Status |", "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |"])
@@ -550,6 +627,7 @@ def parse_cli(argv: list[str]) -> tuple[str, str | None, argparse.Namespace]:
     parser.add_argument("--browser-pages", type=float, default=0)
     parser.add_argument("--content-writer", type=float, default=0)
     parser.add_argument("--ai-credits", type=float, default=0)
+    parser.add_argument("--plagiarism-checks", type=float, default=0)
     return command, config, parser.parse_args(raw)
 
 

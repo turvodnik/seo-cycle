@@ -148,6 +148,29 @@ policy_files:
   latest_page_outline_quality: seo/research-package/latest-page-outline-quality.md
   latest_page_outline_quality_json: seo/research-package/latest-page-outline-quality.json
   content_drafts_dir: seo/research-package/drafts
+  knowledge_wiki_root: seo/knowledge/wiki
+  knowledge_obsidian_root: seo/knowledge/obsidian-vault
+  knowledge_graph_corpus: seo/knowledge/graph-corpus
+  knowledge_graph_root: seo/knowledge/graph
+  knowledge_hybrid_index_root: seo/knowledge/zvec
+  knowledge_project_manifest: seo/knowledge/wiki/project-manifest.json
+  knowledge_state_summary: seo/knowledge/wiki/state/latest-summary.md
+  knowledge_context_dir: seo/knowledge/wiki/context
+  knowledge_latest_context_pack: seo/knowledge/wiki/context/latest-context-pack.md
+  knowledge_latest_context_pack_json: seo/knowledge/wiki/context/latest-context-pack.json
+  knowledge_content_taste_report: seo/knowledge/wiki/reports/content-taste-gate.md
+  knowledge_content_taste_json: seo/knowledge/wiki/reports/content-taste-gate.json
+  knowledge_wiki_preflight_report: seo/knowledge/wiki/preflight/wiki-preflight.md
+  knowledge_wiki_preflight_json: seo/knowledge/wiki/preflight/wiki-preflight.json
+  knowledge_review_cluster_plan: seo/knowledge/wiki/frameworks/review-cluster-plan.md
+  knowledge_review_cluster_json: seo/knowledge/wiki/frameworks/review-clusters.json
+  knowledge_api_catalog: seo/knowledge/wiki/api-catalog/api-catalog.json
+  knowledge_api_candidates: seo/knowledge/wiki/api-catalog/api-candidates.jsonl
+  knowledge_decision_log: seo/knowledge/wiki/decisions/decision-log.jsonl
+  knowledge_graphify_status: seo/knowledge/graph/graphify-status.json
+  knowledge_graphify_local_graph: seo/knowledge/graph/graphify-local-graph.json
+  knowledge_zvec_status: seo/knowledge/zvec/zvec-status.json
+  knowledge_zvec_db: seo/knowledge/zvec/hybrid.sqlite
   context_pack_report: seo/setup/context-pack.md
   context_pack_json: seo/setup/context-pack.json
   latest_context_pack: seo/setup/latest-context-pack.md
@@ -167,6 +190,10 @@ policy_files:
   xmlriver_health_json: seo/setup/xmlriver-health.json
   latest_xmlriver_health: seo/setup/latest-xmlriver-health.md
   latest_xmlriver_health_json: seo/setup/latest-xmlriver-health.json
+  writerzen_health_report: seo/setup/writerzen-health.md
+  writerzen_health_json: seo/setup/writerzen-health.json
+  latest_writerzen_health: seo/setup/latest-writerzen-health.md
+  latest_writerzen_health_json: seo/setup/latest-writerzen-health.json
   setup_gap_audit_report: seo/setup/setup-gap-audit.md
   setup_gap_audit_json: seo/setup/setup-gap-audit.json
   latest_setup_gap_audit: seo/setup/latest-setup-gap-audit.md
@@ -259,6 +286,42 @@ policy_files:
   gsc_url_inspection_json: seo/technical/gsc-url-inspection.json
   latest_gsc_url_inspection: seo/technical/latest-gsc-url-inspection.md
   latest_gsc_url_inspection_json: seo/technical/latest-gsc-url-inspection.json
+  gsc_indexing_export_report: seo/technical/gsc-indexing-export.md
+  gsc_indexing_export_json: seo/technical/gsc-indexing-export.json
+  latest_gsc_indexing_export: seo/technical/latest-gsc-indexing-export.md
+  latest_gsc_indexing_export_json: seo/technical/latest-gsc-indexing-export.json
+  gsc_indexing_queue_report: seo/technical/gsc-indexing-queue.md
+  gsc_indexing_queue_json: seo/technical/gsc-indexing-queue.json
+  gsc_indexing_queue_csv: seo/technical/gsc-indexing-request-queue.csv
+  latest_gsc_indexing_queue: seo/technical/latest-gsc-indexing-queue.md
+  latest_gsc_indexing_queue_json: seo/technical/latest-gsc-indexing-queue.json
+  latest_gsc_indexing_queue_csv: seo/technical/latest-gsc-indexing-request-queue.csv
+  gsc_indexing_submit_report: seo/technical/gsc-indexing-submit.md
+  gsc_indexing_submit_json: seo/technical/gsc-indexing-submit.json
+  latest_gsc_indexing_submit: seo/technical/latest-gsc-indexing-submit.md
+  latest_gsc_indexing_submit_json: seo/technical/latest-gsc-indexing-submit.json
+  gsc_indexing_recheck_report: seo/technical/gsc-indexing-recheck.md
+  gsc_indexing_recheck_json: seo/technical/gsc-indexing-recheck.json
+  latest_gsc_indexing_recheck: seo/technical/latest-gsc-indexing-recheck.md
+  latest_gsc_indexing_recheck_json: seo/technical/latest-gsc-indexing-recheck.json
+  indexnow_submit_report: seo/technical/indexnow-submit.md
+  indexnow_submit_json: seo/technical/indexnow-submit.json
+  indexnow_submit_csv: seo/technical/indexnow-submit-log.csv
+  latest_indexnow_submit: seo/technical/latest-indexnow-submit.md
+  latest_indexnow_submit_json: seo/technical/latest-indexnow-submit.json
+  latest_indexnow_submit_csv: seo/technical/latest-indexnow-submit-log.csv
+  yandex_recrawl_submit_report: seo/technical/yandex-recrawl-submit.md
+  yandex_recrawl_submit_json: seo/technical/yandex-recrawl-submit.json
+  yandex_recrawl_submit_csv: seo/technical/yandex-recrawl-submit.csv
+  latest_yandex_recrawl_submit: seo/technical/latest-yandex-recrawl-submit.md
+  latest_yandex_recrawl_submit_json: seo/technical/latest-yandex-recrawl-submit.json
+  latest_yandex_recrawl_submit_csv: seo/technical/latest-yandex-recrawl-submit.csv
+  yandex_recrawl_status_report: seo/technical/yandex-recrawl-status.md
+  yandex_recrawl_status_json: seo/technical/yandex-recrawl-status.json
+  yandex_recrawl_status_csv: seo/technical/yandex-recrawl-status.csv
+  latest_yandex_recrawl_status: seo/technical/latest-yandex-recrawl-status.md
+  latest_yandex_recrawl_status_json: seo/technical/latest-yandex-recrawl-status.json
+  latest_yandex_recrawl_status_csv: seo/technical/latest-yandex-recrawl-status.csv
   bing_url_inspection_report: seo/technical/bing-url-inspection.md
   bing_url_inspection_json: seo/technical/bing-url-inspection.json
   latest_bing_url_inspection: seo/technical/latest-bing-url-inspection.md
@@ -317,6 +380,19 @@ governance:
       enabled: false
       plan: not_configured
       limits_file: seo/neuronwriter-limits.yaml
+      monthly_content_writer_limit: 0
+      monthly_ai_credit_limit: 0
+      monthly_plagiarism_check_limit: 0
+      reserve_plagiarism_checks: 0
+    writerzen:
+      enabled: false
+      plan: not_configured
+      browser_export_only: true
+      daily_topic_lookup_limit: 0
+      daily_keyword_lookup_limit: 0
+      monthly_keyword_credit_limit: 0
+      monthly_article_limit: 0
+      monthly_ai_words_limit: 0
     google_cloud_nlp:
       enabled: false
       budget_file: seo/entities/google-nlp-policy.yaml
@@ -565,6 +641,38 @@ xmlriver_provider:
     - suggest
     - ai_overview_blocks
 
+writerzen_provider:
+  enabled: false
+  mode: persistent_browser_export
+  api_default: no_public_api_browser_export
+  login_url: https://app.writerzen.net/
+  cache_enabled: true
+  cache_key_parts: [topic, region, export_file, mode, export_hash]
+  import_dir: seo/research/writerzen/imports
+  raw_path: seo/research/raw/writerzen/
+  distillate_path: seo/research/distillates/writerzen/
+  vector_path: seo/research/vector/source_pack.jsonl
+  stores_password: false
+  browser_workflow:
+    preferred: persistent_logged_in_browser
+    allowed_modes: [persistent_browser, manual_browser, manual_export]
+    export_required: true
+    store_passwords: false
+    profile_dir: ~/.codex/browser-profiles/writerzen
+    collect_script: ./.codex/skills/seo-cycle/scripts/writerzen-browser-collect.py
+    runner_script: ./.codex/skills/seo-cycle/scripts/writerzen-browser-runner.mjs
+    default_reports: [topic_discovery, keyword_explorer, keyword_planner, domain_focus]
+  use_for:
+    - topic_discovery
+    - keyword_explorer
+    - keyword_planner
+    - domain_focus
+    - allintitle_kgr
+    - buying_journey
+    - serp_type
+  fallback_only:
+    - plagiarism_export
+
 # -----------------------------------------------------------------------------
 # 4. Project type & mode — что это за сайт и какой режим цикла
 # -----------------------------------------------------------------------------
@@ -790,6 +898,22 @@ sources:
     engine: google.ru           # google.ru | google.com | google.uk | ...
     target_score: 65            # минимум для зелёной зоны
     helper_script: "./seo/scripts/nw.sh"
+    plagiarism:
+      enabled: false
+      provider: neuronwriter
+      mode: api_guarded          # api_guarded | manual_ui | disabled
+      endpoint_env: NW_PLAGIARISM_PATH
+      fallback: manual_neuronwriter_ui_or_writerzen_export
+  writerzen:
+    enabled: false
+    method: browser_export
+    login_url: https://app.writerzen.net/
+    import_dir: seo/research/writerzen/imports
+    health_script: ./.codex/skills/seo-cycle/scripts/writerzen-health.py
+    browser_collect_script: ./.codex/skills/seo-cycle/scripts/writerzen-browser-collect.py
+    source_pack_script: ./.codex/skills/seo-cycle/scripts/writerzen-source-pack.py
+    exports: [topic_discovery, keyword_explorer, keyword_planner, domain_focus]
+    note: "No public API assumed: use logged-in browser export CSV/XLSX, then ingest bounded distillates/vector records."
 
   # === LLM CLI sources ===
   llm_cli:
@@ -969,6 +1093,12 @@ quality_gates:
   neuronwriter_score:
     enabled: false              # автоматически true если sources.neuronwriter.enabled
     min_score: 65
+
+  plagiarism_check:
+    enabled: false              # включать для финальных коммерческих/блоговых текстов
+    provider: neuronwriter
+    min_remaining_checks: 5
+    block_publish_on_missing: true
 
   fact_check_log_present:
     enabled: true               # требовать поле fact_check_log в frontmatter

@@ -673,16 +673,20 @@ def content_draft_stage(package: dict[str, Any]) -> dict[str, Any]:
         warnings=warnings,
         commands=[
             "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service neuronwriter --category paid_api --content-writer 1 --ai-credits 500 --fail-on-block",
+            "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service neuronwriter --category paid_api --plagiarism-checks 1 --fail-on-block",
             f"Create or revise draft markdown under {package_dir}/drafts/ from {package_dir}/copywriter-ready/*.md, copywriting_playbook, writer_prompt_packet and source slots.",
             f"python3 ~/.codex/skills/seo-cycle/scripts/draft-quality-gate.py {package_dir}/drafts/<slug>.md --outline {package_dir}/page-outlines-v3/<slug>.json --write",
             "bash ~/.codex/skills/seo-cycle/scripts/nw-cli.sh evaluate <query_id> <draft.html>",
+            "bash ~/.codex/skills/seo-cycle/scripts/nw-cli.sh plagiarism <query_id> <draft.html>",
+            "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py record --service neuronwriter --category paid_api --plagiarism-checks 1 --task \"final plagiarism check\" --write",
             "python3 ~/.codex/skills/seo-cycle/scripts/project-journey.py --write",
         ],
         exit_criteria=[
             "Draft markdown exists for the selected MVP/P1 page.",
             "draft-quality-gate JSON exists next to each draft.",
             "Draft quality gate has 0 error/critical findings.",
-            "NeuronWriter usage is checked/recorded when it is used; if unavailable, fallback drafting is explicitly logged.",
+            "NeuronWriter usage is checked/recorded when it is used; if unavailable, fallback drafting/checking is explicitly logged.",
+            "Final commercial/blog drafts pass the configured plagiarism check or carry an approved manual fallback note.",
             "The next project-journey run marks this stage done before implementation/publishing.",
         ],
     )

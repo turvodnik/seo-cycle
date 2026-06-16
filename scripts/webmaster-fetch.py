@@ -2,8 +2,10 @@
 """
 webmaster-fetch.py — Яндекс.Вебмастер API клиент.
 
-Использует OAuth токен (env YANDEX_OAUTH_TOKEN) + host_id (env
-YANDEX_WEBMASTER_HOST_ID, либо --host) + user_id (env YANDEX_USER_ID).
+Использует OAuth токен (env YANDEX_WEBMASTER_OAUTH_TOKEN или
+YANDEX_OAUTH_TOKEN) + host_id (env YANDEX_WEBMASTER_HOST_ID /
+YANDEX_HOST_ID, либо --host) + user_id (env YANDEX_WEBMASTER_USER_ID /
+YANDEX_USER_ID).
 
 Получает popular search queries за период (аналог GSC «История запросов»).
 Output совместим с snapshot-build.py --source webmaster.
@@ -27,12 +29,12 @@ API docs: https://yandex.ru/dev/webmaster/doc/dg/concepts/about.html
       python3 snapshot-build.py --source webmaster --output snapshot.json --merge
 
 Опции:
-    --user-id ID            Yandex user ID (env YANDEX_USER_ID)
+    --user-id ID            Yandex user ID (env YANDEX_WEBMASTER_USER_ID / YANDEX_USER_ID)
     --host HOST_ID          Host ID в формате https:example.com:443 (env YANDEX_WEBMASTER_HOST_ID)
     --token TOKEN           OAuth (env YANDEX_OAUTH_TOKEN)
     --days N                (default: 28)
     --start-date YYYY-MM-DD / --end-date YYYY-MM-DD
-    --order-by              POPULARITY (default) | DAILY_CLICKS | DAILY_IMPRESSIONS
+    --order-by              TOTAL_SHOWS (default) | TOTAL_CLICKS
     --limit N               (default: 500, max 500 на страницу)
     --output PATH
 """
@@ -48,13 +50,17 @@ API_BASE = "https://api.webmaster.yandex.net/v4"
 
 def fetch(user_id: str, host_id: str, token: str, start: str, end: str,
           order_by: str, limit: int) -> dict:
-    params = {
-        "date_from": start,
-        "date_to": end,
-        "order_by": order_by,
-        "query_indicator": "TOTAL_CLICKS,TOTAL_SHOWS,AVG_SHOW_POSITION,AVG_CLICK_POSITION",
-        "limit": min(limit, 500),
-    }
+    params = [
+        ("date_from", start),
+        ("date_to", end),
+        ("order_by", order_by),
+        ("device_type_indicator", "ALL"),
+        ("limit", min(limit, 500)),
+    ]
+    # Yandex Webmaster API expects repeated query_indicator params, not a CSV.
+    # CSV is rejected as a single enum value by the current API.
+    for indicator in ("TOTAL_SHOWS", "TOTAL_CLICKS", "AVG_SHOW_POSITION", "AVG_CLICK_POSITION"):
+        params.append(("query_indicator", indicator))
     url = f"{API_BASE}/user/{user_id}/hosts/{host_id}/search-queries/popular/?{urllib.parse.urlencode(params)}"
     req = urllib.request.Request(url, headers={
         "Authorization": f"OAuth {token}",
@@ -72,14 +78,14 @@ def fetch(user_id: str, host_id: str, token: str, start: str, end: str,
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--user-id", default=os.environ.get("YANDEX_USER_ID"))
-    ap.add_argument("--host", default=os.environ.get("YANDEX_WEBMASTER_HOST_ID"))
-    ap.add_argument("--token", default=os.environ.get("YANDEX_OAUTH_TOKEN"))
+    ap.add_argument("--user-id", default=os.environ.get("YANDEX_WEBMASTER_USER_ID") or os.environ.get("YANDEX_USER_ID"))
+    ap.add_argument("--host", default=os.environ.get("YANDEX_WEBMASTER_HOST_ID") or os.environ.get("YANDEX_HOST_ID"))
+    ap.add_argument("--token", default=os.environ.get("YANDEX_WEBMASTER_OAUTH_TOKEN") or os.environ.get("YANDEX_OAUTH_TOKEN"))
     ap.add_argument("--days", type=int, default=28)
     ap.add_argument("--start-date")
     ap.add_argument("--end-date")
-    ap.add_argument("--order-by", default="POPULARITY",
-                    choices=["POPULARITY", "DAILY_CLICKS", "DAILY_IMPRESSIONS"])
+    ap.add_argument("--order-by", default="TOTAL_SHOWS",
+                    choices=["TOTAL_SHOWS", "TOTAL_CLICKS"])
     ap.add_argument("--limit", type=int, default=500)
     ap.add_argument("--output", type=pathlib.Path)
     args = ap.parse_args()

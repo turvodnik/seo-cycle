@@ -70,6 +70,7 @@ QUALITY_CRITERIA = (
 
 FINDING_CRITERIA = {
     "missing_required_artifacts": ("structure_architecture", "technical_implementation", "consistency_handoff"),
+    "required_research_source_missing": ("serp_intent_validation", "eeat_evidence", "geo_ai_citability", "consistency_handoff"),
     "serp_validation_incomplete": ("serp_intent_validation", "clustering_url_mapping"),
     "semantic_core_url_drift": ("clustering_url_mapping", "technical_implementation", "consistency_handoff"),
     "dirty_semantic_core_queries": ("keyword_universe", "consistency_handoff"),
@@ -88,6 +89,12 @@ REMEDIATION_HINTS = {
         "target_files": list(REQUIRED_FILES),
         "command": "Restore/regenerate the missing package artifacts, then rerun research-package-quality.py --write.",
         "definition_of_done": "Every required artifact exists and can be parsed before downstream briefs are generated.",
+    },
+    "required_research_source_missing": {
+        "mode": "source_refresh",
+        "target_files": ["seo/research/distillates/", "seo/research/llm-cli/results/"],
+        "command": "Run the required source collectors, cache/distill the results, then rerun research-package-quality.py --write.",
+        "definition_of_done": "Every project-required research source has a non-empty ready artifact before downstream writing starts.",
     },
     "serp_validation_incomplete": {
         "mode": "source_refresh",
@@ -189,6 +196,108 @@ def read_yaml(path: pathlib.Path) -> dict[str, Any]:
     except Exception:
         return {"_yaml_error": True}
     return data if isinstance(data, dict) else {}
+
+
+def nested_get(data: dict[str, Any], dotted: str, default: Any = None) -> Any:
+    current: Any = data
+    for part in dotted.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return default
+        current = current[part]
+    return current
+
+
+def project_root_for_package(package_dir: pathlib.Path) -> pathlib.Path:
+    for candidate in [package_dir, *package_dir.parents]:
+        if (candidate / "seo-cycle.yaml").exists():
+            return candidate
+    return package_dir.parent
+
+
+def normalize_required_sources(raw: Any) -> list[dict[str, Any]]:
+    if isinstance(raw, dict):
+        items = []
+        for source_id, value in raw.items():
+            if isinstance(value, dict):
+                item = {"id": source_id, **value}
+            else:
+                item = {"id": source_id, "path": value}
+            items.append(item)
+        return items
+    if isinstance(raw, list):
+        items = []
+        for value in raw:
+            if isinstance(value, dict):
+                items.append(value)
+            else:
+                items.append({"id": str(value)})
+        return items
+    return []
+
+
+def source_status_value(data: dict[str, Any], field: str | None) -> Any:
+    if not field:
+        return None
+    return nested_get(data, field, data.get(field))
+
+
+def check_required_research_sources(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    missing: list[dict[str, Any]] = []
+    required = normalize_required_sources(nested_get(cfg, "quality_gates.required_research_sources", []))
+    for source in required:
+        source_id = str(source.get("id") or "unnamed_source")
+        min_bytes = int(source.get("min_bytes") or 100)
+        mode = str(source.get("mode") or "all").lower()
+        required_status = source.get("required_status")
+        status_field = source.get("status_field")
+        raw_paths: list[str] = []
+        if source.get("path"):
+            raw_paths.append(str(source["path"]))
+        if isinstance(source.get("paths"), list):
+            raw_paths.extend(str(path) for path in source["paths"])
+        matched_paths: list[pathlib.Path] = []
+        for raw_path in raw_paths:
+            matched_paths.append((project_root / raw_path).resolve())
+        if source.get("glob"):
+            matched_paths.extend(sorted(project_root.glob(str(source["glob"]))))
+        if not matched_paths:
+            missing.append({"source": source_id, "reason": "no_paths_configured", "expected": source})
+            continue
+
+        checks = []
+        for path in matched_paths:
+            item: dict[str, Any] = {"path": str(path)}
+            if not path.exists():
+                item["ok"] = False
+                item["reason"] = "missing"
+            elif path.is_file() and path.stat().st_size < min_bytes:
+                item["ok"] = False
+                item["reason"] = "too_small"
+                item["bytes"] = path.stat().st_size
+            else:
+                item["ok"] = True
+                item["bytes"] = path.stat().st_size if path.is_file() else None
+                if required_status and path.suffix.lower() == ".json":
+                    value = source_status_value(read_json(path), str(status_field or "status"))
+                    item["status"] = value
+                    if value != required_status:
+                        item["ok"] = False
+                        item["reason"] = "status_mismatch"
+                        item["required_status"] = required_status
+            checks.append(item)
+
+        ok_count = sum(1 for item in checks if item.get("ok"))
+        source_ok = ok_count >= 1 if mode == "any" else ok_count == len(checks)
+        if not source_ok:
+            missing.append(
+                {
+                    "source": source_id,
+                    "mode": mode,
+                    "required_status": required_status,
+                    "checks": checks[:20],
+                }
+            )
+    return missing
 
 
 def norm(value: Any) -> str:
@@ -331,13 +440,33 @@ def remediation_plan_from_findings(findings: list[dict[str, Any]]) -> list[dict[
 
 def launch_action_plan(report: dict[str, Any]) -> list[dict[str, Any]]:
     if not report["findings"]:
+        source_lock_gate = report.get("source_lock_gate") if isinstance(report.get("source_lock_gate"), dict) else {}
+        if source_lock_gate.get("status") == "required_before_final_draft":
+            plan_path = source_lock_gate.get("plan") or "<package>/source-lock-plan.md"
+            queue_path = source_lock_gate.get("queue") or "<package>/source-lock-queue.csv"
+            return [
+                {
+                    "step": 1,
+                    "priority": "P0-01",
+                    "action": "Complete source-lock before final drafting.",
+                    "command": f"Review {queue_path}; resolve claims using {plan_path}; rerun research-package-quality.py <package> --write",
+                    "definition_of_done": "Every P0/P1 technical or numeric claim is verified, softened, or removed before draft-quality-gate/NeuronWriter/plagiarism checks.",
+                },
+                {
+                    "step": 2,
+                    "priority": "P0-02",
+                    "action": "Refresh content/page production artifacts after source-lock decisions.",
+                    "command": "page-outline-v3.py <package> --all-mvp --write && page-outline-quality.py <package> --version v3 --write",
+                    "definition_of_done": "Every MVP page has a generated v3 outline, copywriter-ready brief, and passing v3 outline quality gate before drafting.",
+                },
+            ]
         return [
             {
                 "step": 1,
                 "priority": "P0-01",
                 "action": "Proceed to content/page production.",
-                "command": "page-outline-v2.py <package> --all-mvp --write",
-                "definition_of_done": "Every MVP page has a generated v2 outline and final Codex review before publication.",
+                "command": "page-outline-v3.py <package> --all-mvp --write && page-outline-quality.py <package> --version v3 --write",
+                "definition_of_done": "Every MVP page has a generated v3 outline, copywriter-ready brief, and passing v3 outline quality gate before drafting.",
             }
         ]
 
@@ -392,6 +521,8 @@ def launch_action_plan(report: dict[str, Any]) -> list[dict[str, Any]]:
 
 def audit_package(package_dir: pathlib.Path) -> dict[str, Any]:
     package_dir = resolve_package(package_dir)
+    project_root = project_root_for_package(package_dir)
+    project_cfg = read_yaml(project_root / "seo-cycle.yaml")
     architecture = read_json(package_dir / "semantic-architecture-final.json")
     semantic_rows, semantic_fields = read_csv(package_dir / "semantic-core.csv")
     content_rows, content_fields = read_csv(package_dir / "content-plan.csv")
@@ -415,6 +546,17 @@ def audit_package(package_dir: pathlib.Path) -> dict[str, Any]:
             title="Research package is missing required artifacts.",
             evidence=missing,
             action="Regenerate or restore the missing CSV/JSON/MD/YAML files before handoff.",
+        )
+
+    missing_required_sources = check_required_research_sources(project_root, project_cfg)
+    if missing_required_sources:
+        add_finding(
+            findings,
+            finding_id="required_research_source_missing",
+            severity="critical",
+            title="Project-required research sources are missing or not ready.",
+            evidence={"sources": missing_required_sources[:20]},
+            action="Run the mandatory source collectors, write raw/distillate artifacts, and rerun the package gate before content drafting.",
         )
 
     serp = architecture.get("dataforseo_serp_validation") or {}
@@ -596,10 +738,12 @@ def audit_package(package_dir: pathlib.Path) -> dict[str, Any]:
         },
         "inputs": {
             "required_files": {name: (package_dir / name).exists() for name in REQUIRED_FILES},
+            "required_research_sources": normalize_required_sources(nested_get(project_cfg, "quality_gates.required_research_sources", [])),
             "semantic_core_fields": semantic_fields,
             "content_plan_fields": content_fields,
             "dataforseo_fields": dataforseo_fields,
         },
+        "source_lock_gate": nested_get(architecture, "metadata.source_lock_gate", {}),
         "findings": findings,
         "scorecard": scorecard,
         "remediation_plan": remediation_plan,
