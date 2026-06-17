@@ -12,6 +12,7 @@
 - Stage contracts default to five repair attempts and write `seo/orchestrator/<stage>-report.md/json`; exhausted gates write `seo/orchestrator/<stage>-blocker.md/json` with stop conditions and missing artifacts.
 - Added a built-in `--goal` pilot route that runs `task-router.py`, then `project-journey.py`, and refreshes `setup-control-plane.py` once when the journey gate is still blocked.
 - Added `seo-cycle-run.py --stage-template research-package --package <path>` for the real research package lane: quality gate, bounded repair/rerun, v3 page briefs, and v3 outline quality gate.
+- Added `seo-cycle-run.py --stage-template copywriting --draft <draft.md> [--outline <outline.json>]` plus `draft-quality-gate.py --fail-on-error`, so draft validation can act as a real blocking gate without changing the legacy default exit behavior.
 - Added regression coverage for contract defaults, repair/rerun behavior, blocker reports and CLI execution.
 - Added `docs/orchestrator.md` and `docs/refactor-v1.63-plan.md` to document the Pifagor SEO skill direction and the safe refactor path.
 

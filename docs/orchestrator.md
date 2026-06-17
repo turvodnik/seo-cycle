@@ -64,6 +64,24 @@ This template runs:
    command gate through `page-outline-quality.py --version v3`, repair by
    regenerating v3 briefs, up to five repair attempts.
 
+Run the built-in copywriting lane for one existing draft:
+
+```bash
+python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py \
+  --stage-template copywriting \
+  --package seo/research-package \
+  --draft seo/research-package/drafts/sample.md \
+  --outline seo/research-package/page-outlines-v3/sample.json \
+  --write
+```
+
+If `--outline` is omitted, the template uses
+`<package>/page-outlines-v3/<draft-stem>.json`. This lane runs
+`draft-quality-gate.py --fail-on-error`, writes the draft gate reports next to
+the draft, and blocks when error/critical findings remain. It does not create
+or rewrite the draft; the repair action is human/agent revision from the
+copywriter-ready brief.
+
 ## Stage Contract
 
 JSON and YAML are both accepted. YAML requires PyYAML to be installed; JSON
@@ -147,6 +165,9 @@ repair attempts, missing inputs, missing outputs and stop conditions.
   project scripts.
 - Keep paid APIs, browser actions, indexing submission and publishing behind
   existing approval gates.
+- Use `draft-quality-gate.py --fail-on-error` only when a pipeline needs a
+  non-zero exit for error/critical findings; legacy calls without the flag keep
+  their historical exit behavior.
 - Prefer stage wrappers around proven scripts instead of moving business logic
   into the orchestrator.
 - Treat blocker reports as a handoff to a human or a later agent step, not as a

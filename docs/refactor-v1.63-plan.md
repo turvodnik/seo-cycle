@@ -24,6 +24,10 @@ Status: implemented as the v1.63 pilot.
   `seo-cycle-run.py --stage-template research-package --package <path>` wraps
   quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring
   users to hand-write a stage YAML first.
+- Add a built-in copywriting lane template:
+  `seo-cycle-run.py --stage-template copywriting --draft <draft.md>` wraps
+  `draft-quality-gate.py --fail-on-error` for one existing draft while keeping
+  the legacy draft gate exit behavior unchanged unless the flag is used.
 
 ## Next Slices
 
@@ -32,22 +36,16 @@ Status: implemented as the v1.63 pilot.
    - Prefer scripts that already use `seo_cycle_core.config`.
    - Keep direct script behavior and CLI output unchanged.
 
-2. Wrap the copywriting lane.
-   - Stage: `page-outline-v3.py`.
-   - Gate: `page-outline-quality.py --version v3`.
-   - Stage: draft creation by human/agent.
-   - Gate: `draft-quality-gate.py`.
-
-3. Wrap setup readiness.
+2. Wrap setup readiness.
    - Stage: `setup-control-plane.py`.
    - Gate: project journey with `--fail-on-blocker`.
    - Repair: safe setup refreshes only, no secret writes.
 
-4. Add project-local contract templates.
+3. Add project-local contract templates.
    - Suggested path: `seo/stages/*.yaml`.
    - Keep templates secret-free and approval-aware.
 
-5. Add a small panel surface later.
+4. Add a small panel surface later.
    - The panel should read `seo/orchestrator/latest-run.json`.
    - It should not execute paid/browser/publish actions without the same
      approval gates as the CLI.

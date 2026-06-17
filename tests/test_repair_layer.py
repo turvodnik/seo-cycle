@@ -417,6 +417,29 @@ class RepairLayerTest(unittest.TestCase):
         self.assertIn("missing_internal_link", finding_ids)
         self.assertIn("missing_proof_slot", finding_ids)
 
+    def test_draft_quality_gate_can_fail_on_error_findings(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPTS / "draft-quality-gate.py"),
+                str(self.package / "draft.md"),
+                "--outline",
+                str(self.package / "page-outlines-v2" / "try-on.json"),
+                "--format",
+                "json",
+                "--fail-on-error",
+            ],
+            cwd=self.package,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(proc.returncode, 1)
+        report = json.loads(proc.stdout)
+        finding_ids = {finding["id"] for finding in report["findings"]}
+        self.assertIn("unsafe_first_person_expertise", finding_ids)
+
     def test_research_quality_action_plan_points_to_exact_repair_commands(self) -> None:
         quality = self.run_script_allow_fail("research-package-quality.py")
         commands = "\n".join(item["command"] for item in quality["remediation_plan"])

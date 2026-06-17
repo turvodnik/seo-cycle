@@ -196,9 +196,74 @@ def research_package_contracts(package: str) -> tuple[StageContract, ...]:
     )
 
 
-def template_contracts(template: str, package: str) -> tuple[StageContract, ...]:
+def default_outline_for_draft(package: str, draft: str) -> str:
+    return package_output(package, "page-outlines-v3", f"{pathlib.Path(draft).stem}.json")
+
+
+def draft_gate_outputs(draft: str) -> tuple[str, str]:
+    draft_path = pathlib.Path(draft)
+    return (
+        str(draft_path.with_suffix(".draft-quality-gate.json")),
+        str(draft_path.with_suffix(".draft-quality-gate.md")),
+    )
+
+
+def copywriting_contracts(package: str, draft: str | None, outline: str | None) -> tuple[StageContract, ...]:
+    if not draft:
+        raise SystemExit("ERROR: --stage-template copywriting requires --draft")
+    outline_path = outline or default_outline_for_draft(package, draft)
+    report_json, report_md = draft_gate_outputs(draft)
+    root = skill_root()
+    command = [
+        sys.executable,
+        str(root / "scripts/draft-quality-gate.py"),
+        draft,
+        "--outline",
+        outline_path,
+        "--write",
+        "--format",
+        "json",
+        "--fail-on-error",
+    ]
+    gate_command = [
+        sys.executable,
+        str(root / "scripts/draft-quality-gate.py"),
+        draft,
+        "--outline",
+        outline_path,
+        "--format",
+        "json",
+        "--fail-on-error",
+    ]
+    return (
+        StageContract.from_mapping(
+            {
+                "id": "draft_quality_gate",
+                "title": "Draft quality gate",
+                "required_inputs": [
+                    draft,
+                    outline_path,
+                ],
+                "commands": [command],
+                "outputs": [report_json, report_md],
+                "gate": {"command": gate_command},
+                "repair_commands": [],
+                "max_attempts": 0,
+                "stop_conditions": [
+                    "draft-quality-gate.py found error/critical findings; revise the draft from copywriter-ready brief and rerun.",
+                    "Draft and outline slug mapping is wrong; pass --outline explicitly.",
+                ],
+                "next_stage": "project_journey",
+            }
+        ),
+    )
+
+
+def template_contracts(template: str, package: str, draft: str | None, outline: str | None) -> tuple[StageContract, ...]:
     if template == "research-package":
         return research_package_contracts(package)
+    if template == "copywriting":
+        return copywriting_contracts(package, draft, outline)
     raise SystemExit(f"ERROR: unknown stage template: {template}")
 
 
@@ -289,8 +354,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stage-file", type=pathlib.Path, help="JSON/YAML stage contract file.")
     parser.add_argument("--stage-id", help="Run only one stage from --stage-file.")
-    parser.add_argument("--stage-template", choices=("research-package",), help="Built-in stage contract template.")
-    parser.add_argument("--package", default="seo/research-package", help="Research package path for --stage-template research-package.")
+    parser.add_argument("--stage-template", choices=("research-package", "copywriting"), help="Built-in stage contract template.")
+    parser.add_argument("--package", default="seo/research-package", help="Research package path for built-in stage templates.")
+    parser.add_argument("--draft", help="Draft markdown path for --stage-template copywriting.")
+    parser.add_argument("--outline", help="Outline JSON path for --stage-template copywriting. Defaults to <package>/page-outlines-v3/<draft-stem>.json.")
     parser.add_argument("--goal", help="Build a small built-in route/journey stage plan from a task goal.")
     parser.add_argument("--project-root", type=pathlib.Path, default=pathlib.Path.cwd())
     parser.add_argument("--write", action="store_true", help="Execute commands and write seo/orchestrator reports.")
@@ -301,7 +368,7 @@ def main() -> int:
     if args.stage_file:
         contracts = load_stage_contracts(args.stage_file.expanduser().resolve(), args.stage_id)
     elif args.stage_template:
-        contracts = template_contracts(args.stage_template, args.package)
+        contracts = template_contracts(args.stage_template, args.package, args.draft, args.outline)
         if args.stage_id:
             contracts = tuple(contract for contract in contracts if contract.id == args.stage_id)
             if not contracts:

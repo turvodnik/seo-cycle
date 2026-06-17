@@ -220,6 +220,38 @@ class OrchestratorCoreTest(unittest.TestCase):
         self.assertIn("--all-mvp", stages[1]["commands"][0])
         self.assertTrue(any("page-outline-quality.py" in part for part in stages[2]["gate"]["command"]))
 
+    def test_seo_cycle_run_renders_copywriting_template_plan(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(SEO_CYCLE_RUN),
+                "--stage-template",
+                "copywriting",
+                "--package",
+                "seo/research-package",
+                "--draft",
+                "seo/research-package/drafts/sample.md",
+                "--format",
+                "json",
+            ],
+            cwd=self.tmp,
+            check=True,
+            text=True,
+            capture_output=True,
+            env={"PYTHONPATH": PYTHONPATH},
+        )
+        report = json.loads(proc.stdout)
+        stage = report["stages"][0]
+
+        self.assertEqual(report["status"], "planned")
+        self.assertEqual(stage["id"], "draft_quality_gate")
+        self.assertIn("seo/research-package/drafts/sample.md", stage["required_inputs"])
+        self.assertIn("seo/research-package/page-outlines-v3/sample.json", stage["required_inputs"])
+        self.assertIn("seo/research-package/drafts/sample.draft-quality-gate.json", stage["outputs"])
+        self.assertTrue(any("draft-quality-gate.py" in part for part in stage["commands"][0]))
+        self.assertIn("--fail-on-error", stage["gate"]["command"])
+        self.assertEqual(stage["max_attempts"], 0)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

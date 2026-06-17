@@ -193,6 +193,7 @@ def main() -> int:
     parser.add_argument("draft", help="Draft markdown file")
     parser.add_argument("--outline", required=True, help="page-outline-v2 JSON file")
     parser.add_argument("--write", action="store_true", help="Write draft quality reports next to the draft")
+    parser.add_argument("--fail-on-error", action="store_true", help="Exit 1 when error/critical findings are present.")
     parser.add_argument("--format", choices=("json", "md"), default="md")
     args = parser.parse_args()
 
@@ -200,6 +201,9 @@ def main() -> int:
     if args.write:
         write_outputs(pathlib.Path(args.draft), report)
     print_report(report, args.format, render_markdown(report))
+    if args.fail_on_error:
+        has_error = any(str(item.get("severity", "")).lower() in {"error", "critical"} for item in report.get("findings", []))
+        return 1 if has_error else 0
     return 0
 
 
