@@ -67,6 +67,9 @@ $EDITOR <project-root>/.env
 cd <project-root>
 bash ./.codex/skills/seo-cycle/scripts/knowledge/wiki-refresh-all.sh
 bash ./.codex/skills/seo-cycle/scripts/knowledge/graphify-refresh.sh
+
+# 8. v1.63 staged orchestrator pilot: stage -> gate -> repair -> rerun
+python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py --goal "собрать research package" --write
 ```
 
 `bootstrap-codex.sh` по умолчанию ставит seo-cycle как **shared core + project-local entrypoints**: общий код в `~/.codex/vendor/seo-cycle`, а в проекте только symlink `./.codex/skills/seo-cycle`, `./.agents/skills/seo-cycle`, `./.claude/skills/seo-cycle`. Если проект не bootstrap'или, seo-cycle skills в нём не появляются и не читаются. Полный vendor clone в проект доступен через `--vendor-local`; legacy global skill exposure только через `--global-skill`. Project bootstrap запускает `init-project.sh`, создаёт `.env` из `.env.example`, добавляет `.env` в `.gitignore`, пишет `SEO_RUNTIME=codex`, `SEO_SEARCH_RUNTIME=direct`. WordPress/Novomira MCP не создаётся автоматически; включай его только явной командой или флагом `--with-wordpress-mcp`. `bootstrap-claude.sh` делает Claude-вариант и создаёт `CLAUDE.md`, если его ещё нет. Wizard спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
@@ -403,6 +406,7 @@ python3 ./.codex/skills/seo-cycle/scripts/setup-answer-plan.py --write  # пос
 python3 ./.codex/skills/seo-cycle/scripts/launch-plan.py --write
 python3 ./.codex/skills/seo-cycle/scripts/spend-guard.py --write
 python3 ./.codex/skills/seo-cycle/scripts/task-router.py --task "аудит индексации и robots" --write
+python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py --goal "аудит индексации и robots" --write
 python3 ./.codex/skills/seo-cycle/scripts/context-pack.py --task "аудит индексации и robots" --write
 python3 ./.codex/skills/seo-cycle/scripts/usage-ledger.py report --write
 python3 ./.codex/skills/seo-cycle/scripts/automation-recommender.py --write
@@ -412,6 +416,8 @@ python3 ./.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-d
 ```
 
 `setup-control-plane.py` — единый post-init отчёт: refresh intake/profile, resolve sources, governance, validate-config, automation plan, spend guard, launch plan, setup blueprint, upgrade assistant, access-key assistant, context pack, token-waste audit, Perplexity/NotebookLM/XMLRiver health, setup gap audit/questionnaire, answer-plan path readiness и стартовый task route; пишет `seo/setup/setup-control-plane.md`, `setup-control-plane.json`, `setup-blueprint.md/json`, `setup-matrix.csv`, `upgrade-assistant.md/json`, `upgrade-questionnaire.csv`, `access-key-assistant.md/json/csv`, `context-pack.md/json`, `token-waste-audit.md/json`, `perplexity-health.md/json`, `notebooklm-health.md/json`, `xmlriver-health.md/json`, `setup-gap-audit.md/json`, `setup-questionnaire.md/csv/json`, `spend-guard.md/json`, `launch-plan.md/json`, `latest-validation.txt`, `latest-governance.json`, `latest-sources.json`, `latest-task-route.md/json`. `--apply-profile` остаётся отдельным явным действием.
+
+`seo-cycle-run.py` — v1.63 staged orchestrator pilot. Он запускает старые команды через явный контракт `stage -> gate -> repair -> rerun -> next stage`, пишет `seo/orchestrator/latest-run.md/json`, stage reports и blocker reports. Без `--write` показывает план, с `--goal` строит встроенный маршрут `task-router.py` + `project-journey.py`, с `--stage-file` читает JSON/YAML контракт. Подробно: `docs/orchestrator.md`.
 
 `context-pack.py` — самый короткий task-scoped handoff для Claude/Codex. Пишет `seo/setup/context-pack.md/json` и `seo/setup/latest-context-pack.md/json`: что читать первым, `context_manifest`, какие raw-артефакты не грузить, какие approval gates/spend blockers действуют, какие команды запускать дальше.
 

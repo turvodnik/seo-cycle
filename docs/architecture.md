@@ -7,6 +7,7 @@
 3. **CMS-agnostic** — публикация делегируется проектным скиллам через `delegate.*`. Универсальный скилл сам не пишет в CMS — он оркестратор.
 4. **LLM-агностичный** — каждый шаг с LLM можно выполнить через Claude (внутри сессии), либо через external CLI (Antigravity, Codex), либо через Perplexity Pro. Выбор по доступности и задаче.
 5. **Идемпотентный** — повторный запуск той же фазы не ломает артефакты, а обновляет их с timestamp.
+6. **Stage-gated** — новый v1.63 слой не заменяет старые команды, а оборачивает их в явный контракт `stage -> gate -> repair -> rerun -> next stage`.
 
 ## Поток управления
 
@@ -29,6 +30,48 @@ Phase 8 ← delegate.schema_markup
 Phase 9 ← delegate.google_data + delegate.yandex_specialist
 Phase 10 ← сам скилл + проектные lessons learned
 ```
+
+## v1.63 staged orchestrator
+
+`scripts/seo-cycle-run.py` — пилотный Pifagor SEO skill wrapper. Он читает JSON/YAML stage contracts или строит короткий план из `--goal`, затем передаёт стадии в `scripts/seo_cycle_core/orchestrator.py`.
+
+Минимальный контракт стадии:
+
+```yaml
+stages:
+  - id: research_quality
+    title: Research package quality
+    required_inputs:
+      - seo/research-package/semantic-architecture-final.json
+    commands:
+      - ["python3", "./.codex/skills/seo-cycle/scripts/research-package-quality.py", "seo/research-package", "--write"]
+    outputs:
+      - seo/research-package/research-package-quality.json
+    gate: {}
+    repair_commands:
+      - ["python3", "./.codex/skills/seo-cycle/scripts/research-package-repair.py", "seo/research-package", "--write"]
+    max_attempts: 5
+    stop_conditions:
+      - Reviewed SERP evidence is still missing.
+    next_stage: deep_page_briefs
+```
+
+Поля контракта:
+
+- `required_inputs` проверяются до запуска стадии; если их нет, стадия сразу `blocked`.
+- `commands` выполняют основную работу стадии.
+- `outputs` используются как output-gate, если `gate.command` не задан.
+- `gate.command` решает, можно ли идти дальше; по умолчанию успешен только exit code `0`.
+- `repair_commands` запускаются после проваленного gate.
+- `max_attempts` — число repair-попыток, по умолчанию `5`.
+- `approval_required` останавливает стадию до ручного `--approve`.
+- `stop_conditions` попадают в blocker report, когда цикл исчерпан.
+
+Артефакты:
+
+- `seo/orchestrator/latest-run.md/json` — сводка всего запуска.
+- `seo/orchestrator/<stage>-report.md/json` — полный stage report.
+- `seo/orchestrator/<stage>-blocker.md/json` — отдельный blocker report, если gate не прошёл.
 
 ## Структура файлов скилла
 

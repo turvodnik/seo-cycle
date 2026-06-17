@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.63.0] — 2026-06-17
+
+### Staged orchestrator pilot
+
+- Added `scripts/seo-cycle-run.py`, a thin CLI for declarative stage contracts with `stage -> gate -> repair -> rerun -> next stage` control.
+- Added `scripts/seo_cycle_core/{stages,gates,repair,orchestrator}.py` as a small core layer for immutable stage contracts, command/output gates, bounded repair loops, blocker reports and latest run summaries.
+- Stage contracts default to five repair attempts and write `seo/orchestrator/<stage>-report.md/json`; exhausted gates write `seo/orchestrator/<stage>-blocker.md/json` with stop conditions and missing artifacts.
+- Added a built-in `--goal` pilot route that runs `task-router.py`, then `project-journey.py`, and refreshes `setup-control-plane.py` once when the journey gate is still blocked.
+- Added regression coverage for contract defaults, repair/rerun behavior, blocker reports and CLI execution.
+- Added `docs/orchestrator.md` and `docs/refactor-v1.63-plan.md` to document the Pifagor SEO skill direction and the safe refactor path.
+
 ## [1.62.0] — 2026-06-16
 
 ### Project Knowledge Hub

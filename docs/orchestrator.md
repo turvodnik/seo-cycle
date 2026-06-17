@@ -1,0 +1,142 @@
+# Staged Orchestrator
+
+`seo-cycle-run.py` is the v1.63 Pifagor SEO skill pilot. It gives the old
+seo-cycle scripts a small control shell:
+
+```text
+stage -> gate -> repair -> rerun -> next stage
+```
+
+It does not rewrite the old commands and does not auto-publish, submit
+indexing, spend paid API credits, or store secrets. A stage is allowed to do
+only what its command contract says.
+
+## Quick Start
+
+Run the built-in goal pilot from a project root:
+
+```bash
+python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py \
+  --goal "собрать research package" \
+  --write
+```
+
+This currently runs two stages:
+
+1. `task_route` — calls `task-router.py --task <goal> --write`.
+2. `project_journey` — calls `project-journey.py --goal <goal> --write`,
+   gates through `project-journey.py --fail-on-blocker`, and repairs once with
+   `setup-control-plane.py --task <goal> --write --skip-intake`.
+
+Dry-run the plan without executing commands:
+
+```bash
+python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py \
+  --goal "собрать research package"
+```
+
+Run a contract file:
+
+```bash
+python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py \
+  --stage-file seo/stages/research-package.yaml \
+  --write \
+  --format json
+```
+
+## Stage Contract
+
+JSON and YAML are both accepted. YAML requires PyYAML to be installed; JSON
+works with the Python standard library.
+
+```yaml
+stages:
+  - id: research_quality
+    title: Research package quality
+    required_inputs:
+      - seo/research-package/semantic-architecture-final.json
+    commands:
+      - ["python3", "./.codex/skills/seo-cycle/scripts/research-package-quality.py", "seo/research-package", "--write"]
+    outputs:
+      - seo/research-package/research-package-quality.json
+    gate: {}
+    repair_commands:
+      - ["python3", "./.codex/skills/seo-cycle/scripts/research-package-repair.py", "seo/research-package", "--write"]
+    max_attempts: 5
+    approval_required: false
+    stop_conditions:
+      - Reviewed SERP evidence is still missing.
+    next_stage: deep_page_briefs
+```
+
+Fields:
+
+- `id` — required stable stage id.
+- `title` — human title; defaults to `id`.
+- `required_inputs` — files that must already exist before commands run.
+- `commands` — main stage commands, in order.
+- `outputs` — expected artifacts; used as the gate if no command gate exists.
+- `gate.command` — optional command gate. Exit codes in `pass_codes` pass.
+  If `gate` is empty, the orchestrator uses an output-existence gate.
+- `repair_commands` — commands to run after a failed gate.
+- `max_attempts` — maximum repair attempts. Default is `5`.
+- `approval_required` — stops the stage until rerun with `--approve`.
+- `stop_conditions` — human-readable conditions copied into blocker reports.
+- `next_stage` — metadata for the next stage.
+
+Use list-form commands for anything non-trivial. String commands are split with
+`shlex`, but list-form avoids quoting surprises.
+
+## Runtime Behavior
+
+For each stage:
+
+1. Check `approval_required`.
+2. Check `required_inputs`.
+3. Run `commands`.
+4. Evaluate `gate.command`, or check that all `outputs` exist.
+5. If gate passes, write a stage report and move to the next stage.
+6. If gate fails and attempts remain, run `repair_commands`, rerun the stage,
+   and gate again.
+7. If attempts are exhausted, write a blocker report and stop the run.
+
+`max_attempts` counts repair attempts, not total stage runs. With
+`max_attempts: 2`, the sequence is:
+
+```text
+stage -> gate -> repair -> stage -> gate -> repair -> stage -> gate -> blocked
+```
+
+## Artifacts
+
+With `--write`, reports are written under the current project root:
+
+- `seo/orchestrator/latest-run.md`
+- `seo/orchestrator/latest-run.json`
+- `seo/orchestrator/<stage-id>-report.md`
+- `seo/orchestrator/<stage-id>-report.json`
+- `seo/orchestrator/<stage-id>-blocker.md`
+- `seo/orchestrator/<stage-id>-blocker.json`
+
+Reports include command exit codes, redacted stdout/stderr, gate attempts,
+repair attempts, missing inputs, missing outputs and stop conditions.
+
+## Safety Rules
+
+- No secret values in contracts. Use environment variables through the existing
+  project scripts.
+- Keep paid APIs, browser actions, indexing submission and publishing behind
+  existing approval gates.
+- Prefer stage wrappers around proven scripts instead of moving business logic
+  into the orchestrator.
+- Treat blocker reports as a handoff to a human or a later agent step, not as a
+  reason to keep looping.
+
+## Where The Code Lives
+
+- `scripts/seo-cycle-run.py` — CLI entrypoint.
+- `scripts/seo_cycle_core/stages.py` — immutable stage/gate contracts.
+- `scripts/seo_cycle_core/gates.py` — output and command gate evaluation.
+- `scripts/seo_cycle_core/repair.py` — repair command runner.
+- `scripts/seo_cycle_core/orchestrator.py` — stage loop, reports and blockers.
+- `tests/test_orchestrator_core.py` — regression tests for the pilot contract.
