@@ -34,6 +34,8 @@ from __future__ import annotations
 import argparse, os, pathlib, re, shutil, sys
 from datetime import date
 
+from seo_cycle_core.config import find_config_upwards, load_yaml, project_root_for
+
 try:
     import yaml
 except ImportError:
@@ -46,14 +48,6 @@ def safe_filename(s: str) -> str:
     s = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", s)
     s = s.strip().strip(".")
     return s[:200] or "untitled"
-
-
-def find_config(start: pathlib.Path) -> pathlib.Path | None:
-    for rel in ("seo-cycle.yaml", ".seo-cycle.yaml", "seo/seo-cycle.yaml", ".claude/seo-cycle.yaml"):
-        p = start / rel
-        if p.exists():
-            return p
-    return None
 
 
 def ensure_dir(p: pathlib.Path):
@@ -396,7 +390,7 @@ def sync(project_root: pathlib.Path, vault_root: pathlib.Path, cfg: dict, args):
     entities: dict = {}
     if entities_path.exists():
         try:
-            raw = yaml.safe_load(entities_path.read_text(encoding="utf-8")) or {}
+            raw = load_yaml(entities_path)
             if isinstance(raw, dict) and "entities" in raw:
                 raw = raw["entities"]
             if isinstance(raw, dict):
@@ -440,7 +434,7 @@ def sync(project_root: pathlib.Path, vault_root: pathlib.Path, cfg: dict, args):
     stock = {}
     if sp.exists():
         try:
-            stock = yaml.safe_load(sp.read_text(encoding="utf-8")) or {}
+            stock = load_yaml(sp)
         except Exception as e:
             print(f"⚠ stock-inventory.yaml: {e}", file=sys.stderr)
 
@@ -632,17 +626,13 @@ def main():
     if args.config:
         cfg_path = pathlib.Path(args.config).resolve()
     else:
-        cfg_path = find_config(pathlib.Path.cwd())
+        cfg_path = find_config_upwards(pathlib.Path.cwd())
         if not cfg_path:
             print(f"ERROR: seo-cycle.yaml не найден в {pathlib.Path.cwd()}", file=sys.stderr)
             sys.exit(2)
 
-    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
-    project_root = cfg_path.parent
-    if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
-        project_root = cfg_path.parent
-    elif "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
-        project_root = cfg_path.parent.parent
+    cfg = load_yaml(cfg_path)
+    project_root = project_root_for(cfg_path)
 
     # Резолвим vault_root с поддержкой централизованного паттерна.
     # Приоритет:

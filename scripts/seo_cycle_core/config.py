@@ -37,6 +37,15 @@ def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
     return None
 
 
+def find_config_upwards(start_dir: pathlib.Path) -> pathlib.Path | None:
+    start = start_dir if start_dir.is_dir() else start_dir.parent
+    for directory in (start, *start.parents):
+        found = find_config(directory)
+        if found:
+            return found
+    return None
+
+
 def project_root_for(cfg_path: pathlib.Path) -> pathlib.Path:
     if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
         return cfg_path.parent

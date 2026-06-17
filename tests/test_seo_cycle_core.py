@@ -14,7 +14,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from seo_cycle_core.config import boolish, find_config, nested_get, numeric, policy_path, project_root_for, rel_path
+from seo_cycle_core.config import boolish, find_config, find_config_upwards, nested_get, numeric, policy_path, project_root_for, rel_path
 from seo_cycle_core.providers import notebooklm_health, perplexity_health
 from seo_cycle_core.reports import stringify_paths, write_artifacts, write_report_bundle
 from seo_cycle_core.source_artifacts import (
@@ -41,6 +41,14 @@ class SeoCycleCoreTest(unittest.TestCase):
         self.assertEqual(rel_path(self.tmp, "seo/setup/context-pack.md"), self.tmp / "seo/setup/context-pack.md")
         self.assertEqual(policy_path({"policy_files": {"foo": "seo/foo.md"}}, self.tmp, "foo", "fallback.md"), self.tmp / "seo/foo.md")
         self.assertEqual(policy_path({}, self.tmp, "foo", "fallback.md"), self.tmp / "fallback.md")
+
+    def test_config_helper_finds_config_upwards(self) -> None:
+        cfg_path = self.tmp / "seo-cycle.yaml"
+        nested = self.tmp / "seo" / "cycles" / "draft"
+        nested.mkdir(parents=True)
+        cfg_path.write_text("project: {}\n", encoding="utf-8")
+
+        self.assertEqual(find_config_upwards(nested), cfg_path)
 
     def test_parsing_helpers_are_consistent(self) -> None:
         self.assertTrue(boolish("yes"))
@@ -317,6 +325,13 @@ class SeoCycleCoreTest(unittest.TestCase):
                 self.assertNotIn("CONFIG_SEARCH_PATHS", source)
                 self.assertNotIn("def find_config", source)
                 self.assertNotIn("def load_yaml", source)
+
+    def test_obsidian_sync_uses_shared_config_helpers(self) -> None:
+        source = (ROOT / "scripts/obsidian-sync.py").read_text(encoding="utf-8")
+
+        self.assertIn("from seo_cycle_core.config import find_config_upwards, load_yaml, project_root_for", source)
+        self.assertNotIn("def find_config(", source)
+        self.assertNotIn("yaml.safe_load", source)
 
     def test_source_artifacts_write_raw_distillate_latest_and_vector(self) -> None:
         cache_key = stable_cache_key({"topic": "Плита ОСП", "region": "RU", "mode": "manual_browser"})

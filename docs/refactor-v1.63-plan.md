@@ -53,6 +53,8 @@ Status: implemented as the v1.63 pilot.
 - Move technical discovery scripts onto shared `seo_cycle_core.config`
   config discovery/YAML helpers: `validate-config.py`,
   `resolve-sources.py`, `schema-org-build.py`, and `wp-photo-image.py`.
+- Move `obsidian-sync.py` onto shared `seo_cycle_core.config` upward
+  config discovery, project-root and YAML helpers.
 - Add a built-in research package lane template:
   `seo-cycle-run.py --stage-template research-package --package <path>` wraps
   quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring

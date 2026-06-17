@@ -14,6 +14,7 @@
 - `automation-plan.py`, `automation-recommender.py`, `usage-ledger.py` and `tool-stack-recommender.py` now use shared `seo_cycle_core.config` config/path/policy helpers instead of local duplicates.
 - `governance-report.py`, `project-profile.py`, `project-upgrade-assistant.py` and `access-key-assistant.py` now use shared `seo_cycle_core.config` config/path/policy helpers instead of local duplicates.
 - `validate-config.py`, `resolve-sources.py`, `schema-org-build.py` and `wp-photo-image.py` now use shared `seo_cycle_core.config` config discovery/YAML helpers instead of local duplicates.
+- `obsidian-sync.py` now uses shared `seo_cycle_core.config` upward config discovery, project-root and YAML helpers instead of local duplicates.
 - Stage contracts default to five repair attempts and write `seo/orchestrator/<stage>-report.md/json`; exhausted gates write `seo/orchestrator/<stage>-blocker.md/json` with stop conditions and missing artifacts.
 - Added a built-in `--goal` pilot route that runs `task-router.py`, then `project-journey.py`, and refreshes `setup-control-plane.py` once when the journey gate is still blocked.
 - Added `seo-cycle-run.py --stage-template setup-readiness --goal <task>` for the setup control plane lane: setup refresh, journey blocker gate, and one safe repair refresh without apply/secret/schedule actions.
