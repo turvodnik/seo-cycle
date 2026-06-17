@@ -19,6 +19,8 @@ import pathlib
 import sys
 from typing import Any
 
+from seo_cycle_core.reports import write_artifacts
+
 try:
     import yaml
 except ImportError:
@@ -541,20 +543,24 @@ def questionnaire_csv(report: dict[str, Any]) -> str:
 
 def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
     out_dir = project_root / "seo" / "setup"
-    out_dir.mkdir(parents=True, exist_ok=True)
     md = render_markdown(report)
-    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     questionnaire_md = render_questionnaire_markdown(report)
-    questionnaire_json = json.dumps(report.get("questionnaire", {}), ensure_ascii=False, indent=2) + "\n"
-    for name in ("setup-gap-audit.md", "latest-setup-gap-audit.md"):
-        (out_dir / name).write_text(md, encoding="utf-8")
-    for name in ("setup-gap-audit.json", "latest-setup-gap-audit.json"):
-        (out_dir / name).write_text(json_text, encoding="utf-8")
-    for name in ("setup-questionnaire.md", "latest-setup-questionnaire.md"):
-        (out_dir / name).write_text(questionnaire_md, encoding="utf-8")
-    for name in ("setup-questionnaire.json", "latest-setup-questionnaire.json"):
-        (out_dir / name).write_text(questionnaire_json, encoding="utf-8")
-    (out_dir / "setup-questionnaire.csv").write_text(questionnaire_csv(report), encoding="utf-8")
+    questionnaire = report.get("questionnaire", {})
+    write_artifacts(
+        text_files={
+            out_dir / "setup-gap-audit.md": md,
+            out_dir / "latest-setup-gap-audit.md": md,
+            out_dir / "setup-questionnaire.md": questionnaire_md,
+            out_dir / "latest-setup-questionnaire.md": questionnaire_md,
+            out_dir / "setup-questionnaire.csv": questionnaire_csv(report),
+        },
+        json_files={
+            out_dir / "setup-gap-audit.json": report,
+            out_dir / "latest-setup-gap-audit.json": report,
+            out_dir / "setup-questionnaire.json": questionnaire,
+            out_dir / "latest-setup-questionnaire.json": questionnaire,
+        },
+    )
     return out_dir / "setup-gap-audit.md"
 
 

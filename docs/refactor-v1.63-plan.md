@@ -21,7 +21,9 @@ Status: implemented as the v1.63 pilot.
   `task-router.py`, `project-journey.py`, `setup-control-plane.py`,
   `setup-blueprint.py`, `launch-plan.py`, `spend-guard.py`,
   `tool-stack-recommender.py`, `setup-onboarding.py`, and
-  `growth-roadmap.py` use the shared layer.
+  `growth-roadmap.py`, `project-upgrade-assistant.py`,
+  `access-key-assistant.py`, `setup-answer-plan.py`, and
+  `setup-gap-audit.py` use the shared layer.
 - Add a built-in research package lane template:
   `seo-cycle-run.py --stage-template research-package --package <path>` wraps
   quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring

@@ -17,6 +17,8 @@ import pathlib
 import sys
 from typing import Any
 
+from seo_cycle_core.reports import write_artifacts
+
 try:
     import yaml
 except ImportError:
@@ -379,11 +381,6 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
     return data or {}
 
 
-def write_text(path: pathlib.Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-
-
 def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Path:
     path = pathlib.Path(str(raw)).expanduser()
     return path if path.is_absolute() else project_root / path
@@ -524,12 +521,17 @@ def questionnaire_csv(report: dict[str, Any]) -> str:
 def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
     setup_dir = project_root / "seo" / "setup"
     markdown = render_markdown(report)
-    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
-    write_text(setup_dir / "upgrade-assistant.md", markdown)
-    write_text(setup_dir / "upgrade-assistant.json", json_text)
-    write_text(setup_dir / "upgrade-questionnaire.csv", questionnaire_csv(report))
-    write_text(setup_dir / "latest-upgrade-assistant.md", markdown)
-    write_text(setup_dir / "latest-upgrade-assistant.json", json_text)
+    write_artifacts(
+        text_files={
+            setup_dir / "upgrade-assistant.md": markdown,
+            setup_dir / "latest-upgrade-assistant.md": markdown,
+            setup_dir / "upgrade-questionnaire.csv": questionnaire_csv(report),
+        },
+        json_files={
+            setup_dir / "upgrade-assistant.json": report,
+            setup_dir / "latest-upgrade-assistant.json": report,
+        },
+    )
     return setup_dir / "upgrade-assistant.md"
 
 

@@ -18,6 +18,8 @@ import re
 import sys
 from typing import Any
 
+from seo_cycle_core.reports import write_artifacts
+
 try:
     import yaml
 except ImportError:
@@ -271,14 +273,18 @@ def plan_csv(report: dict[str, Any]) -> str:
 
 def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
     out_dir = project_root / "seo" / "setup"
-    out_dir.mkdir(parents=True, exist_ok=True)
     markdown = render_markdown(report)
-    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
-    for name in ("setup-answer-plan.md", "latest-setup-answer-plan.md"):
-        (out_dir / name).write_text(markdown, encoding="utf-8")
-    for name in ("setup-answer-plan.json", "latest-setup-answer-plan.json"):
-        (out_dir / name).write_text(json_text, encoding="utf-8")
-    (out_dir / "setup-answer-plan.csv").write_text(plan_csv(report), encoding="utf-8")
+    write_artifacts(
+        text_files={
+            out_dir / "setup-answer-plan.md": markdown,
+            out_dir / "latest-setup-answer-plan.md": markdown,
+            out_dir / "setup-answer-plan.csv": plan_csv(report),
+        },
+        json_files={
+            out_dir / "setup-answer-plan.json": report,
+            out_dir / "latest-setup-answer-plan.json": report,
+        },
+    )
     return out_dir / "setup-answer-plan.md"
 
 
