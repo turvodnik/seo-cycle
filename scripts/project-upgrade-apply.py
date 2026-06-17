@@ -25,7 +25,8 @@ except ImportError:  # pragma: no cover
     print("ERROR: PyYAML is required. Install with `pip3 install pyyaml`.", file=sys.stderr)
     sys.exit(2)
 
-from seo_cycle_core.config import find_config, load_yaml, project_root_for, write_text
+from seo_cycle_core.config import find_config, load_yaml, project_root_for
+from seo_cycle_core.reports import write_artifacts
 
 
 YES_ANSWERS = {"yes", "y", "true", "1", "да", "д", "yes_report_only", "yes_for_codex_projects"}
@@ -241,11 +242,18 @@ def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib
         "latest_json": setup_dir / "latest-project-upgrade-apply.json",
     }
     report["paths"] = {key: str(path) for key, path in paths.items()}
-    write_text(paths["markdown"], render_markdown(report))
-    write_text(paths["json"], json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-    write_text(paths["csv"], planned_csv(report))
-    write_text(paths["latest_markdown"], render_markdown(report))
-    write_text(paths["latest_json"], json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    markdown = render_markdown(report)
+    write_artifacts(
+        text_files={
+            paths["markdown"]: markdown,
+            paths["latest_markdown"]: markdown,
+            paths["csv"]: planned_csv(report),
+        },
+        json_files={
+            paths["json"]: report,
+            paths["latest_json"]: report,
+        },
+    )
     return paths["markdown"]
 
 

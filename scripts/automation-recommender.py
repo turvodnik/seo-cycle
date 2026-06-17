@@ -18,6 +18,8 @@ import pathlib
 import sys
 from typing import Any
 
+from seo_cycle_core.reports import write_artifacts
+
 try:
     import yaml
 except ImportError:
@@ -445,11 +447,15 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
     out_dir = project_root / "seo" / "automations"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "automation-recommendations.md").write_text(render_markdown(report), encoding="utf-8")
-    (out_dir / "automation-recommendations.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    overlay_path = project_root / "seo" / "automation-policy.generated.yaml"
-    overlay_path.write_text(dump_yaml(report["policy_overlay"]), encoding="utf-8")
+    write_artifacts(
+        text_files={
+            out_dir / "automation-recommendations.md": render_markdown(report),
+            project_root / "seo" / "automation-policy.generated.yaml": dump_yaml(report["policy_overlay"]),
+        },
+        json_files={
+            out_dir / "automation-recommendations.json": report,
+        },
+    )
     return out_dir / "automation-recommendations.md"
 
 

@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - JSON is valid YAML fallback
     yaml = None
 
 from seo_cycle_core.config import find_config, project_root_for, write_text
+from seo_cycle_core.reports import write_artifacts
 
 
 LOCAL_SCRIPT_ROOT = "./.codex/skills/seo-cycle/scripts"
@@ -325,8 +326,14 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def write_report(project_root: pathlib.Path, report: dict[str, Any]) -> None:
     stage_dir = project_root / "seo" / "stages"
-    write_text(stage_dir / "stage-template-export.md", render_markdown(report))
-    write_text(stage_dir / "stage-template-export.json", json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    write_artifacts(
+        text_files={
+            stage_dir / "stage-template-export.md": render_markdown(report),
+        },
+        json_files={
+            stage_dir / "stage-template-export.json": report,
+        },
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

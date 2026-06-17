@@ -19,6 +19,7 @@ from typing import Any
 
 from seo_cycle_core.config import boolish, find_config, load_yaml, policy_path, project_root_for, rel_display, skill_root
 from seo_cycle_core.context import build_context_manifest
+from seo_cycle_core.reports import write_artifacts
 
 
 def load_json(path: pathlib.Path) -> dict[str, Any]:
@@ -415,13 +416,17 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
     out_dir = project_root / "seo" / "setup"
-    out_dir.mkdir(parents=True, exist_ok=True)
     md = render_markdown(report)
-    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
-    for name in ("context-pack.md", "latest-context-pack.md"):
-        (out_dir / name).write_text(md, encoding="utf-8")
-    for name in ("context-pack.json", "latest-context-pack.json"):
-        (out_dir / name).write_text(json_text, encoding="utf-8")
+    write_artifacts(
+        text_files={
+            out_dir / "context-pack.md": md,
+            out_dir / "latest-context-pack.md": md,
+        },
+        json_files={
+            out_dir / "context-pack.json": report,
+            out_dir / "latest-context-pack.json": report,
+        },
+    )
     return out_dir / "context-pack.md"
 
 
