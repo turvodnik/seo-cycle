@@ -19,6 +19,8 @@ import pathlib
 import sys
 from typing import Any
 
+from seo_cycle_core.reports import write_artifacts
+
 try:
     import yaml
 except ImportError:
@@ -456,11 +458,12 @@ def render_report(intake_path: pathlib.Path, intake: dict[str, Any]) -> str:
 
 
 def write_outputs(project_root: pathlib.Path, intake_path: pathlib.Path, intake: dict[str, Any], report: str) -> None:
-    intake_path.parent.mkdir(parents=True, exist_ok=True)
-    intake_path.write_text(dump_yaml(intake), encoding="utf-8")
-    report_path = project_root / "seo" / "project-intake-report.md"
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(report, encoding="utf-8")
+    write_artifacts(
+        text_files={
+            intake_path: dump_yaml(intake),
+            project_root / "seo" / "project-intake-report.md": report,
+        },
+    )
 
 
 def main() -> int:

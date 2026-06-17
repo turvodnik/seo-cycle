@@ -16,7 +16,8 @@ Status: implemented as the v1.63 pilot.
   execution.
 - Document the contract and artifacts.
 - Start shared helper extraction without a large rewrite:
-  `seo_cycle_core.reports` now owns artifact writes/path stringification,
+  `seo_cycle_core.reports` now owns artifact writes/path stringification and
+  sorted JSON output when a legacy report requires it,
   `seo_cycle_core.subprocesses` now owns command-step capture/JSON parsing, and
   `task-router.py`, `project-journey.py`, `setup-control-plane.py`,
   `setup-blueprint.py`, `launch-plan.py`, `spend-guard.py`,
@@ -33,7 +34,8 @@ Status: implemented as the v1.63 pilot.
   `google-nlp-aggregate.py`, `orphan-url-resolver.py`,
   `serp-validation-plan.py`, `serp-validation-import.py`,
   `spoke-opportunity-audit.py`, `entity-graph-quality.py`, and
-  `research-package-repair.py` use the shared layer.
+  `research-package-repair.py`, `writerzen-browser-collect.py`, and
+  `project-intake-wizard.py` use the shared layer.
 - Add a built-in research package lane template:
   `seo-cycle-run.py --stage-template research-package --package <path>` wraps
   quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring

@@ -70,6 +70,19 @@ class SeoCycleCoreTest(unittest.TestCase):
         self.assertTrue((self.tmp / "seo/latest-report.md").exists())
         self.assertTrue((self.tmp / "seo/latest-report.json").exists())
 
+    def test_report_bundle_can_write_sorted_json_keys_when_requested(self) -> None:
+        paths = {
+            "markdown": self.tmp / "seo/sorted-report.md",
+            "json": self.tmp / "seo/sorted-report.json",
+            "latest_markdown": self.tmp / "seo/latest-sorted-report.md",
+            "latest_json": self.tmp / "seo/latest-sorted-report.json",
+        }
+
+        write_report_bundle(paths, "# Report\n", {"z": 1, "a": 2}, sort_keys=True)
+
+        json_text = paths["json"].read_text(encoding="utf-8")
+        self.assertLess(json_text.index('"a"'), json_text.index('"z"'))
+
     def test_report_artifact_helpers_write_text_json_and_string_paths(self) -> None:
         paths = {
             "markdown": self.tmp / "seo/setup/report.md",
@@ -206,6 +219,16 @@ class SeoCycleCoreTest(unittest.TestCase):
                 source = (ROOT / "scripts" / script).read_text(encoding="utf-8")
                 self.assertIn("from seo_cycle_core.reports import write_artifacts", source)
                 self.assertIn("write_artifacts(", source)
+
+    def test_setup_input_scripts_use_shared_report_writers(self) -> None:
+        intake_source = (ROOT / "scripts/project-intake-wizard.py").read_text(encoding="utf-8")
+        self.assertIn("from seo_cycle_core.reports import write_artifacts", intake_source)
+        self.assertIn("write_artifacts(", intake_source)
+
+        writerzen_source = (ROOT / "scripts/writerzen-browser-collect.py").read_text(encoding="utf-8")
+        self.assertIn("from seo_cycle_core.reports import write_report_bundle", writerzen_source)
+        self.assertIn("write_report_bundle(", writerzen_source)
+        self.assertIn("sort_keys=True", writerzen_source)
 
     def test_source_artifacts_write_raw_distillate_latest_and_vector(self) -> None:
         cache_key = stable_cache_key({"topic": "Плита ОСП", "region": "RU", "mode": "manual_browser"})

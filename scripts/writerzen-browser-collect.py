@@ -14,7 +14,8 @@ import sys
 import tempfile
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, rel_path, write_text
+from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, rel_path
+from seo_cycle_core.reports import write_report_bundle
 
 
 PROVIDER = "writerzen"
@@ -231,11 +232,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 def write_report(project_root: pathlib.Path, report: dict[str, Any]) -> None:
     paths = setup_paths(project_root)
     markdown = render_markdown(report)
-    payload = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-    write_text(paths["markdown"], markdown)
-    write_text(paths["json"], payload)
-    write_text(paths["latest_markdown"], markdown)
-    write_text(paths["latest_json"], payload)
+    write_report_bundle(paths, markdown, report, sort_keys=True)
 
 
 def main() -> int:

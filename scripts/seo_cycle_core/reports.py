@@ -18,14 +18,15 @@ def write_artifacts(
     *,
     text_files: Mapping[pathlib.Path, str] | None = None,
     json_files: Mapping[pathlib.Path, Any] | None = None,
+    sort_keys: bool = False,
 ) -> None:
     for path, text in (text_files or {}).items():
         write_text(path, text)
     for path, payload in (json_files or {}).items():
-        write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+        write_text(path, json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=sort_keys) + "\n")
 
 
-def write_report_bundle(paths: dict[str, pathlib.Path], markdown: str, payload: dict[str, Any]) -> None:
+def write_report_bundle(paths: dict[str, pathlib.Path], markdown: str, payload: dict[str, Any], *, sort_keys: bool = False) -> None:
     write_artifacts(
         text_files={
             paths["markdown"]: markdown,
@@ -35,4 +36,5 @@ def write_report_bundle(paths: dict[str, pathlib.Path], markdown: str, payload: 
             paths["json"]: payload,
             paths["latest_json"]: payload,
         },
+        sort_keys=sort_keys,
     )
