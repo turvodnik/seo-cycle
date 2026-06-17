@@ -50,6 +50,158 @@ def load_stage_contracts(path: pathlib.Path, stage_id: str | None) -> tuple[Stag
     return contracts
 
 
+def package_output(package: str, *parts: str) -> str:
+    return str(pathlib.Path(package, *parts))
+
+
+def research_package_contracts(package: str) -> tuple[StageContract, ...]:
+    root = skill_root()
+    return (
+        StageContract.from_mapping(
+            {
+                "id": "research_quality_gate",
+                "title": "Research package quality gate",
+                "required_inputs": [
+                    package_output(package, "semantic-core.csv"),
+                    package_output(package, "content-plan.csv"),
+                    package_output(package, "final-clusters.md"),
+                    package_output(package, "semantic-architecture-final.json"),
+                    package_output(package, "entity-map.md"),
+                    package_output(package, "entity-map.yaml"),
+                ],
+                "commands": [
+                    [
+                        sys.executable,
+                        str(root / "scripts/research-package-quality.py"),
+                        package,
+                        "--write",
+                        "--format",
+                        "json",
+                    ],
+                ],
+                "outputs": [
+                    package_output(package, "research-package-quality.json"),
+                    package_output(package, "research-package-action-plan.md"),
+                ],
+                "gate": {
+                    "command": [
+                        sys.executable,
+                        str(root / "scripts/research-package-quality.py"),
+                        package,
+                        "--format",
+                        "json",
+                    ],
+                },
+                "repair_commands": [
+                    [
+                        sys.executable,
+                        str(root / "scripts/research-package-repair.py"),
+                        package,
+                        "--write",
+                        "--format",
+                        "json",
+                    ],
+                ],
+                "max_attempts": 5,
+                "stop_conditions": [
+                    "research-package-quality.py still returns fail after the repair loop.",
+                    "Reviewed SERP evidence or required research artifacts are still missing.",
+                ],
+                "next_stage": "deep_page_briefs_v3",
+            }
+        ),
+        StageContract.from_mapping(
+            {
+                "id": "deep_page_briefs_v3",
+                "title": "Deep page briefs v3",
+                "required_inputs": [
+                    package_output(package, "research-package-quality.json"),
+                ],
+                "commands": [
+                    [
+                        sys.executable,
+                        str(root / "scripts/page-outline-v3.py"),
+                        package,
+                        "--all-mvp",
+                        "--write",
+                        "--format",
+                        "json",
+                    ],
+                ],
+                "outputs": [
+                    package_output(package, "copywriter-ready"),
+                    package_output(package, "page-outlines-v3"),
+                    package_output(package, "vector/page_outline_triplets.jsonl"),
+                ],
+                "gate": {},
+                "repair_commands": [],
+                "max_attempts": 0,
+                "stop_conditions": [
+                    "page-outline-v3.py did not generate copywriter-ready briefs or vector triplets.",
+                ],
+                "next_stage": "page_outline_quality_v3",
+            }
+        ),
+        StageContract.from_mapping(
+            {
+                "id": "page_outline_quality_v3",
+                "title": "Page outline quality v3",
+                "required_inputs": [
+                    package_output(package, "page-outlines-v3"),
+                    package_output(package, "vector/page_outline_triplets.jsonl"),
+                ],
+                "commands": [
+                    [
+                        sys.executable,
+                        str(root / "scripts/page-outline-quality.py"),
+                        package,
+                        "--version",
+                        "v3",
+                        "--write",
+                        "--format",
+                        "json",
+                    ],
+                ],
+                "outputs": [
+                    package_output(package, "page-outline-quality.json"),
+                ],
+                "gate": {
+                    "command": [
+                        sys.executable,
+                        str(root / "scripts/page-outline-quality.py"),
+                        package,
+                        "--version",
+                        "v3",
+                        "--format",
+                        "json",
+                    ],
+                },
+                "repair_commands": [
+                    [
+                        sys.executable,
+                        str(root / "scripts/page-outline-v3.py"),
+                        package,
+                        "--all-mvp",
+                        "--write",
+                        "--format",
+                        "json",
+                    ],
+                ],
+                "max_attempts": 5,
+                "stop_conditions": [
+                    "page-outline-quality.py --version v3 still fails after regenerating v3 briefs.",
+                ],
+            }
+        ),
+    )
+
+
+def template_contracts(template: str, package: str) -> tuple[StageContract, ...]:
+    if template == "research-package":
+        return research_package_contracts(package)
+    raise SystemExit(f"ERROR: unknown stage template: {template}")
+
+
 def builtin_goal_contracts(goal: str) -> tuple[StageContract, ...]:
     root = skill_root()
     return (
@@ -137,6 +289,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stage-file", type=pathlib.Path, help="JSON/YAML stage contract file.")
     parser.add_argument("--stage-id", help="Run only one stage from --stage-file.")
+    parser.add_argument("--stage-template", choices=("research-package",), help="Built-in stage contract template.")
+    parser.add_argument("--package", default="seo/research-package", help="Research package path for --stage-template research-package.")
     parser.add_argument("--goal", help="Build a small built-in route/journey stage plan from a task goal.")
     parser.add_argument("--project-root", type=pathlib.Path, default=pathlib.Path.cwd())
     parser.add_argument("--write", action="store_true", help="Execute commands and write seo/orchestrator reports.")
@@ -146,10 +300,16 @@ def main() -> int:
 
     if args.stage_file:
         contracts = load_stage_contracts(args.stage_file.expanduser().resolve(), args.stage_id)
+    elif args.stage_template:
+        contracts = template_contracts(args.stage_template, args.package)
+        if args.stage_id:
+            contracts = tuple(contract for contract in contracts if contract.id == args.stage_id)
+            if not contracts:
+                raise SystemExit(f"ERROR: stage id not found: {args.stage_id}")
     elif args.goal:
         contracts = builtin_goal_contracts(args.goal)
     else:
-        raise SystemExit("ERROR: provide --stage-file or --goal")
+        raise SystemExit("ERROR: provide --stage-file, --stage-template, or --goal")
 
     cwd = args.project_root.expanduser().resolve()
     if not args.write:

@@ -187,6 +187,39 @@ class OrchestratorCoreTest(unittest.TestCase):
         self.assertEqual(report["stages"][0]["id"], "cli_stage")
         self.assertTrue((self.tmp / "seo" / "orchestrator" / "cli_stage-report.json").exists())
 
+    def test_seo_cycle_run_renders_research_package_template_plan(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(SEO_CYCLE_RUN),
+                "--stage-template",
+                "research-package",
+                "--package",
+                "seo/research-package",
+                "--format",
+                "json",
+            ],
+            cwd=self.tmp,
+            check=True,
+            text=True,
+            capture_output=True,
+            env={"PYTHONPATH": PYTHONPATH},
+        )
+        report = json.loads(proc.stdout)
+        stages = report["stages"]
+
+        self.assertEqual(report["status"], "planned")
+        self.assertEqual(
+            [stage["id"] for stage in stages],
+            ["research_quality_gate", "deep_page_briefs_v3", "page_outline_quality_v3"],
+        )
+        self.assertEqual(stages[0]["max_attempts"], 5)
+        self.assertIn("seo/research-package/research-package-quality.json", stages[0]["outputs"])
+        self.assertTrue(any("research-package-repair.py" in part for part in stages[0]["repair_commands"][0]))
+        self.assertTrue(any("page-outline-v3.py" in part for part in stages[1]["commands"][0]))
+        self.assertIn("--all-mvp", stages[1]["commands"][0])
+        self.assertTrue(any("page-outline-quality.py" in part for part in stages[2]["gate"]["command"]))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

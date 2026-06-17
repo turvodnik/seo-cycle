@@ -20,6 +20,10 @@ Status: implemented as the v1.63 pilot.
   `seo_cycle_core.subprocesses` now owns command-step capture/JSON parsing, and
   `task-router.py`, `project-journey.py`, and `setup-control-plane.py` use the
   shared layer.
+- Add a built-in research package lane template:
+  `seo-cycle-run.py --stage-template research-package --package <path>` wraps
+  quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring
+  users to hand-write a stage YAML first.
 
 ## Next Slices
 
@@ -28,28 +32,22 @@ Status: implemented as the v1.63 pilot.
    - Prefer scripts that already use `seo_cycle_core.config`.
    - Keep direct script behavior and CLI output unchanged.
 
-2. Wrap the research package lane.
-   - Stage: `research-package-quality.py`.
-   - Repair: `research-package-repair.py`.
-   - Rerun: `research-package-quality.py`.
-   - Next: `page-outline-v3.py`.
-
-3. Wrap the copywriting lane.
+2. Wrap the copywriting lane.
    - Stage: `page-outline-v3.py`.
    - Gate: `page-outline-quality.py --version v3`.
    - Stage: draft creation by human/agent.
    - Gate: `draft-quality-gate.py`.
 
-4. Wrap setup readiness.
+3. Wrap setup readiness.
    - Stage: `setup-control-plane.py`.
    - Gate: project journey with `--fail-on-blocker`.
    - Repair: safe setup refreshes only, no secret writes.
 
-5. Add project-local contract templates.
+4. Add project-local contract templates.
    - Suggested path: `seo/stages/*.yaml`.
    - Keep templates secret-free and approval-aware.
 
-6. Add a small panel surface later.
+5. Add a small panel surface later.
    - The panel should read `seo/orchestrator/latest-run.json`.
    - It should not execute paid/browser/publish actions without the same
      approval gates as the CLI.

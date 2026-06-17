@@ -44,6 +44,26 @@ python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py \
   --format json
 ```
 
+Run the built-in research package lane:
+
+```bash
+python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py \
+  --stage-template research-package \
+  --package seo/research-package \
+  --write
+```
+
+This template runs:
+
+1. `research_quality_gate` — `research-package-quality.py --write`, command
+   gate through `research-package-quality.py`, repair through
+   `research-package-repair.py --write`, up to five repair attempts.
+2. `deep_page_briefs_v3` — `page-outline-v3.py --all-mvp --write`, gated by
+   generated `copywriter-ready`, `page-outlines-v3`, and vector triplets.
+3. `page_outline_quality_v3` — `page-outline-quality.py --version v3 --write`,
+   command gate through `page-outline-quality.py --version v3`, repair by
+   regenerating v3 briefs, up to five repair attempts.
+
 ## Stage Contract
 
 JSON and YAML are both accepted. YAML requires PyYAML to be installed; JSON
