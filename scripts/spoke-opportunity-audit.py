@@ -21,9 +21,8 @@ from research_package_repair_core import (
     to_bool,
     to_float,
     write_csv,
-    write_json,
-    write_text,
 )
+from seo_cycle_core.reports import write_artifacts
 
 
 def match_cluster(row: dict[str, str], lookup: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
@@ -122,8 +121,10 @@ def render_markdown(report: dict[str, Any]) -> str:
 def write_outputs(package: pathlib.Path, report: dict[str, Any]) -> None:
     write_csv(package / "spoke-opportunities.csv", report["rows"])
     persist = {key: value for key, value in report.items() if key != "rows"}
-    write_json(package / "spoke-opportunity-audit.json", persist)
-    write_text(package / "spoke-opportunity-audit.md", render_markdown(report))
+    write_artifacts(
+        text_files={package / "spoke-opportunity-audit.md": render_markdown(report)},
+        json_files={package / "spoke-opportunity-audit.json": persist},
+    )
 
 
 def main() -> int:

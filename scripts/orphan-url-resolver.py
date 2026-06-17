@@ -19,9 +19,8 @@ from research_package_repair_core import (
     resolve_package,
     slugify,
     write_csv,
-    write_json,
-    write_text,
 )
+from seo_cycle_core.reports import write_artifacts
 
 
 def known_urls(package: pathlib.Path, architecture: dict[str, Any]) -> set[str]:
@@ -122,8 +121,10 @@ def render_markdown(report: dict[str, Any]) -> str:
 def write_outputs(package: pathlib.Path, report: dict[str, Any]) -> None:
     write_csv(package / "content-plan.orphan-backlog.csv", report["backlog_rows"])
     persist = {key: value for key, value in report.items() if key != "backlog_rows"}
-    write_json(package / "orphan-url-resolver.json", persist)
-    write_text(package / "orphan-url-resolver.md", render_markdown(report))
+    write_artifacts(
+        text_files={package / "orphan-url-resolver.md": render_markdown(report)},
+        json_files={package / "orphan-url-resolver.json": persist},
+    )
 
 
 def main() -> int:

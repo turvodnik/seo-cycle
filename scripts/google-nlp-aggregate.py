@@ -17,10 +17,9 @@ from research_package_repair_core import (
     repeated_phrase_clean,
     resolve_package,
     to_float,
-    write_json,
     write_jsonl,
-    write_text,
 )
+from seo_cycle_core.reports import write_artifacts
 
 
 def raw_entities(package: pathlib.Path, architecture: dict[str, Any]) -> list[dict[str, Any]]:
@@ -115,8 +114,10 @@ def render_markdown(report: dict[str, Any]) -> str:
 def write_outputs(package: pathlib.Path, report: dict[str, Any]) -> None:
     write_jsonl(package / "entity_coverage.jsonl", report["rows"])
     persist = {key: value for key, value in report.items() if key != "rows"}
-    write_json(package / "google-nlp-aggregate.json", persist)
-    write_text(package / "google-nlp-aggregate.md", render_markdown(report))
+    write_artifacts(
+        text_files={package / "google-nlp-aggregate.md": render_markdown(report)},
+        json_files={package / "google-nlp-aggregate.json": persist},
+    )
 
 
 def main() -> int:

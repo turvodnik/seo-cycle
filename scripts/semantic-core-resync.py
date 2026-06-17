@@ -18,9 +18,8 @@ from research_package_repair_core import (
     read_csv,
     resolve_package,
     write_csv,
-    write_json,
-    write_text,
 )
+from seo_cycle_core.reports import write_artifacts
 
 
 CLUSTER_FIELDS = ("base_cluster", "cluster_id", "source_cluster")
@@ -102,8 +101,10 @@ def write_outputs(package: pathlib.Path, report: dict[str, Any]) -> None:
     rows = report["rows"]
     write_csv(package / "semantic-core.resynced.csv", rows)
     persist = {key: value for key, value in report.items() if key != "rows"}
-    write_json(package / "semantic-core-resync.json", persist)
-    write_text(package / "semantic-core-resync.md", render_markdown(report))
+    write_artifacts(
+        text_files={package / "semantic-core-resync.md": render_markdown(report)},
+        json_files={package / "semantic-core-resync.json": persist},
+    )
 
 
 def main() -> int:

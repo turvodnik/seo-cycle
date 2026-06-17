@@ -16,9 +16,8 @@ from research_package_repair_core import (
     read_csv,
     resolve_package,
     write_csv,
-    write_json,
-    write_text,
 )
+from seo_cycle_core.reports import write_artifacts
 
 
 PROMPT_PATTERNS = [
@@ -103,8 +102,10 @@ def write_outputs(package: pathlib.Path, report: dict[str, Any]) -> None:
         write_csv(package / "semantic-core.cleaned.csv", [], ["keyword"])
     write_csv(package / "semantic-core.rejected.csv", rejected_rows_data, None)
     persist = {key: value for key, value in report.items() if key not in {"clean_rows", "rejected_rows"}}
-    write_json(package / "semantic-core-clean.json", persist)
-    write_text(package / "semantic-core-clean.md", render_markdown(report))
+    write_artifacts(
+        text_files={package / "semantic-core-clean.md": render_markdown(report)},
+        json_files={package / "semantic-core-clean.json": persist},
+    )
 
 
 def main() -> int:

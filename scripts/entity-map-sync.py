@@ -13,9 +13,8 @@ from research_package_repair_core import (
     normalize_space,
     print_report,
     resolve_package,
-    write_json,
-    write_text,
 )
+from seo_cycle_core.reports import write_artifacts
 
 try:
     import yaml
@@ -111,10 +110,14 @@ def render_report(report: dict[str, Any]) -> str:
 
 
 def write_outputs(package: pathlib.Path, report: dict[str, Any]) -> None:
-    write_text(package / "entity-map.md", report["rendered_markdown"])
     persist = {key: value for key, value in report.items() if key != "rendered_markdown"}
-    write_json(package / "entity-map-sync.json", persist)
-    write_text(package / "entity-map-sync.md", render_report(report))
+    write_artifacts(
+        text_files={
+            package / "entity-map.md": report["rendered_markdown"],
+            package / "entity-map-sync.md": render_report(report),
+        },
+        json_files={package / "entity-map-sync.json": persist},
+    )
 
 
 def main() -> int:

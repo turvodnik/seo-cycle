@@ -28,7 +28,12 @@ Status: implemented as the v1.63 pilot.
   `usage-ledger.py`, `orchestrator-panel.py`, `automation-plan.py`,
   `vnext_audit_core.py`, `ai-bot-access-check.py`,
   `research-package-quality.py`, `page-outline-quality.py`, and
-  `draft-quality-gate.py` use the shared layer.
+  `draft-quality-gate.py`, `semantic-core-clean.py`,
+  `semantic-core-resync.py`, `entity-map-sync.py`,
+  `google-nlp-aggregate.py`, `orphan-url-resolver.py`,
+  `serp-validation-plan.py`, `serp-validation-import.py`,
+  `spoke-opportunity-audit.py`, `entity-graph-quality.py`, and
+  `research-package-repair.py` use the shared layer.
 - Add a built-in research package lane template:
   `seo-cycle-run.py --stage-template research-package --package <path>` wraps
   quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring

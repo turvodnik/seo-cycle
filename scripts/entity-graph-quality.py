@@ -16,9 +16,8 @@ from research_package_repair_core import (
     print_report,
     relation_parts,
     resolve_package,
-    write_json,
-    write_text,
 )
+from seo_cycle_core.reports import write_artifacts
 
 
 def outline_files(package: pathlib.Path) -> list[pathlib.Path]:
@@ -152,8 +151,10 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def write_outputs(package: pathlib.Path, report: dict[str, Any]) -> None:
-    write_json(package / "entity-graph-quality.json", report)
-    write_text(package / "entity-graph-quality.md", render_markdown(report))
+    write_artifacts(
+        text_files={package / "entity-graph-quality.md": render_markdown(report)},
+        json_files={package / "entity-graph-quality.json": report},
+    )
 
 
 def main() -> int:

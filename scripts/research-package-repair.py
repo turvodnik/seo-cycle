@@ -10,7 +10,8 @@ import subprocess
 import sys
 from typing import Any
 
-from research_package_repair_core import print_report, resolve_package, write_json, write_text
+from research_package_repair_core import print_report, resolve_package
+from seo_cycle_core.reports import write_artifacts
 
 
 REPAIR_STEPS = (
@@ -144,8 +145,10 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def write_outputs(package: pathlib.Path, report: dict[str, Any]) -> None:
-    write_json(package / "research-package-repair.json", report)
-    write_text(package / "research-package-repair.md", render_markdown(report))
+    write_artifacts(
+        text_files={package / "research-package-repair.md": render_markdown(report)},
+        json_files={package / "research-package-repair.json": report},
+    )
 
 
 def main() -> int:

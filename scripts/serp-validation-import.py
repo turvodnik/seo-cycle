@@ -23,8 +23,8 @@ from research_package_repair_core import (
     read_csv,
     resolve_package,
     write_json,
-    write_text,
 )
+from seo_cycle_core.reports import write_artifacts
 
 
 def list_value(value: Any) -> list[str]:
@@ -252,8 +252,10 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def write_outputs(package: pathlib.Path, report: dict[str, Any]) -> None:
-    write_json(package / "serp-validation-import.json", report)
-    write_text(package / "serp-validation-import.md", render_markdown(report))
+    write_artifacts(
+        text_files={package / "serp-validation-import.md": render_markdown(report)},
+        json_files={package / "serp-validation-import.json": report},
+    )
 
 
 def main() -> int:
