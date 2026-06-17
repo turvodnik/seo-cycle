@@ -21,6 +21,8 @@ import subprocess
 import sys
 from typing import Any
 
+from seo_cycle_core.reports import write_artifacts
+
 try:
     import yaml
 except ImportError:
@@ -532,11 +534,6 @@ def dump_yaml(data: dict[str, Any]) -> str:
     return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
 
-def write_text(path: pathlib.Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-
-
 def boolish(value: Any) -> bool:
     if isinstance(value, bool):
         return value
@@ -1023,12 +1020,19 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def write_reports(project_root: pathlib.Path, report: dict[str, Any]) -> None:
-    write_text(project_root / "seo" / "tool-stack.generated.yaml", generated_yaml(report))
-    write_text(project_root / "seo" / "setup" / "tool-stack-report.md", render_markdown(report))
-    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
-    write_text(project_root / "seo" / "setup" / "tool-stack-report.json", json_text)
-    write_text(project_root / "seo" / "setup" / "latest-tool-stack.md", render_markdown(report))
-    write_text(project_root / "seo" / "setup" / "latest-tool-stack.json", json_text)
+    setup_dir = project_root / "seo" / "setup"
+    markdown = render_markdown(report)
+    write_artifacts(
+        text_files={
+            project_root / "seo" / "tool-stack.generated.yaml": generated_yaml(report),
+            setup_dir / "tool-stack-report.md": markdown,
+            setup_dir / "latest-tool-stack.md": markdown,
+        },
+        json_files={
+            setup_dir / "tool-stack-report.json": report,
+            setup_dir / "latest-tool-stack.json": report,
+        },
+    )
 
 
 def apply_overlay(cfg_path: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:

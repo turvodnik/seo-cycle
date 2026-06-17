@@ -18,6 +18,8 @@ import subprocess
 import sys
 from typing import Any
 
+from seo_cycle_core.reports import write_artifacts
+
 try:
     import yaml
 except ImportError:
@@ -78,11 +80,6 @@ def load_json(path: pathlib.Path) -> dict[str, Any]:
 
 def dump_yaml(data: dict[str, Any]) -> str:
     return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
-
-
-def write_text(path: pathlib.Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
@@ -676,14 +673,20 @@ def generated_yaml(report: dict[str, Any]) -> str:
 
 
 def write_reports(project_root: pathlib.Path, report: dict[str, Any]) -> None:
+    setup_dir = project_root / "seo" / "setup"
     markdown = render_markdown(report)
-    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
-    write_text(project_root / "seo" / "onboarding.generated.yaml", generated_yaml(report))
-    write_text(project_root / "seo" / "setup" / "onboarding-playbook.md", markdown)
-    write_text(project_root / "seo" / "setup" / "onboarding-playbook.json", json_text)
-    write_text(project_root / "seo" / "setup" / "latest-onboarding-playbook.md", markdown)
-    write_text(project_root / "seo" / "setup" / "latest-onboarding-playbook.json", json_text)
-    write_text(project_root / "seo" / "setup" / "onboarding-checklist.csv", checklist_csv(report))
+    write_artifacts(
+        text_files={
+            project_root / "seo" / "onboarding.generated.yaml": generated_yaml(report),
+            setup_dir / "onboarding-playbook.md": markdown,
+            setup_dir / "latest-onboarding-playbook.md": markdown,
+            setup_dir / "onboarding-checklist.csv": checklist_csv(report),
+        },
+        json_files={
+            setup_dir / "onboarding-playbook.json": report,
+            setup_dir / "latest-onboarding-playbook.json": report,
+        },
+    )
 
 
 def main() -> int:

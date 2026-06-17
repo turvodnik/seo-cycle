@@ -18,6 +18,8 @@ import subprocess
 import sys
 from typing import Any
 
+from seo_cycle_core.reports import write_artifacts
+
 try:
     import yaml
 except ImportError:
@@ -114,11 +116,6 @@ def load_json(path: pathlib.Path) -> dict[str, Any]:
 
 def dump_yaml(data: dict[str, Any]) -> str:
     return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
-
-
-def write_text(path: pathlib.Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
@@ -669,13 +666,19 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def write_reports(project_root: pathlib.Path, report: dict[str, Any]) -> None:
-    write_text(project_root / "seo" / "growth-roadmap.generated.yaml", generated_yaml(report))
+    setup_dir = project_root / "seo" / "setup"
     markdown = render_markdown(report)
-    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
-    write_text(project_root / "seo" / "setup" / "growth-roadmap.md", markdown)
-    write_text(project_root / "seo" / "setup" / "growth-roadmap.json", json_text)
-    write_text(project_root / "seo" / "setup" / "latest-growth-roadmap.md", markdown)
-    write_text(project_root / "seo" / "setup" / "latest-growth-roadmap.json", json_text)
+    write_artifacts(
+        text_files={
+            project_root / "seo" / "growth-roadmap.generated.yaml": generated_yaml(report),
+            setup_dir / "growth-roadmap.md": markdown,
+            setup_dir / "latest-growth-roadmap.md": markdown,
+        },
+        json_files={
+            setup_dir / "growth-roadmap.json": report,
+            setup_dir / "latest-growth-roadmap.json": report,
+        },
+    )
 
 
 def main() -> int:

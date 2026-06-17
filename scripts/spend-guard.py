@@ -17,6 +17,8 @@ import pathlib
 import sys
 from typing import Any
 
+from seo_cycle_core.reports import write_artifacts
+
 try:
     import yaml
 except ImportError:
@@ -92,11 +94,6 @@ def load_json(path: pathlib.Path) -> dict[str, Any]:
 
 def dump_yaml(data: dict[str, Any]) -> str:
     return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
-
-
-def write_text(path: pathlib.Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
@@ -599,12 +596,19 @@ def checklist_csv(report: dict[str, Any]) -> str:
 
 def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
     setup_dir = project_root / "seo" / "setup"
-    write_text(project_root / "seo" / "spend-guard.generated.yaml", generated_yaml(report))
-    write_text(setup_dir / "spend-guard.md", render_markdown(report))
-    write_text(setup_dir / "spend-guard.json", json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-    write_text(setup_dir / "latest-spend-guard.md", render_markdown(report))
-    write_text(setup_dir / "latest-spend-guard.json", json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-    write_text(setup_dir / "spend-checklist.csv", checklist_csv(report))
+    markdown = render_markdown(report)
+    write_artifacts(
+        text_files={
+            project_root / "seo" / "spend-guard.generated.yaml": generated_yaml(report),
+            setup_dir / "spend-guard.md": markdown,
+            setup_dir / "latest-spend-guard.md": markdown,
+            setup_dir / "spend-checklist.csv": checklist_csv(report),
+        },
+        json_files={
+            setup_dir / "spend-guard.json": report,
+            setup_dir / "latest-spend-guard.json": report,
+        },
+    )
     return setup_dir / "spend-guard.md"
 
 
