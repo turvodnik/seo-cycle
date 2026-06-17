@@ -24,27 +24,13 @@ validate-config.py — валидатор seo-cycle.yaml.
 from __future__ import annotations
 import argparse, os, pathlib, sys
 
+from seo_cycle_core.config import config_search_paths, find_config, load_yaml, project_root_for
+
 try:
     import yaml
 except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)
-
-
-CONFIG_SEARCH_PATHS = [
-    "seo-cycle.yaml",
-    ".seo-cycle.yaml",
-    "seo/seo-cycle.yaml",
-    ".claude/seo-cycle.yaml",
-]
-
-
-def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
-    for rel in CONFIG_SEARCH_PATHS:
-        p = start_dir / rel
-        if p.exists():
-            return p
-    return None
 
 
 def load_env(project_root: pathlib.Path) -> dict[str, str]:
@@ -89,8 +75,7 @@ def load_region_profile(profile_id: str) -> dict | None:
                  / "config" / "region-profiles" / f"{profile_id}.yaml")
     if not prof_path.exists():
         return None
-    with prof_path.open(encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    return load_yaml(prof_path)
 
 
 def check_sources(cfg: dict, env: dict, project_root: pathlib.Path, checklist: list, warnings: list):
@@ -672,20 +657,16 @@ def main():
         if not cfg_path:
             print(f"ERROR: seo-cycle.yaml не найден в {pathlib.Path.cwd()}", file=sys.stderr)
             print(f"  Ожидаемые имена/места:", file=sys.stderr)
-            for p in CONFIG_SEARCH_PATHS:
+            for p in config_search_paths():
                 print(f"    {p}", file=sys.stderr)
             print(f"\n  Скопируй шаблон:", file=sys.stderr)
             print(f"    cp ~/.codex/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml", file=sys.stderr)
             sys.exit(2)
 
-    project_root = cfg_path.parent
-    if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
-        project_root = cfg_path.parent
-    elif "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
-        project_root = cfg_path.parent.parent
+    project_root = project_root_for(cfg_path)
 
     try:
-        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        cfg = load_yaml(cfg_path)
     except Exception as e:
         print(f"ERROR: не могу распарсить YAML: {e}", file=sys.stderr)
         sys.exit(2)

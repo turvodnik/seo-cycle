@@ -23,21 +23,13 @@ areaServed, knowsAbout, sameAs — то, что связывает контен�
 from __future__ import annotations
 import argparse, json, pathlib, sys
 
+from seo_cycle_core.config import find_config, load_yaml
+
 try:
     import yaml
 except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)
-
-CONFIG_SEARCH_PATHS = ["seo-cycle.yaml", ".seo-cycle.yaml", "seo/seo-cycle.yaml", ".claude/seo-cycle.yaml"]
-
-
-def find_config() -> pathlib.Path | None:
-    for rel in CONFIG_SEARCH_PATHS:
-        p = pathlib.Path.cwd() / rel
-        if p.exists():
-            return p
-    return None
 
 
 def build_org(cfg: dict) -> dict:
@@ -117,12 +109,11 @@ def main() -> int:
     ap.add_argument("--config", help="путь к seo-cycle.yaml")
     args = ap.parse_args()
 
-    cfg_path = pathlib.Path(args.config) if args.config else find_config()
+    cfg_path = pathlib.Path(args.config).expanduser() if args.config else find_config(pathlib.Path.cwd())
     if not cfg_path or not cfg_path.exists():
         print("ERROR: seo-cycle.yaml не найден", file=sys.stderr)
         return 2
-    with cfg_path.open(encoding="utf-8") as f:
-        cfg = yaml.safe_load(f) or {}
+    cfg = load_yaml(cfg_path)
 
     built = build_org(cfg)
 

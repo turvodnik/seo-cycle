@@ -19,6 +19,10 @@ CONFIG_SEARCH_PATHS = (
 )
 
 
+def config_search_paths() -> tuple[str, ...]:
+    return CONFIG_SEARCH_PATHS
+
+
 def skill_root(current_file: str | pathlib.Path | None = None) -> pathlib.Path:
     if current_file:
         return pathlib.Path(current_file).resolve().parent.parent
@@ -96,4 +100,3 @@ def nested_get(data: dict[str, Any], dotted: str) -> Any:
 def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
     policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
     return rel_path(project_root, policy_files.get(key, default))
-

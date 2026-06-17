@@ -302,6 +302,22 @@ class SeoCycleCoreTest(unittest.TestCase):
                 self.assertNotIn("def policy_path(", source)
                 self.assertNotIn("CONFIG_SEARCH_PATHS = [", source)
 
+    def test_technical_discovery_scripts_use_shared_config_helpers(self) -> None:
+        scripts = [
+            "validate-config.py",
+            "resolve-sources.py",
+            "schema-org-build.py",
+            "wp-photo-image.py",
+        ]
+
+        for script in scripts:
+            with self.subTest(script=script):
+                source = (ROOT / "scripts" / script).read_text(encoding="utf-8")
+                self.assertIn("from seo_cycle_core.config import", source)
+                self.assertNotIn("CONFIG_SEARCH_PATHS", source)
+                self.assertNotIn("def find_config", source)
+                self.assertNotIn("def load_yaml", source)
+
     def test_source_artifacts_write_raw_distillate_latest_and_vector(self) -> None:
         cache_key = stable_cache_key({"topic": "Плита ОСП", "region": "RU", "mode": "manual_browser"})
         vector = make_vector_record(

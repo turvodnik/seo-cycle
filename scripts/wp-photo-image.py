@@ -23,6 +23,8 @@ from typing import Any
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from seo_cycle_core.config import find_config
+
 try:
     import yaml
 except ImportError:  # pragma: no cover - optional until --config is used
@@ -34,13 +36,6 @@ except ImportError:  # pragma: no cover - reported only when processing images
     Image = None
     ImageOps = None
 
-
-CONFIG_SEARCH_PATHS = [
-    "seo-cycle.yaml",
-    ".seo-cycle.yaml",
-    "seo/seo-cycle.yaml",
-    ".claude/seo-cycle.yaml",
-]
 
 PRESET_RATIO_ALIASES = {
     "featured": ("featured", "hero", "article_inline"),
@@ -55,14 +50,6 @@ PRESET_RATIO_ALIASES = {
 def require_pillow() -> None:
     if Image is None or ImageOps is None:
         raise RuntimeError("Pillow is required: python3 -m pip install pillow")
-
-
-def find_config(start_dir: Path) -> Path | None:
-    for rel in CONFIG_SEARCH_PATHS:
-        candidate = start_dir / rel
-        if candidate.exists():
-            return candidate
-    return None
 
 
 def load_config(path: str | None) -> dict[str, Any]:
