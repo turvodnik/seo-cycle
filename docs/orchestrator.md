@@ -44,6 +44,28 @@ python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py \
   --format json
 ```
 
+Run the built-in setup readiness lane:
+
+```bash
+python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py \
+  --stage-template setup-readiness \
+  --goal "first SEO setup" \
+  --write
+```
+
+This template runs one stage:
+
+1. `setup_control_plane` — `setup-control-plane.py --task <goal> --write`,
+   command gate through `project-journey.py --goal <goal>
+   --fail-on-blocker`, and one safe repair refresh through
+   `setup-control-plane.py --task <goal> --write --skip-intake
+   --skip-automation`.
+
+The setup repair refresh does not apply project profiles, write secret values,
+run paid APIs, publish content, submit indexing, or install schedules. If
+`project-journey.py` is still blocked after the refresh, the orchestrator writes
+a blocker report with the missing human fields, access setup, or approval gates.
+
 Run the built-in research package lane:
 
 ```bash

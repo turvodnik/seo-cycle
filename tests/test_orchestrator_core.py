@@ -252,6 +252,43 @@ class OrchestratorCoreTest(unittest.TestCase):
         self.assertIn("--fail-on-error", stage["gate"]["command"])
         self.assertEqual(stage["max_attempts"], 0)
 
+    def test_seo_cycle_run_renders_setup_readiness_template_plan(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(SEO_CYCLE_RUN),
+                "--stage-template",
+                "setup-readiness",
+                "--goal",
+                "first SEO setup",
+                "--format",
+                "json",
+            ],
+            cwd=self.tmp,
+            check=True,
+            text=True,
+            capture_output=True,
+            env={"PYTHONPATH": PYTHONPATH},
+        )
+        report = json.loads(proc.stdout)
+        stage = report["stages"][0]
+
+        self.assertEqual(report["status"], "planned")
+        self.assertEqual(stage["id"], "setup_control_plane")
+        self.assertIn("seo-cycle.yaml", stage["required_inputs"])
+        self.assertIn("seo/setup/setup-control-plane.json", stage["outputs"])
+        self.assertIn("seo/setup/project-journey.json", stage["outputs"])
+        self.assertTrue(any("setup-control-plane.py" in part for part in stage["commands"][0]))
+        self.assertIn("--task", stage["commands"][0])
+        self.assertIn("first SEO setup", stage["commands"][0])
+        self.assertTrue(any("project-journey.py" in part for part in stage["gate"]["command"]))
+        self.assertIn("--fail-on-blocker", stage["gate"]["command"])
+        self.assertIn("first SEO setup", stage["gate"]["command"])
+        self.assertTrue(any("setup-control-plane.py" in part for part in stage["repair_commands"][0]))
+        self.assertIn("--skip-intake", stage["repair_commands"][0])
+        self.assertNotIn("--apply-profile", stage["commands"][0] + stage["repair_commands"][0])
+        self.assertEqual(stage["max_attempts"], 1)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

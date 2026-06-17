@@ -259,11 +259,73 @@ def copywriting_contracts(package: str, draft: str | None, outline: str | None) 
     )
 
 
-def template_contracts(template: str, package: str, draft: str | None, outline: str | None) -> tuple[StageContract, ...]:
+def setup_readiness_contracts(goal: str | None) -> tuple[StageContract, ...]:
+    task = goal or "first SEO cycle setup"
+    root = skill_root()
+    setup_command = [
+        sys.executable,
+        str(root / "scripts/setup-control-plane.py"),
+        "--task",
+        task,
+        "--write",
+    ]
+    gate_command = [
+        sys.executable,
+        str(root / "scripts/project-journey.py"),
+        "--goal",
+        task,
+        "--format",
+        "json",
+        "--fail-on-blocker",
+    ]
+    repair_command = [
+        sys.executable,
+        str(root / "scripts/setup-control-plane.py"),
+        "--task",
+        task,
+        "--write",
+        "--skip-intake",
+        "--skip-automation",
+    ]
+    return (
+        StageContract.from_mapping(
+            {
+                "id": "setup_control_plane",
+                "title": "Setup control plane readiness",
+                "required_inputs": ["seo-cycle.yaml"],
+                "commands": [setup_command],
+                "outputs": [
+                    "seo/setup/setup-control-plane.json",
+                    "seo/setup/project-journey.json",
+                    "seo/setup/setup-gap-audit.json",
+                    "seo/setup/latest-task-route.json",
+                ],
+                "gate": {"command": gate_command},
+                "repair_commands": [repair_command],
+                "max_attempts": 1,
+                "stop_conditions": [
+                    "project-journey.py --fail-on-blocker still reports a blocked current stage after setup refresh.",
+                    "Human setup questionnaire fields, missing access, or approval gates must be resolved manually.",
+                ],
+                "next_stage": "approved_task_route",
+            }
+        ),
+    )
+
+
+def template_contracts(
+    template: str,
+    package: str,
+    draft: str | None,
+    outline: str | None,
+    goal: str | None,
+) -> tuple[StageContract, ...]:
     if template == "research-package":
         return research_package_contracts(package)
     if template == "copywriting":
         return copywriting_contracts(package, draft, outline)
+    if template == "setup-readiness":
+        return setup_readiness_contracts(goal)
     raise SystemExit(f"ERROR: unknown stage template: {template}")
 
 
@@ -354,7 +416,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stage-file", type=pathlib.Path, help="JSON/YAML stage contract file.")
     parser.add_argument("--stage-id", help="Run only one stage from --stage-file.")
-    parser.add_argument("--stage-template", choices=("research-package", "copywriting"), help="Built-in stage contract template.")
+    parser.add_argument(
+        "--stage-template",
+        choices=("research-package", "copywriting", "setup-readiness"),
+        help="Built-in stage contract template.",
+    )
     parser.add_argument("--package", default="seo/research-package", help="Research package path for built-in stage templates.")
     parser.add_argument("--draft", help="Draft markdown path for --stage-template copywriting.")
     parser.add_argument("--outline", help="Outline JSON path for --stage-template copywriting. Defaults to <package>/page-outlines-v3/<draft-stem>.json.")
@@ -368,7 +434,7 @@ def main() -> int:
     if args.stage_file:
         contracts = load_stage_contracts(args.stage_file.expanduser().resolve(), args.stage_id)
     elif args.stage_template:
-        contracts = template_contracts(args.stage_template, args.package, args.draft, args.outline)
+        contracts = template_contracts(args.stage_template, args.package, args.draft, args.outline, args.goal)
         if args.stage_id:
             contracts = tuple(contract for contract in contracts if contract.id == args.stage_id)
             if not contracts:

@@ -28,6 +28,11 @@ Status: implemented as the v1.63 pilot.
   `seo-cycle-run.py --stage-template copywriting --draft <draft.md>` wraps
   `draft-quality-gate.py --fail-on-error` for one existing draft while keeping
   the legacy draft gate exit behavior unchanged unless the flag is used.
+- Add a built-in setup readiness lane template:
+  `seo-cycle-run.py --stage-template setup-readiness --goal <task>` wraps
+  `setup-control-plane.py --write` behind `project-journey.py
+  --fail-on-blocker`, with one safe repair refresh and a blocker report when
+  human setup fields, access setup or approvals are still missing.
 
 ## Next Slices
 
@@ -36,16 +41,11 @@ Status: implemented as the v1.63 pilot.
    - Prefer scripts that already use `seo_cycle_core.config`.
    - Keep direct script behavior and CLI output unchanged.
 
-2. Wrap setup readiness.
-   - Stage: `setup-control-plane.py`.
-   - Gate: project journey with `--fail-on-blocker`.
-   - Repair: safe setup refreshes only, no secret writes.
-
-3. Add project-local contract templates.
+2. Add project-local contract templates.
    - Suggested path: `seo/stages/*.yaml`.
    - Keep templates secret-free and approval-aware.
 
-4. Add a small panel surface later.
+3. Add a small panel surface later.
    - The panel should read `seo/orchestrator/latest-run.json`.
    - It should not execute paid/browser/publish actions without the same
      approval gates as the CLI.

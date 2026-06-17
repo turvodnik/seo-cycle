@@ -70,6 +70,7 @@ bash ./.codex/skills/seo-cycle/scripts/knowledge/graphify-refresh.sh
 
 # 8. v1.63 staged orchestrator pilot: stage -> gate -> repair -> rerun
 python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py --goal "собрать research package" --write
+python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py --stage-template setup-readiness --goal "first SEO setup" --write
 python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py --stage-template research-package --package seo/research-package --write
 python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py --stage-template copywriting --draft seo/research-package/drafts/sample.md --write
 ```
