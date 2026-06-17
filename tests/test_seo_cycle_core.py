@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from seo_cycle_core.config import boolish, find_config, nested_get, numeric, policy_path, project_root_for, rel_path
 from seo_cycle_core.providers import notebooklm_health, perplexity_health
-from seo_cycle_core.reports import write_report_bundle
+from seo_cycle_core.reports import stringify_paths, write_artifacts, write_report_bundle
 from seo_cycle_core.source_artifacts import (
     make_vector_record,
     read_cached_distillate,
@@ -24,7 +24,7 @@ from seo_cycle_core.source_artifacts import (
     utc_now_iso,
     write_source_artifacts,
 )
-from seo_cycle_core.subprocesses import run_json
+from seo_cycle_core.subprocesses import json_from_step, run_command_step, run_json
 
 
 class SeoCycleCoreTest(unittest.TestCase):
@@ -70,6 +70,28 @@ class SeoCycleCoreTest(unittest.TestCase):
         self.assertTrue((self.tmp / "seo/latest-report.md").exists())
         self.assertTrue((self.tmp / "seo/latest-report.json").exists())
 
+    def test_report_artifact_helpers_write_text_json_and_string_paths(self) -> None:
+        paths = {
+            "markdown": self.tmp / "seo/setup/report.md",
+            "json": self.tmp / "seo/setup/report.json",
+            "csv": self.tmp / "seo/setup/report.csv",
+        }
+
+        write_artifacts(
+            text_files={
+                paths["markdown"]: "# Report\n",
+                paths["csv"]: "name,status\nsetup,ok\n",
+            },
+            json_files={
+                paths["json"]: {"status": "ok"},
+            },
+        )
+
+        self.assertEqual(paths["markdown"].read_text(encoding="utf-8"), "# Report\n")
+        self.assertEqual(json.loads(paths["json"].read_text(encoding="utf-8"))["status"], "ok")
+        self.assertEqual(paths["csv"].read_text(encoding="utf-8").splitlines()[1], "setup,ok")
+        self.assertEqual(stringify_paths(paths), {key: str(path) for key, path in paths.items()})
+
     def test_source_artifacts_write_raw_distillate_latest_and_vector(self) -> None:
         cache_key = stable_cache_key({"topic": "Плита ОСП", "region": "RU", "mode": "manual_browser"})
         vector = make_vector_record(
@@ -105,6 +127,15 @@ class SeoCycleCoreTest(unittest.TestCase):
         result = run_json([sys.executable, "-c", "print('not-json')"], self.tmp)
         self.assertEqual(result["error"], "invalid json")
         self.assertEqual(result["exit_code"], 0)
+
+    def test_command_step_helpers_capture_output_and_parse_json(self) -> None:
+        step = run_command_step("demo", [sys.executable, "-c", "import json; print(json.dumps({'ok': True}))"], self.tmp)
+
+        self.assertEqual(step["name"], "demo")
+        self.assertEqual(step["exit_code"], 0)
+        self.assertEqual(json_from_step(step), {"ok": True})
+        self.assertEqual(json_from_step({**step, "stdout": "not-json"}), {})
+        self.assertEqual(json_from_step({**step, "exit_code": 1}), {})
 
     def test_perplexity_health_uses_persistent_app_without_password_storage(self) -> None:
         app = self.tmp / "Perplexity.app"

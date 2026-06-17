@@ -19,6 +19,7 @@ from typing import Any
 
 from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for, skill_root
 from seo_cycle_core.context import build_context_manifest
+from seo_cycle_core.reports import write_artifacts
 from seo_cycle_core.subprocesses import run_json
 
 PAID_OR_QUOTA_SOURCES = {
@@ -485,14 +486,18 @@ def render_markdown(route: dict[str, Any]) -> str:
 def write_route(project_root: pathlib.Path, route: dict[str, Any]) -> pathlib.Path:
     out_dir = project_root / "seo" / "setup"
     routes_dir = out_dir / "task-routes"
-    routes_dir.mkdir(parents=True, exist_ok=True)
     slug = slugify(f"{route['task_type']}-{route['task']}")
     md = render_markdown(route)
-    json_text = json.dumps(route, ensure_ascii=False, indent=2) + "\n"
-    (out_dir / "latest-task-route.md").write_text(md, encoding="utf-8")
-    (out_dir / "latest-task-route.json").write_text(json_text, encoding="utf-8")
-    (routes_dir / f"{slug}.md").write_text(md, encoding="utf-8")
-    (routes_dir / f"{slug}.json").write_text(json_text, encoding="utf-8")
+    write_artifacts(
+        text_files={
+            out_dir / "latest-task-route.md": md,
+            routes_dir / f"{slug}.md": md,
+        },
+        json_files={
+            out_dir / "latest-task-route.json": route,
+            routes_dir / f"{slug}.json": route,
+        },
+    )
     return out_dir / "latest-task-route.md"
 
 

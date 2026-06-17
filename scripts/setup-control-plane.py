@@ -18,22 +18,12 @@ import datetime as dt
 import json
 import pathlib
 import re
-import subprocess
 import sys
 from typing import Any
 
 from seo_cycle_core.config import find_config, load_yaml, project_root_for, rel_path, skill_root, write_text
-
-
-def run_step(name: str, command: list[str], cwd: pathlib.Path) -> dict[str, Any]:
-    proc = subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False)
-    return {
-        "name": name,
-        "command": command,
-        "exit_code": proc.returncode,
-        "stdout": proc.stdout,
-        "stderr": proc.stderr,
-    }
+from seo_cycle_core.reports import write_artifacts
+from seo_cycle_core.subprocesses import json_from_step, run_command_step as run_step
 
 
 def parse_count(label: str, text: str) -> int:
@@ -48,15 +38,6 @@ def parse_validation(step: dict[str, Any]) -> dict[str, int]:
         "warnings": parse_count("WARNINGS", text),
         "checklist": parse_count("ЧЕК-ЛИСТ что подключить", text),
     }
-
-
-def load_json_output(step: dict[str, Any]) -> dict[str, Any]:
-    if step.get("exit_code") != 0:
-        return {}
-    try:
-        return json.loads(step.get("stdout") or "{}")
-    except json.JSONDecodeError:
-        return {}
 
 
 def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dict[str, Any]]:
@@ -490,9 +471,10 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def write_report(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
     out_dir = project_root / "seo" / "setup"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    write_text(out_dir / "setup-control-plane.md", render_markdown(report))
-    write_text(out_dir / "setup-control-plane.json", json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    write_artifacts(
+        text_files={out_dir / "setup-control-plane.md": render_markdown(report)},
+        json_files={out_dir / "setup-control-plane.json": report},
+    )
     return out_dir
 
 
@@ -722,106 +704,106 @@ def main() -> int:
         write_text(setup_dir / "latest-sources.json", sources_step.get("stdout", ""))
 
     cfg = load_yaml(cfg_path)
-    governance = load_json_output(governance_step)
-    sources = load_json_output(sources_step)
+    governance = json_from_step(governance_step)
+    sources = json_from_step(sources_step)
     automation_step = next((step for step in steps if step["name"] == "automation plan"), {})
-    automation = load_json_output(automation_step)
+    automation = json_from_step(automation_step)
     if not automation:
         automation = json.loads((project_root / "seo" / "automations" / "automation-plan.json").read_text(encoding="utf-8")) if (project_root / "seo" / "automations" / "automation-plan.json").exists() else {}
     if "allowed" not in automation and "schedule_install_allowed" in automation:
         automation["allowed"] = automation.get("schedule_install_allowed")
     task_router_step = next((step for step in steps if step["name"] == "task router"), {})
-    task_route = load_json_output(task_router_step)
+    task_route = json_from_step(task_router_step)
     task_route_file = project_root / "seo" / "setup" / "latest-task-route.json"
     if not task_route and task_route_file.exists():
         task_route = json.loads(task_route_file.read_text(encoding="utf-8"))
     usage_step = next((step for step in steps if step["name"] == "usage ledger"), {})
-    usage_ledger = load_json_output(usage_step)
+    usage_ledger = json_from_step(usage_step)
     usage_file = project_root / "seo" / "setup" / "latest-usage-ledger.json"
     if not usage_ledger and usage_file.exists():
         usage_ledger = json.loads(usage_file.read_text(encoding="utf-8"))
     automation_recommender_step = next((step for step in steps if step["name"] == "automation recommender"), {})
-    automation_recommendations = load_json_output(automation_recommender_step)
+    automation_recommendations = json_from_step(automation_recommender_step)
     automation_recommendations_file = project_root / "seo" / "automations" / "automation-recommendations.json"
     if not automation_recommendations and automation_recommendations_file.exists():
         automation_recommendations = json.loads(automation_recommendations_file.read_text(encoding="utf-8"))
     tool_stack_step = next((step for step in steps if step["name"] == "tool stack recommender"), {})
-    tool_stack = load_json_output(tool_stack_step)
+    tool_stack = json_from_step(tool_stack_step)
     tool_stack_file = project_root / "seo" / "setup" / "tool-stack-report.json"
     if not tool_stack and tool_stack_file.exists():
         tool_stack = json.loads(tool_stack_file.read_text(encoding="utf-8"))
     spend_guard_step = next((step for step in steps if step["name"] == "spend guard"), {})
-    spend_guard = load_json_output(spend_guard_step)
+    spend_guard = json_from_step(spend_guard_step)
     spend_guard_file = project_root / "seo" / "setup" / "spend-guard.json"
     if not spend_guard and spend_guard_file.exists():
         spend_guard = json.loads(spend_guard_file.read_text(encoding="utf-8"))
     growth_roadmap_step = next((step for step in steps if step["name"] == "growth roadmap"), {})
-    growth_roadmap = load_json_output(growth_roadmap_step)
+    growth_roadmap = json_from_step(growth_roadmap_step)
     growth_roadmap_file = project_root / "seo" / "setup" / "growth-roadmap.json"
     if not growth_roadmap and growth_roadmap_file.exists():
         growth_roadmap = json.loads(growth_roadmap_file.read_text(encoding="utf-8"))
     onboarding_step = next((step for step in steps if step["name"] == "setup onboarding"), {})
-    onboarding = load_json_output(onboarding_step)
+    onboarding = json_from_step(onboarding_step)
     onboarding_file = project_root / "seo" / "setup" / "onboarding-playbook.json"
     if not onboarding and onboarding_file.exists():
         onboarding = json.loads(onboarding_file.read_text(encoding="utf-8"))
     launch_plan_step = next((step for step in steps if step["name"] == "launch plan"), {})
-    launch_plan = load_json_output(launch_plan_step)
+    launch_plan = json_from_step(launch_plan_step)
     launch_plan_file = project_root / "seo" / "setup" / "launch-plan.json"
     if not launch_plan and launch_plan_file.exists():
         launch_plan = json.loads(launch_plan_file.read_text(encoding="utf-8"))
     context_pack_step = next((step for step in steps if step["name"] == "context pack"), {})
-    context_pack = load_json_output(context_pack_step)
+    context_pack = json_from_step(context_pack_step)
     context_pack_file = project_root / "seo" / "setup" / "context-pack.json"
     if not context_pack and context_pack_file.exists():
         context_pack = json.loads(context_pack_file.read_text(encoding="utf-8"))
     token_waste_step = next((step for step in steps if step["name"] == "token waste audit"), {})
-    token_waste_audit = load_json_output(token_waste_step)
+    token_waste_audit = json_from_step(token_waste_step)
     token_waste_file = project_root / "seo" / "setup" / "token-waste-audit.json"
     if not token_waste_audit and token_waste_file.exists():
         token_waste_audit = json.loads(token_waste_file.read_text(encoding="utf-8"))
     perplexity_step = next((step for step in steps if step["name"] == "perplexity health"), {})
-    perplexity_health = load_json_output(perplexity_step)
+    perplexity_health = json_from_step(perplexity_step)
     perplexity_file = project_root / "seo" / "setup" / "perplexity-health.json"
     if not perplexity_health and perplexity_file.exists():
         perplexity_health = json.loads(perplexity_file.read_text(encoding="utf-8"))
     notebooklm_step = next((step for step in steps if step["name"] == "notebooklm health"), {})
-    notebooklm_health = load_json_output(notebooklm_step)
+    notebooklm_health = json_from_step(notebooklm_step)
     notebooklm_file = project_root / "seo" / "setup" / "notebooklm-health.json"
     if not notebooklm_health and notebooklm_file.exists():
         notebooklm_health = json.loads(notebooklm_file.read_text(encoding="utf-8"))
     xmlriver_step = next((step for step in steps if step["name"] == "xmlriver health"), {})
-    xmlriver_health = load_json_output(xmlriver_step)
+    xmlriver_health = json_from_step(xmlriver_step)
     xmlriver_file = project_root / "seo" / "setup" / "xmlriver-health.json"
     if not xmlriver_health and xmlriver_file.exists():
         xmlriver_health = json.loads(xmlriver_file.read_text(encoding="utf-8"))
     writerzen_step = next((step for step in steps if step["name"] == "writerzen health"), {})
-    writerzen_health = load_json_output(writerzen_step)
+    writerzen_health = json_from_step(writerzen_step)
     writerzen_file = project_root / "seo" / "setup" / "writerzen-health.json"
     if not writerzen_health and writerzen_file.exists():
         writerzen_health = json.loads(writerzen_file.read_text(encoding="utf-8"))
     setup_gap_step = next((step for step in steps if step["name"] == "setup gap audit"), {})
-    setup_gap_audit = load_json_output(setup_gap_step)
+    setup_gap_audit = json_from_step(setup_gap_step)
     setup_gap_file = project_root / "seo" / "setup" / "setup-gap-audit.json"
     if not setup_gap_audit and setup_gap_file.exists():
         setup_gap_audit = json.loads(setup_gap_file.read_text(encoding="utf-8"))
     setup_blueprint_step = next((step for step in steps if step["name"] == "setup blueprint"), {})
-    setup_blueprint = load_json_output(setup_blueprint_step)
+    setup_blueprint = json_from_step(setup_blueprint_step)
     setup_blueprint_file = project_root / "seo" / "setup" / "setup-blueprint.json"
     if not setup_blueprint and setup_blueprint_file.exists():
         setup_blueprint = json.loads(setup_blueprint_file.read_text(encoding="utf-8"))
     upgrade_step = next((step for step in steps if step["name"] == "project upgrade assistant"), {})
-    upgrade_assistant = load_json_output(upgrade_step)
+    upgrade_assistant = json_from_step(upgrade_step)
     upgrade_file = project_root / "seo" / "setup" / "upgrade-assistant.json"
     if not upgrade_assistant and upgrade_file.exists():
         upgrade_assistant = json.loads(upgrade_file.read_text(encoding="utf-8"))
     access_key_step = next((step for step in steps if step["name"] == "access key assistant"), {})
-    access_key_assistant = load_json_output(access_key_step)
+    access_key_assistant = json_from_step(access_key_step)
     access_key_file = project_root / "seo" / "setup" / "access-key-assistant.json"
     if not access_key_assistant and access_key_file.exists():
         access_key_assistant = json.loads(access_key_file.read_text(encoding="utf-8"))
     project_journey_step = next((step for step in steps if step["name"] == "project journey"), {})
-    project_journey = load_json_output(project_journey_step)
+    project_journey = json_from_step(project_journey_step)
     project_journey_file = project_root / "seo" / "setup" / "project-journey.json"
     if not project_journey and project_journey_file.exists():
         project_journey = json.loads(project_journey_file.read_text(encoding="utf-8"))
@@ -829,7 +811,7 @@ def main() -> int:
     for step in steps:
         if not step["name"].startswith("vnext "):
             continue
-        report = load_json_output(step)
+        report = json_from_step(step)
         if not report:
             slug = step["name"].removeprefix("vnext ").replace(" ", "-")
             report_file = project_root / "seo" / "vnext" / f"{slug}.json"
@@ -845,7 +827,7 @@ def main() -> int:
     for step in steps:
         if not step["name"].startswith("technical "):
             continue
-        report = load_json_output(step)
+        report = json_from_step(step)
         if not report:
             continue
         technical_reports[report.get("audit_id", step["name"])] = {

@@ -17,7 +17,8 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for, rel_path, write_text
+from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for, rel_path
+from seo_cycle_core.reports import stringify_paths, write_artifacts
 
 
 def utc_now() -> str:
@@ -953,14 +954,19 @@ def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib
         "latest_markdown": setup_dir / "latest-project-journey.md",
         "latest_json": setup_dir / "latest-project-journey.json",
     }
-    report["paths"] = {key: str(path) for key, path in paths.items()}
+    report["paths"] = stringify_paths(paths)
     markdown = render_markdown(report)
-    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
-    write_text(paths["markdown"], markdown)
-    write_text(paths["json"], json_text)
-    write_text(paths["checklist"], checklist_csv(report))
-    write_text(paths["latest_markdown"], markdown)
-    write_text(paths["latest_json"], json_text)
+    write_artifacts(
+        text_files={
+            paths["markdown"]: markdown,
+            paths["checklist"]: checklist_csv(report),
+            paths["latest_markdown"]: markdown,
+        },
+        json_files={
+            paths["json"]: report,
+            paths["latest_json"]: report,
+        },
+    )
     return paths["markdown"]
 
 
