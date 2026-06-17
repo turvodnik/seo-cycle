@@ -178,6 +178,12 @@ def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dic
         "automation_plan_json": "seo/automations/automation-plan.json",
         "automation_crontab": "seo/automations/crontab.txt",
         "latest_task_route": "seo/setup/latest-task-route.md",
+        "stage_templates_dir": "seo/stages",
+        "stage_template_setup_readiness": "seo/stages/setup-readiness.yaml",
+        "stage_template_research_package": "seo/stages/research-package.yaml",
+        "stage_template_copywriting_draft": "seo/stages/copywriting-draft.yaml",
+        "stage_template_export_report": "seo/stages/stage-template-export.md",
+        "stage_template_export_json": "seo/stages/stage-template-export.json",
         "ai_brand_audit_report": "seo/vnext/ai-brand-audit.md",
         "answer_units_audit_report": "seo/vnext/answer-units-audit.md",
         "ai_bot_access_check_report": "seo/vnext/ai-bot-access-check.md",
@@ -375,6 +381,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     upgrade_assistant = report.get("upgrade_assistant", {})
     access_key_assistant = report.get("access_key_assistant", {})
     project_journey = report.get("project_journey", {})
+    stage_templates = report.get("stage_templates", {})
     context_pack = report.get("context_pack", {})
     setup_gap_audit = report.get("setup_gap_audit", {})
     spend_guard = report.get("spend_guard", {})
@@ -418,6 +425,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Access key tasks/approval: {(access_key_assistant.get('summary') or {}).get('tasks')}/{(access_key_assistant.get('summary') or {}).get('approval_required')}",
         f"- Project journey: {project_journey.get('status')} / stage={(project_journey.get('current_stage') or {}).get('id')}",
         f"- Project journey score: {project_journey.get('journey_score')}",
+        f"- Stage templates: {(stage_templates.get('summary') or {}).get('templates')}",
         f"- Context pack chars: {context_pack.get('rendered_chars')}",
         f"- Token waste findings: {len(token_waste_audit.get('findings', []))}",
         f"- Perplexity health: {perplexity_health.get('status')}",
@@ -651,6 +659,12 @@ def main() -> int:
     project_journey_command.extend(["--format", "json"])
     steps.append(run_step("project journey", project_journey_command, project_root))
 
+    stage_template_command = [sys.executable, str(root / "scripts/stage-template-export.py"), str(cfg_path)]
+    if args.write:
+        stage_template_command.append("--write")
+    stage_template_command.extend(["--format", "json"])
+    steps.append(run_step("stage template export", stage_template_command, project_root))
+
     for script_name, step_name in (
         ("expert-source-pack.py", "vnext expert source pack"),
         ("ai-brand-audit.py", "vnext ai brand audit"),
@@ -807,6 +821,11 @@ def main() -> int:
     project_journey_file = project_root / "seo" / "setup" / "project-journey.json"
     if not project_journey and project_journey_file.exists():
         project_journey = json.loads(project_journey_file.read_text(encoding="utf-8"))
+    stage_templates_step = next((step for step in steps if step["name"] == "stage template export"), {})
+    stage_templates = json_from_step(stage_templates_step)
+    stage_templates_file = project_root / "seo" / "stages" / "stage-template-export.json"
+    if not stage_templates and stage_templates_file.exists():
+        stage_templates = json.loads(stage_templates_file.read_text(encoding="utf-8"))
     vnext_reports: dict[str, Any] = {}
     for step in steps:
         if not step["name"].startswith("vnext "):
@@ -862,6 +881,7 @@ def main() -> int:
         "upgrade_assistant": upgrade_assistant,
         "access_key_assistant": access_key_assistant,
         "project_journey": project_journey,
+        "stage_templates": stage_templates,
         "context_pack": context_pack,
         "token_waste_audit": token_waste_audit,
         "perplexity_health": perplexity_health,

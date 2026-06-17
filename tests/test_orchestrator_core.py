@@ -11,10 +11,16 @@ import sys
 import tempfile
 import unittest
 
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    yaml = None
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SEO_CYCLE_RUN = SCRIPTS / "seo-cycle-run.py"
+STAGE_TEMPLATE_EXPORT = SCRIPTS / "stage-template-export.py"
 PYTHONPATH = f"{SCRIPTS}"
 
 sys.path.insert(0, str(SCRIPTS))
@@ -288,6 +294,52 @@ class OrchestratorCoreTest(unittest.TestCase):
         self.assertIn("--skip-intake", stage["repair_commands"][0])
         self.assertNotIn("--apply-profile", stage["commands"][0] + stage["repair_commands"][0])
         self.assertEqual(stage["max_attempts"], 1)
+
+    @unittest.skipIf(yaml is None, "PyYAML is required to dry-run exported YAML stage files")
+    def test_stage_template_export_writes_project_local_yaml_contracts(self) -> None:
+        cfg_path = self.tmp / "seo-cycle.yaml"
+        cfg_path.write_text("project:\n  name: Stage Template Test\n", encoding="utf-8")
+
+        proc = subprocess.run(
+            [sys.executable, str(STAGE_TEMPLATE_EXPORT), str(cfg_path), "--write", "--format", "json"],
+            cwd=self.tmp,
+            check=True,
+            text=True,
+            capture_output=True,
+            env={"PYTHONPATH": PYTHONPATH},
+        )
+        report = json.loads(proc.stdout)
+        stage_dir = self.tmp / "seo" / "stages"
+
+        self.assertEqual(report["status"], "ok")
+        self.assertEqual(report["summary"]["templates"], 3)
+        self.assertEqual(report["summary"]["written"], 3)
+        for filename in ("setup-readiness.yaml", "research-package.yaml", "copywriting-draft.yaml"):
+            self.assertTrue((stage_dir / filename).exists(), filename)
+
+        setup_plan = subprocess.run(
+            [
+                sys.executable,
+                str(SEO_CYCLE_RUN),
+                "--stage-file",
+                str(stage_dir / "setup-readiness.yaml"),
+                "--format",
+                "json",
+            ],
+            cwd=self.tmp,
+            check=True,
+            text=True,
+            capture_output=True,
+            env={"PYTHONPATH": PYTHONPATH},
+        )
+        setup_stage = json.loads(setup_plan.stdout)["stages"][0]
+
+        self.assertEqual(setup_stage["id"], "setup_control_plane")
+        self.assertIn("./.codex/skills/seo-cycle/scripts/setup-control-plane.py", setup_stage["commands"][0])
+        self.assertIn("--fail-on-blocker", setup_stage["gate"]["command"])
+        self.assertNotIn("--apply-profile", setup_stage["commands"][0] + setup_stage["repair_commands"][0])
+        self.assertTrue((stage_dir / "stage-template-export.md").exists())
+        self.assertTrue((stage_dir / "stage-template-export.json").exists())
 
 
 if __name__ == "__main__":

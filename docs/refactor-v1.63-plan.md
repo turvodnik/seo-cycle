@@ -33,6 +33,11 @@ Status: implemented as the v1.63 pilot.
   `setup-control-plane.py --write` behind `project-journey.py
   --fail-on-blocker`, with one safe repair refresh and a blocker report when
   human setup fields, access setup or approvals are still missing.
+- Add project-local contract templates:
+  `stage-template-export.py --write` creates editable
+  `seo/stages/setup-readiness.yaml`, `seo/stages/research-package.yaml` and
+  `seo/stages/copywriting-draft.yaml`; `setup-control-plane.py --write`
+  refreshes them without overwriting manual edits.
 
 ## Next Slices
 
@@ -41,11 +46,7 @@ Status: implemented as the v1.63 pilot.
    - Prefer scripts that already use `seo_cycle_core.config`.
    - Keep direct script behavior and CLI output unchanged.
 
-2. Add project-local contract templates.
-   - Suggested path: `seo/stages/*.yaml`.
-   - Keep templates secret-free and approval-aware.
-
-3. Add a small panel surface later.
+2. Add a small panel surface later.
    - The panel should read `seo/orchestrator/latest-run.json`.
    - It should not execute paid/browser/publish actions without the same
      approval gates as the CLI.

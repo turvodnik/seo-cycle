@@ -138,6 +138,8 @@ class ContextPackTest(unittest.TestCase):
         self.assertGreaterEqual(setup["upgrade_assistant"]["summary"]["features"], 1)
         self.assertGreaterEqual(setup["access_key_assistant"]["summary"]["tasks"], 1)
         self.assertGreater(len(setup["setup_blueprint"]["decision_matrix"]), 0)
+        self.assertEqual(setup["stage_templates"]["summary"]["templates"], 3)
+        self.assertEqual(setup["stage_templates"]["summary"]["written"], 3)
         self.assertLess(setup["setup_gap_audit"]["score"], 100)
         self.assertGreater(setup["setup_gap_audit"]["questionnaire"]["row_count"], 0)
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "setup-gap-audit.md").exists())
@@ -148,6 +150,9 @@ class ContextPackTest(unittest.TestCase):
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "access-key-assistant.md").exists())
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "access-key-assistant.csv").exists())
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "setup-questionnaire.csv").exists())
+        self.assertTrue((cfg_path.parent / "seo" / "stages" / "setup-readiness.yaml").exists())
+        self.assertTrue((cfg_path.parent / "seo" / "stages" / "research-package.yaml").exists())
+        self.assertTrue((cfg_path.parent / "seo" / "stages" / "copywriting-draft.yaml").exists())
         self.assertTrue(any("seo/setup/context-pack.md" in action for action in setup["next_actions"]))
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "latest-context-pack.md").exists())
 

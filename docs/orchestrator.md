@@ -44,6 +44,23 @@ python3 ./.codex/skills/seo-cycle/scripts/seo-cycle-run.py \
   --format json
 ```
 
+Create project-local contract templates:
+
+```bash
+python3 ./.codex/skills/seo-cycle/scripts/stage-template-export.py --write
+```
+
+This writes:
+
+- `seo/stages/setup-readiness.yaml`
+- `seo/stages/research-package.yaml`
+- `seo/stages/copywriting-draft.yaml`
+- `seo/stages/stage-template-export.md/json`
+
+`setup-control-plane.py --write` runs the exporter automatically. Existing
+YAML files are kept untouched unless the exporter is run with `--force`, so
+project-specific edits are not overwritten during setup refreshes.
+
 Run the built-in setup readiness lane:
 
 ```bash
@@ -185,6 +202,8 @@ repair attempts, missing inputs, missing outputs and stop conditions.
 
 - No secret values in contracts. Use environment variables through the existing
   project scripts.
+- Keep project-local contracts under `seo/stages/`; use `stage-template-export.py
+  --write` for safe defaults and edit the YAML per project.
 - Keep paid APIs, browser actions, indexing submission and publishing behind
   existing approval gates.
 - Use `draft-quality-gate.py --fail-on-error` only when a pipeline needs a
