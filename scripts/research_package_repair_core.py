@@ -9,7 +9,9 @@ import pathlib
 import re
 import sys
 from collections import Counter
-from typing import Any, Iterable
+from typing import Any
+
+from seo_cycle_core.reports import write_json_file as write_json, write_jsonl_file as write_jsonl
 
 
 def resolve_package(path: str | pathlib.Path) -> pathlib.Path:
@@ -23,11 +25,6 @@ def read_json(path: pathlib.Path, default: Any = None) -> Any:
     if not path.exists():
         return default
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def write_json(path: pathlib.Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def write_text(path: pathlib.Path, text: str) -> None:
@@ -188,12 +185,6 @@ def print_report(report: dict[str, Any], output_format: str, markdown: str) -> N
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
         print(markdown, end="" if markdown.endswith("\n") else "\n")
-
-
-def write_jsonl(path: pathlib.Path, rows: Iterable[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lines = [json.dumps(row, ensure_ascii=False, sort_keys=True) for row in rows]
-    path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
 
 def repeated_phrase_clean(value: str) -> str:

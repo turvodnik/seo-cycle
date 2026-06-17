@@ -55,6 +55,9 @@ Status: implemented as the v1.63 pilot.
   `resolve-sources.py`, `schema-org-build.py`, and `wp-photo-image.py`.
 - Move `obsidian-sync.py` onto shared `seo_cycle_core.config` upward
   config discovery, project-root and YAML helpers.
+- Move repair/knowledge JSON writers onto shared `seo_cycle_core.reports`
+  JSON/JSONL helpers: `research_package_repair_core.py` and
+  `knowledge/wiki_common.py` plus `knowledge/wp-blog-to-obsidian.py`.
 - Add a built-in research package lane template:
   `seo-cycle-run.py --stage-template research-package --package <path>` wraps
   quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring

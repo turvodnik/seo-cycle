@@ -24,6 +24,7 @@ if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
 from seo_cycle_core.config import find_config, load_yaml, project_root_for, rel_path  # noqa: E402
+from seo_cycle_core.reports import write_jsonl_file as write_jsonl, write_sorted_json_file as write_json  # noqa: E402
 
 
 def _discover_project_root() -> Path:
@@ -165,18 +166,6 @@ def slugify(value: str) -> str:
     value = re.sub(r"https?://", "", value)
     value = re.sub(r"[^a-z0-9а-яё/_-]+", "-", value, flags=re.I)
     return value.replace("/", "-").strip("-") or "untitled"
-
-
-def write_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
 
 
 def read_json(path: Path, default: Any) -> Any:

@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from seo_cycle_core.config import boolish, find_config, find_config_upwards, nested_get, numeric, policy_path, project_root_for, rel_path
 from seo_cycle_core.providers import notebooklm_health, perplexity_health
-from seo_cycle_core.reports import stringify_paths, write_artifacts, write_report_bundle
+from seo_cycle_core.reports import stringify_paths, write_artifacts, write_json_file, write_jsonl_file, write_report_bundle, write_sorted_json_file
 from seo_cycle_core.source_artifacts import (
     make_vector_record,
     read_cached_distillate,
@@ -112,6 +112,20 @@ class SeoCycleCoreTest(unittest.TestCase):
         self.assertEqual(json.loads(paths["json"].read_text(encoding="utf-8"))["status"], "ok")
         self.assertEqual(paths["csv"].read_text(encoding="utf-8").splitlines()[1], "setup,ok")
         self.assertEqual(stringify_paths(paths), {key: str(path) for key, path in paths.items()})
+
+    def test_report_helpers_write_json_and_jsonl_files(self) -> None:
+        unsorted_path = self.tmp / "reports" / "unsorted.json"
+        sorted_path = self.tmp / "reports" / "sorted.json"
+        jsonl_path = self.tmp / "reports" / "rows.jsonl"
+
+        write_json_file(unsorted_path, {"z": 1, "a": 2})
+        write_sorted_json_file(sorted_path, {"z": 1, "a": 2})
+        write_jsonl_file(jsonl_path, [{"b": 2, "a": 1}, {"c": 3}])
+
+        self.assertLess(unsorted_path.read_text(encoding="utf-8").index('"z"'), unsorted_path.read_text(encoding="utf-8").index('"a"'))
+        self.assertLess(sorted_path.read_text(encoding="utf-8").index('"a"'), sorted_path.read_text(encoding="utf-8").index('"z"'))
+        self.assertEqual(len(jsonl_path.read_text(encoding="utf-8").splitlines()), 2)
+        self.assertIn('{"a": 1, "b": 2}', jsonl_path.read_text(encoding="utf-8").splitlines()[0])
 
     def test_setup_blueprint_uses_shared_artifact_writer(self) -> None:
         source = (ROOT / "scripts/setup-blueprint.py").read_text(encoding="utf-8")
@@ -332,6 +346,20 @@ class SeoCycleCoreTest(unittest.TestCase):
         self.assertIn("from seo_cycle_core.config import find_config_upwards, load_yaml, project_root_for", source)
         self.assertNotIn("def find_config(", source)
         self.assertNotIn("yaml.safe_load", source)
+
+    def test_json_writer_modules_use_shared_report_helpers(self) -> None:
+        repair_source = (ROOT / "scripts/research_package_repair_core.py").read_text(encoding="utf-8")
+        wiki_source = (ROOT / "scripts/knowledge/wiki_common.py").read_text(encoding="utf-8")
+        wp_obsidian_source = (ROOT / "scripts/knowledge/wp-blog-to-obsidian.py").read_text(encoding="utf-8")
+
+        self.assertIn("from seo_cycle_core.reports import write_json_file as write_json, write_jsonl_file as write_jsonl", repair_source)
+        self.assertIn("from seo_cycle_core.reports import write_jsonl_file as write_jsonl, write_sorted_json_file as write_json", wiki_source)
+        self.assertIn("from seo_cycle_core.reports import write_jsonl_file as write_jsonl", wp_obsidian_source)
+        self.assertNotIn("def write_json(", repair_source)
+        self.assertNotIn("def write_jsonl(", repair_source)
+        self.assertNotIn("def write_json(", wiki_source)
+        self.assertNotIn("def write_jsonl(", wiki_source)
+        self.assertNotIn("def write_jsonl(", wp_obsidian_source)
 
     def test_source_artifacts_write_raw_distillate_latest_and_vector(self) -> None:
         cache_key = stable_cache_key({"topic": "Плита ОСП", "region": "RU", "mode": "manual_browser"})

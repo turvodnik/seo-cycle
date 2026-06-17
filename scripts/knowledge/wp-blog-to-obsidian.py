@@ -26,6 +26,7 @@ except ImportError as exc:  # pragma: no cover
     raise SystemExit("Missing dependency: requests") from exc
 
 from wiki_common import OBSIDIAN_ROOT, PROJECT_DOMAIN, PROJECT_NAME, PROJECT_SLUG, ROOT
+from seo_cycle_core.reports import write_jsonl_file as write_jsonl
 
 DEFAULT_VAULT = OBSIDIAN_ROOT
 
@@ -285,13 +286,6 @@ def render_article_note(article: dict[str, Any]) -> str:
 
 {article['text']}
 """
-
-
-def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
 
 
 def main() -> int:
