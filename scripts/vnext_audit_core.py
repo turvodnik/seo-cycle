@@ -18,7 +18,8 @@ import re
 import sys
 from typing import Any
 
-from seo_cycle_core.config import boolish, find_config, load_yaml, nested_get, policy_path, project_root_for, rel_path, write_text
+from seo_cycle_core.config import boolish, find_config, load_yaml, nested_get, policy_path, project_root_for, rel_path
+from seo_cycle_core.reports import write_report_bundle
 
 
 SOURCES = [
@@ -586,11 +587,7 @@ def write_report(report: dict[str, Any], cfg_path: pathlib.Path) -> None:
     project_root = project_root_for(cfg_path)
     paths = {key: rel_path(project_root, path) for key, path in report["paths"].items()}
     md = render_markdown(report)
-    js = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
-    write_text(paths["markdown"], md)
-    write_text(paths["json"], js)
-    write_text(paths["latest_markdown"], md)
-    write_text(paths["latest_json"], js)
+    write_report_bundle(paths, md, report)
 
 
 def parse_args(audit_id: str, argv: list[str] | None = None) -> argparse.Namespace:

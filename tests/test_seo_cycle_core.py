@@ -159,6 +159,18 @@ class SeoCycleCoreTest(unittest.TestCase):
                 self.assertIn("from seo_cycle_core.reports import write_artifacts", source)
                 self.assertIn("write_artifacts(", source)
 
+    def test_vnext_report_scripts_use_shared_report_bundle(self) -> None:
+        scripts = [
+            "vnext_audit_core.py",
+            "ai-bot-access-check.py",
+        ]
+
+        for script in scripts:
+            with self.subTest(script=script):
+                source = (ROOT / "scripts" / script).read_text(encoding="utf-8")
+                self.assertIn("from seo_cycle_core.reports import write_report_bundle", source)
+                self.assertIn("write_report_bundle(", source)
+
     def test_source_artifacts_write_raw_distillate_latest_and_vector(self) -> None:
         cache_key = stable_cache_key({"topic": "Плита ОСП", "region": "RU", "mode": "manual_browser"})
         vector = make_vector_record(

@@ -22,7 +22,9 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from vnext_audit_core import find_config, load_yaml, policy_path, project_root_for, rel_path, write_text
+from seo_cycle_core.reports import write_report_bundle
+
+from vnext_audit_core import find_config, load_yaml, policy_path, project_root_for, rel_path
 
 
 BOT_CATALOG: list[dict[str, str]] = [
@@ -460,11 +462,7 @@ def write_report(report: dict[str, Any], cfg_path: pathlib.Path) -> None:
     project_root = project_root_for(cfg_path)
     paths = {key: rel_path(project_root, path) for key, path in report["paths"].items()}
     markdown = render_markdown(report)
-    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
-    write_text(paths["markdown"], markdown)
-    write_text(paths["json"], json_text)
-    write_text(paths["latest_markdown"], markdown)
-    write_text(paths["latest_json"], json_text)
+    write_report_bundle(paths, markdown, report)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
