@@ -38,6 +38,10 @@ Status: implemented as the v1.63 pilot.
   `project-intake-wizard.py` use the shared report layer.
 - Move `project-intake-wizard.py` onto shared `seo_cycle_core.config`
   config/path/YAML helpers as the first post-report helper extraction.
+- Move setup surface scripts onto shared `seo_cycle_core.config`
+  config/path/policy helpers: `setup-blueprint.py`, `launch-plan.py`,
+  `spend-guard.py`, `setup-onboarding.py`, `growth-roadmap.py`,
+  `setup-answer-plan.py`, and `setup-gap-audit.py`.
 - Add a built-in research package lane template:
   `seo-cycle-run.py --stage-template research-package --package <path>` wraps
   quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring

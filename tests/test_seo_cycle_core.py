@@ -240,6 +240,29 @@ class SeoCycleCoreTest(unittest.TestCase):
         self.assertNotIn("def load_yaml", source)
         self.assertNotIn("CONFIG_SEARCH_PATHS = [", source)
 
+    def test_setup_surface_scripts_use_shared_config_helpers(self) -> None:
+        scripts = [
+            "setup-blueprint.py",
+            "launch-plan.py",
+            "spend-guard.py",
+            "setup-onboarding.py",
+            "growth-roadmap.py",
+            "setup-answer-plan.py",
+            "setup-gap-audit.py",
+        ]
+
+        expected_import = "from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for, rel_path"
+        for script in scripts:
+            with self.subTest(script=script):
+                source = (ROOT / "scripts" / script).read_text(encoding="utf-8")
+                self.assertIn(expected_import, source)
+                self.assertNotIn("def find_config", source)
+                self.assertNotIn("def project_root_for", source)
+                self.assertNotIn("def rel_path", source)
+                self.assertNotIn("def load_yaml", source)
+                self.assertNotIn("def policy_path", source)
+                self.assertNotIn("CONFIG_SEARCH_PATHS = [", source)
+
     def test_source_artifacts_write_raw_distillate_latest_and_vector(self) -> None:
         cache_key = stable_cache_key({"topic": "Плита ОСП", "region": "RU", "mode": "manual_browser"})
         vector = make_vector_record(
