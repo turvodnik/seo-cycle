@@ -18,6 +18,7 @@ import subprocess
 import sys
 from typing import Any
 
+from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for
 from seo_cycle_core.reports import write_artifacts
 
 try:
@@ -26,13 +27,6 @@ except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)
 
-
-CONFIG_SEARCH_PATHS = [
-    "seo-cycle.yaml",
-    ".seo-cycle.yaml",
-    "seo/seo-cycle.yaml",
-    ".claude/seo-cycle.yaml",
-]
 
 ACTIVE_DECISIONS = {"enabled", "report_only", "approval_required"}
 
@@ -308,41 +302,11 @@ def skill_root() -> pathlib.Path:
     return pathlib.Path(__file__).resolve().parent.parent
 
 
-def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
-    for rel in CONFIG_SEARCH_PATHS:
-        path = start_dir / rel
-        if path.exists():
-            return path
-    return None
-
-
-def project_root_for(cfg_path: pathlib.Path) -> pathlib.Path:
-    if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
-        return cfg_path.parent
-    if "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
-        return cfg_path.parent.parent
-    return cfg_path.parent
-
-
-def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
-
-
 def load_json(path: pathlib.Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-
-
-def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
-    policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
-    raw = policy_files.get(key, default)
-    path = pathlib.Path(str(raw)).expanduser()
-    return path if path.is_absolute() else project_root / path
 
 
 def run_tool_stack(cfg_path: pathlib.Path, project_root: pathlib.Path) -> dict[str, Any]:

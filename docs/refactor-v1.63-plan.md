@@ -46,6 +46,10 @@ Status: implemented as the v1.63 pilot.
   config/path/policy helpers: `automation-plan.py`,
   `automation-recommender.py`, `usage-ledger.py`, and
   `tool-stack-recommender.py`.
+- Move legacy setup/config scripts onto shared `seo_cycle_core.config`
+  config/path/policy helpers: `governance-report.py`,
+  `project-profile.py`, `project-upgrade-assistant.py`, and
+  `access-key-assistant.py`.
 - Add a built-in research package lane template:
   `seo-cycle-run.py --stage-template research-package --package <path>` wraps
   quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring
