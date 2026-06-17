@@ -19,6 +19,8 @@ import subprocess
 import sys
 from typing import Any
 
+from seo_cycle_core.reports import write_artifacts
+
 try:
     import yaml
 except ImportError:
@@ -424,12 +426,19 @@ def generated_yaml(report: dict[str, Any]) -> str:
 
 def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
     setup_dir = project_root / "seo" / "setup"
-    write_text(project_root / "seo" / "setup-blueprint.generated.yaml", generated_yaml(report))
-    write_text(setup_dir / "setup-blueprint.md", render_markdown(report))
-    write_text(setup_dir / "setup-blueprint.json", json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-    write_text(setup_dir / "latest-setup-blueprint.md", render_markdown(report))
-    write_text(setup_dir / "latest-setup-blueprint.json", json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-    write_text(setup_dir / "setup-matrix.csv", matrix_csv(report))
+    markdown = render_markdown(report)
+    write_artifacts(
+        text_files={
+            project_root / "seo" / "setup-blueprint.generated.yaml": generated_yaml(report),
+            setup_dir / "setup-blueprint.md": markdown,
+            setup_dir / "latest-setup-blueprint.md": markdown,
+            setup_dir / "setup-matrix.csv": matrix_csv(report),
+        },
+        json_files={
+            setup_dir / "setup-blueprint.json": report,
+            setup_dir / "latest-setup-blueprint.json": report,
+        },
+    )
     return setup_dir / "setup-blueprint.md"
 
 
