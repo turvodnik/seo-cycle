@@ -42,6 +42,10 @@ Status: implemented as the v1.63 pilot.
   config/path/policy helpers: `setup-blueprint.py`, `launch-plan.py`,
   `spend-guard.py`, `setup-onboarding.py`, `growth-roadmap.py`,
   `setup-answer-plan.py`, and `setup-gap-audit.py`.
+- Move runtime/control scripts onto shared `seo_cycle_core.config`
+  config/path/policy helpers: `automation-plan.py`,
+  `automation-recommender.py`, `usage-ledger.py`, and
+  `tool-stack-recommender.py`.
 - Add a built-in research package lane template:
   `seo-cycle-run.py --stage-template research-package --package <path>` wraps
   quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring
