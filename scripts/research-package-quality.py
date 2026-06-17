@@ -26,7 +26,7 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
-from seo_cycle_core.config import write_text
+from seo_cycle_core.reports import write_artifacts
 from research_package_repair_core import repeated_phrase_clean
 
 
@@ -875,9 +875,13 @@ def write_outputs(package_dir: pathlib.Path, report: dict[str, Any], output_dir:
         "action_plan": out / "research-package-action-plan.md",
     }
     report["paths"] = {key: str(path) for key, path in paths.items()}
-    write_text(paths["markdown"], render_markdown(report))
-    write_text(paths["json"], json.dumps(report, ensure_ascii=False, indent=2) + "\n")
-    write_text(paths["action_plan"], render_action_plan(report))
+    write_artifacts(
+        text_files={
+            paths["markdown"]: render_markdown(report),
+            paths["action_plan"]: render_action_plan(report),
+        },
+        json_files={paths["json"]: report},
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -26,7 +26,9 @@ Status: implemented as the v1.63 pilot.
   `setup-gap-audit.py`, `context-pack.py`, `project-upgrade-apply.py`,
   `automation-recommender.py`, `stage-template-export.py`,
   `usage-ledger.py`, `orchestrator-panel.py`, `automation-plan.py`,
-  `vnext_audit_core.py`, and `ai-bot-access-check.py` use the shared layer.
+  `vnext_audit_core.py`, `ai-bot-access-check.py`,
+  `research-package-quality.py`, `page-outline-quality.py`, and
+  `draft-quality-gate.py` use the shared layer.
 - Add a built-in research package lane template:
   `seo-cycle-run.py --stage-template research-package --package <path>` wraps
   quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring

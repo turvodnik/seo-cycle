@@ -16,7 +16,7 @@ import pathlib
 import re
 from typing import Any
 
-from seo_cycle_core.config import write_text
+from seo_cycle_core.reports import write_report_bundle
 
 
 SEVERITY_ORDER = {"critical": 4, "high": 3, "medium": 2, "low": 1}
@@ -902,11 +902,7 @@ def write_outputs(input_path: pathlib.Path, report: dict[str, Any], output_dir: 
     }
     report["paths"] = {key: str(path) for key, path in paths.items()}
     markdown = render_markdown(report)
-    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
-    write_text(paths["markdown"], markdown)
-    write_text(paths["json"], json_text)
-    write_text(paths["latest_markdown"], markdown)
-    write_text(paths["latest_json"], json_text)
+    write_report_bundle(paths, markdown, report)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -14,9 +14,8 @@ from research_package_repair_core import (
     normalize_space,
     normalize_url,
     print_report,
-    write_json,
-    write_text,
 )
+from seo_cycle_core.reports import write_artifacts
 
 
 FIRST_PERSON_EXPERTISE = re.compile(
@@ -184,8 +183,10 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def write_outputs(draft_path: pathlib.Path, report: dict[str, Any]) -> None:
     draft_path = draft_path.expanduser().resolve()
-    write_json(draft_path.with_suffix(".draft-quality-gate.json"), report)
-    write_text(draft_path.with_suffix(".draft-quality-gate.md"), render_markdown(report))
+    write_artifacts(
+        text_files={draft_path.with_suffix(".draft-quality-gate.md"): render_markdown(report)},
+        json_files={draft_path.with_suffix(".draft-quality-gate.json"): report},
+    )
 
 
 def main() -> int:

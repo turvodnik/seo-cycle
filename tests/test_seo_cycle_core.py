@@ -171,6 +171,22 @@ class SeoCycleCoreTest(unittest.TestCase):
                 self.assertIn("from seo_cycle_core.reports import write_report_bundle", source)
                 self.assertIn("write_report_bundle(", source)
 
+    def test_research_quality_scripts_use_shared_report_writers(self) -> None:
+        artifact_scripts = [
+            "research-package-quality.py",
+            "draft-quality-gate.py",
+        ]
+
+        for script in artifact_scripts:
+            with self.subTest(script=script):
+                source = (ROOT / "scripts" / script).read_text(encoding="utf-8")
+                self.assertIn("from seo_cycle_core.reports import write_artifacts", source)
+                self.assertIn("write_artifacts(", source)
+
+        bundle_source = (ROOT / "scripts/page-outline-quality.py").read_text(encoding="utf-8")
+        self.assertIn("from seo_cycle_core.reports import write_report_bundle", bundle_source)
+        self.assertIn("write_report_bundle(", bundle_source)
+
     def test_source_artifacts_write_raw_distillate_latest_and_vector(self) -> None:
         cache_key = stable_cache_key({"topic": "Плита ОСП", "region": "RU", "mode": "manual_browser"})
         vector = make_vector_record(
