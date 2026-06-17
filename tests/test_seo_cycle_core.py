@@ -98,6 +98,12 @@ class SeoCycleCoreTest(unittest.TestCase):
         self.assertIn("from seo_cycle_core.reports import write_artifacts", source)
         self.assertIn("write_artifacts(", source)
 
+    def test_launch_plan_uses_shared_artifact_writer(self) -> None:
+        source = (ROOT / "scripts/launch-plan.py").read_text(encoding="utf-8")
+
+        self.assertIn("from seo_cycle_core.reports import write_artifacts", source)
+        self.assertIn("write_artifacts(", source)
+
     def test_source_artifacts_write_raw_distillate_latest_and_vector(self) -> None:
         cache_key = stable_cache_key({"topic": "Плита ОСП", "region": "RU", "mode": "manual_browser"})
         vector = make_vector_record(

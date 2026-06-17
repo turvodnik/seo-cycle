@@ -8,7 +8,7 @@
 
 - Added `scripts/seo-cycle-run.py`, a thin CLI for declarative stage contracts with `stage -> gate -> repair -> rerun -> next stage` control.
 - Added `scripts/seo_cycle_core/{stages,gates,repair,orchestrator}.py` as a small core layer for immutable stage contracts, command/output gates, bounded repair loops, blocker reports and latest run summaries.
-- Added shared `seo_cycle_core.reports` and `seo_cycle_core.subprocesses` helpers for artifact writes, path stringification, command-step capture and JSON parsing; migrated `task-router.py`, `project-journey.py`, `setup-control-plane.py` and `setup-blueprint.py` onto that shared layer.
+- Added shared `seo_cycle_core.reports` and `seo_cycle_core.subprocesses` helpers for artifact writes, path stringification, command-step capture and JSON parsing; migrated `task-router.py`, `project-journey.py`, `setup-control-plane.py`, `setup-blueprint.py` and `launch-plan.py` onto that shared layer.
 - Stage contracts default to five repair attempts and write `seo/orchestrator/<stage>-report.md/json`; exhausted gates write `seo/orchestrator/<stage>-blocker.md/json` with stop conditions and missing artifacts.
 - Added a built-in `--goal` pilot route that runs `task-router.py`, then `project-journey.py`, and refreshes `setup-control-plane.py` once when the journey gate is still blocked.
 - Added `seo-cycle-run.py --stage-template setup-readiness --goal <task>` for the setup control plane lane: setup refresh, journey blocker gate, and one safe repair refresh without apply/secret/schedule actions.

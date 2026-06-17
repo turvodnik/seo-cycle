@@ -18,8 +18,8 @@ Status: implemented as the v1.63 pilot.
 - Start shared helper extraction without a large rewrite:
   `seo_cycle_core.reports` now owns artifact writes/path stringification,
   `seo_cycle_core.subprocesses` now owns command-step capture/JSON parsing, and
-  `task-router.py`, `project-journey.py`, `setup-control-plane.py`, and
-  `setup-blueprint.py` use the shared layer.
+  `task-router.py`, `project-journey.py`, `setup-control-plane.py`,
+  `setup-blueprint.py`, and `launch-plan.py` use the shared layer.
 - Add a built-in research package lane template:
   `seo-cycle-run.py --stage-template research-package --package <path>` wraps
   quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring

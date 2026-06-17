@@ -83,11 +83,6 @@ def dump_yaml(data: dict[str, Any]) -> str:
     return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
 
-def write_text(path: pathlib.Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-
-
 def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
     policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
     return rel_path(project_root, policy_files.get(key, default))
