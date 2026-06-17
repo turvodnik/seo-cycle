@@ -17,6 +17,8 @@ import pathlib
 import sys
 from typing import Any
 
+from seo_cycle_core.reports import write_artifacts
+
 try:
     import yaml
 except ImportError:
@@ -560,15 +562,20 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def write_report(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
     out_dir = project_root / "seo" / "setup"
-    out_dir.mkdir(parents=True, exist_ok=True)
     ledger_path = pathlib.Path(report.get("ledger_path", ""))
     if str(ledger_path):
         ledger_path.parent.mkdir(parents=True, exist_ok=True)
         ledger_path.touch(exist_ok=True)
     md_path = out_dir / "latest-usage-ledger.md"
     json_path = out_dir / "latest-usage-ledger.json"
-    md_path.write_text(render_markdown(report), encoding="utf-8")
-    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_artifacts(
+        text_files={
+            md_path: render_markdown(report),
+        },
+        json_files={
+            json_path: report,
+        },
+    )
     return md_path
 
 

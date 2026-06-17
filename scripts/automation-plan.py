@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from typing import Any
 from xml.sax.saxutils import escape
 
+from seo_cycle_core.reports import write_artifacts
+
 try:
     import yaml
 except ImportError:
@@ -323,15 +325,21 @@ def write_outputs(project_root: pathlib.Path, cfg: dict[str, Any], policy: dict[
     launchd_dir.mkdir(parents=True, exist_ok=True)
     logs_dir.mkdir(parents=True, exist_ok=True)
 
-    (out_dir / "automation-plan.md").write_text(render_markdown(cfg, policy, project_root, tasks, allowed, reasons), encoding="utf-8")
-    (out_dir / "crontab.txt").write_text("\n".join(cron_lines(tasks, include_disabled=True)) + "\n", encoding="utf-8")
     payload = {
         "project_root": str(project_root),
         "schedule_install_allowed": allowed,
         "blockers": reasons,
         "tasks": [task.__dict__ for task in tasks],
     }
-    (out_dir / "automation-plan.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_artifacts(
+        text_files={
+            out_dir / "automation-plan.md": render_markdown(cfg, policy, project_root, tasks, allowed, reasons),
+            out_dir / "crontab.txt": "\n".join(cron_lines(tasks, include_disabled=True)) + "\n",
+        },
+        json_files={
+            out_dir / "automation-plan.json": payload,
+        },
+    )
     for task in tasks:
         if task.enabled:
             (launchd_dir / f"{task.task_id}.plist").write_text(launchd_plist(task, project_root), encoding="utf-8")

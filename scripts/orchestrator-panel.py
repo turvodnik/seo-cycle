@@ -9,7 +9,8 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, project_root_for, rel_display, rel_path, write_text
+from seo_cycle_core.config import find_config, project_root_for, rel_display, rel_path
+from seo_cycle_core.reports import write_artifacts
 
 
 BLOCKED_ACTIONS = [
@@ -185,8 +186,14 @@ def render_markdown(panel: dict[str, Any]) -> str:
 
 def write_panel(project_root: pathlib.Path, panel: dict[str, Any]) -> None:
     out_dir = project_root / "seo" / "orchestrator"
-    write_text(out_dir / "panel.md", render_markdown(panel))
-    write_text(out_dir / "panel.json", json.dumps(panel, ensure_ascii=False, indent=2) + "\n")
+    write_artifacts(
+        text_files={
+            out_dir / "panel.md": render_markdown(panel),
+        },
+        json_files={
+            out_dir / "panel.json": panel,
+        },
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
