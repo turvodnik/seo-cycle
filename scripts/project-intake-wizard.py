@@ -19,6 +19,7 @@ import pathlib
 import sys
 from typing import Any
 
+from seo_cycle_core.config import find_config, load_yaml, project_root_for, rel_path
 from seo_cycle_core.reports import write_artifacts
 
 try:
@@ -27,13 +28,6 @@ except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)
 
-
-CONFIG_SEARCH_PATHS = [
-    "seo-cycle.yaml",
-    ".seo-cycle.yaml",
-    "seo/seo-cycle.yaml",
-    ".claude/seo-cycle.yaml",
-]
 
 FREE_FIRST_TOOLS = [
     "robots_sitemap",
@@ -101,36 +95,6 @@ TRACKING_POLICIES = [
     "approval_required_for_rf",
     "allowed",
 ]
-
-
-def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
-    for rel in CONFIG_SEARCH_PATHS:
-        path = start_dir / rel
-        if path.exists():
-            return path
-    return None
-
-
-def project_root_for(cfg_path: pathlib.Path) -> pathlib.Path:
-    if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
-        return cfg_path.parent
-    if "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
-        return cfg_path.parent.parent
-    return cfg_path.parent
-
-
-def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Path:
-    path = pathlib.Path(raw).expanduser()
-    if not path.is_absolute():
-        path = project_root / path
-    return path
-
-
-def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
 
 
 def dump_yaml(data: dict[str, Any]) -> str:

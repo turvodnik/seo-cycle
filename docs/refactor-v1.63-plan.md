@@ -35,7 +35,9 @@ Status: implemented as the v1.63 pilot.
   `serp-validation-plan.py`, `serp-validation-import.py`,
   `spoke-opportunity-audit.py`, `entity-graph-quality.py`, and
   `research-package-repair.py`, `writerzen-browser-collect.py`, and
-  `project-intake-wizard.py` use the shared layer.
+  `project-intake-wizard.py` use the shared report layer.
+- Move `project-intake-wizard.py` onto shared `seo_cycle_core.config`
+  config/path/YAML helpers as the first post-report helper extraction.
 - Add a built-in research package lane template:
   `seo-cycle-run.py --stage-template research-package --package <path>` wraps
   quality -> repair/rerun -> v3 briefs -> v3 outline quality without requiring
