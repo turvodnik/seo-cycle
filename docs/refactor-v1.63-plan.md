@@ -38,6 +38,10 @@ Status: implemented as the v1.63 pilot.
   `seo/stages/setup-readiness.yaml`, `seo/stages/research-package.yaml` and
   `seo/stages/copywriting-draft.yaml`; `setup-control-plane.py --write`
   refreshes them without overwriting manual edits.
+- Add a small read-only panel surface:
+  `orchestrator-panel.py` reads `seo/orchestrator/latest-run.json`, summarizes
+  current stage/blockers and writes `seo/orchestrator/panel.md/json` on demand
+  without executing commands or exposing raw command logs.
 
 ## Next Slices
 
@@ -46,10 +50,9 @@ Status: implemented as the v1.63 pilot.
    - Prefer scripts that already use `seo_cycle_core.config`.
    - Keep direct script behavior and CLI output unchanged.
 
-2. Add a small panel surface later.
-   - The panel should read `seo/orchestrator/latest-run.json`.
-   - It should not execute paid/browser/publish actions without the same
-     approval gates as the CLI.
+2. Keep the panel read-only while iterating on display fields.
+   - It should keep reading `seo/orchestrator/latest-run.json`.
+   - It should not execute paid/browser/publish actions.
 
 ## Non-Goals For v1.63
 

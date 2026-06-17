@@ -61,6 +61,21 @@ This writes:
 YAML files are kept untouched unless the exporter is run with `--force`, so
 project-specific edits are not overwritten during setup refreshes.
 
+Read the latest run as a panel:
+
+```bash
+python3 ./.codex/skills/seo-cycle/scripts/orchestrator-panel.py
+```
+
+The panel reads `seo/orchestrator/latest-run.json` and prints a sanitized
+summary: status, current stage, gate/repair counts, missing outputs, blockers
+and next reports to read. It does not execute commands and intentionally drops
+raw `stage_runs`, `repairs`, `gates`, stdout and stderr. With `--write`, it
+writes:
+
+- `seo/orchestrator/panel.md`
+- `seo/orchestrator/panel.json`
+
 Run the built-in setup readiness lane:
 
 ```bash
@@ -194,6 +209,8 @@ With `--write`, reports are written under the current project root:
 - `seo/orchestrator/<stage-id>-report.json`
 - `seo/orchestrator/<stage-id>-blocker.md`
 - `seo/orchestrator/<stage-id>-blocker.json`
+- `seo/orchestrator/panel.md`
+- `seo/orchestrator/panel.json`
 
 Reports include command exit codes, redacted stdout/stderr, gate attempts,
 repair attempts, missing inputs, missing outputs and stop conditions.
@@ -204,6 +221,8 @@ repair attempts, missing inputs, missing outputs and stop conditions.
   project scripts.
 - Keep project-local contracts under `seo/stages/`; use `stage-template-export.py
   --write` for safe defaults and edit the YAML per project.
+- Use `orchestrator-panel.py` for read-only status review. It must not execute
+  stage commands or display raw command logs.
 - Keep paid APIs, browser actions, indexing submission and publishing behind
   existing approval gates.
 - Use `draft-quality-gate.py --fail-on-error` only when a pipeline needs a
@@ -221,4 +240,5 @@ repair attempts, missing inputs, missing outputs and stop conditions.
 - `scripts/seo_cycle_core/gates.py` — output and command gate evaluation.
 - `scripts/seo_cycle_core/repair.py` — repair command runner.
 - `scripts/seo_cycle_core/orchestrator.py` — stage loop, reports and blockers.
+- `scripts/orchestrator-panel.py` — read-only latest-run/blocker summary.
 - `tests/test_orchestrator_core.py` — regression tests for the pilot contract.

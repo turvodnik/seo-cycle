@@ -15,6 +15,7 @@
 - Added `seo-cycle-run.py --stage-template research-package --package <path>` for the real research package lane: quality gate, bounded repair/rerun, v3 page briefs, and v3 outline quality gate.
 - Added `seo-cycle-run.py --stage-template copywriting --draft <draft.md> [--outline <outline.json>]` plus `draft-quality-gate.py --fail-on-error`, so draft validation can act as a real blocking gate without changing the legacy default exit behavior.
 - Added `stage-template-export.py --write` and wired it into `setup-control-plane.py` so projects get editable `seo/stages/setup-readiness.yaml`, `seo/stages/research-package.yaml` and `seo/stages/copywriting-draft.yaml` contracts for `seo-cycle-run.py --stage-file`.
+- Added `orchestrator-panel.py`, a read-only panel for `seo/orchestrator/latest-run.json` that summarizes current stage/blockers without exposing command logs or executing paid/browser/publish actions.
 - Added regression coverage for contract defaults, repair/rerun behavior, blocker reports and CLI execution.
 - Added `docs/orchestrator.md` and `docs/refactor-v1.63-plan.md` to document the Pifagor SEO skill direction and the safe refactor path.
 

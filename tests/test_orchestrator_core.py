@@ -21,6 +21,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SEO_CYCLE_RUN = SCRIPTS / "seo-cycle-run.py"
 STAGE_TEMPLATE_EXPORT = SCRIPTS / "stage-template-export.py"
+ORCHESTRATOR_PANEL = SCRIPTS / "orchestrator-panel.py"
 PYTHONPATH = f"{SCRIPTS}"
 
 sys.path.insert(0, str(SCRIPTS))
@@ -340,6 +341,119 @@ class OrchestratorCoreTest(unittest.TestCase):
         self.assertNotIn("--apply-profile", setup_stage["commands"][0] + setup_stage["repair_commands"][0])
         self.assertTrue((stage_dir / "stage-template-export.md").exists())
         self.assertTrue((stage_dir / "stage-template-export.json").exists())
+
+    def test_orchestrator_panel_reads_latest_run_without_command_logs(self) -> None:
+        out_dir = self.tmp / "seo" / "orchestrator"
+        out_dir.mkdir(parents=True)
+        blocker_path = out_dir / "page_outline_quality_v3-blocker.json"
+        blocker_path.write_text(
+            json.dumps(
+                {
+                    "stage_id": "page_outline_quality_v3",
+                    "title": "Page outline quality v3",
+                    "status": "blocked",
+                    "repair_attempts": 2,
+                    "gate_attempts": 3,
+                    "missing_outputs": ["seo/research-package/page-outline-quality.json"],
+                    "stop_conditions": ["Manual brief review required."],
+                    "last_gate": {
+                        "passed": False,
+                        "command": ["python3", "page-outline-quality.py"],
+                        "stdout": "Authorization: Bearer should-not-leak",
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        (out_dir / "latest-run.json").write_text(
+            json.dumps(
+                {
+                    "status": "blocked",
+                    "generated_at": "2026-06-17T10:00:00Z",
+                    "completed": 1,
+                    "total": 3,
+                    "stages": [
+                        {
+                            "id": "research_quality_gate",
+                            "title": "Research package quality gate",
+                            "status": "passed",
+                            "gate_attempts": 1,
+                            "repair_attempts": 0,
+                            "missing_inputs": [],
+                            "missing_outputs": [],
+                            "stop_conditions": [],
+                        },
+                        {
+                            "id": "page_outline_quality_v3",
+                            "title": "Page outline quality v3",
+                            "status": "blocked",
+                            "gate_attempts": 3,
+                            "repair_attempts": 2,
+                            "missing_inputs": [],
+                            "missing_outputs": ["seo/research-package/page-outline-quality.json"],
+                            "stop_conditions": ["Manual brief review required."],
+                            "paths": {"blocker_json": str(blocker_path)},
+                            "stage_runs": [
+                                [
+                                    {
+                                        "command": ["python3", "page-outline-quality.py"],
+                                        "stdout": "Authorization: Bearer should-not-leak",
+                                    }
+                                ]
+                            ],
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(ORCHESTRATOR_PANEL),
+                "--project-root",
+                str(self.tmp),
+                "--format",
+                "json",
+            ],
+            cwd=self.tmp,
+            check=True,
+            text=True,
+            capture_output=True,
+            env={"PYTHONPATH": PYTHONPATH},
+        )
+        panel = json.loads(proc.stdout)
+        panel_text = json.dumps(panel, ensure_ascii=False)
+
+        self.assertEqual(panel["status"], "blocked")
+        self.assertFalse(panel["execution_enabled"])
+        self.assertEqual(panel["summary"]["blocked"], 1)
+        self.assertEqual(panel["current_stage"]["id"], "page_outline_quality_v3")
+        self.assertEqual(panel["blockers"][0]["stage_id"], "page_outline_quality_v3")
+        self.assertIn("seo/research-package/page-outline-quality.json", panel["blockers"][0]["missing_outputs"])
+        self.assertNotIn("stage_runs", panel_text)
+        self.assertNotIn("should-not-leak", panel_text)
+
+        md_proc = subprocess.run(
+            [
+                sys.executable,
+                str(ORCHESTRATOR_PANEL),
+                "--project-root",
+                str(self.tmp),
+            ],
+            cwd=self.tmp,
+            check=True,
+            text=True,
+            capture_output=True,
+            env={"PYTHONPATH": PYTHONPATH},
+        )
+        self.assertIn("# seo-cycle orchestrator panel", md_proc.stdout)
+        self.assertIn("page_outline_quality_v3", md_proc.stdout)
+        self.assertIn("Execution: read-only", md_proc.stdout)
+        self.assertNotIn("should-not-leak", md_proc.stdout)
 
 
 if __name__ == "__main__":
