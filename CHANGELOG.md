@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.80.0] — 2026-07-04
+
+### Ranking progress analytics: per-project deltas, movers, portfolio view
+
+- Added `position-progress.py` (`seo-cycle progress`) — the «стало ли лучше» view over positions snapshots in seo.db: top-3/10/30 buckets with deltas vs previous and vs first snapshot, average position, movers (improved/declined/new/lost queries), per-engine filter, and a quality-loops digest (runs, attempts, findings resolved vs still open) so content-quality progress sits next to ranking progress.
+- `--global` aggregates every project from `config/projects-registry.yaml` into an agency portfolio table (totals + per-project top-3/top-10/clicks/Δ/resolved findings), written to `~/.seo-cycle/reports/portfolio-progress.*`.
+- `--write --html` renders a self-contained visual report (CSS bars for the top-10 trend across snapshots). Extracted the shared markdown→HTML renderer into `seo_cycle_core/html_report.py` (used by client-report.py and position-progress.py; client-report output unchanged). Added `tests/test_position_progress.py`.
+
 ## [1.79.0] — 2026-07-04
 
 ### Scorecards: honest 0-10 self-assessment for every tool run

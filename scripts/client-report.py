@@ -18,18 +18,17 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import html
 import json
+import os
 import pathlib
+import shutil
 import sqlite3
+import subprocess
 import sys
 from typing import Any
 
-import os
-import shutil
-import subprocess
-
 from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, write_text
+from seo_cycle_core.html_report import html_page, markdown_to_html_body
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("client-report")
@@ -250,70 +249,12 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def inline_html(text: str) -> str:
-    """Escape + minimal markdown inline: **bold**."""
-    escaped = html.escape(text)
-    while "**" in escaped:
-        escaped = escaped.replace("**", "<strong>", 1).replace("**", "</strong>", 1)
-    return escaped
-
-
 def render_html(report: dict[str, Any], markdown_body: str) -> str:
-    accent = html.escape(report["agency"]["accent_color"])
-    out: list[str] = []
-    lines = markdown_body.splitlines()
-    index = 0
-    while index < len(lines):
-        line = lines[index]
-        if line.startswith("|"):
-            table_lines = []
-            while index < len(lines) and lines[index].startswith("|"):
-                table_lines.append(lines[index])
-                index += 1
-            out.append("<table>")
-            header_done = False
-            for raw in table_lines:
-                cells = [cell.strip() for cell in raw.strip("|").split("|")]
-                if set("".join(cells)) <= {"-", ":", " "}:
-                    continue
-                tag = "td" if header_done else "th"
-                header_done = True
-                out.append("<tr>" + "".join(f"<{tag}>{inline_html(cell)}</{tag}>" for cell in cells) + "</tr>")
-            out.append("</table>")
-            continue
-        if line.startswith("- "):
-            out.append("<ul>")
-            while index < len(lines) and lines[index].lstrip().startswith("- "):
-                out.append(f"<li>{inline_html(lines[index].lstrip()[2:])}</li>")
-                index += 1
-            out.append("</ul>")
-            continue
-        if line.startswith("# "):
-            out.append(f"<h1>{inline_html(line[2:])}</h1>")
-        elif line.startswith("## "):
-            out.append(f"<h2>{inline_html(line[3:])}</h2>")
-        elif line.strip() == "---":
-            out.append("<hr>")
-        elif line.strip():
-            out.append(f"<p>{inline_html(line)}</p>")
-        index += 1
-    body = "\n".join(out)
-    return f"""<!doctype html>
-<html lang="ru"><head><meta charset="utf-8">
-<title>{html.escape(report['client'])} — отчёт {html.escape(report['period'])}</title>
-<style>
-body{{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;max-width:860px;margin:2rem auto;padding:0 1.5rem;color:#1a1a1a;line-height:1.55}}
-h1{{color:{accent};border-bottom:3px solid {accent};padding-bottom:.4rem}}
-h2{{color:{accent};margin-top:2rem}}
-table{{border-collapse:collapse;width:100%;margin:.7rem 0}}
-td,th{{border:1px solid #ddd;padding:.45rem .7rem;text-align:left;font-size:.95rem}}
-li{{margin:.25rem 0}} strong{{color:{accent}}}
-hr{{border:none;border-top:1px solid #ddd;margin:2rem 0}}
-@media print{{body{{margin:0;max-width:none}}}}
-</style></head><body>
-{body}
-</body></html>
-"""
+    return html_page(
+        f"{report['client']} — отчёт {report['period']}",
+        markdown_to_html_body(markdown_body),
+        accent=report["agency"]["accent_color"],
+    )
 
 
 def main() -> int:
