@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.70.0] — 2026-07-04
+
+### WordPress site → local content mirror with change and drift detection
+
+- Added `wp-content-pull.py`: the site→local half of two-way sync (read-only GET over `/wp-json/wp/v2/posts|pages` with pagination and an optional Application Password for non-public statuses; offline mode ingests a saved REST export via `--input-file`).
+- Each pull refreshes `seo/content-mirror/<type>/<slug>.md` — frontmatter (id, url, status, modified, content hash, word count) plus normalized text — so the mirror is git-versionable content history. `mirror-state.json` keeps the previous pull state.
+- The sync report diffs pulls: new / changed-on-site / deleted-on-site pages, plus **draft drift** — a post whose slug matches a local draft but whose site text hash differs (someone edited the page directly in the CMS). Deleted pages are pruned from the mirror. Output: `seo/content-mirror/sync-report.md/json`.
+- The mirror is now a RAG source (`mirror` in `rag.sources`, on by default): published site content becomes searchable in project and cross-project indexes. Added `tests/test_wp_content_pull.py`.
+
+
 ## [1.69.0] — 2026-07-04
 
 ### Yandex Metrika Logs API (unsampled deep analytics)

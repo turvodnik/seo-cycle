@@ -27,7 +27,7 @@ from .config import nested_get
 
 DEFAULT_CHUNK_CHARS = 1200
 DEFAULT_CHUNK_OVERLAP = 150
-DEFAULT_SOURCES = ("source_pack", "triplet", "distillate", "draft")
+DEFAULT_SOURCES = ("source_pack", "triplet", "distillate", "draft", "mirror")
 FTS_PREFILTER = 200
 GLOBAL_DB = pathlib.Path.home() / ".seo-cycle" / "rag" / "global.db"
 
@@ -191,6 +191,9 @@ def iter_project_documents(project_root: pathlib.Path, cfg: dict[str, Any]
                     continue
                 seen.add(path)
                 yield "draft", path, md_chunks(path)
+    if "mirror" in sources:
+        for path in sorted(project_root.glob("seo/content-mirror/*/*.md")):
+            yield "mirror", path, md_chunks(path)
 
 
 def embedding_env() -> dict[str, str] | None:

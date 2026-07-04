@@ -1225,7 +1225,7 @@ data_store:
 rag:
   chunk_chars: 1200
   chunk_overlap: 150
-  sources: [source_pack, triplet, distillate, draft]
+  sources: [source_pack, triplet, distillate, draft, mirror]
   embedding:
     mode: auto                          # auto | off | required
 
