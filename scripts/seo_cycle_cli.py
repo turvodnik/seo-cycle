@@ -47,9 +47,14 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "cycle": {"script": "cycle-state.py", "help": "Phase DAG state (init/next/show/set/gate)"},
     "forecast": {"script": "seo-forecast.py", "help": "Traffic/lead forecast from core + positions"},
     "kpi": {"script": "kpi-contract.py", "help": "KPI contract check: plan vs fact, escalation"},
-    "sync": {"script": "wp-content-pull.py", "help": "Pull site content mirror + change/drift report"},
     "budget": {"script": "budget-mix-planner.py", "help": "SEO+PPC budget mix by leads per unit"},
     "report": {"script": "client-report.py", "help": "White-label client report (md + HTML)"},
+}
+
+SYNC_ADAPTERS = {
+    "wordpress": "wp-content-pull.py",
+    "tilda": "tilda-content-pull.py",
+    "bitrix": "bitrix-content-pull.py",
 }
 
 GATE_SCRIPTS = {
@@ -203,6 +208,7 @@ def command_overview() -> str:
             "  gate           Quality gates: gate research-package|outline|draft [...]",
             "  ads            Paid ads: ads health|fetch|analytics|draft|apply [...]",
             "  rag            Local RAG: rag index [--write|--global] | rag query \"<вопрос>\" [...]",
+            "  sync           Site→local mirror via the publishing.cms adapter (wordpress|tilda|bitrix)",
             "  run            run monthly [...] | run script <name> [...] | run <task words>",
             "  doctor         Read-only aggregated health check",
             "  version        Print skill version",
@@ -252,6 +258,17 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_gate(passthrough, project)
     if args.command == "ads":
         return cmd_ads(passthrough, project)
+    if args.command == "sync":
+        cms = "wordpress"
+        cfg_for_sync = find_config(project)
+        if cfg_for_sync:
+            cms = str(((load_yaml(cfg_for_sync).get("publishing") or {}) or {}).get("cms") or "wordpress")
+        script = SYNC_ADAPTERS.get(cms)
+        if not script:
+            print(f"ERROR: no sync adapter for publishing.cms={cms!r}"
+                  f" (supported: {', '.join(SYNC_ADAPTERS)})", file=sys.stderr)
+            return 2
+        return run_script(script, passthrough, project)
     if args.command == "rag":
         if not passthrough or passthrough[0] not in RAG_SCRIPTS:
             print("usage: seo-cycle rag {index|query} [args...]", file=sys.stderr)

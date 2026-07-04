@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
-"""Pull published WordPress content into a local mirror and report site-side changes.
+"""Pull published WordPress content into the local mirror and report site-side changes.
 
-Site → local half of two-way sync (publishing scripts are the local → site
-half; the knowledge-hub `wp-blog-to-obsidian.py` serves the wiki instead).
-Read-only for WordPress: GET /wp-json/wp/v2/posts|pages with pagination.
-
-Each pull refreshes `seo/content-mirror/<type>/<slug>.md` (frontmatter: id,
-url, status, modified, content hash + normalized text) and diffs against the
-previous pull state: new / changed / deleted on the site. Posts whose slug
-matches a local draft are checked for drift — a changed hash after the draft
-was written means someone edited the page directly on the site.
+WordPress adapter over the shared mirror engine (seo_cycle_core/mirror.py):
+read-only GET over /wp-json/wp/v2/posts|pages with pagination, normalized into
+mirror records. See also tilda-content-pull.py and bitrix-content-pull.py.
 
 Env: WP_BASE_URL (+ optional WP_USER/WP_APP_PASSWORD for non-public statuses).
 Default is offline (--input-file <rest-export.json>); --live makes real GETs.
@@ -20,20 +14,17 @@ from __future__ import annotations
 
 import argparse
 import base64
-import datetime as dt
-import hashlib
 import json
 import os
 import pathlib
-import re
 import sys
 import urllib.error
 import urllib.request
-from html.parser import HTMLParser
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, project_root_for, write_text
+from seo_cycle_core.config import find_config, load_yaml, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
+from seo_cycle_core.mirror import apply_pull, html_to_text, make_record, render_sync_markdown, sync_output_paths
 from seo_cycle_core.reports import write_report_bundle
 
 log = setup_logging("wp-content-pull")
@@ -41,38 +32,6 @@ log = setup_logging("wp-content-pull")
 CONTENT_TYPES = ("posts", "pages")
 MAX_PAGES_DEFAULT = 10  # x100 items per type
 FIELDS = "id,slug,link,status,modified,title,content"
-
-
-class TextExtractor(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.parts: list[str] = []
-        self._skip = 0
-
-    def handle_starttag(self, tag: str, attrs: list) -> None:
-        if tag in {"script", "style"}:
-            self._skip += 1
-        if tag in {"p", "br", "li", "h1", "h2", "h3", "h4", "tr"}:
-            self.parts.append("\n")
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in {"script", "style"} and self._skip:
-            self._skip -= 1
-
-    def handle_data(self, data: str) -> None:
-        if not self._skip:
-            self.parts.append(data)
-
-
-def html_to_text(html: str) -> str:
-    parser = TextExtractor()
-    parser.feed(html or "")
-    text = "".join(parser.parts)
-    return re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]+", " ", text)).strip()
-
-
-def content_hash(text: str) -> str:
-    return hashlib.sha1(" ".join(text.split()).encode("utf-8")).hexdigest()[:16]
 
 
 def rest_fetch(base_url: str, content_type: str, max_pages: int) -> list[dict[str, Any]]:
@@ -112,147 +71,16 @@ def normalize_item(item: dict[str, Any], content_type: str) -> dict[str, Any] | 
     html = rendered.get("rendered") if isinstance(rendered, dict) else str(rendered or "")
     title = item.get("title", {})
     title_text = title.get("rendered") if isinstance(title, dict) else str(title or "")
-    text = html_to_text(html or "")
-    return {
-        "type": content_type,
-        "id": item.get("id"),
-        "slug": slug,
-        "url": item.get("link"),
-        "status": item.get("status"),
-        "modified": item.get("modified"),
-        "title": html_to_text(title_text or ""),
-        "hash": content_hash(text),
-        "words": len(text.split()),
-        "text": text,
-    }
-
-
-def mirror_paths(project_root: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
-    mirror = project_root / "seo" / "content-mirror"
-    return mirror, mirror / "mirror-state.json"
-
-
-def load_state(state_path: pathlib.Path) -> dict[str, Any]:
-    try:
-        data = json.loads(state_path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def write_mirror_file(mirror: pathlib.Path, record: dict[str, Any]) -> None:
-    body = [
-        "---",
-        f"id: {record['id']}",
-        f"type: {record['type']}",
-        f"url: {record['url']}",
-        f"status: {record['status']}",
-        f"modified: {record['modified']}",
-        f"content_hash: {record['hash']}",
-        f"words: {record['words']}",
-        "---",
-        "",
-        f"# {record['title']}",
-        "",
-        record["text"],
-        "",
-    ]
-    write_text(mirror / record["type"] / f"{record['slug']}.md", "\n".join(body))
-
-
-def local_draft_hashes(project_root: pathlib.Path) -> dict[str, dict[str, Any]]:
-    """slug -> {hash, path, mtime} for local drafts (best-effort slug matching)."""
-    drafts: dict[str, dict[str, Any]] = {}
-    for pattern in ("seo/research-package/drafts/*.md", "seo/drafts/*.md", "06-drafts/*.md"):
-        for path in sorted(project_root.glob(pattern)):
-            if ".draft-quality-gate" in path.name:
-                continue
-            slug = path.stem.replace(".publish", "").replace(".wp-draft", "").replace(".public", "")
-            try:
-                text = html_to_text(path.read_text(encoding="utf-8"))
-            except OSError:
-                continue
-            drafts[slug] = {"hash": content_hash(text), "path": str(path.relative_to(project_root)),
-                            "mtime": path.stat().st_mtime}
-    return drafts
-
-
-def build_report(records: list[dict[str, Any]], previous: dict[str, Any],
-                 drafts: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    current_keys = {f"{record['type']}/{record['slug']}": record for record in records}
-    prev_items = previous.get("items", {}) if isinstance(previous.get("items"), dict) else {}
-
-    new_items = sorted(key for key in current_keys if key not in prev_items)
-    deleted = sorted(key for key in prev_items if key not in current_keys)
-    changed = sorted(
-        key for key, record in current_keys.items()
-        if key in prev_items and prev_items[key].get("hash") != record["hash"]
+    return make_record(
+        content_type=content_type,
+        item_id=item.get("id"),
+        slug=slug,
+        url=item.get("link"),
+        status=item.get("status"),
+        modified=item.get("modified"),
+        title=html_to_text(title_text or ""),
+        text=html_to_text(html or ""),
     )
-
-    drift = []
-    for record in records:
-        draft = drafts.get(record["slug"])
-        if draft and draft["hash"] != record["hash"]:
-            drift.append({"slug": record["slug"], "url": record["url"], "draft": draft["path"],
-                          "note": "site content differs from the local draft"})
-
-    return {
-        "audit_id": "wp_content_sync",
-        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "counts": {
-            "mirrored": len(records),
-            "new": len(new_items),
-            "changed_on_site": len(changed),
-            "deleted_on_site": len(deleted),
-            "draft_drift": len(drift),
-        },
-        "new": new_items[:50],
-        "changed_on_site": [
-            {"key": key, "url": current_keys[key]["url"], "modified": current_keys[key]["modified"],
-             "previous_hash": prev_items.get(key, {}).get("hash"), "hash": current_keys[key]["hash"]}
-            for key in changed[:50]
-        ],
-        "deleted_on_site": deleted[:50],
-        "draft_drift": drift[:50],
-        "previous_pull": previous.get("generated_at"),
-    }
-
-
-def render_markdown(report: dict[str, Any]) -> str:
-    counts = report["counts"]
-    lines = [
-        "# WP Content Sync (site → local)",
-        "",
-        f"- Generated: {report['generated_at']} (previous pull: {report.get('previous_pull') or 'first pull'})",
-        f"- Mirrored: {counts['mirrored']} · new: {counts['new']} · changed on site: {counts['changed_on_site']}"
-        f" · deleted: {counts['deleted_on_site']} · draft drift: {counts['draft_drift']}",
-    ]
-    if report["changed_on_site"]:
-        lines.extend(["", "## Changed on site since last pull", ""])
-        for row in report["changed_on_site"][:15]:
-            lines.append(f"- {row['url']} (modified {row['modified']})")
-    if report["draft_drift"]:
-        lines.extend(["", "## Draft drift (edited directly on the site?)", ""])
-        for row in report["draft_drift"][:15]:
-            lines.append(f"- `{row['slug']}` — {row['url']} vs {row['draft']}")
-    if report["deleted_on_site"]:
-        lines.extend(["", "## Deleted on site", ""])
-        lines.extend(f"- {key}" for key in report["deleted_on_site"][:15])
-    if report["new"]:
-        lines.extend(["", "## New on site", ""])
-        lines.extend(f"- {key}" for key in report["new"][:15])
-    lines.extend(["", "Mirror: `seo/content-mirror/` (git-versioned text snapshots, indexed by RAG)."])
-    return "\n".join(lines) + "\n"
-
-
-def output_paths(project_root: pathlib.Path) -> dict[str, pathlib.Path]:
-    base = project_root / "seo" / "content-mirror"
-    return {
-        "markdown": base / "sync-report.md",
-        "json": base / "sync-report.json",
-        "latest_markdown": base / "latest-sync-report.md",
-        "latest_json": base / "latest-sync-report.json",
-    }
 
 
 def main() -> int:
@@ -304,29 +132,13 @@ def main() -> int:
         print("Provide --input-file <rest-export.json> or --live (read-only GET to the site).", file=sys.stderr)
         return 0
 
-    mirror, state_path = mirror_paths(project_root)
-    previous = load_state(state_path)
-    report = build_report(records, previous, local_draft_hashes(project_root))
-
+    report = apply_pull(project_root, records, source="wordpress", write=args.write)
     if args.write:
-        for record in records:
-            write_mirror_file(mirror, record)
-        # prune mirror files for items deleted on the site
-        for key in report["deleted_on_site"]:
-            stale = mirror / f"{key}.md"
-            if stale.exists():
-                stale.unlink()
-        state = {
-            "generated_at": report["generated_at"],
-            "items": {f"{r['type']}/{r['slug']}": {"id": r["id"], "hash": r["hash"], "modified": r["modified"]}
-                      for r in records},
-        }
-        write_text(state_path, json.dumps(state, ensure_ascii=False, indent=2) + "\n")
-        write_report_bundle(output_paths(project_root), render_markdown(report), report)
+        write_report_bundle(sync_output_paths(project_root), render_sync_markdown(report), report)
     if args.format == "json":
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(render_markdown(report), end="")
+        print(render_sync_markdown(report), end="")
     return 0
 
 

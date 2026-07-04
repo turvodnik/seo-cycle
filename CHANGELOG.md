@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.75.0] — 2026-07-04
+
+### Tilda + Bitrix mirror adapters over a shared engine
+
+- Extracted the site→local mirror engine into `seo_cycle_core/mirror.py` (records, mirror files, pull state, new/changed/deleted diff, draft-drift detection, sync report); `wp-content-pull.py` is now a thin WordPress adapter over it with unchanged CLI and outputs.
+- Added `tilda-content-pull.py`: official Tilda API (getpageslist + getpagefullexport, `TILDA_PUBLIC_KEY/SECRET_KEY/PROJECT_ID`), respects the ~150 req/hour quota via `--max-pages`, offline `--input-file` mode; published/draft status mapped, page URLs built from the project domain.
+- Added `bitrix-content-pull.py`: honest about Bitrix CMS having no stock content REST — ingests JSON exports of infoblock elements (case-insensitive `ID/CODE/NAME/DETAIL_TEXT/DETAIL_PAGE_URL/TIMESTAMP_X`) or GETs a developer-exposed JSON feed (`BITRIX_EXPORT_URL` + optional bearer token).
+- `seo-cycle sync` is now CMS-aware: it dispatches to the adapter matching `publishing.cms` (wordpress|tilda|bitrix). All adapters share the sync-report contract and feed the same RAG-indexed mirror. Added `tests/test_cms_adapters.py`.
+
+
 ## [1.74.0] — 2026-07-04
 
 ### White-label client reports
