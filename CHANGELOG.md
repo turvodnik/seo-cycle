@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.63.0] — 2026-07-04
+
+### Shared core dedupe + file logging
+
+- Extended `seo_cycle_core/config.py` with `nested_get(..., default=...)` and a shared `package_project_root()`; `research-package-quality.py` and `usage-ledger.py` now import `find_config`, `load_yaml`, `policy_path`, `project_root_for`, `rel_path`, `numeric`, and `nested_get` from the core instead of re-defining them.
+- Added `seo_cycle_core/logging_setup.py`: per-day file logging to `seo/logs/seo-cycle-YYYY-MM-DD.log` plus stderr warnings, idempotent setup, graceful degradation without a project root or with `logging.enabled: false`, `SEO_CYCLE_LOG_LEVEL=off` override, and `prune_logs()` retention helper. stdout remains reserved for data/report contracts.
+- `research-package-repair.py` now logs each repair step return code and `project-journey.py` logs the resolved stage per run.
+- Documented the optional `logging` section in `config/project.template.yaml`; added `tests/test_logging_setup.py`.
+
 ## [1.62.0] — 2026-06-16
 
 ### Project Knowledge Hub

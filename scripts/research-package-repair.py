@@ -11,6 +11,10 @@ import sys
 from typing import Any
 
 from research_package_repair_core import print_report, resolve_package, write_json, write_text
+from seo_cycle_core.config import find_config, load_yaml, package_project_root
+from seo_cycle_core.logging_setup import setup_logging
+
+log = setup_logging("research-package-repair")
 
 
 REPAIR_STEPS = (
@@ -74,6 +78,9 @@ def run_step(package: pathlib.Path, step: dict[str, Any], write: bool) -> dict[s
     if write:
         command.insert(-2, "--write")
     proc = subprocess.run(command, cwd=package, text=True, capture_output=True, check=False)
+    log.info("repair step %s rc=%s", step["id"], proc.returncode)
+    if proc.returncode != 0 and proc.stderr:
+        log.warning("repair step %s stderr: %s", step["id"], proc.stderr[-500:])
     parsed: dict[str, Any] = {}
     if proc.stdout.strip():
         try:
@@ -156,6 +163,10 @@ def main() -> int:
     args = parser.parse_args()
 
     package = resolve_package(args.package)
+    project_root = package_project_root(package)
+    cfg_path = find_config(project_root)
+    global log
+    log = setup_logging("research-package-repair", project_root, load_yaml(cfg_path) if cfg_path else {})
     report = build_report(package, args.write)
     if args.write:
         write_outputs(package, report)

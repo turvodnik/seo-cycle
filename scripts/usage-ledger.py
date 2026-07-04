@@ -18,18 +18,13 @@ import sys
 from typing import Any
 
 try:
-    import yaml
+    import yaml  # noqa: F401 - hard requirement for this script
 except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)
 
+from seo_cycle_core.config import find_config, load_yaml, numeric, policy_path, project_root_for, rel_path
 
-CONFIG_SEARCH_PATHS = [
-    "seo-cycle.yaml",
-    ".seo-cycle.yaml",
-    "seo/seo-cycle.yaml",
-    ".claude/seo-cycle.yaml",
-]
 
 COMMANDS = {"report", "check", "record"}
 LLM_SERVICES = {"openai", "anthropic", "claude", "gemini", "deepseek", "perplexity", "llm_cli", "codex", "antigravity"}
@@ -61,46 +56,11 @@ METRIC_KEYS = [
 ]
 
 
-def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
-    for rel in CONFIG_SEARCH_PATHS:
-        path = start_dir / rel
-        if path.exists():
-            return path
-    return None
-
-
-def project_root_for(cfg_path: pathlib.Path) -> pathlib.Path:
-    if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
-        return cfg_path.parent
-    if "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
-        return cfg_path.parent.parent
-    return cfg_path.parent
-
-
-def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Path:
-    path = pathlib.Path(raw).expanduser()
-    if not path.is_absolute():
-        path = project_root / path
-    return path
-
-
-def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
-
-
 def load_json(path: pathlib.Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-
-
-def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
-    policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
-    return rel_path(project_root, policy_files.get(key, default))
 
 
 def nested_numeric(data: dict[str, Any], path: list[str], default: float = 0.0) -> float:
@@ -127,13 +87,6 @@ def infer_category(service: str, category: str | None = None) -> str:
     if service in PAID_API_SERVICES:
         return "paid_api"
     return "tool"
-
-
-def numeric(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def metric_payload(args: argparse.Namespace) -> dict[str, float]:

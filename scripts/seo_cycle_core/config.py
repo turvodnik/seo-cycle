@@ -41,6 +41,13 @@ def project_root_for(cfg_path: pathlib.Path) -> pathlib.Path:
     return cfg_path.parent
 
 
+def package_project_root(package_dir: pathlib.Path) -> pathlib.Path:
+    for candidate in [package_dir, *package_dir.parents]:
+        if (candidate / "seo-cycle.yaml").exists():
+            return candidate
+    return package_dir.parent
+
+
 def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Path:
     path = pathlib.Path(raw).expanduser()
     if not path.is_absolute():
@@ -84,11 +91,11 @@ def numeric(value: Any, default: float = 0) -> float:
         return float(default)
 
 
-def nested_get(data: dict[str, Any], dotted: str) -> Any:
+def nested_get(data: dict[str, Any], dotted: str, default: Any = None) -> Any:
     cur: Any = data
     for part in dotted.split("."):
         if not isinstance(cur, dict) or part not in cur:
-            return None
+            return default
         cur = cur[part]
     return cur
 

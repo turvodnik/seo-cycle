@@ -26,7 +26,7 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
-from seo_cycle_core.config import write_text
+from seo_cycle_core.config import nested_get, package_project_root, write_text
 from research_package_repair_core import repeated_phrase_clean
 
 
@@ -198,20 +198,7 @@ def read_yaml(path: pathlib.Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def nested_get(data: dict[str, Any], dotted: str, default: Any = None) -> Any:
-    current: Any = data
-    for part in dotted.split("."):
-        if not isinstance(current, dict) or part not in current:
-            return default
-        current = current[part]
-    return current
-
-
-def project_root_for_package(package_dir: pathlib.Path) -> pathlib.Path:
-    for candidate in [package_dir, *package_dir.parents]:
-        if (candidate / "seo-cycle.yaml").exists():
-            return candidate
-    return package_dir.parent
+project_root_for_package = package_project_root
 
 
 def normalize_required_sources(raw: Any) -> list[dict[str, Any]]:

@@ -524,6 +524,33 @@ def batch_payload(outlines: list[dict[str, Any]]) -> dict[str, Any]:
     return {"outline_id": "page_outline_v3_batch", "version": "v3", "generated_at": V2.utc_now(), "count": len(outlines), "outlines": outlines}
 
 
+def attach_rag_passages(package: pathlib.Path, outlines: list[dict[str, Any]]) -> None:
+    """Best-effort: enrich outlines with related passages from the local RAG index."""
+    try:
+        from seo_cycle_core.config import find_config, load_yaml, package_project_root
+        from seo_cycle_core.rag import open_db, rag_db_path, search
+    except ImportError:
+        return
+    project_root = package_project_root(package)
+    cfg_path = find_config(project_root)
+    cfg = load_yaml(cfg_path) if cfg_path else {}
+    db_path = rag_db_path(project_root, cfg)
+    if not db_path.exists():
+        return
+    conn = open_db(db_path)
+    for outline in outlines:
+        keyword = str((outline.get("page") or {}).get("primary_keyword") or "").strip()
+        if not keyword:
+            continue
+        hits = search(conn, keyword, top_k=3, source_types=["source_pack", "distillate", "triplet"])
+        outline["related_passages"] = [
+            {"source_type": hit["source_type"], "path": hit["path"], "score": hit["score"],
+             "text": hit["text"][:500], "meta": hit.get("meta", {})}
+            for hit in hits
+        ]
+    conn.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate deep copywriter-ready page outline v3 from an SEO research package.")
     parser.add_argument("package", help="Research package directory, or a file inside it.")
@@ -533,6 +560,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--expert-author", action="store_true", help="Allow first-person expert framing because a real expert author exists.")
     parser.add_argument("--write", action="store_true", help="Write markdown/json/copywriter-ready output.")
     parser.add_argument("--output-dir", help="Output directory. Defaults to <package>/page-outlines-v3.")
+    parser.add_argument("--rag", action="store_true",
+                        help="Attach top related passages from the local RAG index (no-op without seo/rag.db).")
     parser.add_argument("--format", choices=["json", "markdown", "copywriter"], default="json")
     args = parser.parse_args(argv)
 
@@ -545,6 +574,8 @@ def main(argv: list[str] | None = None) -> int:
         priorities=args.priority,
         expert_author=args.expert_author,
     )
+    if args.rag:
+        attach_rag_passages(package, outlines)
     if args.write:
         output_dir = pathlib.Path(args.output_dir).expanduser().resolve() if args.output_dir else None
         for outline in outlines:
