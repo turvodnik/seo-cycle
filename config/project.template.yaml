@@ -1255,6 +1255,13 @@ kpi:
   # ctr_curve:                          # override CTR-кривой forecast
   #   "1": 0.32
 
+# White-label брендинг клиентских отчётов (client-report.py --write).
+agency:
+  name: ""                              # имя агентства в шапке отчёта
+  contact: ""                           # email/телеграм для клиента
+  accent_color: "#0B57D0"               # фирменный цвет HTML-отчёта
+  footer_note: ""                       # подпись/дисклеймер в конце
+
 # Лёгкие алерты через Telegram (без n8n). Без ключей в .env — graceful no-op.
 notifications:
   enabled: false                        # opt-in

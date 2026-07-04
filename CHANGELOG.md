@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.74.0] — 2026-07-04
+
+### White-label client reports
+
+- Added `client-report.py`: assembles a client-facing monthly report from whatever artifacts exist — search visibility (top-3/top-10/clicks with deltas between the two latest seo.db snapshots), KPI plan-vs-fact with corrective actions, content-sync counters, ads spend/CPA, forecast scenarios with upside clusters, and the recommended budget mix. Sections without data are omitted instead of rendering empty tables.
+- Two outputs per period: markdown and a fully self-contained HTML (inline CSS, no external resources, print-to-PDF friendly) branded from the new `agency` config section (name, contact, accent color, footer note). Nothing is sent anywhere — the file is reviewed and shared by a human.
+- CLI gains `seo-cycle report --period YYYY-MM --write`. Added `tests/test_client_report.py`.
+
+
 ## [1.73.0] — 2026-07-04
 
 ### SEO+PPC budget-mix planner
