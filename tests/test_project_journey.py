@@ -271,7 +271,7 @@ class ProjectJourneyTest(unittest.TestCase):
         self.assertEqual(report["current_stage"]["id"], "content_draft_gate")
         self.assertIn("seo/research-package/drafts/*.md", report["missing_for_next_step"])
         self.assertTrue(any("usage-ledger.py check --service neuronwriter" in command for command in report["current_stage"]["next_commands"]))
-        self.assertTrue(any("draft-quality-gate.py" in command for command in report["current_stage"]["next_commands"]))
+        self.assertTrue(any("loop-runner.py draft" in command for command in report["current_stage"]["next_commands"]))
 
     def test_content_draft_gate_requires_draft_quality_report(self) -> None:
         cfg_path = self.make_project()

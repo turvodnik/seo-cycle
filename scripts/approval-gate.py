@@ -59,6 +59,9 @@ TICKET_TYPES = {
     "audit_fixes": "🔧 Audit Fixes",
     "refresh_plan": "♻️  Refresh Plan",
     "deindex_rewrite": "🚨 Deindex Rewrite",
+    "loop_escalation": "🔁 Loop Escalation",
+    "ads_campaign_draft": "📣 Ads Campaign Draft",
+    "ads_bid_change": "💰 Ads Bid Change",
     "custom": "⏸  Custom",
 }
 STATUSES = ("pending", "approved", "rejected")

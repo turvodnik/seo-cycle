@@ -18,6 +18,9 @@ import sys
 from typing import Any
 
 from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for, rel_path, write_text
+from seo_cycle_core.logging_setup import setup_logging
+
+log = setup_logging("project-journey")
 
 
 def utc_now() -> str:
@@ -108,6 +111,42 @@ def detect_research_package(project_root: pathlib.Path, raw: str | None) -> path
     return None
 
 
+def loop_states(project_root: pathlib.Path) -> dict[str, dict[str, Any]]:
+    """Latest quality-loop state per target from seo/loops/*.json (loop-runner.py)."""
+    loops_dir = project_root / "seo" / "loops"
+    latest: dict[str, dict[str, Any]] = {}
+    if not loops_dir.is_dir():
+        return latest
+    for path in sorted(loops_dir.glob("*.json")):
+        data = read_json(path)
+        target = str(data.get("target") or "")
+        if not target:
+            continue
+        escalation = data.get("escalation") if isinstance(data.get("escalation"), dict) else {}
+        row = {
+            "loop_id": data.get("loop_id"),
+            "status": data.get("status"),
+            "attempts_used": len(data.get("attempts") or []),
+            "max_attempts": data.get("max_attempts"),
+            "updated_at": data.get("updated_at"),
+            "escalation_ticket": escalation.get("ticket_id"),
+            "state_file": rel_display(project_root, path),
+        }
+        prev = latest.get(target)
+        if not prev or str(row.get("updated_at") or "") > str(prev.get("updated_at") or ""):
+            latest[target] = row
+    return latest
+
+
+def loop_evidence_line(loop_info: dict[str, Any] | None) -> str | None:
+    if not loop_info:
+        return None
+    return (
+        f"loop: {loop_info.get('status')}, attempt {loop_info.get('attempts_used')}/{loop_info.get('max_attempts')}"
+        f" ({loop_info.get('state_file')})"
+    )
+
+
 def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> dict[str, Any]:
     required = [
         "semantic-core.csv",
@@ -136,6 +175,7 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
             "draft_quality_warnings": 0,
             "draft_quality_missing": [],
             "draft_quality_findings": [],
+            "loops": loop_states(project_root),
         }
     required_status = {name: (package / name).exists() for name in required}
     quality_path = package / "research-package-quality.json"
@@ -211,6 +251,7 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
         "draft_quality_warnings": draft_quality_warnings,
         "draft_quality_missing": draft_quality_missing,
         "draft_quality_findings": draft_quality_findings,
+        "loops": loop_states(project_root),
     }
 
 
@@ -424,6 +465,15 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
         f"10-point score: {quality.get('ten_point_score', 'n/a')}",
         f"quality stale after repair: {package.get('quality_stale_after_repair', False)}",
     ]
+    loop_info = (package.get("loops") or {}).get("research-package")
+    loop_line = loop_evidence_line(loop_info)
+    if loop_line:
+        evidence.append(loop_line)
+    if loop_info and loop_info.get("status") == "escalated":
+        blockers.append(
+            f"Quality loop escalated after {loop_info.get('attempts_used')} attempts"
+            f" (ticket {loop_info.get('escalation_ticket') or 'n/a'}) — review {loop_info.get('state_file')} before retrying."
+        )
     return stage(
         stage_id="research_quality_gate",
         order=6,
@@ -433,7 +483,10 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
         missing=missing,
         blockers=blockers,
         warnings=warnings,
-        commands=[f"python3 ~/.codex/skills/seo-cycle/scripts/research-package-quality.py {package_dir} --write --format plan"],
+        commands=[
+            f"python3 ~/.codex/skills/seo-cycle/scripts/loop-runner.py research-package {package_dir}",
+            f"python3 ~/.codex/skills/seo-cycle/scripts/research-package-quality.py {package_dir} --write --format plan",
+        ],
         exit_criteria=[
             "No critical findings remain.",
             "research-package-quality.py has been rerun after any research-package-repair.py output.",
@@ -460,6 +513,7 @@ def repair_stage(package: dict[str, Any]) -> dict[str, Any]:
     missing = []
     blockers = []
     commands = [
+        f"python3 ~/.codex/skills/seo-cycle/scripts/loop-runner.py research-package {package_dir}",
         f"python3 ~/.codex/skills/seo-cycle/scripts/research-package-repair.py {package_dir} --write",
     ]
     if quality_failed and not package.get("repair_exists"):
@@ -651,6 +705,25 @@ def content_draft_stage(package: dict[str, Any]) -> dict[str, Any]:
     if draft_quality_warnings:
         warnings.append(f"Draft quality gate has {draft_quality_warnings} warning findings to review before publishing.")
 
+    evidence = [
+        f"page-outlines-v3 json files: {v3_count}",
+        f"copywriter-ready markdown files: {copywriter_count}",
+        f"outline quality version/status: {outline_version or 'not_run'}/{outline_status}",
+        f"draft markdown files: {draft_count}",
+        f"draft quality reports: {draft_quality_count}",
+        f"draft quality errors: {draft_quality_errors}",
+        f"draft quality warnings: {draft_quality_warnings}",
+    ]
+    draft_loop = (package.get("loops") or {}).get("draft")
+    draft_loop_line = loop_evidence_line(draft_loop)
+    if draft_loop_line:
+        evidence.append(draft_loop_line)
+    if draft_loop and draft_loop.get("status") == "escalated":
+        blockers.append(
+            f"Draft quality loop escalated after {draft_loop.get('attempts_used')} attempts"
+            f" (ticket {draft_loop.get('escalation_ticket') or 'n/a'}) — review {draft_loop.get('state_file')}."
+        )
+
     return stage(
         stage_id="content_draft_gate",
         order=10,
@@ -659,15 +732,7 @@ def content_draft_stage(package: dict[str, Any]) -> dict[str, Any]:
             "Turn copywriter-ready v3 briefs into drafts, optionally use NeuronWriter within limits, "
             "then validate drafts before implementation or publishing."
         ),
-        evidence=[
-            f"page-outlines-v3 json files: {v3_count}",
-            f"copywriter-ready markdown files: {copywriter_count}",
-            f"outline quality version/status: {outline_version or 'not_run'}/{outline_status}",
-            f"draft markdown files: {draft_count}",
-            f"draft quality reports: {draft_quality_count}",
-            f"draft quality errors: {draft_quality_errors}",
-            f"draft quality warnings: {draft_quality_warnings}",
-        ],
+        evidence=evidence,
         missing=missing,
         blockers=blockers,
         warnings=warnings,
@@ -675,7 +740,7 @@ def content_draft_stage(package: dict[str, Any]) -> dict[str, Any]:
             "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service neuronwriter --category paid_api --content-writer 1 --ai-credits 500 --fail-on-block",
             "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service neuronwriter --category paid_api --plagiarism-checks 1 --fail-on-block",
             f"Create or revise draft markdown under {package_dir}/drafts/ from {package_dir}/copywriter-ready/*.md, copywriting_playbook, writer_prompt_packet and source slots.",
-            f"python3 ~/.codex/skills/seo-cycle/scripts/draft-quality-gate.py {package_dir}/drafts/<slug>.md --outline {package_dir}/page-outlines-v3/<slug>.json --write",
+            f"python3 ~/.codex/skills/seo-cycle/scripts/loop-runner.py draft {package_dir}/drafts/<slug>.md --outline {package_dir}/page-outlines-v3/<slug>.json",
             "bash ~/.codex/skills/seo-cycle/scripts/nw-cli.sh evaluate <query_id> <draft.html>",
             "bash ~/.codex/skills/seo-cycle/scripts/nw-cli.sh plagiarism <query_id> <draft.html>",
             "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py record --service neuronwriter --category paid_api --plagiarism-checks 1 --task \"final plagiarism check\" --write",
@@ -987,7 +1052,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     project_root = project_root_for(cfg_path)
+    global log
+    log = setup_logging("project-journey", project_root, load_yaml(cfg_path))
     report = build_report(cfg_path, goal=args.goal, research_package=args.research_package)
+    log.info("journey stage=%s status=%s", (report.get("current_stage") or {}).get("id"), report.get("status"))
     if args.write:
         write_outputs(project_root, report)
     if args.format == "json":

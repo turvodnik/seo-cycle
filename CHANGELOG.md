@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [1.64.0] — 2026-07-04
+
+### Bounded quality loop (check → repair → re-check, max 5 attempts)
+
+- Added `seo_cycle_core/loop.py` + `scripts/loop-runner.py`: a bounded loop around the existing gates with three targets — `research-package` (machine repair via `research-package-repair.py`), `page-outline`, and `draft` (LLM repair protocol). Attempt budget comes from `governance.loop` (default 5, per-target overrides), attempts journal lives in `seo/loops/<loop-id>.json/.md`.
+- Self-checks are split into `quality` and `evidence` classes (honesty/factual findings such as `eeat_evidence_missing`, `serp_validation_incomplete`, `missing_proof_slot`, `unsafe_first_person_expertise`), so escalations show whether a package is incomplete or untrustworthy.
+- Progress proof between attempts: per-attempt finding fingerprint + resolved/new/unchanged delta; two identical fingerprints in a row escalate early instead of burning the remaining budget.
+- LLM repair protocol: when a target needs model work (outline regeneration, draft rewrite), loop-runner prints a machine-readable `action_required: llm_repair` payload and exits with code 3; rerun with `--resume` after the fix. Exit codes: 0 passed / 1 escalated / 2 config error / 3 awaiting LLM.
+- Escalation creates a `loop_escalation` approval ticket (new type in `approval-gate.py`) plus a Telegram alert via `notify.py`; on success `--phase <phase>` marks the cycle-state phase done+gate-passed.
+- `project-journey.py` now reads `seo/loops/*.json`: quality/repair/draft stages show loop attempts, escalated loops become blockers, and `loop-runner.py` is the first suggested command instead of the manual gate→repair pair.
+- New `governance.loop` template section; added `tests/test_loop_runner.py` (core unit + draft-target e2e for the exit-3 protocol, early no-progress escalation, and attempt budget).
+
 ## [1.63.0] — 2026-07-04
 
 ### Shared core dedupe + file logging
