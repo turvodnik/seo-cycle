@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.84.0] — 2026-07-04
+
+### Push-to-ten wave 1: SERP intelligence, own crawler, structure map, link liveness, repurpose
+
+- Added `serp-intel.py` (`seo-cycle intel`) — fully offline SERP intelligence over already-imported validation data: SERP-overlap clustering (Jaccard over top-10 URLs, union-find) with merge/split candidates against the current core, SERP-feature shares (AI Overview / featured snippet / PAA…) overall and per page type with an AEO-priority keyword list, and entity-map candidates mined from competitor titles (morphology-aware known-entity subtraction, intent stop-words).
+- Added `site-crawl.py` (`seo-cycle crawl`) — own stdlib BFS crawler: robots.txt honored, polite delay, page cap; findings cover broken internal links, pages linking to broken URLs, redirect chains, duplicate/missing titles, missing h1/description, noindex on linked pages, canonical-elsewhere, deep pages. `--input-file` re-runs findings offline over a previous crawl. Verified e2e against a local test server.
+- Added `structure-map.py` (`seo-cycle structure`) — the visual site map: collapsible URL tree (self-contained HTML + markdown) from crawl / content mirror / sitemap.xml, with per-branch page counts and ⛔/noindex flags.
+- Added `link-liveness.py` (`seo-cycle links`) — E-E-A-T source-rot check: external links from drafts/copywriter-ready/mirror verified with HEAD (GET fallback), 7-day cache, dead and permanently-redirected sources reported with the files that cite them.
+- Added `content-repurpose.py` (`seo-cycle repurpose`) — one draft → Telegram post, VK post, timestamped video-script outline, email digest and ready Q&A, built only from the draft's own facts with explicit [TODO] voice slots.
+- All five wired into the web dashboard command panel (Техничка/Данные groups) and the reports list. Added `tests/test_serp_intel.py` + `tests/test_crawl_tools.py` (9 tests, crawler tested against a live local HTTP server).
+
 ## [1.83.0] — 2026-07-04
 
 ### Visual agency dashboard: seo-cycle web

@@ -89,6 +89,18 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "rag-index": {"label": "Обновить RAG-индекс", "group": "Данные",
                    "script": "rag-index.py", "args": ["--write"],
                    "hint": "Инкрементальная индексация артефактов"},
+    "site-crawl": {"label": "Обойти сайт (краулер)", "group": "Техничка",
+                    "script": "site-crawl.py", "args": ["--live", "--write"],
+                    "hint": "BFS до 300 страниц: битые ссылки, дубли title, noindex", "timeout": 600},
+    "structure-map": {"label": "Карта структуры сайта", "group": "Техничка",
+                       "script": "structure-map.py", "args": ["--write"],
+                       "hint": "Визуальное дерево разделов → Отчёты"},
+    "serp-intel": {"label": "SERP-интеллект", "group": "Данные",
+                    "script": "serp-intel.py", "args": ["--write"],
+                    "hint": "Overlap-кластеры, фичи выдачи, кандидаты сущностей (offline)"},
+    "link-liveness": {"label": "Живость внешних источников", "group": "Техничка",
+                       "script": "link-liveness.py", "args": ["--live", "--write"],
+                       "hint": "HEAD-проверка ссылок из статей (E-E-A-T)", "timeout": 300},
     "validate": {"label": "Проверить конфиг", "group": "Сервис",
                   "script": "validate-config.py", "args": [],
                   "hint": "seo-cycle.yaml: ошибки и подсказки"},
@@ -162,6 +174,9 @@ def list_reports(project: pathlib.Path) -> list[dict[str, Any]]:
         project / "seo" / "ads" / "ads-analytics.md",
         *(project / "seo" / "strategy").glob("*.md"),
         *(project / "seo" / "setup").glob("latest-project-journey.md"),
+        *(project / "seo" / "crawl").glob("*.md"),
+        *(project / "seo" / "crawl").glob("*.html"),
+        *(project / "seo" / "research-package").glob("serp-intel.md"),
     ]
     for path in candidates:
         if path.exists() and path.suffix.lower() in FILE_EXTENSIONS:

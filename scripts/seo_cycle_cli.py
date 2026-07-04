@@ -54,6 +54,11 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "progress": {"script": "position-progress.py", "help": "Ranking progress per project or --global portfolio"},
     "auth": {"script": "auth-assistant.py", "help": "Provider logins: list | login <provider> [--global] | set VAR"},
     "web": {"script": "webapp.py", "help": "Visual agency dashboard in the browser (web --open)"},
+    "crawl": {"script": "site-crawl.py", "help": "Own site crawler: --live BFS with findings"},
+    "structure": {"script": "structure-map.py", "help": "Visual site-structure tree (crawl/mirror/sitemap)"},
+    "intel": {"script": "serp-intel.py", "help": "SERP overlap clusters, features, entity candidates (offline)"},
+    "links": {"script": "link-liveness.py", "help": "External-source liveness check (E-E-A-T rot)"},
+    "repurpose": {"script": "content-repurpose.py", "help": "Draft → TG/VK/video/email skeletons"},
 }
 
 SYNC_ADAPTERS = {
