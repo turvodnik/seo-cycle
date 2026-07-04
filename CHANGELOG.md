@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.76.0] — 2026-07-04
+
+### Engineering wave: CI, optional config schema, monolith slimming
+
+- Added `.github/workflows/tests.yml`: GitHub Actions matrix (Python 3.11/3.12/3.14) running the full unittest suite with PyYAML, plus an informational strict-schema check of the config template.
+- Added `seo_cycle_core/config_schema.py` — an **optional** Pydantic schema for `seo-cycle.yaml` (project/locale/engines, governance.loop bounds, ads policy/apply caps, rag chunking/embedding mode, kpi goals). All models allow extra keys, so unknown sections are never an error; without pydantic installed `validate-config.py --strict` prints an install hint instead of failing. `--strict` appends schema issues to the regular error list.
+- Slimmed the three monoliths without changing any CLI contract, by extracting pure data/helpers into the core package: `tool-stack-recommender.py` 1102→592 lines (`seo_cycle_core/tool_catalog.py` + core config imports replace local helper copies), `project-journey.py` 1069→848 (`seo_cycle_core/journey.py`: stage records, package/loop state readers), `setup-control-plane.py` 944→777 (`seo_cycle_core/artifact_catalog.py`). Added `tests/test_config_schema.py`.
+
+
 ## [1.75.0] — 2026-07-04
 
 ### Tilda + Bitrix mirror adapters over a shared engine

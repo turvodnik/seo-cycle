@@ -674,6 +674,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("config", nargs="?", help="Путь к seo-cycle.yaml (по умолчанию — поиск в текущей директории)")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--strict", action="store_true",
+                    help="Дополнительно прогнать Pydantic-схему секций (нужен pip3 install pydantic)")
     args = ap.parse_args()
 
     if args.config:
@@ -725,6 +727,11 @@ def main():
     check_v11_extensions(cfg, env, checklist, warnings)
     check_vnext_guardrails(cfg, checklist, warnings)
     check_observability_env(cfg, env, checklist, warnings)
+
+    if args.strict:
+        from seo_cycle_core.config_schema import schema_errors
+        for issue in schema_errors(cfg):
+            errors.append(f"schema: {issue}")
 
     print(f"== seo-cycle config validation ==")
     print(f"  Config: {cfg_path}")
