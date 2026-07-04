@@ -141,6 +141,76 @@ def cmd_doctor(args: list[str], project: pathlib.Path) -> int:
     return worst
 
 
+MENU_ACTIONS: tuple[tuple[str, str, list[str]], ...] = (
+    ("Статус проекта (journey)", "project-journey.py", []),
+    ("Прогресс позиций", "position-progress.py", []),
+    ("Прогресс по всем проектам (портфель)", "position-progress.py", ["--global"]),
+    ("Месячный дашборд", "monthly-dashboard.py", []),
+    ("Approvals: что ждёт решения", "approval-gate.py", ["list"]),
+    ("Самооценки инструментов", "scorecard.py", ["show"]),
+    ("Doctor: health всех провайдеров", None, []),  # special-cased below
+    ("Auth: кто настроен и откуда", "auth-assistant.py", ["list"]),
+)
+
+
+def load_registry_projects() -> list[dict[str, Any]]:
+    registry = SKILL_ROOT / "config" / "projects-registry.yaml"
+    if not registry.exists():
+        return []
+    projects = (load_yaml(registry).get("projects") or [])
+    return [item for item in projects if isinstance(item, dict) and item.get("path")]
+
+
+def pick_project(default: pathlib.Path) -> pathlib.Path:
+    """Choose a project: current dir if it is one, otherwise from the registry."""
+    if find_config(default):
+        return default
+    projects = load_registry_projects()
+    if not projects:
+        print(f"Проект не найден в {default} и реестр пуст — запустите из папки проекта.", file=sys.stderr)
+        return default
+    print("\nПроекты из реестра:")
+    for index, item in enumerate(projects, 1):
+        print(f"  {index}. {item.get('name', '?')} — {item['path']} [{item.get('status', 'active')}]")
+    choice = input("Номер проекта [1]: ").strip() or "1"
+    try:
+        selected = projects[int(choice) - 1]
+        return pathlib.Path(str(selected["path"])).expanduser()
+    except (ValueError, IndexError):
+        print("Не понял номер — остаюсь в текущей папке.", file=sys.stderr)
+        return default
+
+
+def cmd_menu(project: pathlib.Path) -> int:
+    """Interactive menu — the double-click entrypoint for non-terminal users."""
+    if not sys.stdin.isatty():
+        print("menu требует интерактивный терминал; используйте подкоманды seo-cycle напрямую.", file=sys.stderr)
+        return 2
+    project = pick_project(project)
+    while True:
+        name = (load_yaml(find_config(project)).get("project") or {}).get("name") if find_config(project) else None
+        print(f"\n=== seo-cycle · {name or project} ===")
+        for index, (title, _, _) in enumerate(MENU_ACTIONS, 1):
+            print(f"  {index}. {title}")
+        print("  p. Сменить проект    0. Выход")
+        choice = input("Выбор: ").strip().lower()
+        if choice in {"0", "q", "exit"}:
+            return 0
+        if choice == "p":
+            project = pick_project(project)
+            continue
+        try:
+            title, script, extra = MENU_ACTIONS[int(choice) - 1]
+        except (ValueError, IndexError):
+            continue
+        print(f"\n--- {title} ---\n")
+        if script is None:
+            cmd_doctor([], project)
+        else:
+            run_script(script, extra, project)
+        input("\n[Enter — в меню] ")
+
+
 def cmd_run(args: list[str], project: pathlib.Path) -> int:
     if not args:
         print("usage: seo-cycle run monthly [...] | run script <name> [...] | run <task words>", file=sys.stderr)
@@ -218,6 +288,7 @@ def command_overview() -> str:
             "  sync           Site→local mirror via the publishing.cms adapter (wordpress|tilda|bitrix)",
             "  run            run monthly [...] | run script <name> [...] | run <task words>",
             "  doctor         Read-only aggregated health check",
+            "  menu           Interactive menu (double-click entrypoint; picks a project from the registry)",
             "  version        Print skill version",
             "",
             "Every command forwards remaining args to the wrapped script:",
@@ -259,6 +330,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "doctor":
         return cmd_doctor(passthrough, project)
+    if args.command == "menu":
+        return cmd_menu(project)
     if args.command == "run":
         return cmd_run(passthrough, project)
     if args.command == "gate":

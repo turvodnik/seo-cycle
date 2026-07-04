@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.82.0] — 2026-07-04
+
+### Desktop launcher, interactive menu, VPS + GBP submission runbooks
+
+- Added `seo-cycle menu` — the double-click entrypoint for non-terminal use: picks a project from `config/projects-registry.yaml` (or uses the current directory), then runs journey / position progress (project or portfolio) / monthly dashboard / approvals / scorecards / doctor / auth status in a loop. Refuses non-TTY input cleanly (rc 2), so scheduled runs can't hang on it.
+- Added `install-desktop-app.sh`: puts «SEO Cycle.app» (osacompile applet opening Terminal → `seo-cycle menu`) and a portable «SEO Cycle.command» fallback on the Desktop; `--desktop-dir` for tests/custom targets.
+- Added `docs/vps-deployment.md` — the long-running-agents runbook: what to offload to a VPS vs keep local (browser steps, approvals stay human), systemd timer units for monthly/db/portfolio schedules, tmux + headless CLI patterns, Telegram alerts, security notes (0600 env profiles, spend caps still apply).
+- Added `docs/gbp-verification-submission.md` — the copy-paste submission pack for Google verification: quota-request use case text, business.manage scope justification, privacy-policy requirements, a 4-scene demo-video script, and the common-rejection checklist. Added `tests/test_desktop_launcher.py`.
+
 ## [1.81.0] — 2026-07-04
 
 ### Auth profiles: log in once globally, or per project — your choice
