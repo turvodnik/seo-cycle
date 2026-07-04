@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.69.0] — 2026-07-04
+
+### Yandex Metrika Logs API (unsampled deep analytics)
+
+- Added `metrika-logs-fetch.py`: guarded read-only Logs API client on the same `YANDEX_OAUTH_TOKEN`/`YANDEX_METRIKA_COUNTER_ID` env as `metrika-fetch.py`. One-shot `--live` flow: evaluate → create request → poll until processed → download all parts → clean the server-side request; offline mode ingests a previously downloaded TSV via `--input-file`.
+- Sources: per-visit (`visits`, default fields: landing URL, traffic source, page views, duration, new-user flag, goal ids) and per-hit (`hits`) logs; `--fields` overrides the field list, `--days` bounds the window.
+- Raw unsampled TSV lands in `seo/analytics/raw/metrika-logs/` (never loaded into context wholesale); the bounded summary — rows, date range, traffic-source split, top landing pages, average duration, goal-visit and new-user shares — goes to `seo/analytics/metrika-logs-summary.md/json`. Added `tests/test_metrika_logs.py`.
+
+
 ## [1.68.0] — 2026-07-04
 
 ### GTM audit, Merchant diagnostics, and local YML feed validator
