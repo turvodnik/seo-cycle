@@ -38,6 +38,7 @@ from seo_cycle_core.loop import (
     target_config,
 )
 from seo_cycle_core.loop import no_progress as loop_no_progress
+from seo_cycle_core.scorecard import score_from_findings, write_scorecard
 
 log = setup_logging("loop-runner")
 
@@ -161,6 +162,24 @@ def save_state(state: dict[str, Any], json_path: pathlib.Path) -> None:
     write_text(json_path.with_suffix(".md"), render_state_markdown(state))
 
 
+def write_loop_scorecard(state: dict[str, Any], project_root: pathlib.Path) -> None:
+    """Auto-grade the loop outcome so progress is visible in journey/dashboards."""
+    attempts = state.get("attempts", [])
+    findings = attempts[-1]["check"]["findings"] if attempts else []
+    try:
+        write_scorecard(
+            project_root,
+            f"loop:{state.get('target', '?')}",
+            score_from_findings(findings),
+            status="done" if state.get("status") == "passed" else "failed",
+            done=[f"{len(attempts)} попыток, статус {state.get('status')}"],
+            missing=[f"{item.get('severity')}:{item.get('id')}" for item in findings[:5]],
+            meta={"loop_id": state.get("loop_id"), "attempts": len(attempts)},
+        )
+    except OSError as exc:
+        log.warning("scorecard write failed: %s", exc)
+
+
 def mark_phase_passed(phase: str, cycle_dir: str | None, project_root: pathlib.Path) -> None:
     command = [sys.executable, str(scripts_dir() / "cycle-state.py"), "set", phase, "--status", "done", "--gate-passed"]
     if cycle_dir:
@@ -260,6 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         if decision == "passed":
             state["status"] = "passed"
             save_state(state, json_path)
+            write_loop_scorecard(state, project_root)
             if args.phase:
                 mark_phase_passed(args.phase, args.cycle_dir, project_root)
             print_state(state, args.format)
@@ -269,6 +289,7 @@ def main(argv: list[str] | None = None) -> int:
             reason = "no progress between attempts" if loop_no_progress(state) else "attempt budget spent"
             escalate(state, reason, project_root, json_path.with_suffix(".md"), limits["escalate"])
             save_state(state, json_path)
+            write_loop_scorecard(state, project_root)
             print_state(state, args.format)
             return EXIT_ESCALATED
 

@@ -168,6 +168,20 @@ seo-cycle loop page-outline <package>                        # LLM-protocol
 
 Самопроверки: класс `evidence` (eeat_evidence_missing, serp_validation_incomplete, missing_proof_slot, unsafe_first_person_expertise, …) — это честность/достоверность: такие findings нельзя «дожимать» переформулировкой, только реальными источниками и фактами.
 
+## Самооценка результатов (scorecard, обязательна)
+
+**После каждой содержательной задачи ставь честную оценку 0–10 в двух местах: в ответе пользователю и в scorecard проекта.** Loop-runner делает это сам (passed/escalated); всё остальное — руками:
+
+```bash
+seo-cycle score record --tool <task-name> --score 8.5 \
+  --done "что сделано" --done "ещё пункт" \
+  --missing "чего не хватает" [--status done|partial|failed]
+seo-cycle score show               # таблица последних оценок (видна и в journey)
+seo-cycle score record --tool gate --findings-json <report.json>  # авто-оценка из findings
+```
+
+Правила честной оценки: 10 = сделано полностью и проверено; каждая нерешённая критика −3, ошибка −2, warning −0.75 (та же формула, что в `score_from_findings`). Не завышай: «частично» = `--status partial` со списком `--missing`. В чате всегда дублируй кратко: «Оценка: 8.5/10 — сделано X, Y; не хватает Z».
+
 ## Платная реклама (полуавтомат, approval-only)
 
 Слой выключен по умолчанию (`ads.enabled: false`). Порядок: `ads health` → `ads fetch` (read-only; default кэш/`--input-file`, live только с `--live` после `seo-cycle spend` и ledger-preflight) → `ads analytics` (SEO+PPC кросс-правила: органика в топ-3 ↔ ставки, конверсионные search terms вне ядра, CPA/ROAS, wasted spend → минус-слова) → `ads draft --create-ticket` (черновики кампаний из семантического ядра, бюджеты = 0 by design) → human approve → `ads apply --ticket <id> --live --allow-write` (только Директ в v1, sandbox-first, кап операций).

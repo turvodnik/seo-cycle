@@ -49,6 +49,7 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "kpi": {"script": "kpi-contract.py", "help": "KPI contract check: plan vs fact, escalation"},
     "budget": {"script": "budget-mix-planner.py", "help": "SEO+PPC budget mix by leads per unit"},
     "report": {"script": "client-report.py", "help": "White-label client report (md + HTML)"},
+    "score": {"script": "scorecard.py", "help": "Self-assessment scorecards: record/show 0-10 grades"},
 }
 
 SYNC_ADAPTERS = {

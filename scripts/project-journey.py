@@ -19,6 +19,8 @@ from typing import Any
 
 from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for, rel_display, rel_path, write_text
 from seo_cycle_core.logging_setup import setup_logging
+from seo_cycle_core.scorecard import load_latest as load_scorecards
+from seo_cycle_core.scorecard import render_scorecards_markdown
 
 log = setup_logging("project-journey")
 
@@ -691,6 +693,7 @@ def build_report(cfg_path: pathlib.Path, *, goal: str, research_package: str | N
         else None,
         "missing_for_next_step": (current or {}).get("missing_artifacts", []) + (current or {}).get("blockers", []),
         "stages": stages,
+        "scorecards": load_scorecards(project_root),
         "action_plan": build_action_plan(stages),
         "rules": [
             "Do not skip a blocked/current stage just because a later artifact exists.",
@@ -763,6 +766,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.append("- Exit criteria:")
             lines.extend(f"  - {value}" for value in item["exit_criteria"])
         lines.append("")
+    lines.extend(["## Самооценки последних запусков", "", render_scorecards_markdown(report.get("scorecards", {}), limit=10)])
     lines.extend(["## Rules"])
     lines.extend(f"- {rule}" for rule in report.get("rules", []))
     return "\n".join(lines) + "\n"

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.79.0] — 2026-07-04
+
+### Scorecards: honest 0-10 self-assessment for every tool run
+
+- Added `seo_cycle_core/scorecard.py` + `scripts/scorecard.py` (`seo-cycle score`): every meaningful task run records a 0-10 grade with done/missing lists. Findings-driven scoring (`score_from_findings`: critical −3, error −2, warning −0.75, info −0.2) keeps grades honest instead of decorative; storage is `seo/scorecards/scorecards.jsonl` (history) + `latest.json` (per-tool current grade).
+- `loop-runner.py` now auto-grades every finished loop (passed → done, escalated → failed, score from the last attempt's findings), so quality-loop progress is measurable per run.
+- `project-journey.py` shows a «Самооценки последних запусков» table (🟢/🟡/🔴 badges) and exposes `scorecards` in the JSON report; SKILL.md gained the mandatory self-assessment rule — agents grade each task in chat **and** via `seo-cycle score record`, including `--findings-json` auto-scoring. Added `tests/test_scorecard.py`.
+
 ## [1.78.0] — 2026-07-04
 
 ### Curated ecosystem: n-gram waste rule, MCP presets, integration doctrine
