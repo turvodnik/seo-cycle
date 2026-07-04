@@ -10,7 +10,7 @@ from __future__ import annotations
 import pathlib
 from typing import Any
 
-from .config import policy_path, rel_path
+from .config import rel_path
 
 def artifact_status(project_root: pathlib.Path, cfg: dict[str, Any]) -> list[dict[str, Any]]:
     defaults = {

@@ -22,8 +22,8 @@ Cross-platform: pure Python 3, only optional yaml.
 """
 
 from __future__ import annotations
-import argparse, csv, glob, json, pathlib, re, sys
-from datetime import date, datetime, timedelta
+import argparse, csv, json, pathlib, re, sys
+from datetime import date, timedelta
 
 try:
     import yaml

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [1.85.0] — 2026-07-04
+
+### Push-to-ten wave 2: delivery, cohorts, schedules, lint-clean codebase
+
+- **Reports that deliver themselves**: `notify.py --file` sends documents to Telegram (stdlib multipart sendDocument, graceful no-op without a token); `client-report.py --send` ships the written PDF (or md) straight to the client chat after `--write`.
+- Added `metrika-cohorts.py` (`seo-cycle cohorts`) — cohort analysis over Logs-API visits TSV: клиенты по неделе первого визита × возврат/конверсия/доля органики, с трендом «качество трафика растёт/падает».
+- Added `geo-citation-log.py` (`seo-cycle geo-log`) — the GEO scoreboard: append brand-citation observations (manual `--record` or `--import-audit` from ai-brand-audit JSON), monthly share trend per AI engine.
+- `position-progress --global` now reports **cross-project overlaps** — queries where two or more agency projects rank in top-30 simultaneously (internal competition check), sorted by best position.
+- Added `install-schedule.sh` — one command turns on the cadence: daily `db + progress --write --html` per project, weekly portfolio, optional monthly runner (launchd plists on macOS, ready crontab block on Linux). `loop-runner` теперь сам переиндексирует RAG после прошедшего драфта.
+- **Engineering to ten**: new `ruff` job in CI (E9/F63/F7/F82/F401/F841) and the codebase cleaned to pass it — 34 dead imports and 10 unused variables removed, plus one real bug fixed (`wiki-export-project-state.py` called `urlparse` without importing it; the NameError was silently swallowed by `except Exception`, so project-domain links were never recognized).
+- Added `docs/agency-playbook.md` — операционный учебник сотрудника (день 1 / статья / неделя / месяц, роли, непреложные правила). `docs/audit-scorecard-2026-07.md` re-scored after both waves: **integral 8.7 → 9.6/10**, remaining gaps explicitly tagged [external]/[policy]/[осталось]. Added `tests/test_delivery_tools.py`.
+
 ## [1.84.0] — 2026-07-04
 
 ### Push-to-ten wave 1: SERP intelligence, own crawler, structure map, link liveness, repurpose

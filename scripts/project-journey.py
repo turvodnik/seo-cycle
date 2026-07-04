@@ -10,14 +10,13 @@ from __future__ import annotations
 
 import argparse
 import csv
-import datetime as dt
 import io
 import json
 import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for, rel_display, rel_path, write_text
+from seo_cycle_core.config import find_config, load_yaml, project_root_for, write_text
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.scorecard import load_latest as load_scorecards
 from seo_cycle_core.scorecard import render_scorecards_markdown
@@ -31,11 +30,8 @@ from seo_cycle_core.journey import (  # noqa: E402
     detect_research_package,
     json_summary,
     loop_evidence_line,
-    loop_states,
     package_state,
-    read_json,
     stage,
-    unique_paths,
     utc_now,
 )
 

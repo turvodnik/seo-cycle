@@ -21,7 +21,7 @@ API этого не позволяет. Этот скрипт — дешёвая
 """
 
 from __future__ import annotations
-import argparse, csv, glob, hashlib, json, pathlib, re, sys
+import argparse, csv, hashlib, json, pathlib, re, sys
 
 CACHE = pathlib.Path("seo/research/keyso")
 

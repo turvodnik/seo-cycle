@@ -264,6 +264,8 @@ def main() -> int:
     parser.add_argument("--write", action="store_true", help="Write seo/reports/client-report-<period>.md/.html")
     parser.add_argument("--pdf", action="store_true",
                         help="Also print the HTML to PDF via headless Chrome (requires --write)")
+    parser.add_argument("--send", action="store_true",
+                        help="Send the written report (PDF if built, else md) to Telegram via notify.py")
     parser.add_argument("--format", choices=("md", "json"), default="md")
     args = parser.parse_args()
 
@@ -293,8 +295,17 @@ def main() -> int:
                 print(f"PDF: {detail}", file=sys.stderr)
             else:
                 print(f"PDF skipped: {detail}", file=sys.stderr)
-    elif args.pdf:
-        print("--pdf requires --write (the PDF is printed from the written HTML)", file=sys.stderr)
+        if args.send:
+            pdf_path = base / f"client-report-{args.period}.pdf"
+            attach = pdf_path if pdf_path.exists() else base / f"client-report-{args.period}.md"
+            subprocess.run(
+                [sys.executable, str(pathlib.Path(__file__).resolve().parent / "notify.py"),
+                 f"Отчёт клиенту: {report['client']} · {args.period}",
+                 "--title", "Client report", "--level", "ok", "--file", str(attach)],
+                cwd=project_root, check=False,
+            )
+    elif args.pdf or args.send:
+        print("--pdf/--send requires --write (they use the written files)", file=sys.stderr)
     if args.format == "json":
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:

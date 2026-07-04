@@ -22,7 +22,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, rel_display, rel_path, write_text
+from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, rel_display, rel_path
 from seo_cycle_core.technical_artifacts import write_technical_report
 
 

@@ -13,7 +13,6 @@ backup of `seo-cycle.yaml` and only applies conservative source flags.
 from __future__ import annotations
 
 import argparse
-import copy
 import datetime as dt
 import json
 import pathlib
@@ -34,7 +33,6 @@ from seo_cycle_core.config import (  # noqa: E402
     numeric,
     policy_path,
     project_root_for,
-    rel_path,
     skill_root,
     write_text,
 )

@@ -52,7 +52,7 @@ def main() -> int:
     rows = []
     with open(args.csv, encoding="utf-8") as f:
         reader = csv.reader(f)
-        header = next(reader, [])
+        next(reader, [])  # skip header
         for r in reader:
             if not r or not r[0].strip():
                 continue

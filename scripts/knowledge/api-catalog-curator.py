@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
 from wiki_common import WIKI_ROOT, ensure_wiki_tree, utc_now, write_json, write_jsonl
 

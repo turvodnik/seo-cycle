@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from urllib.parse import urlparse
 
 from graphify.analyze import god_nodes, suggest_questions, surprising_connections
 from graphify.build import build_from_json
@@ -19,7 +18,7 @@ from graphify.cluster import cluster, score_all
 from graphify.export import to_json
 from graphify.report import generate
 
-from wiki_common import GRAPH_ROOT, PROJECT_DOMAIN, ROOT, WIKI_ROOT, canonical_url
+from wiki_common import GRAPH_ROOT, ROOT, WIKI_ROOT, canonical_url
 
 OUT_ROOT = GRAPH_ROOT / "graphify-out"
 VECTOR_ROOT = ROOT / "seo" / "research" / "vector"

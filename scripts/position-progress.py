@@ -152,7 +152,7 @@ def delta_block(latest: dict[str, Any], reference: dict[str, Any] | None) -> dic
 
 
 def collect_project(project_root: pathlib.Path, cfg: dict[str, Any], *, engine: str | None,
-                    limit_movers: int) -> dict[str, Any]:
+                    limit_movers: int, include_queries: bool = False) -> dict[str, Any]:
     report: dict[str, Any] = {
         "audit_id": "position_progress",
         "project": (cfg.get("project") or {}).get("name") or project_root.name,
@@ -187,6 +187,11 @@ def collect_project(project_root: pathlib.Path, cfg: dict[str, Any], *, engine: 
         })
         if previous:
             report["movers"] = movers(conn, previous["date"], latest["date"], engine, limit_movers)
+        if include_queries:
+            report["top_queries"] = {
+                query: position for query, position in
+                query_positions(conn, latest["date"], engine).items() if position <= 30
+            }
         conn.close()
     except sqlite3.Error as exc:
         report["status"] = f"db_error: {exc}"
@@ -278,7 +283,7 @@ def collect_portfolio(registry_path: pathlib.Path, *, engine: str | None, limit_
             projects.append({"project": item.get("name") or root.name, "status": "no_config"})
             continue
         report = collect_project(project_root_for(cfg_path), load_yaml(cfg_path),
-                                 engine=engine, limit_movers=limit_movers)
+                                 engine=engine, limit_movers=limit_movers, include_queries=True)
         if item.get("name"):
             report["project"] = str(item["name"])
         report["registry_status"] = item.get("status", "active")
@@ -292,8 +297,20 @@ def collect_portfolio(registry_path: pathlib.Path, *, engine: str | None, limit_
             totals["delta_top10"] += (report.get("delta_vs_previous") or {}).get("top10", 0) or 0
             totals["delta_clicks"] += (report.get("delta_vs_previous") or {}).get("clicks", 0) or 0
         totals["findings_resolved"] += (report.get("loops") or {}).get("findings_resolved", 0)
+
+    # кросс-проектные пересечения: один запрос в топ-30 у двух и более проектов
+    query_owners: dict[str, list[dict[str, Any]]] = {}
+    for report in projects:
+        for query, position in (report.pop("top_queries", None) or {}).items():
+            query_owners.setdefault(query, []).append(
+                {"project": report.get("project", "?"), "position": position})
+    overlaps = [
+        {"query": query, "projects": sorted(owners, key=lambda o: o["position"])}
+        for query, owners in query_owners.items() if len(owners) > 1
+    ]
+    overlaps.sort(key=lambda item: min(o["position"] for o in item["projects"]))
     return {"audit_id": "portfolio_progress", "engine": engine or "all",
-            "projects": projects, "totals": totals}
+            "projects": projects, "totals": totals, "cross_project_overlap": overlaps[:50]}
 
 
 def render_portfolio_markdown(portfolio: dict[str, Any]) -> str:
@@ -315,6 +332,13 @@ def render_portfolio_markdown(portfolio: dict[str, Any]) -> str:
         lines.append(f"| {report['project']} | {latest['date']} | {latest['top3']} | {latest['top10']}"
                      f" | {latest['clicks']} | {f'{delta:+d}' if isinstance(delta, int) else '—'}"
                      f" | {loops.get('findings_resolved', 0)} |")
+    overlaps = portfolio.get("cross_project_overlap") or []
+    if overlaps:
+        lines.extend(["", "## Пересечения проектов (один запрос — несколько сайтов)", "",
+                      "_Проверьте: это внутренняя конкуренция или сознательная стратегия._", ""])
+        for item in overlaps[:10]:
+            owners = ", ".join(f"{o['project']} (#{o['position']:g})" for o in item["projects"])
+            lines.append(f"- «{item['query']}»: {owners}")
     return "\n".join(lines) + "\n"
 
 

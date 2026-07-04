@@ -83,7 +83,7 @@ def call(token: str, path: str, params: dict, _retry=True):
         with urllib.request.urlopen(req, timeout=60) as r:
             _LAST[0] = time.time()
             data = json.loads(r.read())
-            cnt = bump_usage(CACHE_DIR := pathlib.Path("./seo/research/keyso"))
+            cnt = bump_usage(pathlib.Path("./seo/research/keyso"))
             print(f"  [keyso usage: {cnt} запросов за месяц]", file=sys.stderr)
             return data
     except urllib.error.HTTPError as e:

@@ -11,7 +11,7 @@ import math
 import pathlib
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
 from typing import Any
 
 from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, rel_path

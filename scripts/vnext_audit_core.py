@@ -582,7 +582,6 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def write_report(report: dict[str, Any], cfg_path: pathlib.Path) -> None:
-    cfg = load_yaml(cfg_path)
     project_root = project_root_for(cfg_path)
     paths = {key: rel_path(project_root, path) for key, path in report["paths"].items()}
     md = render_markdown(report)

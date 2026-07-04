@@ -263,7 +263,6 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
     business = intake.get("business", {}) if isinstance(intake.get("business"), dict) else {}
     markets = intake.get("markets", {}) if isinstance(intake.get("markets"), dict) else {}
     marketing = intake.get("marketing", {}) if isinstance(intake.get("marketing"), dict) else {}
-    setup = intake.get("setup_decisions", {}) if isinstance(intake.get("setup_decisions"), dict) else {}
     governance = cfg.get("governance", {}) if isinstance(cfg.get("governance"), dict) else {}
     budget = governance.get("budget_policy", {}) if isinstance(governance.get("budget_policy"), dict) else {}
     token = governance.get("token_policy", {}) if isinstance(governance.get("token_policy"), dict) else {}

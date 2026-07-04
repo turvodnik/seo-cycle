@@ -307,7 +307,6 @@ def build_actions(
     usage: dict[str, Any],
 ) -> list[dict[str, Any]]:
     cty = country(cfg, intake)
-    eng = engines(cfg, intake)
     flags = business_flags(cfg, intake)
     decisions = tool_decisions(tool_stack)
     actions: list[dict[str, Any]] = []

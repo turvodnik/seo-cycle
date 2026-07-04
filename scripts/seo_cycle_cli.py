@@ -59,6 +59,8 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "intel": {"script": "serp-intel.py", "help": "SERP overlap clusters, features, entity candidates (offline)"},
     "links": {"script": "link-liveness.py", "help": "External-source liveness check (E-E-A-T rot)"},
     "repurpose": {"script": "content-repurpose.py", "help": "Draft → TG/VK/video/email skeletons"},
+    "cohorts": {"script": "metrika-cohorts.py", "help": "Метрика Logs cohorts: return/conversion by first-visit week"},
+    "geo-log": {"script": "geo-citation-log.py", "help": "Brand citations in AI answers: record/import/trend"},
 }
 
 SYNC_ADAPTERS = {

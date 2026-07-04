@@ -175,7 +175,6 @@ def crawl(start: str, *, max_pages: int, max_depth: int, delay: float, timeout: 
 def build_findings(data: dict[str, Any], max_depth: int) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     pages = [p for p in data.get("pages", []) if "url" in p]
-    by_url = {p["url"]: p for p in pages}
     statuses = {p["url"]: p.get("status", 0) for p in pages}
 
     def add(severity: str, finding_id: str, title: str, urls: list[str]) -> None:

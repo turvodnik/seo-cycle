@@ -26,7 +26,7 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.ads import ads_config, primary_platform
+from seo_cycle_core.ads import primary_platform
 from seo_cycle_core.config import find_config, load_yaml, package_project_root, write_text
 from seo_cycle_core.logging_setup import setup_logging
 

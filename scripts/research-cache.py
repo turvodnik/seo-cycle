@@ -20,7 +20,7 @@ TTL по проекту берётся из seo-cycle.yaml: research_cache_ttl_d
 """
 
 from __future__ import annotations
-import argparse, glob, os, sys, time, pathlib
+import argparse, glob, sys, time, pathlib
 
 
 def newest_fresh(directory: str, slug: str, source: str, ttl_days: float,

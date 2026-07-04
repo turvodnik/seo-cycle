@@ -282,6 +282,12 @@ def main(argv: list[str] | None = None) -> int:
             write_loop_scorecard(state, project_root)
             if args.phase:
                 mark_phase_passed(args.phase, args.cycle_dir, project_root)
+            if args.target == "draft":
+                # прошедший драфт сразу попадает в RAG (инкрементально, дёшево)
+                subprocess.run(
+                    [sys.executable, str(scripts_dir() / "rag-index.py"), "--write"],
+                    cwd=project_root, text=True, capture_output=True, check=False,
+                )
             print_state(state, args.format)
             return EXIT_PASSED
 

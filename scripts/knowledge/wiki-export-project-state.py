@@ -15,9 +15,9 @@ import re
 from collections import Counter
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from wiki_common import (
-    CONFIG,
     PROJECT_DOMAIN,
     PROJECT_BRAND,
     PROJECT_NAME,
@@ -30,7 +30,6 @@ from wiki_common import (
     frontmatter,
     load_env,
     parse_html,
-    public_content_from_record,
     slugify,
     title_from_record,
     utc_now,

@@ -23,7 +23,7 @@ older than N (days|months).
 
 from __future__ import annotations
 import argparse, json, pathlib, re, sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 try:
     import yaml

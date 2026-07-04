@@ -21,7 +21,7 @@ Endpoint Keys.so, auth X-Keyso-TOKEN (env KEYSO_API_TOKEN), лимит 10/10се
 """
 
 from __future__ import annotations
-import argparse, hashlib, json, os, pathlib, statistics, sys, time, urllib.parse, urllib.request, urllib.error
+import argparse, hashlib, json, os, pathlib, sys, time, urllib.parse, urllib.request, urllib.error
 from collections import defaultdict
 
 BASE_URL = "https://api.keys.so"

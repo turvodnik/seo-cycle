@@ -17,7 +17,6 @@ import hashlib
 import json
 import pathlib
 import re
-import sys
 from collections import Counter
 from typing import Any
 

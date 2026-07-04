@@ -22,7 +22,7 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, project_root_for, rel_path, skill_root, write_text
+from seo_cycle_core.config import find_config, load_yaml, project_root_for, skill_root, write_text
 
 
 def run_step(name: str, command: list[str], cwd: pathlib.Path) -> dict[str, Any]:
@@ -215,7 +215,6 @@ def next_actions(
 def render_markdown(report: dict[str, Any]) -> str:
     project = report.get("project", {})
     validation = report.get("validation", {})
-    governance = report.get("governance", {})
     sources = report.get("sources", {})
     automation = report.get("automation", {})
     automation_recommendations = report.get("automation_recommendations", {})

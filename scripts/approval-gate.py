@@ -50,7 +50,7 @@ Cross-platform: pure Python. Работает в Claude Code, Codex, plain bash.
 
 from __future__ import annotations
 import argparse, hashlib, json, pathlib, re, sys
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 
 TICKET_TYPES = {

@@ -424,7 +424,6 @@ def evaluate(state: dict[str, Any], estimate: dict[str, Any] | None = None) -> d
                 )
             )
 
-    statuses = {row["status"] for row in rows}
     approval_required = [row for row in rows if row["status"] == "approval_required"]
     blocked = [row for row in rows if row["status"] == "blocked"]
     near_cap = [row for row in rows if row["status"] == "near_cap"]
