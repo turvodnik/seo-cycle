@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.87.0] — 2026-07-04
+
+### Implementation-quality wave: bugbear-clean codebase + quality audit
+
+- Fixed all 18 ruff-bugbear findings: loop-variable closures in `client-report.py` (B023 — worked by luck, would break on any reorder), `raise … from` in gtm-audit/merchant-fetch, explicit `strict=` on seven `zip()` sites (RAG cosine now `strict=True` — mismatched vector lengths must fail loudly), seven unused loop variables renamed.
+- `notify.py` dropped its private `load_env` copy for the shared profile chain (`env_profile.env_chain`, legacy `seo/.env` honoured); the last local `/tmp` hardcode (automation-plan validate log) moved into `seo/automations/`; `/tmp` in wp-photo-image is on the **remote** SSH host by design and stays.
+- CI lint tightened to `E9,F63,F7,F82,F401,F841,B,PLE`.
+- Added `docs/code-quality-audit.md` — the implementation-quality audit: objective metrics over 176 scripts (0 bare excepts, 54 deliberate broad excepts, 16 files >600 lines, test/core/logging coverage), per-subsystem scores 7.5–10 with an integral of **8.9/10**, three real bugs caught by lint + live runs, explicitly-kept technical debt, next engineering steps.
+
 ## [1.86.1] — 2026-07-04
 
 - Fix: `snapshot-build.py --source webmaster` now parses webmaster-fetch.py raw API v4 records (query_text + indicators); previously 500 queries silently collapsed into empty rows. Flat exports unchanged. Registry gained PifagorLab and gsse. Added tests/test_snapshot_webmaster.py.
