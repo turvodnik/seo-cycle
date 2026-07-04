@@ -75,12 +75,12 @@ def main() -> int:
     if args.md:
         print("| Метрика | Моё | Медиана конк. | Разрыв | Статус |")
         print("|---|---|---|---|---|")
-        for m, my, med, gap, st, n in rows:
+        for m, my, med, gap, st, _n in rows:
             print(f"| {m} | {my:g} | {med:g} | {gap:+.0f}% | {st} |")
     else:
         print(f"{'метрика':<22}{'моё':>8}{'медиана':>10}{'разрыв':>9}  статус")
         print("-" * 60)
-        for m, my, med, gap, st, n in rows:
+        for m, my, med, gap, st, _n in rows:
             print(f"{m:<22}{my:>8g}{med:>10g}{gap:>+8.0f}%  {st}")
     behind = [m for m, *_ , st, n in rows if st == "🔴 ниже"]
     if behind:

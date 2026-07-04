@@ -150,7 +150,7 @@ def wasted_ngrams(terms: list[dict[str, Any]], wasted_min: float) -> list[dict[s
         if term["conversions"] > 0:
             continue
         words = [w for w in norm_query(term["query"]).split() if len(w) > 2]
-        grams = set(words) | {" ".join(pair) for pair in zip(words, words[1:])}
+        grams = set(words) | {" ".join(pair) for pair in zip(words, words[1:], strict=False)}
         for gram in grams:
             bucket = stats.setdefault(gram, {"cost": 0.0, "clicks": 0.0, "terms": 0})
             bucket["cost"] += term["cost"]

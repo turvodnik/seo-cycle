@@ -502,7 +502,7 @@ def h3_subsections_for_section(
     titles = subsection_titles(str(section["kind"]), str(section["title"]), primary, page_type)
     ranges = split_range(int(section["word_count_min"]), int(section["word_count_max"]), len(titles))
     result = []
-    for idx, ((title, task), (min_words, max_words)) in enumerate(zip(titles, ranges), start=1):
+    for idx, ((title, task), (min_words, max_words)) in enumerate(zip(titles, ranges, strict=True), start=1):
         result.append(
             {
                 "order": idx,

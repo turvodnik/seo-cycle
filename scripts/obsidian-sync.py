@@ -88,7 +88,7 @@ def wrap_wiki_links(text: str, entity_names: list[str]) -> str:
         r'^---\s*$.*?^---\s*$', # frontmatter
     ]
     flags = [re.DOTALL, 0, 0, 0, 0, re.MULTILINE | re.DOTALL]
-    for pat, fl in zip(patterns, flags):
+    for pat, fl in zip(patterns, flags, strict=True):
         text = re.sub(pat, protect, text, flags=fl)
 
     # Сортируем по длине (длинные сначала, чтобы избежать частичных совпадений)

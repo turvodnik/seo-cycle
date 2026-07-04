@@ -200,7 +200,7 @@ def entity_candidates(validation: dict[str, dict[str, Any]], known: set[str],
             tokens = [t for t in re.findall(r"[а-яёa-z][а-яёa-z-]{3,}", str(title).lower())
                       if t not in STOP_TOKENS]
             words.update(tokens)
-            bigrams.update(" ".join(pair) for pair in zip(tokens, tokens[1:]))
+            bigrams.update(" ".join(pair) for pair in zip(tokens, tokens[1:], strict=False))
     out = []
     for token, count in (words + bigrams).most_common(200):
         if count < min_count:

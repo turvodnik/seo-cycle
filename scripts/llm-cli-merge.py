@@ -136,7 +136,7 @@ def main():
         f.write(f"stats:\n  keywords_unique: {len(seen)}\n  entities_unique: {len(ent_seen)}\n---\n\n")
         f.write(f"# Merged LLM CLI отчёт\n\n")
         f.write(f"## Long-Tail запросы (уникальные)\n\n")
-        for i, (n, (kw, src)) in enumerate(seen.items(), 1):
+        for i, (_n, (kw, src)) in enumerate(seen.items(), 1):
             f.write(f"{i}. `[{src}]` {kw}\n")
         f.write(f"\n## Связанные сущности (объединённые)\n\n")
         for i, item in enumerate(ent_seen.values(), 1):

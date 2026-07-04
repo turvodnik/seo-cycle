@@ -81,7 +81,7 @@ def main() -> int:
             new_s = "—" if np_ == 0 else f"{np_:.0f}"
             print(f"| {t} | {kw} | {op:.0f} | {new_s} | {cl} | {url} |")
     else:
-        for t, kw, op, np_, cl, url in findings:
+        for t, kw, op, np_, cl, _url in findings:
             new_s = "—" if np_ == 0 else f"{np_:.0f}"
             print(f"  [{t:<7}] {kw}  (поз {op:.0f}→{new_s}, клики {cl})")
     print("\n  → Действие: вернуть через refresh контента + перелинковку (Phase 10).")

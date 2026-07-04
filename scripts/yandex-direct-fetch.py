@@ -141,7 +141,7 @@ def parse_tsv(text: str, field_names: list[str]) -> list[dict[str, Any]]:
     header = lines[0].split("\t")
     columns = header if set(header) & set(field_names) else field_names
     start = 1 if columns is header else 0
-    return [dict(zip(columns, line.split("\t"))) for line in lines[start:]]
+    return [dict(zip(columns, line.split("\t"), strict=False)) for line in lines[start:]]
 
 
 def live_fetch(report: str, cfg: dict[str, Any], days: int) -> Any:

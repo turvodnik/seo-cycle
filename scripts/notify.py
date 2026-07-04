@@ -19,23 +19,23 @@ API на исходе, ошибка сбора — вызывается из mon
 """
 
 from __future__ import annotations
-import argparse, json, os, pathlib, sys, urllib.parse, urllib.request
+import argparse, json, pathlib, sys, urllib.parse, urllib.request
 import uuid
+
+from seo_cycle_core.config import find_config, project_root_for
+from seo_cycle_core.env_profile import env_chain, parse_env_file
 
 LEVEL_ICON = {"info": "ℹ️", "warn": "⚠️", "alert": "🔴", "ok": "✅"}
 
 
 def load_env() -> dict:
-    env = dict(os.environ)
-    for rel in (".env", "seo/.env"):
-        p = pathlib.Path.cwd() / rel
-        if p.exists():
-            for line in p.read_text().splitlines():
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    env.setdefault(k.strip(), v.strip().strip('"').strip("'"))
-    return env
+    """process env > project .env > ~/.seo-cycle/env.global (+legacy seo/.env)."""
+    cfg_path = find_config(pathlib.Path.cwd())
+    merged = env_chain(project_root_for(cfg_path) if cfg_path else None)
+    legacy = pathlib.Path.cwd() / "seo" / ".env"
+    for key, value in parse_env_file(legacy).items():
+        merged.setdefault(key, value)
+    return merged
 
 
 def send_telegram(token: str, chat_id: str, text: str) -> bool:

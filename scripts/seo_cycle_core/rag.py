@@ -232,7 +232,7 @@ def cosine(a: bytes, b: bytes) -> float:
     va, vb = unpack_vector(a), unpack_vector(b)
     if len(va) != len(vb) or not va:
         return 0.0
-    dot = sum(x * y for x, y in zip(va, vb))
+    dot = sum(x * y for x, y in zip(va, vb, strict=True))
     norm = math.sqrt(sum(x * x for x in va)) * math.sqrt(sum(y * y for y in vb))
     return dot / norm if norm else 0.0
 

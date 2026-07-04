@@ -119,7 +119,7 @@ def main() -> int:
         # Обратная совместимость: профиля нет — отдаём sources.* как есть
         sources = cfg.get("sources", {}) or {}
         active, skipped = {}, {}
-        for name, node in sources.items():
+        for name, _node in sources.items():
             en = local_source_enabled(sources, name)
             if en is False:
                 skipped[name] = "выключено локально"

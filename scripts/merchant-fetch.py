@@ -40,8 +40,8 @@ def live_fetch(report: str, max_pages: int = 5) -> dict[str, Any]:
         from google.auth import default as adc_default
         from google.auth.transport.requests import Request as AuthRequest
         from google.oauth2 import service_account
-    except ImportError:
-        raise RuntimeError("google-auth is required for --live: pip3 install google-auth")
+    except ImportError as exc:
+        raise RuntimeError("google-auth is required for --live: pip3 install google-auth") from exc
     merchant_id = os.environ.get("GOOGLE_MERCHANT_ACCOUNT_ID", "").replace("-", "")
     if not merchant_id:
         raise RuntimeError("set GOOGLE_MERCHANT_ACCOUNT_ID env")

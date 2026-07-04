@@ -212,7 +212,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         data = section["data"]
         if section["id"] == "positions":
             latest, delta = data["latest"], data.get("delta") or {}
-            def fmt(key): return f"{latest[key]}" + (f" ({delta[key]:+d})" if delta else "")
+
+            def fmt(key: str, latest=latest, delta=delta) -> str:
+                return f"{latest[key]}" + (f" ({delta[key]:+d})" if delta else "")
+
             lines.append(f"- Запросов в топ-10: **{fmt('top10')}** · в топ-3: **{fmt('top3')}**"
                          f" · клики за срез: **{fmt('clicks')}** (срез {latest['date']})")
         elif section["id"] == "kpi":

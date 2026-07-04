@@ -88,7 +88,7 @@ def live_fetch(counter: str, token: str, *, source: str, fields: str,
     log.info("logs request %s created (%s..%s)", request_id, date_from, date_to)
 
     parts: list[dict[str, Any]] = []
-    for attempt in range(POLL_ATTEMPTS):
+    for _attempt in range(POLL_ATTEMPTS):
         status = api_call(counter, token, f"/logrequest/{request_id}")
         request_status = (status.get("log_request") or {}).get("status")
         if request_status == "processed":

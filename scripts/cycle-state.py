@@ -90,7 +90,7 @@ def save(path: pathlib.Path, state: dict):
 def recompute_blocked(state: dict):
     """Проставляет blocked фазам, у которых зависимость не done+gate."""
     ph = state["phases"]
-    for name, p in ph.items():
+    for _name, p in ph.items():
         if p["status"] in ("done", "in_progress"):
             continue
         deps = p.get("depends_on", [])

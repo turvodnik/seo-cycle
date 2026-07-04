@@ -143,7 +143,7 @@ def command_for_policy_task(project_root: pathlib.Path, task_id: str, mode: str)
         return (
             f"cd {shell_quote(project_root)} && "
             f"mkdir -p {latest_dir} && "
-            f"python3 {shell_quote(root / 'scripts/validate-config.py')} >/tmp/seo-cycle-validate.log && "
+            f"python3 {shell_quote(root / 'scripts/validate-config.py')} > seo/automations/latest-validate.log && "
             f"python3 {shell_quote(root / 'scripts/governance-report.py')} --format md > seo/automations/latest-governance.md && "
             f"bash {shell_quote(root / 'scripts/monthly-runner.sh')} status --dry-run"
         )
