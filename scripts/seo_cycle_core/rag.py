@@ -241,8 +241,8 @@ def index_project(conn: sqlite3.Connection, project_root: pathlib.Path, cfg: dic
                   project: str, *, embed: str = "auto", dry_run: bool = False,
                   embed_fn=embed_texts) -> dict[str, Any]:
     """Incrementally index one project; returns per-source stats."""
-    stats = {"indexed_files": 0, "skipped_files": 0, "removed_files": 0,
-             "chunks": 0, "embedded_chunks": 0, "by_source": {}}
+    stats: dict[str, Any] = {"indexed_files": 0, "skipped_files": 0, "removed_files": 0,
+                             "chunks": 0, "embedded_chunks": 0, "by_source": {}}
     want_embeddings = embed == "required" or (embed == "auto" and embedding_env() is not None)
     seen_paths: set[str] = set()
     for source_type, path, chunks in iter_project_documents(project_root, cfg):

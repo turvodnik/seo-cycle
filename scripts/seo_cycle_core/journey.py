@@ -108,7 +108,7 @@ def loop_states(project_root: pathlib.Path) -> dict[str, dict[str, Any]]:
         target = str(data.get("target") or "")
         if not target:
             continue
-        escalation = data.get("escalation") if isinstance(data.get("escalation"), dict) else {}
+        escalation = data.get("escalation") or {} if isinstance(data.get("escalation"), dict) else {}
         row = {
             "loop_id": data.get("loop_id"),
             "status": data.get("status"),

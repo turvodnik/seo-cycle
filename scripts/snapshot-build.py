@@ -230,10 +230,11 @@ def _merge_snapshot(base: dict, addition: dict) -> dict:
     if src_meta not in base["sources"]:
         base["sources"].append(src_meta)
 
-    # queries
+    # queries (каждая строка несёт свой engine — иначе merged-снапшот его теряет)
     if addition.get("queries"):
         idx = {(q["query"], q.get("url", "")): q for q in base.get("queries", [])}
         for q in addition["queries"]:
+            q.setdefault("engine", addition.get("engine", ""))
             key = (q["query"], q.get("url", ""))
             if key in idx:
                 idx[key].update(q)

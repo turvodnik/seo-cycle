@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.88.0] — 2026-07-04
+
+### Engineering to ten: browser-level JS tests, seam integration tests, mypy/shellcheck/coverage in CI
+
+- **Dashboard JS is now under test**: `tests/test_webapp_browser.py` extracts the page script and runs `node --check` (syntax on every CI run), asserts all six tab renderers exist, and boots the real server + **headless Chrome `--dump-dom`** to verify the page auto-logs-in and renders every tab in an actual browser.
+- **Seam integration test** (`tests/test_pipeline_integration.py`): webmaster-raw-v4 + GSC export → snapshot-build → db-sync → position-progress on real scripts. Its first run caught **bug #4**: `_merge_snapshot` kept `engine` only in source metadata, so every row in seo.db landed with an empty engine and per-engine filters silently degraded. Fixed (rows now carry engine), Эмвуди's live snapshot rebuilt — 500 rows now `yandex`.
+- **mypy on the core package**: 11 findings fixed (Optional handling in providers/journey, typed stats in rag), now 0 errors and a dedicated CI job. **shellcheck** (error severity) and **coverage** (in-process core, protective fail-under=50 — subprocess-driven tests aren't counted) added as CI jobs; wiki regression tests lock the v1.85 urlparse bug class (all knowledge scripts must import cleanly).
+- `docs/code-quality-audit.md` re-scored: CLI/дашборд 9.5, провайдеры 8.5, вики 8.5, тесты+CI 10 — **интеграл 8.9 → 9.2/10**. 287 tests, 6 CI jobs.
+
 ## [1.87.0] — 2026-07-04
 
 ### Implementation-quality wave: bugbear-clean codebase + quality audit

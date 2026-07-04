@@ -20,7 +20,7 @@ def perplexity_health(
     browser_available: bool = False,
     env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    env = env if env is not None else os.environ
+    env = dict(env) if env is not None else dict(os.environ)
     paths = list(app_paths or DEFAULT_PERPLEXITY_APP_PATHS)
     app_detected = any(path.exists() for path in paths)
     api_key_present = bool(env.get("PERPLEXITY_API_KEY"))
