@@ -71,6 +71,15 @@ research_cache_ttl_days: 14
 # и делегирование идут через нативные Codex-skills, а не codex exec обёртки.
 runtime: auto
 
+# Файловое логирование скриптов (stdout остаётся для данных/отчётов).
+# Лог пишется в seo/logs/seo-cycle-YYYY-MM-DD.log; секцию можно опустить —
+# дефолты совпадают с показанными. env SEO_CYCLE_LOG_LEVEL=off выключает файл.
+logging:
+  enabled: true
+  dir: seo/logs
+  level: INFO                # уровень файла: DEBUG | INFO | WARNING | ERROR
+  stderr_level: WARNING      # что дублировать в stderr
+
 # Локальные policy-файлы проекта: бюджет/лимиты API, tracking policy, доступы.
 # init-project.sh создаёт безопасные шаблоны, validate-config.py проверяет наличие.
 policy_files:
@@ -370,6 +379,7 @@ governance:
     monthly_total_usd_cap: 0         # 0 = no paid spend by default
     monthly_paid_api_usd_cap: 0
     monthly_llm_usd_cap: 0
+    monthly_ads_usd_cap: 0           # кап расходов ads-категории в usage-ledger
     require_approval_over_usd: 0
     cloud_budget_alert_usd: 5
     ads_spend_enabled: false
@@ -411,6 +421,22 @@ governance:
       enabled: false
       monthly_usd_cap: 0
 
+  # Автоцикл качества (loop-runner.py): gate -> repair -> re-check с лимитом
+  # попыток и самопроверками (quality/evidence классы findings). При исчерпании
+  # лимита или отсутствии прогресса создаётся loop_escalation approval-тикет.
+  loop:
+    enabled: true
+    max_attempts: 5                   # глобальный лимит попыток на один loop
+    no_progress_after: 2              # одинаковые findings N раз подряд -> ранняя эскалация
+    escalate: true                    # ticket + Telegram alert при остановке
+    targets:
+      research_package:
+        max_attempts: 5
+      page_outline:
+        max_attempts: 3
+      draft:
+        max_attempts: 3
+
   automation_policy:
     default_mode: approval_only       # disabled | report_only | approval_only | auto_with_caps
     create_schedules: false
@@ -434,6 +460,36 @@ governance:
       - whole_site_paid_nlp
       - whole_catalog_generation
       - destructive_indexing_change
+
+# -----------------------------------------------------------------------------
+# 3b'. Платная реклама (Google Ads / Яндекс.Директ) — guarded полуавтомат
+# -----------------------------------------------------------------------------
+# Слой выключен по умолчанию. Fetch — read-only (кэш/--input-file, live только
+# с usage-ledger preflight). Применение изменений — ТОЛЬКО ads-apply.py с
+# approved ticket + --live --allow-write. Для region_profile: ru primary канал —
+# Яндекс.Директ; Google Ads в статусе region_limited — это норма, драфты
+# экспортируются в Google Ads Editor CSV.
+ads:
+  enabled: false
+  primary_platform: auto          # auto | yandex_direct | google_ads (auto: ru → yandex_direct)
+  policy: approval_only           # report_only (apply заблокирован) | approval_only
+  cache_ttl_hours: 24
+  fetch:
+    max_requests_per_run: 200
+  yandex_direct:
+    enabled: false
+    sandbox: false                # сначала репетируй apply в песочнице Директа
+    client_login: ""              # или env YANDEX_DIRECT_CLIENT_LOGIN
+  google_ads:
+    enabled: false
+    apply_enabled: false          # API-запись выключена: используем Editor CSV
+    customer_id: ""               # или env GOOGLE_ADS_CUSTOMER_ID
+  analytics:
+    top_position_threshold: 3     # органика в топ-N + активная ставка → снизить/пауза
+    wasted_spend_min_cost: 300    # cost без конверсий выше порога → минус-слова
+  apply:
+    max_changes_per_run: 20       # жёсткий кап операций за один ads-apply
+    max_daily_budget: 0           # 0 = бюджеты не трогаем вообще
 
 # -----------------------------------------------------------------------------
 # 3c. SEO/AEO/GEO vNext — report-only модули расширенного оркестратора
@@ -1159,7 +1215,19 @@ delegate:
 data_store:
   enabled: false                        # opt-in
   path: "seo/seo.db"
+  rag_path: "seo/rag.db"                # локальный RAG-индекс (rag-index.py / rag-query.py)
   sync_script: "./.codex/skills/seo-cycle/scripts/db-sync.py"
+
+# Локальный RAG: FTS5/BM25 из коробки (без ключей), embeddings опционально
+# через OpenAI-совместимый endpoint (env EMBEDDING_API_URL/KEY/MODEL → hybrid).
+# Индексация: rag-index.py --write (инкрементально); кросс-проектный индекс:
+# rag-index.py --global (по config/projects-registry.yaml → ~/.seo-cycle/rag/global.db).
+rag:
+  chunk_chars: 1200
+  chunk_overlap: 150
+  sources: [source_pack, triplet, distillate, draft]
+  embedding:
+    mode: auto                          # auto | off | required
 
 # Лёгкие алерты через Telegram (без n8n). Без ключей в .env — graceful no-op.
 notifications:

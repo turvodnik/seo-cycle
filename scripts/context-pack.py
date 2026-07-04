@@ -223,6 +223,28 @@ def excluded_raw_artifacts() -> list[str]:
     ]
 
 
+def rag_posture(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, Any]:
+    """One-line RAG index status: exists, chunk count, freshness."""
+    try:
+        from seo_cycle_core.rag import index_stats, open_db, rag_db_path
+    except ImportError:
+        return {"status": "unavailable"}
+    db_path = rag_db_path(project_root, cfg)
+    if not db_path.exists():
+        return {"status": "not_indexed",
+                "hint": "python3 ~/.codex/skills/seo-cycle/scripts/rag-index.py --write"}
+    try:
+        conn = open_db(db_path)
+        stats = index_stats(conn)
+        conn.close()
+    except Exception:
+        return {"status": "error", "db": rel_display(project_root, db_path)}
+    return {"status": "ready", "db": rel_display(project_root, db_path),
+            "chunks": stats["chunks"], "embedded": stats["embedded"],
+            "updated": dt.datetime.fromtimestamp(db_path.stat().st_mtime).isoformat(timespec="seconds"),
+            "query_hint": "python3 ~/.codex/skills/seo-cycle/scripts/rag-query.py \"<вопрос>\" --top-k 5"}
+
+
 def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route: bool) -> dict[str, Any]:
     cfg = load_yaml(cfg_path)
     project_root = project_root_for(cfg_path)
@@ -299,6 +321,7 @@ def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route:
         "roadmap_top_actions": limit(roadmap_actions(growth_roadmap), 6),
         "enabled_automations": limit(automation_summary(automation), 12),
         "human_secret_env_names": limit(env_names(tool_stack, launch_plan), 50),
+        "rag": rag_posture(cfg, project_root),
         "next_commands": [
             "python3 ~/.codex/skills/seo-cycle/scripts/context-pack.py --task \"<current task>\" --write",
             "python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task \"<current task>\" --write",

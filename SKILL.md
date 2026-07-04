@@ -133,6 +133,59 @@ python3 scripts/cycle-state.py show                      # прогресс ци
 
 Для фаз, ещё не вынесенных в отдельные скиллы, действуй по их описанию ниже в этом файле.
 
+## Единый CLI (`seo-cycle`)
+
+`install-codex.sh` ставит symlink `~/.local/bin/seo-cycle` → `bin/seo-cycle`. Это тонкий диспетчер над скриптами (полный passthrough аргументов, exit-коды и stdout-контракты не меняются). Предпочитай его прямым `python3 scripts/...`-вызовам в инструкциях пользователю:
+
+```bash
+seo-cycle status                 # = project-journey: стадия, blockers, следующие команды
+seo-cycle doctor                 # первый шаг диагностики: config/journey/spend/ledger/provider health
+seo-cycle loop <target> <path>   # автоцикл качества (см. секцию ниже)
+seo-cycle gate research-package|outline|draft [...]
+seo-cycle repair <package> --write
+seo-cycle approvals | approve <id> | reject <id>
+seo-cycle ads health|fetch|analytics|draft|apply [...]
+seo-cycle rag index --write | rag query "<вопрос>" [--global]
+seo-cycle run "<задача>"         # task-router; run monthly [...]; run script <name> [...]
+```
+
+## Автоцикл качества (loop-runner)
+
+**Вместо ручной пары «gate → repair → gate» всегда используй `seo-cycle loop`** (`scripts/loop-runner.py`). Он сам гоняет проверку и ремонт до прохождения, максимум `governance.loop.max_attempts` попыток (default 5; per-target: research_package 5, page_outline 3, draft 3), ведёт журнал `seo/loops/<loop-id>.json/.md` (виден в project-journey) и делит findings на классы качество/достоверность.
+
+```bash
+seo-cycle loop research-package seo/research-package        # machine repair внутри
+seo-cycle loop draft <draft.md> --outline <outline.json>    # LLM-protocol
+seo-cycle loop page-outline <package>                        # LLM-protocol
+# опционально: --phase keywords --cycle-dir <dir> → при успехе cycle-state set --gate-passed
+```
+
+Протокол для модели (exit-коды):
+- **0 passed** — цель прошла gate; двигайся дальше по journey.
+- **3 awaiting_llm** — stdout содержит JSON `{"action_required": "llm_repair", findings, instructions}`. Выполни instructions (перепиши драфт / перегенерируй outline, устрани каждый finding), затем запусти команду с `--resume`. НЕ превышай лимит попыток и не обходи loop прямыми вызовами gate.
+- **1 escalated** — лимит исчерпан или нет прогресса (два одинаковых fingerprint подряд). Создан approval-тикет `loop_escalation` + Telegram alert. Остановись, покажи пользователю `seo/loops/<id>.md` и жди решения человека; продолжение — только `--reset` после его правок.
+- **2 config error** — почини вызов/конфиг.
+
+Самопроверки: класс `evidence` (eeat_evidence_missing, serp_validation_incomplete, missing_proof_slot, unsafe_first_person_expertise, …) — это честность/достоверность: такие findings нельзя «дожимать» переформулировкой, только реальными источниками и фактами.
+
+## Платная реклама (полуавтомат, approval-only)
+
+Слой выключен по умолчанию (`ads.enabled: false`). Порядок: `ads health` → `ads fetch` (read-only; default кэш/`--input-file`, live только с `--live` после `seo-cycle spend` и ledger-preflight) → `ads analytics` (SEO+PPC кросс-правила: органика в топ-3 ↔ ставки, конверсионные search terms вне ядра, CPA/ROAS, wasted spend → минус-слова) → `ads draft --create-ticket` (черновики кампаний из семантического ядра, бюджеты = 0 by design) → human approve → `ads apply --ticket <id> --live --allow-write` (только Директ в v1, sandbox-first, кап операций).
+
+Для `region_profile: ru` Google Ads в статусе `region_limited` — **это норма, не ошибка**: primary канал Директ, а Google-драфты экспортируются в Google Ads Editor CSV.
+
+## Локальный RAG (перед написанием и ресёрчем)
+
+`seo/rag.db` (FTS5/BM25, русский из коробки, embeddings опциональны через env `EMBEDDING_API_*`). Индексирует source packs, entity triplets, дистилляты и драфты. Перед Phase 4/6 запроси контекст:
+
+```bash
+seo-cycle rag query "<primary keyword>" --top-k 5 --source-type source_pack --source-type distillate
+seo-cycle rag query "<сущность>" --global          # пересечения с другими проектами агентства
+python3 scripts/page-outline-v3.py <pkg> --all-mvp --rag --write   # брифы с related_passages
+```
+
+Индекс обновляй `seo-cycle rag index --write` после новых distillates/drafts (инкрементально, дёшево). Кросс-проектный: `rag index --global` по projects-registry.
+
 ## Когда запускать
 
 Триггеры:
@@ -400,6 +453,8 @@ python3 ~/.codex/skills/seo-cycle/scripts/resolve-sources.py
 
 **Обязательные evidence-источники:** перед фиксацией Entity Map сверяй сущности, интенты, PAA/FAQ и спорные утверждения через Antigravity CLI и Perplexity Deep Research. Сохраняй raw-ответы на диск, а в Entity Map добавляй только дистиллированные сущности с указанием источника. Без этой сверки карта не проходит quality-gate, кроме явно залогированного технического исключения.
 
+**Сначала переиспользуй накопленное:** `seo-cycle rag query "<сущность>" --source-type triplet --source-type source_pack` — уже проверенные триплеты и цитаты этого проекта (с `--global` — соседних проектов агентства) дешевле нового ресёрча.
+
 **Универсальная структура (17 разделов):**
 1. Центральная сущность (AEO-цитата 2-3 предложения)
 2. Атрибуты (таблица)
@@ -457,6 +512,8 @@ last_fact_check:
 
 **Делегировать:** `delegate.content_writer` (по умолчанию `seo-content-writer`).
 
+**Перед написанием:** запроси накопленный контекст из локального RAG — `seo-cycle rag query "<primary keyword>" --top-k 5 --source-type source_pack --source-type distillate` (цитаты и факты из проверенных source packs; `--global` для пересечений с другими проектами). Брифы с подмешанными пассажами: `page-outline-v3.py --rag`.
+
 **Универсальные правила (config-driven):**
 - Tone of voice — из `tone.*` config
 - Stop-words check — если `quality_gates.stop_words_check.enabled`
@@ -477,6 +534,8 @@ last_fact_check:
 python3 ~/.codex/skills/seo-cycle/scripts/eeat-render.py 06-drafts/<name>.publish.md
 ```
 Рендерятся только источники с verdict достоверно/частично; спорные — править формулировку в тексте, а не «подтверждать». Это прямой Trust-сигнал.
+
+**После черновика:** валидация через автоцикл, не разовым гейтом: `seo-cycle loop draft <draft.md> --outline <page-outlines-v3/slug.json>` (exit 3 = переработай по instructions и `--resume`; лимит попыток не превышать).
 
 Публикация только после прохождения всех гейтов.
 
@@ -668,6 +727,10 @@ python3 ~/.codex/skills/seo-cycle/scripts/source-attribution.py \
 3. `<project>/seo/entities/entities.yaml` — реестр сущностей проекта
 4. `~/.codex/skills/seo-cycle/prompts/` — универсальные промпт-шаблоны
 5. `<artifacts.research_root>` — результаты исследований (ATP, Perplexity, LLM CLI)
+6. `seo/loops/` — журналы автоциклов качества (attempts, delta, эскалации)
+7. `seo/ads/` — raw exports, аналитика и драфты платной рекламы
+8. `seo/rag.db` — локальный RAG-индекс (`rag-query.py`); глобальный — `~/.seo-cycle/rag/global.db`
+9. `seo/logs/` — файловые логи скриптов (`seo-cycle-YYYY-MM-DD.log`)
 
 ## Lessons learned (пополняется)
 

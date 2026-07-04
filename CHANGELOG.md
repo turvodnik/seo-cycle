@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.67.0] — 2026-07-04
+
+### Local RAG layer (SQLite FTS5, optional embeddings, cross-project index)
+
+- Added `seo_cycle_core/rag.py` + `scripts/rag-index.py` + `scripts/rag-query.py`: a zero-dependency local RAG store in `seo/rag.db` (config `data_store.rag_path`). Full-text search runs on SQLite FTS5/BM25 with the unicode61 tokenizer (Russian-ready) and degrades to LIKE when FTS5 is unavailable; no keys or services required.
+- Indexed sources (config `rag.sources`): `source_pack` JSONL records from Perplexity/NotebookLM/XMLRiver collectors, `page_outline_triplets.jsonl` entity triplets, research distillates, and drafts/copywriter-ready markdown (quality-gate reports excluded). Indexing is incremental by content hash; deleted files are purged; `rag-index.py` without `--write` is a dry-run report.
+- Optional embeddings: with `EMBEDDING_API_URL/KEY/MODEL` (OpenAI-compatible `/embeddings`) chunks are embedded into BLOBs via `struct` (no numpy) and queries run hybrid — FTS5 prefilter → pure-Python cosine rerank. Live embedding runs are guarded by a usage-ledger preflight (`--category llm`) and recorded afterwards.
+- Cross-project agency mode: `rag-index.py --global` walks active projects from `config/projects-registry.yaml` into `~/.seo-cycle/rag/global.db`; `rag-query.py --global [--project name]` searches across sites for overlapping topics.
+- Consumers: `page-outline-v3.py --rag` attaches top related passages (with citations) to each brief; `context-pack.py` now reports RAG posture (indexed/chunks/freshness/query hint); CLI gains `seo-cycle rag index|query`. Added `tests/test_rag_local.py` (chunking, Russian BM25 search, filters, incremental reindex, purge, injected-embedding rerank storage, global multi-project mode, CLI dry-run/write/query).
+
 ## [1.66.0] — 2026-07-04
 
 ### Guarded Google Ads + Yandex Direct layer (semi-automatic with approvals)
