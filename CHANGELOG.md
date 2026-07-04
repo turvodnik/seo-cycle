@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.72.0] — 2026-07-04
+
+### Google Business Profile + Yandex Business (honest local-platform layer)
+
+- Added `gbp-health.py`: GBP API readiness with the honest `needs_oauth_verification` status — the business.manage scope requires Google's OAuth verification, so until approved the working path is the browser workflow (prompts/local/google-maps.md) plus manual exports; this is documented as the expected state, not an error.
+- Added `gbp-fetch.py` (read-only): locations (categories/phones/websites, missing-field counters) via Business Information API and reviews (rating distribution, unanswered share, freshness) via My Business v4 — with full offline support: `--input-file` ingests browser/manual exports today, `--live` works once OAuth is verified. Output: `seo/local/gbp-summary.md/json` + raw export.
+- Added `yandex-business-health.py`: honest `partner_limited` status — Яндекс.Справочник API is partner-only (same for 2GIS), so the report lists the working paths instead: browser workflow for the card, manual review exports into `review-velocity.py`, `yml-feed-audit.py` for products on Maps, and Metrika for traffic signals.
+- `seo-cycle doctor` now covers 12 providers (added gbp + yandex-business); GBP OAuth env documented in `.env.example`. Added `tests/test_local_providers.py`.
+
+
 ## [1.71.0] — 2026-07-04
 
 ### SEO forecast + KPI contract ("guaranteed result" loop)

@@ -79,6 +79,8 @@ DOCTOR_STEPS = (
     ("yandex-direct", "yandex-direct-health.py", []),
     ("google-ads", "google-ads-health.py", []),
     ("merchant", "merchant-health.py", []),
+    ("gbp", "gbp-health.py", []),
+    ("yandex-business", "yandex-business-health.py", []),
 )
 
 log = setup_logging("cli")
