@@ -75,6 +75,7 @@ DOCTOR_STEPS = (
     ("xmlriver", "xmlriver-health.py", []),
     ("yandex-direct", "yandex-direct-health.py", []),
     ("google-ads", "google-ads-health.py", []),
+    ("merchant", "merchant-health.py", []),
 )
 
 log = setup_logging("cli")

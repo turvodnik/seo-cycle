@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.68.0] — 2026-07-04
+
+### GTM audit, Merchant diagnostics, and local YML feed validator
+
+- Added `gtm-audit.py`: report-only Google Tag Manager container audit. Primary mode ingests the standard GTM UI container export (`--input-file`, no API access needed); optional `--live` reads the default workspace via GTM API v2 (service account, tagmanager.readonly). Builds a tag/trigger/variable map and hygiene findings: duplicate tags with the same target id (double-counting risk), multiple GA4 config tags, active tags without firing triggers, paused leftovers, orphan triggers/variables, missing Consent Mode settings. Output: `seo/tracking/gtm-audit.md/json`.
+- Added `merchant-health.py` + `merchant-fetch.py`: guarded read-only Google Merchant Center diagnostics via Content API v2.1 (accountstatuses/productstatuses with disapproval reasons) or an offline statuses export. For `region_profile: ru`, `region_limited` is the expected health status and the report points to the Yandex feed path instead.
+- Added `yml-feed-audit.py`: fully local YML (Yandex Market Language) feed validator for Яндекс.Товары/Маркет — stdlib XML parsing, checks required offer fields, duplicate offer ids, non-positive prices, unknown categoryId references, missing pictures/availability, oversized names, and http:// offer URLs; `--url ... --live` downloads the feed, otherwise a local file is used. Output: `seo/merchant/yml-feed-audit.md/json`, exit 1 on critical findings.
+- `seo-cycle doctor` now includes the Merchant health step; documented `GTM_ACCOUNT_ID`/`GTM_CONTAINER_ID` in `.env.example`. Added `tests/test_tracking_merchant.py`.
+
+
 ## [1.67.0] — 2026-07-04
 
 ### Local RAG layer (SQLite FTS5, optional embeddings, cross-project index)
