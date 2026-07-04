@@ -26,11 +26,11 @@ if [[ ! -x "$LAUNCHER" ]]; then
 fi
 mkdir -p "$DESKTOP"
 
-# --- 1. .command fallback (двойной клик открывает Terminal) -------------------
+# --- 1. .command fallback (двойной клик открывает Terminal + браузер) --------
 CMD_FILE="$DESKTOP/SEO Cycle.command"
 cat > "$CMD_FILE" <<EOF
 #!/usr/bin/env bash
-exec "$LAUNCHER" menu
+exec "$LAUNCHER" web --open
 EOF
 chmod +x "$CMD_FILE"
 echo "✓ $CMD_FILE"
@@ -41,8 +41,7 @@ if command -v osacompile >/dev/null 2>&1; then
   rm -rf "$APP"
   osacompile -o "$APP" <<APPLESCRIPT
 tell application "Terminal"
-    activate
-    do script "exec '$LAUNCHER' menu"
+    do script "exec '$LAUNCHER' web --open"
 end tell
 APPLESCRIPT
   echo "✓ $APP"
@@ -52,5 +51,6 @@ else
 fi
 
 echo
-echo "Готово: двойной клик по «SEO Cycle» на рабочем столе открывает меню"
-echo "(выбор проекта из реестра → journey / прогресс позиций / дашборд / approvals / doctor)."
+echo "Готово: двойной клик по «SEO Cycle» открывает визуальный дашборд агентства"
+echo "в браузере (портфель, проекты, approvals, команды, отчёты, доступы)."
+echo "Терминальное меню осталось доступно: seo-cycle menu"

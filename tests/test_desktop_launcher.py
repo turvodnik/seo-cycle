@@ -28,7 +28,7 @@ class DesktopLauncherTest(unittest.TestCase):
         self.assertTrue(os.access(command, os.X_OK))
         body = command.read_text(encoding="utf-8")
         self.assertIn("seo-cycle", body)
-        self.assertIn("menu", body)
+        self.assertIn("web --open", body)  # двойной клик открывает веб-дашборд
         if sys.platform == "darwin" and shutil.which("osacompile"):
             self.assertTrue((tmp / "SEO Cycle.app").exists())
 

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.83.0] — 2026-07-04
+
+### Visual agency dashboard: seo-cycle web
+
+- Added `webapp.py` (`seo-cycle web --open`) — the browser UI over the whole toolchain, stdlib-only (one ThreadingHTTPServer + one self-contained dark-theme page, no external assets): **Портфель** (agency-wide totals and per-project rows from position-progress --global), **Проект** (journey score/stage/blockers/next steps, ranking deltas with trend bars, movers, quality-loops digest, scorecard table), **Approvals** (pending tickets with one-click одобрить/отклонить via approval-gate), **Команды** (whitelisted safe tools grouped by Обзор/Данные/Стратегия/Отчёты/Реклама/Сервис with live output — nothing paid, nothing --live, nothing publishing), **Отчёты** (project report files served inline), **Доступы** (auth-assistant sources per provider; secret values never leave env files).
+- Security: binds 127.0.0.1 by default with a per-process random token (auto-login on localhost when no password is set; JSON preflight blocks cross-origin CSRF); non-local `--host` refuses to start without a password (`SEO_CYCLE_DASHBOARD_PASSWORD` or `--ask-password`); file serving is path-traversal-safe and extension-whitelisted; project paths are validated against the registry.
+- The Desktop launcher («SEO Cycle.app»/.command) now opens the web dashboard instead of the terminal menu (`seo-cycle menu` остаётся). Verified live in the browser (portfolio, project view on real data, command run, auth sources). Added `tests/test_webapp.py` (9 tests: token auth, login flow, composite summary, run whitelist, traversal/extension guards, ticket validation).
+
 ## [1.82.0] — 2026-07-04
 
 ### Desktop launcher, interactive menu, VPS + GBP submission runbooks

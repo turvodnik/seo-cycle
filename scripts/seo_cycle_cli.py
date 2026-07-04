@@ -53,6 +53,7 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "score": {"script": "scorecard.py", "help": "Self-assessment scorecards: record/show 0-10 grades"},
     "progress": {"script": "position-progress.py", "help": "Ranking progress per project or --global portfolio"},
     "auth": {"script": "auth-assistant.py", "help": "Provider logins: list | login <provider> [--global] | set VAR"},
+    "web": {"script": "webapp.py", "help": "Visual agency dashboard in the browser (web --open)"},
 }
 
 SYNC_ADAPTERS = {
