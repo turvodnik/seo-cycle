@@ -693,6 +693,16 @@ python3 ~/.codex/skills/seo-cycle/scripts/source-attribution.py \
 
 **Выход:** `10-iterations.md` — приоритизированный action list со ссылками на конкретные URL/запросы + рекомендуемыми делегатами для каждого пункта.
 
+**KPI-контракт («гарантированный результат»):** если в конфиге заполнена секция `kpi` — раз в месяц сверяй план с фактом и держи стратегию на цифрах:
+
+```bash
+seo-cycle forecast --write     # сценарии current/top10/top3, upside по кластерам, рампа
+seo-cycle kpi --write --escalate   # план vs факт: on_track/at_risk/off_track; off_track → тикет + alert
+seo-cycle sync --live --write  # зеркало сайта: что изменилось на сайте, drift против драфтов
+```
+
+Corrective actions при отставании берутся из forecast (кластеры с максимальным upside) + стандартные рычаги (quality loop, refresh, lost-keywords, ads analytics). Все допущения модели перечислены в отчёте `seo/strategy/seo-forecast.md` — это простая CTR-модель, не обещание.
+
 ---
 
 ## Установка под новый проект
@@ -731,6 +741,8 @@ python3 ~/.codex/skills/seo-cycle/scripts/source-attribution.py \
 7. `seo/ads/` — raw exports, аналитика и драфты платной рекламы
 8. `seo/rag.db` — локальный RAG-индекс (`rag-query.py`); глобальный — `~/.seo-cycle/rag/global.db`
 9. `seo/logs/` — файловые логи скриптов (`seo-cycle-YYYY-MM-DD.log`)
+10. `seo/content-mirror/` — зеркало опубликованного контента сайта + `sync-report` (что изменилось на сайте)
+11. `seo/strategy/` — forecast и KPI-контракт (план vs факт, corrective actions)
 
 ## Lessons learned (пополняется)
 

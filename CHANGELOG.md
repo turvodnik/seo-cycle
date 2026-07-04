@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.71.0] — 2026-07-04
+
+### SEO forecast + KPI contract ("guaranteed result" loop)
+
+- Added `seo-forecast.py`: an honest CTR-curve model over the semantic core and tracked positions — `clicks = monthly_frequency × CTR(position)` with `current` / `target_top10` / `target_top3` scenarios, ±40% bounds, lead projection via `kpi.lead_conversion_rate`, biggest-upside clusters, and a linear month-by-month ramp (`kpi.months_to_target`). Every assumption (curve, unranked position, bounds) is printed in the report; the default curve is overridable via `kpi.ctr_curve`. Output: `seo/strategy/seo-forecast.md/json`.
+- Added `kpi-contract.py`: monthly plan-vs-fact check for `kpi.goals` (organic clicks / leads / keywords in top-10). The plan is a linear ramp from `kpi.baseline` at `kpi.start` to the goal at `kpi.deadline`; facts come from the latest seo.db positions snapshot. Statuses per goal and overall: `on_track` / `at_risk` / `off_track` with `tolerance_pct`. When at risk, corrective actions are pulled from the latest forecast (top-upside clusters) plus standard levers (quality loop, refresh triggers, lost keywords, ads analytics); `--escalate` opens a new `kpi_off_track` approval ticket + Telegram alert, `--fail-on-off-track` gives cron a non-zero exit. Output: `seo/strategy/kpi-report.md/json`.
+- New `kpi` template section (start/deadline/tolerance/baseline/goals/ctr_curve); CLI gains `seo-cycle forecast | kpi | sync`; SKILL.md Phase 10 documents the monthly forecast → kpi → sync ritual. Added `tests/test_forecast_kpi.py`.
+
+
 ## [1.70.0] — 2026-07-04
 
 ### WordPress site → local content mirror with change and drift detection

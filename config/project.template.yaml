@@ -1229,6 +1229,28 @@ rag:
   embedding:
     mode: auto                          # auto | off | required
 
+# KPI-контракт «гарантированного результата»: цели → линейная рампа plan →
+# ежемесячная сверка факта (seo.db positions) → on_track/at_risk/off_track →
+# corrective actions из seo-forecast + эскалация тикетом при провале.
+# Скрипты: seo-forecast.py --write, kpi-contract.py --write [--escalate].
+kpi:
+  enabled: false
+  start: ""                             # YYYY-MM старта контракта (пусто = текущий месяц)
+  deadline: ""                          # YYYY-MM достижения целей (пусто = +12 мес)
+  tolerance_pct: 20                     # допуск отставания от плана
+  lead_conversion_rate: 0.02            # клики → лиды для forecast/KPI
+  months_to_target: 6                   # рампа forecast до top-10 сценария
+  baseline:                             # старт-значения (по умолчанию 0)
+    monthly_organic_clicks: 0
+    monthly_leads: 0
+    keywords_in_top10: 0
+  goals:                                # 0 = цель не отслеживается
+    monthly_organic_clicks: 0
+    monthly_leads: 0
+    keywords_in_top10: 0
+  # ctr_curve:                          # override CTR-кривой forecast
+  #   "1": 0.32
+
 # Лёгкие алерты через Telegram (без n8n). Без ключей в .env — graceful no-op.
 notifications:
   enabled: false                        # opt-in

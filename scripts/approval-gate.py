@@ -62,6 +62,7 @@ TICKET_TYPES = {
     "loop_escalation": "🔁 Loop Escalation",
     "ads_campaign_draft": "📣 Ads Campaign Draft",
     "ads_bid_change": "💰 Ads Bid Change",
+    "kpi_off_track": "📉 KPI Off Track",
     "custom": "⏸  Custom",
 }
 STATUSES = ("pending", "approved", "rejected")

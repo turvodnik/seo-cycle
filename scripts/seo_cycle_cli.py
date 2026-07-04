@@ -45,6 +45,9 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "context": {"script": "context-pack.py", "help": "Low-token context pack for a task"},
     "notify": {"script": "notify.py", "help": "Send a Telegram notification"},
     "cycle": {"script": "cycle-state.py", "help": "Phase DAG state (init/next/show/set/gate)"},
+    "forecast": {"script": "seo-forecast.py", "help": "Traffic/lead forecast from core + positions"},
+    "kpi": {"script": "kpi-contract.py", "help": "KPI contract check: plan vs fact, escalation"},
+    "sync": {"script": "wp-content-pull.py", "help": "Pull site content mirror + change/drift report"},
 }
 
 GATE_SCRIPTS = {
