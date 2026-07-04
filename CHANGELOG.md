@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.81.0] — 2026-07-04
+
+### Auth profiles: log in once globally, or per project — your choice
+
+- Added `seo_cycle_core/env_profile.py` — credential chain with strict precedence: process env > project `.env` > global `~/.seo-cycle/env.global` (override path via `SEO_CYCLE_GLOBAL_ENV`). The `seo-cycle` CLI now merges this chain into every dispatched script and doctor step, so one global login works across all projects until a project overrides it with its own client account.
+- Added `auth-assistant.py` (`seo-cycle auth`): `list` shows every provider variable with its live source (process/project/global/missing), `login <provider> [--global]` is a guided flow — GBP runs the local OAuth dance end-to-end and saves the refresh token straight into the chosen env file, all other providers (Яндекс OAuth, Директ, Google SA, Perplexity, XMLRiver, Keyso, Serpstat, NeuronWriter, WordPress, Tilda, Bitrix, Telegram, Bing, IndexNow, embeddings) print the exact URL + hint and prompt with hidden input. `set VAR [--global]` writes one variable. Secrets are never echoed; files land with 0600.
+- `gbp-oauth-helper.py --write-env <path>` upserts `GBP_OAUTH_REFRESH_TOKEN` into an env file instead of displaying it. `.env.example` gained Perplexity/embeddings sections and the profile precedence note. SKILL.md documents the profile model. Added `tests/test_env_profile.py`.
+
 ## [1.80.0] — 2026-07-04
 
 ### Ranking progress analytics: per-project deltas, movers, portfolio view

@@ -9,7 +9,9 @@ this helper performs the standard authorization-code dance locally:
   1. prints the authorization URL (offline access, business.manage scope);
   2. catches the redirect on http://localhost:<port> with a tiny stdlib server;
   3. exchanges the code and prints the REFRESH TOKEN to stderr once — copy it
-     into .env as GBP_OAUTH_REFRESH_TOKEN yourself; nothing is written to disk.
+     into .env as GBP_OAUTH_REFRESH_TOKEN yourself; nothing is written to disk
+     unless you pass --write-env <path>, which upserts the variable into that
+     env file (0600) and never displays the value.
 
 Requires GBP_OAUTH_CLIENT_ID and GBP_OAUTH_CLIENT_SECRET in the environment
 (create a "Desktop app" or "Web" client with http://localhost redirect).
@@ -21,10 +23,13 @@ import argparse
 import http.server
 import json
 import os
+import pathlib
 import sys
 import threading
 import urllib.parse
 import urllib.request
+
+from seo_cycle_core.env_profile import upsert_env_var
 
 SCOPE = "https://www.googleapis.com/auth/business.manage"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -69,6 +74,8 @@ def main() -> int:
     parser.add_argument("--print-url-only", action="store_true",
                         help="Only print the authorization URL (paste the redirect URL manually)")
     parser.add_argument("--redirect-url", help="With --print-url-only: paste the full redirect URL here to finish")
+    parser.add_argument("--write-env", metavar="PATH",
+                        help="Save GBP_OAUTH_REFRESH_TOKEN into this env file (0600) instead of displaying it")
     args = parser.parse_args()
 
     client_id = os.environ.get("GBP_OAUTH_CLIENT_ID", "")
@@ -126,6 +133,12 @@ def main() -> int:
         print("ERROR: no refresh_token in the response (re-run with prompt=consent; "
               "check that access_type=offline was preserved)", file=sys.stderr)
         return 1
+    if args.write_env:
+        target = upsert_env_var(pathlib.Path(args.write_env).expanduser(), "GBP_OAUTH_REFRESH_TOKEN", refresh)
+        print(f"\n✓ GBP_OAUTH_REFRESH_TOKEN сохранён в {target} (0600); значение не показывается.\n"
+              "Проверка: python3 scripts/gbp-health.py && python3 scripts/gbp-fetch.py --report locations --live",
+              file=sys.stderr)
+        return 0
     print("\n✓ REFRESH TOKEN (показывается один раз, никуда не сохранён):\n", file=sys.stderr)
     print(refresh, file=sys.stderr)
     print("\nДобавьте в .env проекта: GBP_OAUTH_REFRESH_TOKEN=<значение>\n"

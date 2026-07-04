@@ -19,6 +19,7 @@ import time
 from typing import Any
 
 from seo_cycle_core.config import find_config, load_yaml, project_root_for
+from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
 
 SCRIPTS_DIR = pathlib.Path(__file__).resolve().parent
@@ -51,6 +52,7 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "report": {"script": "client-report.py", "help": "White-label client report (md + HTML)"},
     "score": {"script": "scorecard.py", "help": "Self-assessment scorecards: record/show 0-10 grades"},
     "progress": {"script": "position-progress.py", "help": "Ranking progress per project or --global portfolio"},
+    "auth": {"script": "auth-assistant.py", "help": "Provider logins: list | login <provider> [--global] | set VAR"},
 }
 
 SYNC_ADAPTERS = {
@@ -105,7 +107,9 @@ def run_script(script: str, args: list[str], project: pathlib.Path) -> int:
     else:
         command = [sys.executable, str(path), *args]
     started = time.monotonic()
-    proc = subprocess.run(command, cwd=project, check=False)
+    # env chain: process > project .env > ~/.seo-cycle/env.global — a global
+    # login works everywhere until a project overrides it with its own account
+    proc = subprocess.run(command, cwd=project, env=env_chain(project), check=False)
     log.info("dispatch %s args=%s rc=%s duration=%.1fs", script, args, proc.returncode, time.monotonic() - started)
     return proc.returncode
 
@@ -121,6 +125,7 @@ def cmd_doctor(args: list[str], project: pathlib.Path) -> int:
         proc = subprocess.run(
             [sys.executable, str(path), *prepend],
             cwd=project,
+            env=env_chain(project),
             text=True,
             capture_output=True,
             check=False,
