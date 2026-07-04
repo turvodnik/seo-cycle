@@ -506,6 +506,20 @@ def check_governance(cfg: dict, project_root: pathlib.Path, checklist: list, war
     if budget_policy.get("ads_spend_enabled") and numeric_value(budget_policy.get("monthly_total_usd_cap")) <= 0:
         warnings.append("ads_spend_enabled=true, но monthly_total_usd_cap=0")
 
+    ads = cfg.get("ads", {}) if isinstance(cfg.get("ads"), dict) else {}
+    if ads.get("enabled"):
+        if ads.get("policy") not in (None, "report_only", "approval_only"):
+            warnings.append(f"ads.policy={ads.get('policy')!r} — ожидалось report_only | approval_only")
+        platforms_on = [name for name in ("yandex_direct", "google_ads")
+                        if isinstance(ads.get(name), dict) and ads[name].get("enabled")]
+        if not platforms_on:
+            warnings.append("ads.enabled=true, но ни одна платформа не включена (ads.yandex_direct/google_ads.enabled)")
+        if numeric_value(budget_policy.get("monthly_ads_usd_cap")) <= 0:
+            checklist.append("Задать governance.budget_policy.monthly_ads_usd_cap перед live ads fetch/apply")
+        apply_cfg = ads.get("apply", {}) if isinstance(ads.get("apply"), dict) else {}
+        if numeric_value(apply_cfg.get("max_changes_per_run", 20)) > 200:
+            warnings.append("ads.apply.max_changes_per_run > 200 — слишком широкий разовый apply")
+
     automation = gov.get("automation_policy", {}) if isinstance(gov.get("automation_policy"), dict) else {}
     valid_modes = {"disabled", "report_only", "approval_only", "auto_with_caps"}
     mode = automation.get("default_mode")

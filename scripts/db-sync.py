@@ -193,6 +193,83 @@ def sync_usage(conn, root: pathlib.Path) -> int:
     return n
 
 
+def sync_ads(conn, root: pathlib.Path) -> int:
+    """seo/ads/raw/<platform>/*-latest.json → ads_campaigns / ads_stats / ads_search_terms."""
+    conn.execute("DROP TABLE IF EXISTS ads_campaigns")
+    conn.execute("""CREATE TABLE ads_campaigns (platform TEXT, campaign_id TEXT, name TEXT,
+                    status TEXT, budget REAL)""")
+    conn.execute("DROP TABLE IF EXISTS ads_stats")
+    conn.execute("""CREATE TABLE ads_stats (date TEXT, platform TEXT, campaign_id TEXT,
+                    clicks REAL, impressions REAL, cost REAL, conversions REAL)""")
+    conn.execute("DROP TABLE IF EXISTS ads_search_terms")
+    conn.execute("""CREATE TABLE ads_search_terms (platform TEXT, query TEXT, campaign_id TEXT,
+                    clicks REAL, cost REAL, conversions REAL)""")
+
+    def load(platform: str, report: str):
+        p = root / "seo" / "ads" / "raw" / platform / f"{report}-latest.json"
+        if not p.exists():
+            return None
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+    def dig(row, dotted, default=None):
+        cur = row
+        for part in dotted.split("."):
+            if not isinstance(cur, dict) or part not in cur:
+                return default
+            cur = cur[part]
+        return cur
+
+    n = 0
+    data = load("yandex_direct", "campaigns")
+    for row in (dig(data, "result.Campaigns") or []) if data else []:
+        budget = dig(row, "DailyBudget.Amount")
+        conn.execute("INSERT INTO ads_campaigns VALUES (?,?,?,?,?)",
+                     ("yandex_direct", str(row.get("Id", "")), row.get("Name", ""),
+                      row.get("State", ""), float(budget) / 1_000_000 if budget else None))
+        n += 1
+    data = load("google_ads", "campaigns")
+    for row in (data.get("results") or []) if data else []:
+        budget = dig(row, "campaignBudget.amountMicros")
+        conn.execute("INSERT INTO ads_campaigns VALUES (?,?,?,?,?)",
+                     ("google_ads", str(dig(row, "campaign.id", "")), dig(row, "campaign.name", ""),
+                      dig(row, "campaign.status", ""), float(budget) / 1_000_000 if budget else None))
+        n += 1
+    data = load("yandex_direct", "stats")
+    for row in (data.get("rows") or []) if data else []:
+        conn.execute("INSERT INTO ads_stats VALUES (?,?,?,?,?,?,?)",
+                     (row.get("Date", ""), "yandex_direct", str(row.get("CampaignId", "")),
+                      float(row.get("Clicks") or 0), float(row.get("Impressions") or 0),
+                      float(row.get("Cost") or 0), float(row.get("Conversions") or 0)))
+        n += 1
+    data = load("google_ads", "stats")
+    for row in (data.get("results") or []) if data else []:
+        conn.execute("INSERT INTO ads_stats VALUES (?,?,?,?,?,?,?)",
+                     (dig(row, "segments.date", ""), "google_ads", str(dig(row, "campaign.id", "")),
+                      float(dig(row, "metrics.clicks", 0) or 0), float(dig(row, "metrics.impressions", 0) or 0),
+                      float(dig(row, "metrics.costMicros", 0) or 0) / 1_000_000,
+                      float(dig(row, "metrics.conversions", 0) or 0)))
+        n += 1
+    data = load("yandex_direct", "search_queries")
+    for row in (data.get("rows") or []) if data else []:
+        conn.execute("INSERT INTO ads_search_terms VALUES (?,?,?,?,?,?)",
+                     ("yandex_direct", row.get("Query", ""), str(row.get("CampaignId", "")),
+                      float(row.get("Clicks") or 0), float(row.get("Cost") or 0),
+                      float(row.get("Conversions") or 0)))
+        n += 1
+    data = load("google_ads", "search_terms")
+    for row in (data.get("results") or []) if data else []:
+        conn.execute("INSERT INTO ads_search_terms VALUES (?,?,?,?,?,?)",
+                     ("google_ads", dig(row, "searchTermView.searchTerm", ""),
+                      str(dig(row, "campaign.id", "")), float(dig(row, "metrics.clicks", 0) or 0),
+                      float(dig(row, "metrics.costMicros", 0) or 0) / 1_000_000,
+                      float(dig(row, "metrics.conversions", 0) or 0)))
+        n += 1
+    return n
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", help="путь к SQLite (override config)")
@@ -214,6 +291,7 @@ def main() -> int:
             print(f"  ✓ {table}: {n} строк")
     print(f"  ✓ positions: {sync_positions(conn, root)} строк")
     print(f"  ✓ api_usage: {sync_usage(conn, root)} сервис(ов)")
+    print(f"  ✓ ads (campaigns/stats/search_terms): {sync_ads(conn, root)} строк")
     conn.commit()
 
     dash = dashboard_path(cfg)

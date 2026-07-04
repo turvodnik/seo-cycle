@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.66.0] — 2026-07-04
+
+### Guarded Google Ads + Yandex Direct layer (semi-automatic with approvals)
+
+- Added `yandex-direct-health.py` and `google-ads-health.py` (no network): env/readiness reports with `available | needs_credentials | region_limited` statuses. For `region_profile: ru`, Google Ads `region_limited` is an expected state, not an error — the primary paid channel resolves to Yandex Direct via `ads.primary_platform: auto`.
+- Added `yandex-direct-fetch.py` (Direct API v5 JSON + Reports API TSV with 201/202 offline handling, sandbox host support) and `google-ads-fetch.py` (REST GAQL search + urllib OAuth refresh flow, no SDK). Both default to cache/`--input-file`; `--live` requires env credentials plus a `usage-ledger.py check --category ads --fail-on-block` preflight and records usage afterwards. Raw exports land in `seo/ads/raw/<platform>/`, bounded summaries in `seo/ads/<platform>-summary.md/json`.
+- Added `ads-analytics.py` (offline cross-channel SEO+PPC): organic top-N ∩ active bids → lower/pause recommendations, converting search terms missing from the semantic core → `keyword-candidates.csv`, campaign CPA/cost economics, wasted spend → `negative-candidates.csv`. Reads `positions` from seo.db and the research-package core.
+- Added `ads-draft-builder.py`: campaign/ad-group/keyword drafts from `semantic-architecture-final.json` + semantic core (MVP/P0/P1 clusters only, budgets zeroed by design) with md preview, Google Ads Editor CSV export, and `--create-ticket` for an `ads_campaign_draft` approval.
+- Added `ads-apply.py` — the only script that writes to ad platforms, with six safeguards: approved ticket, ledger preflight, `--live --allow-write`, per-run operation cap + frozen budgets (`max_daily_budget: 0`), dry-run default, ledger record + Telegram notify after apply. V1 applies to Yandex Direct (sandbox supported, campaigns start-dated in the future); Google Ads apply stays behind `ads.google_ads.apply_enabled: false` with the Editor CSV as the working path.
+- New `ads` config section (disabled by default) + `governance.budget_policy.monthly_ads_usd_cap`; `validate-config.py` checks the section; `approval-gate.py` gains `ads_campaign_draft`/`ads_bid_change` ticket types; `db-sync.py` builds `ads_campaigns`/`ads_stats`/`ads_search_terms` tables; `access-key-assistant.py` documents both credential sets; CLI gains `seo-cycle ads health|fetch|analytics|draft|apply` and doctor includes both platform healths. Added `tests/test_ads_provider.py`, `tests/test_ads_analytics.py`.
+
 ## [1.65.0] — 2026-07-04
 
 ### Unified `seo-cycle` CLI
