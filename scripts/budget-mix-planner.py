@@ -69,24 +69,31 @@ def seo_lots(forecast: dict[str, Any], *, cost_per_article: float, conversion: f
     return lots
 
 
-def ppc_lots(ads: dict[str, Any], *, ppc_step: float, conversion: float) -> list[dict[str, Any]]:
+def ppc_lots(ads: dict[str, Any], *, ppc_step: float, conversion: float,
+             diminishing_factor: float) -> list[dict[str, Any]]:
+    """Each extra step into the same campaign yields diminishing returns:
+    step N converts at base CPA / factor^(N-1) efficiency (factor <= 1)."""
     lots = []
     for campaign in ads.get("campaigns") or []:
         cpa = campaign.get("cpa")
         if not cpa or float(cpa) <= 0:
             continue
-        leads = ppc_step / float(cpa)
-        for _ in range(MAX_PPC_LOTS_PER_CAMPAIGN):
+        base_leads = ppc_step / float(cpa)
+        for step_number in range(1, MAX_PPC_LOTS_PER_CAMPAIGN + 1):
+            efficiency = diminishing_factor ** (step_number - 1)
+            leads = base_leads * efficiency
+            effective_cpa = round(float(cpa) / efficiency, 2) if efficiency else None
             lots.append(
                 {
                     "channel": "ppc",
-                    "lot": f"budget step: {campaign.get('name') or campaign.get('campaign_id')}"
+                    "lot": f"budget step {step_number}: {campaign.get('name') or campaign.get('campaign_id')}"
                            f" ({campaign.get('platform')})",
                     "cost": ppc_step,
                     "expected_monthly_clicks": round(leads / conversion, 1) if conversion else 0,
                     "expected_monthly_leads": round(leads, 2),
                     "leads_per_1000": round(leads / ppc_step * 1000, 3),
-                    "note": f"recurring monthly spend at current CPA {cpa}",
+                    "note": f"step {step_number}: efficiency {round(efficiency, 2)},"
+                            f" effective CPA {effective_cpa} (base {cpa})",
                 }
             )
     return lots
@@ -100,10 +107,13 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any], monthly_budget
     months = max(1, int(nested_get(cfg, "kpi.months_to_target", 6) or 6))
     cost_per_article = float(numeric(nested_get(cfg, "kpi.budget.cost_per_article"), DEFAULT_COST_PER_ARTICLE))
     ppc_step = float(numeric(nested_get(cfg, "kpi.budget.ppc_step"), DEFAULT_PPC_STEP))
+    diminishing = float(numeric(nested_get(cfg, "kpi.budget.ppc_diminishing_factor"), 0.85))
+    diminishing = min(max(diminishing, 0.1), 1.0)
     budget = monthly_budget or float(numeric(nested_get(cfg, "kpi.budget.monthly_total"), 0))
 
     lots = seo_lots(forecast, cost_per_article=cost_per_article, conversion=conversion,
-                    months_to_target=months) + ppc_lots(ads, ppc_step=ppc_step, conversion=conversion)
+                    months_to_target=months) + ppc_lots(ads, ppc_step=ppc_step, conversion=conversion,
+                                                        diminishing_factor=diminishing)
     lots.sort(key=lambda lot: lot["leads_per_1000"], reverse=True)
 
     selected: list[dict[str, Any]] = []
@@ -123,6 +133,7 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any], monthly_budget
             "monthly_budget": budget,
             "cost_per_article": cost_per_article,
             "ppc_step": ppc_step,
+            "ppc_diminishing_factor": diminishing,
             "lead_conversion_rate": conversion,
             "months_to_target": months,
             "forecast_available": bool(forecast),
@@ -141,8 +152,9 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any], monthly_budget
         "skipped_top_lots": [lot for lot in lots if lot not in selected][:10],
         "assumptions": [
             "SEO lot value uses the average of a linear ramp to target and ignores seasonality.",
-            "PPC lots assume current campaign CPA holds at higher spend (diminishing returns are NOT modeled).",
-            f"PPC lots are capped at {MAX_PPC_LOTS_PER_CAMPAIGN} steps per campaign to limit that assumption.",
+            f"PPC diminishing returns: step N works at factor^(N-1) efficiency"
+            f" (kpi.budget.ppc_diminishing_factor = {diminishing}); base CPA comes from current stats.",
+            f"PPC lots are capped at {MAX_PPC_LOTS_PER_CAMPAIGN} steps per campaign.",
             "SEO production cost is one-time; PPC spend is recurring monthly — compare accordingly.",
             "Run seo-forecast.py and ads-analytics.py first; empty inputs shrink the lot pool.",
         ],

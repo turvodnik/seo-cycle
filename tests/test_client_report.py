@@ -105,6 +105,27 @@ class ClientReportTest(unittest.TestCase):
         self.assertIn("kpi", ids)
         self.assertIn("forecast", ids)
 
+    def test_pdf_export_via_headless_chrome(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("client_report", SCRIPTS / "client-report.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        if not module.find_chrome():
+            self.skipTest("no Chrome/Chromium/Edge on this machine")
+        self.seed_artifacts()
+        proc = self.run_report("--write", "--pdf")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        pdf = self.tmp / "seo" / "reports" / "client-report-2026-07.pdf"
+        self.assertTrue(pdf.exists(), proc.stderr)
+        self.assertGreater(pdf.stat().st_size, 5000)
+        self.assertEqual(pdf.read_bytes()[:5], b"%PDF-")
+
+    def test_pdf_without_write_is_refused_gracefully(self) -> None:
+        proc = self.run_report("--pdf")
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("--write", proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

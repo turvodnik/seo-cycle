@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.77.0] — 2026-07-04
+
+### GBP OAuth path, PPC diminishing returns, direct PDF reports
+
+- Added `gbp-oauth-helper.py` — the local authorization-code dance for the business.manage scope: prints the consent URL, catches the localhost redirect (or accepts a pasted redirect URL with `--print-url-only`), exchanges the code, and shows the refresh token once without writing it anywhere. Added `docs/gbp-oauth-verification.md`: the full human runbook — Cloud project/consent screen/test users, the separate GBP API quota request, working in Testing mode today (7-day token, weekly re-mint), and what Google asks for at verification (privacy policy, scope justification, demo video).
+- `budget-mix-planner.py` now models PPC diminishing returns: budget step N into the same campaign works at `factor^(N-1)` efficiency (`kpi.budget.ppc_diminishing_factor`, default 0.85, `1.0` disables), with effective CPA per step printed in each lot and in the assumptions.
+- `client-report.py --pdf` prints the self-contained HTML to PDF via headless Chrome/Chromium/Edge (auto-discovery incl. `CHROME_BIN`, new/legacy headless fallback, graceful skip with a hint when no browser is installed). Output: `seo/reports/client-report-<period>.pdf`.
+
+
 ## [1.76.0] — 2026-07-04
 
 ### Engineering wave: CI, optional config schema, monolith slimming

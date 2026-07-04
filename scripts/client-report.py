@@ -25,12 +25,63 @@ import sqlite3
 import sys
 from typing import Any
 
+import os
+import shutil
+import subprocess
+
 from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, write_text
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("client-report")
 
 DEFAULT_ACCENT = "#0B57D0"
+
+CHROME_CANDIDATES = (
+    os.environ.get("CHROME_BIN", ""),
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    "google-chrome",
+    "chromium",
+    "chromium-browser",
+    "msedge",
+)
+
+
+def find_chrome() -> str | None:
+    for candidate in CHROME_CANDIDATES:
+        if not candidate:
+            continue
+        if pathlib.Path(candidate).exists():
+            return candidate
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    return None
+
+
+def html_to_pdf(html_path: pathlib.Path, pdf_path: pathlib.Path) -> tuple[bool, str]:
+    """Print the self-contained HTML to PDF via headless Chrome/Chromium/Edge."""
+    chrome = find_chrome()
+    if not chrome:
+        return False, ("no Chrome/Chromium/Edge binary found — set CHROME_BIN env or open the .html "
+                       "and print to PDF manually")
+    command = [
+        chrome,
+        "--headless=new",
+        "--disable-gpu",
+        "--no-pdf-header-footer",
+        f"--print-to-pdf={pdf_path}",
+        html_path.resolve().as_uri(),
+    ]
+    proc = subprocess.run(command, capture_output=True, text=True, timeout=120, check=False)
+    if proc.returncode != 0 or not pdf_path.exists():
+        # older Chrome builds need the legacy headless flag
+        command[1] = "--headless"
+        proc = subprocess.run(command, capture_output=True, text=True, timeout=120, check=False)
+    if proc.returncode == 0 and pdf_path.exists():
+        return True, str(pdf_path)
+    return False, (proc.stderr or proc.stdout or f"rc={proc.returncode}")[-300:]
 
 
 def load_json(path: pathlib.Path) -> dict[str, Any]:
@@ -270,6 +321,8 @@ def main() -> int:
     parser.add_argument("config", nargs="?", help="Path to seo-cycle.yaml")
     parser.add_argument("--period", default=dt.date.today().strftime("%Y-%m"), help="Report period label (YYYY-MM)")
     parser.add_argument("--write", action="store_true", help="Write seo/reports/client-report-<period>.md/.html")
+    parser.add_argument("--pdf", action="store_true",
+                        help="Also print the HTML to PDF via headless Chrome (requires --write)")
     parser.add_argument("--format", choices=("md", "json"), default="md")
     args = parser.parse_args()
 
@@ -286,11 +339,21 @@ def main() -> int:
     markdown_body = render_markdown(report)
     if args.write:
         base = project_root / "seo" / "reports"
+        html_body = render_html(report, markdown_body)
         write_text(base / f"client-report-{args.period}.md", markdown_body)
-        write_text(base / f"client-report-{args.period}.html", render_html(report, markdown_body))
+        write_text(base / f"client-report-{args.period}.html", html_body)
         write_text(base / "latest-client-report.md", markdown_body)
-        write_text(base / "latest-client-report.html", render_html(report, markdown_body))
+        write_text(base / "latest-client-report.html", html_body)
         log.info("client report written for %s (%s sections)", args.period, len(report["sections"]))
+        if args.pdf:
+            ok, detail = html_to_pdf(base / f"client-report-{args.period}.html",
+                                     base / f"client-report-{args.period}.pdf")
+            if ok:
+                print(f"PDF: {detail}", file=sys.stderr)
+            else:
+                print(f"PDF skipped: {detail}", file=sys.stderr)
+    elif args.pdf:
+        print("--pdf requires --write (the PDF is printed from the written HTML)", file=sys.stderr)
     if args.format == "json":
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:

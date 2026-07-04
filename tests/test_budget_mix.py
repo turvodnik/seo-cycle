@@ -61,18 +61,36 @@ class BudgetMixTest(unittest.TestCase):
     def test_greedy_mix_ranks_by_leads_per_unit_and_respects_budget(self) -> None:
         report = self.run_planner("--monthly-budget", "30000", "--write")
         mix = report["mix"]
-        # best lots: seo vagonka (2.7), ppc step (2.0) x2 → 10k+10k+10k = 30k
+        # best lots: seo vagonka (2.7), ppc step1 (2.0), ppc step2 (2.0*0.85=1.7) → 30k
         self.assertEqual(mix["seo_spend"] + mix["ppc_spend"], 30000)
         self.assertEqual(mix["unallocated"], 0)
         self.assertEqual(report["selected_lots"][0]["lot"], "article: vagonka")
         self.assertEqual(report["selected_lots"][0]["channel"], "seo")
         self.assertTrue(all(lot["channel"] == "ppc" for lot in report["selected_lots"][1:3]))
-        # leads: 27 + 20 + 20 = 67
-        self.assertAlmostEqual(mix["expected_monthly_leads"], 67.0, places=1)
+        # leads: 27 + 20 + 17 = 64 (default diminishing factor 0.85)
+        self.assertAlmostEqual(mix["expected_monthly_leads"], 64.0, places=1)
         # ranking is monotonic
         ranks = [lot["leads_per_1000"] for lot in report["selected_lots"]]
         self.assertEqual(ranks, sorted(ranks, reverse=True))
         self.assertTrue((self.tmp / "seo" / "strategy" / "budget-mix.md").exists())
+
+    def test_diminishing_returns_reduce_each_ppc_step(self) -> None:
+        report = self.run_planner("--monthly-budget", "200000")
+        ppc = [lot for lot in report["selected_lots"] if lot["channel"] == "ppc"]
+        leads = [lot["expected_monthly_leads"] for lot in ppc]
+        self.assertEqual(leads, sorted(leads, reverse=True))
+        self.assertGreater(leads[0], leads[-1])  # step 5 is strictly worse than step 1
+        self.assertAlmostEqual(leads[1] / leads[0], 0.85, places=2)
+        self.assertEqual(report["inputs"]["ppc_diminishing_factor"], 0.85)
+
+    def test_factor_one_disables_diminishing(self) -> None:
+        (self.tmp / "seo-cycle.yaml").write_text(
+            CFG + "    ppc_diminishing_factor: 1.0\n", encoding="utf-8"
+        )
+        report = self.run_planner("--monthly-budget", "200000")
+        ppc_leads = {lot["expected_monthly_leads"] for lot in report["selected_lots"]
+                     if lot["channel"] == "ppc"}
+        self.assertEqual(len(ppc_leads), 1)  # all steps equal
 
     def test_campaigns_without_cpa_are_excluded(self) -> None:
         report = self.run_planner("--monthly-budget", "200000")

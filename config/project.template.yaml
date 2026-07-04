@@ -1244,6 +1244,7 @@ kpi:
     monthly_total: 0                    # месячный бюджет SEO+PPC (0 = только по --monthly-budget)
     cost_per_article: 15000             # стоимость производства одной статьи
     ppc_step: 10000                     # шаг докупки PPC-бюджета в кампанию
+    ppc_diminishing_factor: 0.85        # эффективность каждого следующего шага (1.0 = выключить)
   baseline:                             # старт-значения (по умолчанию 0)
     monthly_organic_clicks: 0
     monthly_leads: 0
