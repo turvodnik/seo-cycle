@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.78.0] — 2026-07-04
+
+### Curated ecosystem: n-gram waste rule, MCP presets, integration doctrine
+
+- `ads-analytics.py` rule 5 — **n-gram waste aggregation** (the classic PPC-skill move worth stealing): zero-conversion spend is grouped by 1–2-word n-grams, so a shared token («бесплатно», «б/у») surfaces as a negative-keyword candidate even when every individual search term is below the cost threshold. New `wasted_ngrams` report section + markdown block.
+- Added `mcp-preset.py`: curated project-local MCP servers in `.codex/config.toml` under a dedicated managed block (never collides with the WordPress MCP block, secrets read from the project `.env` at startup). Presets: **chrome-devtools** (official DevTools MCP for perf traces), **perplexity** (official Sonar MCP; PERPLEXITY_API_KEY guard), **google-analytics** (official GA4 MCP; ADC guard). `--list/--enable/--disable/--write`, state in `.codex/mcp-presets.json`.
+- Added `docs/ecosystem-integrations.md` — the curation verdict over ~50 proposed repos/articles: what was adopted (and where), which official MCPs are opt-in presets, why Google Ads MCP intentionally stays out of presets (own guarded layer + ru region_limited), and the rejected lists with reasons — duplicates of installed plugins/скиллов, anti-detect tooling that violates project policy, standalone apps, and awesome-list catalogs. Ends with the four-question rule for future adoptions. Added `tests/test_mcp_preset.py`.
+
+
 ## [1.77.0] — 2026-07-04
 
 ### GBP OAuth path, PPC diminishing returns, direct PDF reports

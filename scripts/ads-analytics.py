@@ -139,6 +139,32 @@ def campaign_stats(project_root: pathlib.Path) -> list[dict[str, Any]]:
     return sorted(result, key=lambda item: item["cost"], reverse=True)
 
 
+def wasted_ngrams(terms: list[dict[str, Any]], wasted_min: float) -> list[dict[str, Any]]:
+    """Rule 5 (PPC classic): aggregate zero-conversion spend by 1-2-word n-grams.
+
+    Single wasted terms are often below the cost threshold individually, but a
+    shared token («бесплатно», «своими руками», «б/у») burns real money in
+    aggregate — the strongest negative-keyword candidates."""
+    stats: dict[str, dict[str, float]] = {}
+    for term in terms:
+        if term["conversions"] > 0:
+            continue
+        words = [w for w in norm_query(term["query"]).split() if len(w) > 2]
+        grams = set(words) | {" ".join(pair) for pair in zip(words, words[1:])}
+        for gram in grams:
+            bucket = stats.setdefault(gram, {"cost": 0.0, "clicks": 0.0, "terms": 0})
+            bucket["cost"] += term["cost"]
+            bucket["clicks"] += term["clicks"]
+            bucket["terms"] += 1
+    rows = [
+        {"ngram": gram, "cost": round(bucket["cost"], 2), "clicks": int(bucket["clicks"]),
+         "terms": int(bucket["terms"]), "action": "review as negative keyword (aggregate waste)"}
+        for gram, bucket in stats.items()
+        if bucket["cost"] >= wasted_min and bucket["terms"] >= 2
+    ]
+    return sorted(rows, key=lambda row: row["cost"], reverse=True)
+
+
 def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, Any]:
     ads = ads_config(cfg)
     threshold = float(nested_get(ads, "analytics.top_position_threshold", 3) or 3)
@@ -163,6 +189,7 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
             wasted.append({**term, "action": "add as negative keyword"})
 
     campaigns = campaign_stats(project_root)
+    ngrams = wasted_ngrams(terms, wasted_min)
     return {
         "audit_id": "ads_analytics",
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
@@ -176,11 +203,13 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
         "organic_overlap": sorted(organic_overlap, key=lambda item: item["cost"], reverse=True)[:100],
         "keyword_candidates": sorted(keyword_candidates, key=lambda item: item["conversions"], reverse=True)[:200],
         "wasted_spend": sorted(wasted, key=lambda item: item["cost"], reverse=True)[:200],
+        "wasted_ngrams": ngrams[:30],
         "campaigns": campaigns,
         "summary": {
             "organic_overlap": len(organic_overlap),
             "keyword_candidates": len(keyword_candidates),
             "wasted_spend": len(wasted),
+            "wasted_ngrams": len(ngrams),
             "campaigns": len(campaigns),
             "total_cost": round(sum(item["cost"] for item in campaigns), 2),
             "total_conversions": round(sum(item["conversions"] for item in campaigns), 1),
@@ -223,6 +252,10 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"- `{row['query']}` ({row['platform']}, cost {round(row['cost'], 2)},"
                 f" conv {row['conversions']}{extra}) — {row['action']}"
             )
+    if report.get("wasted_ngrams"):
+        lines.extend(["", "## Aggregate waste by n-gram (negative candidates)", ""])
+        for row in report["wasted_ngrams"][:10]:
+            lines.append(f"- `{row['ngram']}`: {row['cost']} across {row['terms']} terms — {row['action']}")
     lines.extend(["", "CSV plans: `seo/ads/keyword-candidates.csv`, `seo/ads/negative-candidates.csv`."])
     return "\n".join(lines) + "\n"
 

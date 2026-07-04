@@ -122,6 +122,29 @@ class AdsAnalyticsTest(unittest.TestCase):
         negatives_csv = (self.tmp / "seo" / "ads" / "negative-candidates.csv").read_text(encoding="utf-8")
         self.assertIn("вагонка бесплатно скачать", negatives_csv)
 
+    def test_wasted_ngrams_aggregate_subthreshold_terms(self) -> None:
+        raw = self.tmp / "seo" / "ads" / "raw" / "yandex_direct"
+        (raw / "search_queries-latest.json").write_text(
+            json.dumps({"rows": [
+                # каждый терм ниже порога 100 сам по себе, но токен «бесплатно» суммарно 180
+                {"Query": "вагонка бесплатно скачать", "CampaignId": "2", "Clicks": "9",
+                 "Cost": "90", "Conversions": "0"},
+                {"Query": "вагонка бесплатно чертежи", "CampaignId": "2", "Clicks": "9",
+                 "Cost": "90", "Conversions": "0"},
+                {"Query": "купить вагонку", "CampaignId": "1", "Clicks": "30",
+                 "Cost": "900", "Conversions": "3"},
+            ]}),
+            encoding="utf-8",
+        )
+        report = json.loads(self.run_analytics().stdout)
+        self.assertEqual(report["wasted_spend"], [])  # ни один терм не прошёл порог сам
+        ngrams = {row["ngram"]: row for row in report["wasted_ngrams"]}
+        self.assertIn("бесплатно", ngrams)
+        self.assertEqual(ngrams["бесплатно"]["cost"], 180.0)
+        self.assertEqual(ngrams["бесплатно"]["terms"], 2)
+        self.assertIn("вагонка бесплатно", ngrams)  # биграмма тоже
+        self.assertNotIn("купить", ngrams)  # конверсионные термы не участвуют
+
     def test_runs_without_db_or_raw(self) -> None:
         empty = pathlib.Path(tempfile.mkdtemp(prefix="seo-ads-empty-"))
         self.addCleanup(lambda: shutil.rmtree(empty, ignore_errors=True))
