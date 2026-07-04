@@ -1240,6 +1240,10 @@ kpi:
   tolerance_pct: 20                     # допуск отставания от плана
   lead_conversion_rate: 0.02            # клики → лиды для forecast/KPI
   months_to_target: 6                   # рампа forecast до top-10 сценария
+  budget:                               # для budget-mix-planner.py
+    monthly_total: 0                    # месячный бюджет SEO+PPC (0 = только по --monthly-budget)
+    cost_per_article: 15000             # стоимость производства одной статьи
+    ppc_step: 10000                     # шаг докупки PPC-бюджета в кампанию
   baseline:                             # старт-значения (по умолчанию 0)
     monthly_organic_clicks: 0
     monthly_leads: 0

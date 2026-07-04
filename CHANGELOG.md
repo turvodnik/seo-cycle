@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.73.0] — 2026-07-04
+
+### SEO+PPC budget-mix planner
+
+- Added `budget-mix-planner.py` (offline-only): splits a monthly budget between SEO content and PPC by expected leads per currency unit. Investment lots: one article per biggest-upside cluster from `seo-forecast.json` (one-time cost, ramp-averaged clicks) vs budget steps into the best-CPA campaigns from `ads-analytics.json` (recurring spend, capped at 5 steps per campaign to respect the constant-CPA assumption). Greedy packing prints the selected plan, the share split, expected leads, next lots if the budget grows, and every model assumption.
+- New `kpi.budget` template keys (`monthly_total`, `cost_per_article`, `ppc_step`); CLI gains `seo-cycle budget --monthly-budget N`. Added `tests/test_budget_mix.py`.
+
+
 ## [1.72.0] — 2026-07-04
 
 ### Google Business Profile + Yandex Business (honest local-platform layer)

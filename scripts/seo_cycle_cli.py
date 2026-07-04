@@ -48,6 +48,7 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "forecast": {"script": "seo-forecast.py", "help": "Traffic/lead forecast from core + positions"},
     "kpi": {"script": "kpi-contract.py", "help": "KPI contract check: plan vs fact, escalation"},
     "sync": {"script": "wp-content-pull.py", "help": "Pull site content mirror + change/drift report"},
+    "budget": {"script": "budget-mix-planner.py", "help": "SEO+PPC budget mix by leads per unit"},
 }
 
 GATE_SCRIPTS = {
