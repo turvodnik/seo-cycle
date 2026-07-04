@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.86.1] — 2026-07-04
+
+- Fix: `snapshot-build.py --source webmaster` now parses webmaster-fetch.py raw API v4 records (query_text + indicators); previously 500 queries silently collapsed into empty rows. Flat exports unchanged. Registry gained PifagorLab and gsse. Added tests/test_snapshot_webmaster.py.
+
 ## [1.86.0] — 2026-07-04
 
 ### The tail: Woo YML feeds, РСЯ drafts, forecast confidence, token lifetimes

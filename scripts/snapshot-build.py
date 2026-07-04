@@ -156,16 +156,22 @@ def from_metrika(raw: dict) -> dict:
 
 
 def from_webmaster(raw: dict) -> dict:
-    """Я.Вебмастер «История запросов»: query, shows, clicks, ctr, position"""
+    """Я.Вебмастер «История запросов»: плоский экспорт ИЛИ сырой API v4
+    (webmaster-fetch.py: query_text + indicators.TOTAL_SHOWS/TOTAL_CLICKS/AVG_SHOW_POSITION)."""
     out = {"engine": "yandex", "source": "webmaster", "queries": []}
     rows = raw.get("queries", raw.get("rows", []))
     for r in rows:
+        indicators = r.get("indicators") or {}
+        query = r.get("query") or r.get("query_text") or r.get("name", "")
+        if not query:
+            continue
         out["queries"].append({
-            "query": r.get("query") or r.get("name", ""),
-            "impressions": int(r.get("shows", r.get("impressions", 0))),
-            "clicks": int(r.get("clicks", 0)),
+            "query": query,
+            "impressions": int(r.get("shows", r.get("impressions", indicators.get("TOTAL_SHOWS", 0)))),
+            "clicks": int(r.get("clicks", indicators.get("TOTAL_CLICKS", 0))),
             "ctr": float(r.get("ctr", 0.0)),
-            "position": float(r.get("position", r.get("avgPosition", 0.0))),
+            "position": float(r.get("position",
+                                    r.get("avgPosition", indicators.get("AVG_SHOW_POSITION", 0.0)))),
             "url": r.get("url", ""),
         })
     return out

@@ -19,3 +19,15 @@ projects:
     cms: wordpress
     status: active
     monthly_automation: true
+  - name: "PifagorLab"
+    path: "/Users/turvodnik/AI/3Dprint"
+    region_profile: eu
+    cms: static
+    status: active
+    monthly_automation: false
+  - name: "ГРАДСТРОЙСЕРВИС"
+    path: "/Users/turvodnik/AI/gsse"
+    region_profile: ru
+    cms: wordpress
+    status: active
+    monthly_automation: false
