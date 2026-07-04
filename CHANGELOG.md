@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.86.0] — 2026-07-04
+
+### The tail: Woo YML feeds, РСЯ drafts, forecast confidence, token lifetimes
+
+- Added `woo-yml-feed.py` (`seo-cycle feed`) — a valid `yml_catalog` feed for Яндекс.Товары/Маркет straight from WooCommerce: `--live` pages through the Woo REST API (read-only, `WOO_REST_API_KEY/SECRET`), `--input-file` works offline over an export; categories collected from products, offers carry price/currency/pictures/vendorCode/clean description, out-of-stock → `available="false"`, priceless products are skipped with a count. Validate with the existing `yml-feed-audit.py`.
+- `ads-draft-builder.py --networks` (or `ads.draft.include_networks`) now also drafts **РСЯ campaigns**: per-priority network campaigns with display-length copy (headline ≤56, text ≤81), mandatory image TODO slots, broad-match targeting and an excluded-placements slot; the markdown preview shows the channel. `ads-apply.py` deliberately **skips non-search channels** (`skip_campaign` op) — сети создаются человеком после ревью; Google Ads Editor CSV stays search-only.
+- `seo-forecast.py` scenarios gained honest **confidence intervals**: deterministic Monte-Carlo (400 runs, position σ=1.2, CTR-curve σ=22%) → `confidence {p10,p50,p90}` and `monthly_leads_confidence` per scenario, rendered as P10–P90 in the report table.
+- GBP token lifetime: `gbp-oauth-helper --write-env` also stamps `GBP_TOKEN_MINTED_AT`, and `seo-cycle auth list` warns a day before the 7-day Testing-mode token dies. Audit re-scored: **9.6 → 9.7/10** (12 и 27 стали десятками, реклама 9.5, Merchant 7 → 9). Added `tests/test_tail_tools.py`.
+
 ## [1.85.0] — 2026-07-04
 
 ### Push-to-ten wave 2: delivery, cohorts, schedules, lint-clean codebase

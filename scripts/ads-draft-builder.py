@@ -27,7 +27,7 @@ import sys
 from typing import Any
 
 from seo_cycle_core.ads import primary_platform
-from seo_cycle_core.config import find_config, load_yaml, package_project_root, write_text
+from seo_cycle_core.config import find_config, load_yaml, nested_get, package_project_root, write_text
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("ads-draft-builder")
@@ -87,8 +87,19 @@ def cluster_keywords(rows: list[dict[str, str]], cluster_id: str) -> list[dict[s
     ]
 
 
+def network_ad(cluster: dict[str, Any], final_url: str) -> dict[str, Any]:
+    """РСЯ/сети: длиннее заголовок (≤56), текст ≤81, обязательный image-слот."""
+    name = str(cluster.get("name") or cluster.get("primary_keyword") or "")
+    return {
+        "headlines": [name[:56]],
+        "descriptions": [f"{name}: цены, наличие, доставка. Подбор за 5 минут."[:81]],
+        "image": "[TODO: 1080x607 и 450x450 — добавить при ревью]",
+        "final_url": final_url,
+    }
+
+
 def build_draft(package: pathlib.Path, cfg: dict[str, Any], platform: str,
-                site_url: str) -> dict[str, Any]:
+                site_url: str, *, include_networks: bool = False) -> dict[str, Any]:
     architecture = load_architecture(package)
     rows = load_core_rows(package)
     negatives = load_negative_seeds(package)
@@ -134,6 +145,28 @@ def build_draft(package: pathlib.Path, cfg: dict[str, Any], platform: str,
                 ],
             }
         )
+        if include_networks:
+            network = campaigns.setdefault(
+                f"{priority}-network",
+                {
+                    "name": f"seo-cycle {priority} network",
+                    "platform": platform,
+                    "channel": "network",
+                    "budget_daily": 0,
+                    "excluded_placements": ["[TODO: минус-площадки после первой недели открутки]"],
+                    "apply_note": "network campaigns are reviewed and created manually in v1 (apply skips them)",
+                    "ad_groups": [],
+                },
+            )
+            network["ad_groups"].append(
+                {
+                    "name": str(cluster.get("name") or cluster.get("id")),
+                    "cluster_id": cluster.get("id"),
+                    "final_url": final_url,
+                    "keywords": [{**kw, "match_type": "broad"} for kw in keywords if kw.get("text")],
+                    "ads": [network_ad(cluster, final_url)],
+                }
+            )
 
     draft = {
         "draft_id": f"{platform}-{dt.date.today().isoformat()}",
@@ -166,11 +199,17 @@ def render_markdown(draft: dict[str, Any]) -> str:
         "",
     ]
     for campaign in draft["campaigns"]:
-        lines.extend([f"## {campaign['name']}", ""])
+        channel = campaign.get("channel", "search")
+        lines.extend([f"## {campaign['name']} ({channel})", ""])
+        if campaign.get("apply_note"):
+            lines.append(f"_{campaign['apply_note']}_")
         for group in campaign["ad_groups"]:
             keywords = ", ".join(f"`{kw['text']}`" for kw in group["keywords"][:8])
             lines.append(f"- **{group['name']}** → {group['final_url']}")
             lines.append(f"  - keywords ({len(group['keywords'])}): {keywords}")
+            if channel == "network":
+                ad = (group.get("ads") or [{}])[0]
+                lines.append(f"  - РСЯ: «{(ad.get('headlines') or [''])[0]}» · {ad.get('image', '')}")
         lines.append("")
     lines.append("Apply only via: `ads-apply.py --draft <this.json> --ticket <approved-id> --live --allow-write`")
     return "\n".join(lines) + "\n"
@@ -180,6 +219,8 @@ def write_editor_csv(path: pathlib.Path, draft: dict[str, Any]) -> None:
     """Google Ads Editor import: campaign/ad group/keyword rows."""
     lines = ["Campaign,Ad Group,Keyword,Criterion Type,Final URL"]
     for campaign in draft["campaigns"]:
+        if campaign.get("channel", "search") != "search":
+            continue  # Editor CSV covers search only; сети создаются в кабинете
         for group in campaign["ad_groups"]:
             for keyword in group["keywords"]:
                 text = str(keyword.get("text") or "").replace(",", " ")
@@ -218,6 +259,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("package", nargs="?", default="seo/research-package", help="Research package directory")
     parser.add_argument("--platform", choices=("auto", "yandex_direct", "google_ads"), default="auto")
+    parser.add_argument("--networks", action="store_true",
+                        help="Also draft РСЯ/display campaigns (ads.draft.include_networks in config)")
     parser.add_argument("--write", action="store_true", help="Write draft artifacts under seo/ads/drafts/")
     parser.add_argument("--create-ticket", action="store_true", help="Register an ads_campaign_draft approval ticket")
     parser.add_argument("--format", choices=("md", "json"), default="md")
@@ -235,8 +278,9 @@ def main() -> int:
 
     platform = args.platform if args.platform != "auto" else primary_platform(cfg)
     site_url = str((cfg.get("project") or {}).get("url") or "").strip()
+    include_networks = args.networks or bool(nested_get(cfg, "ads.draft.include_networks", False))
     try:
-        draft = build_draft(package, cfg, platform, site_url)
+        draft = build_draft(package, cfg, platform, site_url, include_networks=include_networks)
     except FileNotFoundError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2

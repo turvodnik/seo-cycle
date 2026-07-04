@@ -188,11 +188,31 @@ def provider_status(project_root: pathlib.Path | None, spec: dict[str, Any]) -> 
     return {"state": state, "vars": rows}
 
 
+def gbp_token_age_warning(project_root: pathlib.Path | None) -> str | None:
+    """Testing-mode GBP refresh tokens die after 7 days — warn before they do."""
+    minted = env_chain(project_root, base={}).get("GBP_TOKEN_MINTED_AT", "")
+    if not minted:
+        return None
+    import datetime as dt
+
+    try:
+        age = (dt.date.today() - dt.date.fromisoformat(minted)).days
+    except ValueError:
+        return None
+    if age >= 6:
+        return (f"GBP refresh token выпущен {age} дн. назад — в Testing-режиме он умирает на 7-й день; "
+                "пере-минтите: seo-cycle auth login gbp")
+    return None
+
+
 def cmd_list(args: argparse.Namespace, project_root: pathlib.Path | None) -> int:
     report = {}
     for alias, spec in PROVIDERS.items():
         status = provider_status(project_root, spec)
         report[alias] = {"title": spec["title"], **status}
+    warning = gbp_token_age_warning(project_root)
+    if warning:
+        report["gbp"]["warning"] = warning
     if args.format == "json":
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
@@ -202,6 +222,8 @@ def cmd_list(args: argparse.Namespace, project_root: pathlib.Path | None) -> int
     icons = {"ready": "✅", "partial": "🟡", "not_configured": "▫️"}
     for alias, data in report.items():
         print(f"{icons[data['state']]} {alias:<14} {data['title']}")
+        if data.get("warning"):
+            print(f"    ⚠️  {data['warning']}")
         for row in data["vars"]:
             mark = {"process": "env", "project": "project", "global": "global", None: "—"}[row["source"]]
             req = "" if row["required"] else " (опц.)"

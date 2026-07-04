@@ -62,6 +62,10 @@ def build_operations(draft: dict[str, Any], max_daily_budget: float) -> list[dic
     """Flatten the draft into an ordered operation plan."""
     operations: list[dict[str, Any]] = []
     for campaign in draft.get("campaigns") or []:
+        if str(campaign.get("channel") or "search") != "search":
+            operations.append({"op": "skip_campaign", "name": campaign.get("name"),
+                               "reason": "non-search channel: create manually after review (v1)"})
+            continue
         budget = float(campaign.get("budget_daily") or 0)
         operations.append(
             {

@@ -21,6 +21,7 @@ import csv
 import datetime as dt
 import json
 import pathlib
+import random
 import sqlite3
 import sys
 from typing import Any
@@ -37,6 +38,10 @@ CTR_11_20 = 0.01
 CTR_BEYOND = 0.002
 UNRANKED_POSITION = 40.0
 BOUNDS = (0.6, 1.4)  # pessimistic / optimistic multipliers
+MONTE_CARLO_RUNS = 400
+POSITION_SIGMA = 1.2   # позиция гуляет на ±1-2 места
+CTR_SIGMA = 0.22       # CTR-кривая известна с точностью ~±22%
+MC_SEED = 42           # детерминизм: одинаковый вход → одинаковые интервалы
 
 
 def ctr_for(position: float, curve: dict[int, float]) -> float:
@@ -117,6 +122,31 @@ def scenario_clicks(core: list[dict[str, Any]], positions: dict[str, float],
     return total, clusters
 
 
+def confidence_interval(core: list[dict[str, Any]], positions: dict[str, float],
+                        curve: dict[int, float], scenario: str) -> dict[str, int]:
+    """P10/P50/P90 по Монте-Карло: позиция ~N(pos, σ), CTR-кривая ~N(1, σ)."""
+    rng = random.Random(MC_SEED)
+    samples: list[float] = []
+    for _ in range(MONTE_CARLO_RUNS):
+        curve_factor = max(0.2, rng.gauss(1.0, CTR_SIGMA))
+        total = 0.0
+        for row in core:
+            position = positions.get(row["keyword"], UNRANKED_POSITION)
+            if scenario == "target_top10":
+                position = min(position, 8.0)
+            elif scenario == "target_top3":
+                position = min(position, 3.0)
+            jittered = max(1.0, rng.gauss(position, POSITION_SIGMA))
+            total += row["frequency"] * ctr_for(jittered, curve) * curve_factor
+        samples.append(total)
+    samples.sort()
+
+    def pct(share: float) -> int:
+        return round(samples[min(len(samples) - 1, int(share * len(samples)))])
+
+    return {"p10": pct(0.10), "p50": pct(0.50), "p90": pct(0.90)}
+
+
 def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, Any]:
     curve = load_ctr_curve(cfg)
     core = load_core(project_root)
@@ -129,10 +159,14 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
     current_total = 0.0
     for scenario in ("current", "target_top10", "target_top3"):
         total, clusters = scenario_clicks(core, positions, curve, scenario)
+        interval = confidence_interval(core, positions, curve, scenario)
         scenarios[scenario] = {
             "monthly_clicks": round(total),
             "monthly_clicks_range": [round(total * BOUNDS[0]), round(total * BOUNDS[1])],
+            "confidence": interval,
             "monthly_leads": round(total * conversion, 1),
+            "monthly_leads_confidence": {key: round(value * conversion, 1)
+                                         for key, value in interval.items()},
             "top_clusters": clusters[:10],
         }
         if scenario == "current":
@@ -191,12 +225,15 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Scenarios (monthly)",
         "",
-        "| Scenario | Clicks | Range | Leads |",
-        "|---|---:|---|---:|",
+        "| Scenario | Clicks | P10–P90 | Leads (P10–P90) |",
+        "|---|---:|---|---|",
     ]
     for name, data in report["scenarios"].items():
-        lines.append(f"| {name} | {data['monthly_clicks']} | {data['monthly_clicks_range'][0]}–"
-                     f"{data['monthly_clicks_range'][1]} | {data['monthly_leads']} |")
+        confidence = data.get("confidence") or {}
+        leads_conf = data.get("monthly_leads_confidence") or {}
+        lines.append(f"| {name} | {data['monthly_clicks']} | {confidence.get('p10', '—')}–"
+                     f"{confidence.get('p90', '—')} | {data['monthly_leads']}"
+                     f" ({leads_conf.get('p10', '—')}–{leads_conf.get('p90', '—')}) |")
     lines.extend(["", "## Biggest upside clusters (to top-10)", ""])
     for item in report["cluster_upside_top10"]:
         lines.append(f"- {item['cluster']}: +{item['upside_clicks']} clicks/mo")

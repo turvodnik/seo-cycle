@@ -134,8 +134,12 @@ def main() -> int:
               "check that access_type=offline was preserved)", file=sys.stderr)
         return 1
     if args.write_env:
+        import datetime as dt
+
         target = upsert_env_var(pathlib.Path(args.write_env).expanduser(), "GBP_OAUTH_REFRESH_TOKEN", refresh)
+        upsert_env_var(target, "GBP_TOKEN_MINTED_AT", dt.date.today().isoformat())
         print(f"\n✓ GBP_OAUTH_REFRESH_TOKEN сохранён в {target} (0600); значение не показывается.\n"
+              "Дата минта записана в GBP_TOKEN_MINTED_AT (в Testing-режиме токен живёт 7 дней).\n"
               "Проверка: python3 scripts/gbp-health.py && python3 scripts/gbp-fetch.py --report locations --live",
               file=sys.stderr)
         return 0

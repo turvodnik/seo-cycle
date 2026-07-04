@@ -61,6 +61,7 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "repurpose": {"script": "content-repurpose.py", "help": "Draft → TG/VK/video/email skeletons"},
     "cohorts": {"script": "metrika-cohorts.py", "help": "Метрика Logs cohorts: return/conversion by first-visit week"},
     "geo-log": {"script": "geo-citation-log.py", "help": "Brand citations in AI answers: record/import/trend"},
+    "feed": {"script": "woo-yml-feed.py", "help": "YML feed from WooCommerce (--live) or a products export"},
 }
 
 SYNC_ADAPTERS = {
