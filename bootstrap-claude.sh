@@ -188,6 +188,11 @@ echo "Next Claude command:"
 echo "  cd \"$PROJECT_DIR\""
 echo "  export SEO_RUNTIME=claude"
 echo "  claude \"Прочитай CLAUDE.md, seo-cycle.yaml и seo/setup/context-pack.md. Подготовь первый SEO-план проекта.\""
+echo ""
+echo "Единая CLI-команда (установлена в ~/.local/bin):"
+echo "  seo-cycle status        # текущая стадия и следующие шаги"
+echo "  seo-cycle doctor        # сводный health-check"
+echo "  seo-cycle --help        # все команды"
 
 if [ "$START_CLAUDE" = "1" ]; then
     if command -v claude >/dev/null 2>&1; then

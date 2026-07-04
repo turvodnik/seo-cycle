@@ -69,6 +69,21 @@ bash ./.codex/skills/seo-cycle/scripts/knowledge/wiki-refresh-all.sh
 bash ./.codex/skills/seo-cycle/scripts/knowledge/graphify-refresh.sh
 ```
 
+### Единая команда `seo-cycle`
+
+`install-codex.sh` создаёт symlink `~/.local/bin/seo-cycle` (если `~/.local/bin` не в PATH — установщик подскажет export-строку, ничего в shell rc не меняется молча). Дальше из корня любого проекта:
+
+```bash
+seo-cycle status          # текущая стадия, blockers, следующие команды (project-journey)
+seo-cycle doctor          # сводный read-only health: config, journey, spend, ledger, provider health
+seo-cycle loop research-package seo/research-package   # автоцикл gate → repair → re-check
+seo-cycle approvals       # pending approval-тикеты; approve/reject <id>
+seo-cycle run "задача"    # low-token маршрут через task-router
+seo-cycle --help          # полный список команд
+```
+
+Каждая подкоманда — тонкая обёртка над соответствующим скриптом: все флаги (`--write`, `--live`, `--format` и т.д.) пробрасываются как есть, exit-коды и stdout-контракты не меняются.
+
 `bootstrap-codex.sh` по умолчанию ставит seo-cycle как **shared core + project-local entrypoints**: общий код в `~/.codex/vendor/seo-cycle`, а в проекте только symlink `./.codex/skills/seo-cycle`, `./.agents/skills/seo-cycle`, `./.claude/skills/seo-cycle`. Если проект не bootstrap'или, seo-cycle skills в нём не появляются и не читаются. Полный vendor clone в проект доступен через `--vendor-local`; legacy global skill exposure только через `--global-skill`. Project bootstrap запускает `init-project.sh`, создаёт `.env` из `.env.example`, добавляет `.env` в `.gitignore`, пишет `SEO_RUNTIME=codex`, `SEO_SEARCH_RUNTIME=direct`. WordPress/Novomira MCP не создаётся автоматически; включай его только явной командой или флагом `--with-wordpress-mcp`. `bootstrap-claude.sh` делает Claude-вариант и создаёт `CLAUDE.md`, если его ещё нет. Wizard спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
 
 WordPress/Novomira MCP не надо добавлять в глобальный `~/.codex/config.toml` и не надо включать во всех проектах. Для проекта, где он нужен, запускай:

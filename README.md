@@ -83,6 +83,25 @@ Knowledge Hub — проектный слой памяти и preflight: [docs/k
 
 10 фаз: discovery → audit → keyword research (multi-source) → cluster+intent → Entity Map → content plan → writing → publishing → JSON-LD/schema → monitoring → iteration. Полное описание фаз — в [SKILL.md](SKILL.md).
 
+### Единый CLI
+
+`install-codex.sh` ставит symlink `~/.local/bin/seo-cycle` → `bin/seo-cycle`. Одна команда вместо десятков `python3 scripts/...`; все аргументы прозрачно пробрасываются в обёрнутый скрипт:
+
+```bash
+seo-cycle status                                # текущая стадия, blockers, следующие команды
+seo-cycle doctor                                # сводный read-only health-check (config/journey/spend/ledger/providers)
+seo-cycle loop research-package seo/research-package   # автоцикл качества: gate → repair → re-check (max 5 попыток)
+seo-cycle gate draft <draft.md> --outline <outline.json> --write
+seo-cycle approvals / approve <id> / reject <id>
+seo-cycle run "написать статью про X"           # low-token маршрут задачи (task-router)
+seo-cycle run monthly --dry-run                 # месячная автоматизация
+seo-cycle --help                                # полный список команд
+```
+
+### Автоцикл качества (loop-runner)
+
+`loop-runner.py` (или `seo-cycle loop`) повторяет «gate → repair → re-check» до прохождения, максимум N попыток (`governance.loop`, default 5). Самопроверки делятся на классы качество/достоверность (evidence findings — proof slots, SERP-валидация, E-E-A-T). Между попытками сравниваются fingerprints findings: два одинаковых подряд → ранняя эскалация (approval-тикет `loop_escalation` + Telegram) без сжигания лимита. Для LLM-шагов (переписать драфт, перегенерить outline) — протокол exit 3 с machine-readable инструкциями и `--resume` после исправления. Журнал попыток: `seo/loops/*.json|.md`, виден в `project-journey`.
+
 ---
 
 ## Возможности

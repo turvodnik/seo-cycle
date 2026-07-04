@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""Launcher for the unified seo-cycle CLI (see scripts/seo_cycle_cli.py)."""
+
+import pathlib
+import sys
+
+SKILL_ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SKILL_ROOT / "scripts"))
+
+from seo_cycle_cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    raise SystemExit(main())

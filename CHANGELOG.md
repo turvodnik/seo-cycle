@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.65.0] — 2026-07-04
+
+### Unified `seo-cycle` CLI
+
+- Added `scripts/seo_cycle_cli.py` + `bin/seo-cycle`: one command instead of dozens of `python3 scripts/*.py` calls. Subcommands wrap existing scripts with full argument passthrough (`status/journey`, `loop`, `gate research-package|outline|draft`, `repair`, `approvals/approve/reject`, `queue`, `db`, `dashboard`, `ledger`, `spend`, `validate`, `context`, `cycle`, `run <task>|monthly|script <name>`, `version`), so exit codes and stdout contracts stay intact.
+- `seo-cycle doctor` — read-only aggregated health check: config validation, journey, spend-guard, usage ledger, and provider health (Perplexity/NotebookLM/XMLRiver) in one summary.
+- `install-codex.sh` now symlinks `~/.local/bin/seo-cycle` (with a PATH hint instead of silent rc edits); `bootstrap-claude.sh` mentions the CLI in its final output. Documented in README.md and INSTALL.md.
+- Every dispatch is logged (command, args, rc, duration) via the new file logging layer. Added `tests/test_cli_dispatch.py`.
+
 ## [1.64.0] — 2026-07-04
 
 ### Bounded quality loop (check → repair → re-check, max 5 attempts)

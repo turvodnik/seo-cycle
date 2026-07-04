@@ -180,6 +180,18 @@ fi
 
 cleanup_legacy_global_links
 
+# Unified CLI: expose `seo-cycle` in ~/.local/bin (no shell rc edits).
+if [ -f "$CORE/bin/seo-cycle" ]; then
+    mkdir -p "$HOME/.local/bin"
+    chmod +x "$CORE/bin/seo-cycle" 2>/dev/null || true
+    ln -sf "$CORE/bin/seo-cycle" "$HOME/.local/bin/seo-cycle"
+    echo "✓ CLI: ~/.local/bin/seo-cycle → $CORE/bin/seo-cycle"
+    case ":$PATH:" in
+        *":$HOME/.local/bin:"*) ;;
+        *) echo "  ⚠ ~/.local/bin не в PATH. Добавь в свой shell rc: export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+    esac
+fi
+
 if [ "$LEGACY_GLOBAL_SKILL" = "1" ]; then
     replace_with_symlink "$CORE" "$HOME/.codex/skills/seo-cycle"
     replace_with_symlink "$CORE" "$HOME/.agents/skills/seo-cycle"
