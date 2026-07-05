@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.89.0] — 2026-07-05
+
+### JS renderer unit tests + the data-driven improvement roadmap
+
+- Closed the last testing gap: `tests/js/dashboard-units.mjs` runs the dashboard page script in node with stubbed DOM/localStorage/fetch and unit-tests **every renderer on fixtures** — esc/fmtDelta helpers, boot() auto-login, renderOverview totals/deltas, renderProject (journey, positions, movers, scorecards), renderApprovals action buttons, renderCommands + runCmd output pane, renderReports tokenized /files links, renderAccess provider states. Python wrapper extracts the script (top-level let/const → var for introspection; the page itself is untouched) and runs in the normal unittest matrix wherever node exists.
+- Added `docs/improvement-roadmap.md` — the step-by-step plan built from live Эмвуди analytics: current visibility (24 top-3 / 419 top-10 / CTR 2.4%), Monte-Carlo ceiling (×12 to 41.7k clicks/mo, P10–P90), per-cluster upside that **reorders the content queue** (osp +14.4k → plywood +9.0k → membranes +8.7k → …), the «0 ranked» core-vs-live-queries mismatch as step 1, and a control rhythm (daily/weekly/monthly) with a command and a checkable metric for every step. 288 tests.
+
 ## [1.88.0] — 2026-07-04
 
 ### Engineering to ten: browser-level JS tests, seam integration tests, mypy/shellcheck/coverage in CI
