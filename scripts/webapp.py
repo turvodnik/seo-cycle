@@ -59,6 +59,9 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "db-sync": {"label": "Обновить базу (db-sync)", "group": "Данные",
                  "script": "db-sync.py", "args": [],
                  "hint": "Пересобрать seo.db из артефактов"},
+    "pulse": {"label": "Снять свежий срез (pulse)", "group": "Данные",
+               "script": "pulse.py", "args": [],
+               "hint": "Вебмастер → снапшот → база → прогресс + свежесть/алерты", "timeout": 600},
     "progress": {"label": "Прогресс позиций + HTML", "group": "Обзор",
                   "script": "position-progress.py", "args": ["--write", "--html"],
                   "hint": "Срезы, движения, циклы качества"},
@@ -551,6 +554,13 @@ function spin(msg){content(`<p class="muted"><span class="spin"></span> ${esc(ms
 function fmtDelta(v,invert){if(v===undefined||v===null)return"";
   const good=invert?v<0:v>0;const cls=v===0?"muted":(good?"up":"down");
   return `<span class="delta ${cls}">${v>0?"+":""}${v}</span>`;}
+function daysSince(d){const t=new Date(d+"T00:00:00").getTime();
+  return isNaN(t)?null:Math.max(0,Math.floor((Date.now()-t)/86400000));}
+function freshBadge(d){const age=daysSince(d);
+  if(age===null)return `<span class="badge bad">нет среза</span>`;
+  if(age<=2)return `<span class="badge ok">свежий</span>`;
+  const cls=age>7?"bad":"warn";
+  return `<span class="badge ${cls}">срезу ${age} дн.</span>`;}
 
 async function render(){
   if(tab==="overview")return renderOverview();
@@ -587,7 +597,7 @@ async function renderOverview(){
     html+=`<tr class="click" onclick="openProject('${esc(r.project)}')"><td>${esc(r.project)}</td>
       <td class="muted">${esc(r.latest.date)}</td><td>${r.latest.top3}</td><td><b>${r.latest.top10}</b></td>
       <td>${r.latest.clicks}</td><td>${fmtDelta(d)||"—"}</td>
-      <td><span class="badge ok">ok</span></td></tr>`;}
+      <td>${freshBadge(r.latest.date)}</td></tr>`;}
   html+=`</table>`;
   content(html);
 }
@@ -616,7 +626,7 @@ async function renderProject(){
   if(pr.error||pr.status!=="ok"){html+=`<h2>Позиции</h2><p class="muted">${esc(pr.error||pr.status||"нет данных")} — запустите db-sync и снапшоты мониторинга</p>`;}
   else{
     const l=pr.latest,d=pr.delta_vs_previous||{};
-    html+=`<h2>Позиции (${esc(pr.engine)}, срез ${esc(l.date)})</h2><div class="grid cards">
+    html+=`<h2>Позиции (${esc(pr.engine)}, срез ${esc(l.date)}) ${freshBadge(l.date)}</h2><div class="grid cards">
       <div class="card"><div class="num">${l.top3}${fmtDelta(d.top3)}</div><div class="label">топ-3</div></div>
       <div class="card"><div class="num">${l.top10}${fmtDelta(d.top10)}</div><div class="label">топ-10</div></div>
       <div class="card"><div class="num">${l.top30}${fmtDelta(d.top30)}</div><div class="label">топ-30</div></div>

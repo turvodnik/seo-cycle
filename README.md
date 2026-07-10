@@ -89,6 +89,7 @@ Knowledge Hub — проектный слой памяти и preflight: [docs/k
 
 ```bash
 seo-cycle status                                # текущая стадия, blockers, следующие команды
+seo-cycle pulse                                 # ежедневный срез: Вебмастер → снапшот → база → прогресс + алерты
 seo-cycle doctor                                # сводный read-only health-check (config/journey/spend/ledger/providers)
 seo-cycle loop research-package seo/research-package   # автоцикл качества: gate → repair → re-check (max 5 попыток)
 seo-cycle gate draft <draft.md> --outline <outline.json> --write

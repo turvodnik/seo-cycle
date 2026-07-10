@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.90.0] — 2026-07-10
+
+### The live data pipeline: pulse, fuzzy forecast matching, freshness everywhere
+
+- **Found by the 5-day autonomy review**: the daily launchd job was chewing the same 2026-07-04 snapshot for six days straight — `db + progress` never fetched anything new. Added `pulse.py` (`seo-cycle pulse`): webmaster-fetch --live (free API, only when credentials are present) → snapshot-build → db-sync → position-progress --write --html, then freshness findings (snapshot older than 3 days → warning, 7+ → error), **top-10 drop detection** (relative fall ≥ `pulse.drop_alert_pct` → critical + Telegram alert best-effort) and a scorecard self-grade for every run. Every step is graceful: no tokens → the pipeline keeps living on existing data and says so honestly.
+- `install-schedule.sh` daily job now runs `seo-cycle pulse` instead of `db && progress` (launchd + crontab variants), and prints the macOS TCC hint: Obsidian dashboards under `~/Library/CloudStorage` need Full Disk Access for `/bin/bash`, otherwise db-sync keeps skipping them (боевой лог: «Operation not permitted» шесть дней подряд).
+- **Forecast is no longer blind**: new `seo_cycle_core/textmatch.py` — a conservative Russian light stemmer (nominal endings only, stems ≥3 chars; verbs/латиница/числа intact) and a three-level query index (exact → stem-set → stem-subset for keys with ≥2 stems, median position over the matched query family — min would report the best tail, not the keyword). `seo-forecast.py` resolves core keywords through it: the боевой «0 ranked из 476» case was pure morphology/word-order mismatch. Inputs now report `ranked: N exact + M fuzzy`, the matching rule is listed in assumptions.
+- Dashboard: portfolio and project views show **data freshness badges** («свежий» ≤2 дн / «срезу N дн.» / «нет среза») instead of a hardcoded «ok», so a dead pipeline is visible the moment you open the page; «Снять свежий срез (pulse)» added to the command panel (Вебмастер API бесплатный — политика «ничего платного» не нарушена). JS units stub `Date.now` and cover the new badges.
+- Tests: 288 → 305 (test_textmatch, test_pulse unit+e2e, fuzzy forecast case, JS freshness checks).
+
 ## [1.89.0] — 2026-07-05
 
 ### JS renderer unit tests + the data-driven improvement roadmap

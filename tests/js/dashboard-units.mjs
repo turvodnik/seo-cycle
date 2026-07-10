@@ -29,6 +29,8 @@ globalThis.localStorage = {
 globalThis.location = { search: "", pathname: "/" };
 globalThis.history = { replaceState() {} };
 globalThis.alert = () => {};
+// детерминированное «сегодня» для freshness-бейджей (фикстуры датированы 2026-07-04)
+Date.now = () => new Date("2026-07-08T12:00:00").getTime();
 
 // --- API fixtures ---------------------------------------------------------
 const PROJECT = "/tmp/proj";
@@ -108,6 +110,13 @@ check("fmtDelta() colors direction and inversion", () => {
   assert.match(g("fmtDelta(-0.4, true)"), /up/); // меньшая позиция = лучше
   assert.equal(g("fmtDelta(null)"), "");
 });
+check("daysSince()/freshBadge() grade data age", () => {
+  assert.equal(g(`daysSince("2026-07-04")`), 4);
+  assert.match(g(`freshBadge("2026-07-08")`), /свежий/);
+  assert.match(g(`freshBadge("2026-07-04")`), /warn/);
+  assert.match(g(`freshBadge("2026-06-01")`), /bad/);
+  assert.match(g(`freshBadge("мусор")`), /нет среза/);
+});
 
 // --- boot() side effects ---------------------------------------------------
 check("boot() auto-logs-in and loads projects", () => {
@@ -118,11 +127,12 @@ check("boot() auto-logs-in and loads projects", () => {
 
 // --- Renderers -------------------------------------------------------------
 await g("renderOverview()");
-check("renderOverview() shows totals and project row", () => {
+check("renderOverview() shows totals, project row and freshness", () => {
   assert.match(content(), /проектов с данными/);
   assert.match(content(), /419/);
   assert.match(content(), /\+7/);
   assert.match(content(), /Юнит/);
+  assert.match(content(), /срезу 4 дн\./); // freshness вместо вечного «ok»
 });
 
 g("cache={}");

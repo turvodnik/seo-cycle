@@ -90,6 +90,22 @@ class ForecastTest(StrategyTestBase):
         # 1000*0.5 + 500*0.01 + 800*0.002 = 506.6 → 507
         self.assertEqual(report["scenarios"]["current"]["monthly_clicks"], 507)
 
+    def test_fuzzy_matching_resolves_inflection_and_word_order(self) -> None:
+        # живой запрос отличается словоформой, порядком и хвостом «цена» —
+        # точный матчинг такое терял (боевой кейс: 0 ranked из 476)
+        conn = sqlite3.connect(self.tmp / "seo" / "seo.db")
+        conn.execute("INSERT INTO positions VALUES ('2026-07-01','yandex','брус имитация цена',6.0,9,700,'/catalog/brus/')")
+        conn.commit()
+        conn.close()
+        proc = self.run_script("seo-forecast.py")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        report = json.loads(proc.stdout)
+        self.assertEqual(report["inputs"]["keywords_ranked"], 3)
+        self.assertEqual(report["inputs"]["ranked_exact"], 2)
+        self.assertEqual(report["inputs"]["ranked_fuzzy"], 1)
+        # «имитация бруса» получил позицию 6 → 800*0.04 = 32 клика к прежним 107
+        self.assertEqual(report["scenarios"]["current"]["monthly_clicks"], 137)
+
 
 class KpiContractTest(StrategyTestBase):
     def kpi_cfg(self, clicks_goal: int) -> str:

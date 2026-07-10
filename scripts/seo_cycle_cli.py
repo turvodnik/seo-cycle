@@ -52,6 +52,7 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "report": {"script": "client-report.py", "help": "White-label client report (md + HTML)"},
     "score": {"script": "scorecard.py", "help": "Self-assessment scorecards: record/show 0-10 grades"},
     "progress": {"script": "position-progress.py", "help": "Ranking progress per project or --global portfolio"},
+    "pulse": {"script": "pulse.py", "help": "Daily pulse: fetch fresh positions -> snapshot -> db -> progress + alerts"},
     "auth": {"script": "auth-assistant.py", "help": "Provider logins: list | login <provider> [--global] | set VAR"},
     "web": {"script": "webapp.py", "help": "Visual agency dashboard in the browser (web --open)"},
     "crawl": {"script": "site-crawl.py", "help": "Own site crawler: --live BFS with findings"},

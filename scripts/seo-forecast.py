@@ -29,6 +29,7 @@ from typing import Any
 from seo_cycle_core.config import find_config, load_yaml, nested_get, numeric, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
+from seo_cycle_core.textmatch import build_query_index, match_position
 
 log = setup_logging("seo-forecast")
 
@@ -104,6 +105,24 @@ def load_positions(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str,
     return {" ".join(str(query).lower().split()): float(position) for query, position in rows if position}
 
 
+def resolve_positions(core: list[dict[str, Any]],
+                      positions: dict[str, float]) -> tuple[dict[str, float], dict[str, int]]:
+    """Match core keywords to live queries: exact → stem-set → stem-subset.
+
+    Точный матчинг по строке терял почти всё из-за морфологии и порядка слов
+    (боевой срез Эмвуди: 0 ranked из 476 при 500 живых запросах).
+    """
+    index = build_query_index(positions)
+    resolved: dict[str, float] = {}
+    stats = {"exact": 0, "stem": 0, "subset": 0}
+    for row in core:
+        position, kind = match_position(row["keyword"], index)
+        if position is not None:
+            resolved[row["keyword"]] = position
+            stats[kind] += 1
+    return resolved, stats
+
+
 def scenario_clicks(core: list[dict[str, Any]], positions: dict[str, float],
                     curve: dict[int, float], scenario: str) -> tuple[float, list[dict[str, Any]]]:
     total = 0.0
@@ -150,7 +169,8 @@ def confidence_interval(core: list[dict[str, Any]], positions: dict[str, float],
 def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, Any]:
     curve = load_ctr_curve(cfg)
     core = load_core(project_root)
-    positions = load_positions(project_root, cfg)
+    tracked = load_positions(project_root, cfg)
+    positions, match_stats = resolve_positions(core, tracked)
     conversion = float(nested_get(cfg, "kpi.lead_conversion_rate", 0.02) or 0.02)
     months = max(1, int(nested_get(cfg, "kpi.months_to_target", 6) or 6))
 
@@ -195,6 +215,7 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "assumptions": {
             "model": "clicks = monthly_frequency × CTR(position); no seasonality, no SERP-feature adjustments",
+            "keyword_matching": "exact → stem-set → stem-subset (ключи ≥2 стемов, позиция = медиана семейства)",
             "ctr_curve": {str(key): value for key, value in sorted(curve.items())},
             "ctr_11_20": CTR_11_20,
             "ctr_beyond_20": CTR_BEYOND,
@@ -207,7 +228,9 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
             "keywords": len(core),
             "keywords_with_frequency": sum(1 for row in core if row["frequency"]),
             "keywords_ranked": ranked,
-            "positions_tracked": len(positions),
+            "ranked_exact": match_stats["exact"],
+            "ranked_fuzzy": match_stats["stem"] + match_stats["subset"],
+            "positions_tracked": len(tracked),
         },
         "scenarios": scenarios,
         "cluster_upside_top10": cluster_upside[:10],
@@ -221,7 +244,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         f"- Generated: {report['generated_at']}",
         f"- Inputs: {report['inputs']['keywords']} keywords"
-        f" ({report['inputs']['keywords_ranked']} ranked, {report['inputs']['positions_tracked']} tracked positions)",
+        f" ({report['inputs']['keywords_ranked']} ranked:"
+        f" {report['inputs'].get('ranked_exact', 0)} exact + {report['inputs'].get('ranked_fuzzy', 0)} fuzzy,"
+        f" {report['inputs']['positions_tracked']} tracked positions)",
         "",
         "## Scenarios (monthly)",
         "",
