@@ -136,6 +136,26 @@ class KpiContractTest(StrategyTestBase):
         self.assertEqual(statuses["keywords_in_top10"], "on_track")
         self.assertIn(report["overall_status"], {"on_track", "at_risk"})
         self.assertTrue((self.tmp / "seo" / "strategy" / "kpi-report.md").exists())
+        # без снапшота с period окно неизвестно — клики честно остаются как есть
+        self.assertIsNone(report["facts"]["window_days"])
+
+    def test_clicks_normalized_by_snapshot_window(self) -> None:
+        # боевой кейс: клики в positions — сумма за окно Вебмастера (13–14 дней),
+        # без нормализации KPI сравнивал их с месячным планом (ложный off_track −61%)
+        monitoring = self.tmp / "seo" / "monitoring"
+        monitoring.mkdir(parents=True, exist_ok=True)
+        (monitoring / "webmaster-snapshot-2026-07-01.json").write_text(json.dumps({
+            "snapshot_date": "2026-07-01",
+            "period": {"start": "2026-06-17", "end": "2026-07-01"},  # 15 дней включительно
+            "queries": [],
+        }), encoding="utf-8")
+        self.write_cfg(self.kpi_cfg(clicks_goal=200))
+        proc = self.run_script("kpi-contract.py")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        report = json.loads(proc.stdout)
+        self.assertEqual(report["facts"]["window_days"], 15)
+        # 150 кликов за 15 дней → 300/мес
+        self.assertEqual(report["facts"]["monthly_organic_clicks"], 300.0)
 
     def test_off_track_escalates_with_ticket_and_actions(self) -> None:
         self.write_cfg(self.kpi_cfg(clicks_goal=5000))

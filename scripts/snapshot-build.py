@@ -230,6 +230,21 @@ def _merge_snapshot(base: dict, addition: dict) -> dict:
     if src_meta not in base["sources"]:
         base["sources"].append(src_meta)
 
+    # period: окно данных источника (echo date_from/date_to из API) — без него
+    # потребители (kpi-contract) не могут нормировать клики окна к месяцу
+    add_period = addition.get("period") or {}
+    if add_period.get("start") or add_period.get("end"):
+        cur = base.get("period") or {}
+        if not cur.get("start"):
+            # дефолтный period (end=today, start=None) — дата среза, не окно данных
+            base["period"] = {"start": add_period.get("start"),
+                              "end": add_period.get("end") or cur.get("end")}
+        else:
+            for key, pick in (("start", min), ("end", max)):
+                val = add_period.get(key)
+                if val:
+                    cur[key] = pick(str(cur[key]), str(val)) if cur.get(key) else val
+
     # queries (каждая строка несёт свой engine — иначе merged-снапшот его теряет)
     if addition.get("queries"):
         idx = {(q["query"], q.get("url", "")): q for q in base.get("queries", [])}
@@ -284,6 +299,10 @@ def main():
 
     raw = _load_input(args)
     normalized = NORMALIZERS[args.source](raw)
+    # окно выборки, если источник его отдаёт (webmaster-fetch echo'ит date_from/date_to)
+    if isinstance(raw, dict) and (raw.get("date_from") or raw.get("date_to")):
+        normalized.setdefault("period", {"start": raw.get("date_from"),
+                                         "end": raw.get("date_to")})
 
     if args.merge and args.output.exists():
         snapshot = json.loads(args.output.read_text(encoding="utf-8"))

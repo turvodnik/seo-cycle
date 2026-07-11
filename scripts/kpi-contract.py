@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import glob
 import json
 import pathlib
 import sqlite3
@@ -55,6 +56,34 @@ def months_between(start: dt.date, end: dt.date) -> int:
     return (end.year - start.year) * 12 + (end.month - start.month)
 
 
+def snapshot_window_days(project_root: pathlib.Path, snapshot_date: Any) -> int | None:
+    """Окно данных снапшота в днях (period.start/end в json, обе границы включительно).
+
+    Клики в positions — сумма за окно источника (webmaster-fetch --days N),
+    без него «monthly_organic_clicks» сравнивал бы яблоки с месяцами.
+    """
+    patterns = ["seo/monitoring/**/*snapshot*.json", "seo/monitoring/*.json",
+                "seo/cycles/**/09-monitoring/*.json"]
+    for pat in patterns:
+        for fp in sorted(glob.glob(str(project_root / pat), recursive=True)):
+            try:
+                data = json.loads(pathlib.Path(fp).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            if str(data.get("snapshot_date")) != str(snapshot_date):
+                continue
+            period = data.get("period") or {}
+            try:
+                d0 = dt.date.fromisoformat(str(period.get("start"))[:10])
+                d1 = dt.date.fromisoformat(str(period.get("end"))[:10])
+            except (TypeError, ValueError):
+                continue
+            days = (d1 - d0).days + 1
+            if days >= 1:
+                return days
+    return None
+
+
 def load_facts(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, Any]:
     db_rel = nested_get(cfg, "data_store.path", "seo/seo.db") or "seo/seo.db"
     db_path = project_root / db_rel
@@ -72,8 +101,13 @@ def load_facts(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, Any
                 "SELECT COUNT(DISTINCT query) FROM positions WHERE snapshot_date = ?"
                 " AND position > 0 AND position <= 10", (latest,)
             ).fetchone()[0]
-            facts.update({"monthly_organic_clicks": float(clicks or 0),
-                          "keywords_in_top10": int(top10 or 0), "snapshot_date": latest})
+            window = snapshot_window_days(project_root, latest)
+            monthly = float(clicks or 0)
+            if window:
+                monthly = round(monthly * 30.0 / window, 1)
+            facts.update({"monthly_organic_clicks": monthly,
+                          "keywords_in_top10": int(top10 or 0),
+                          "snapshot_date": latest, "window_days": window})
         conn.close()
     except sqlite3.Error:
         pass
@@ -192,13 +226,21 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
 
 def render_markdown(report: dict[str, Any]) -> str:
     contract = report["contract"]
+    facts = report["facts"]
+    if facts.get("window_days"):
+        window_line = f"- Facts window: {facts['window_days']} дн. → клики нормированы к 30 дн."
+    elif facts.get("snapshot_date"):
+        window_line = "- ⚠ Окно снапшота неизвестно — клики учтены как есть (без нормализации к месяцу)"
+    else:
+        window_line = ""
     lines = [
         "# KPI Contract",
         "",
         f"- Generated: {report['generated_at']}",
         f"- Contract: {contract['start']} → {contract['deadline']}"
         f" · month: {contract['month']} · tolerance: ±{contract['tolerance_pct']}%",
-        f"- Facts snapshot: {report['facts'].get('snapshot_date') or 'no seo.db positions yet'}",
+        f"- Facts snapshot: {facts.get('snapshot_date') or 'no seo.db positions yet'}",
+        *([window_line] if window_line else []),
         f"- **Overall status: `{report['overall_status']}`**",
         "",
         "## Goals",

@@ -16,6 +16,8 @@ SCRIPTS = ROOT / "scripts"
 
 RAW_V4 = {
     "count": 2,
+    "date_from": "2026-06-27",
+    "date_to": "2026-07-09",
     "queries": [
         {"query_id": "a1", "query_text": "как затирать швы",
          "indicators": {"TOTAL_SHOWS": 177.0, "TOTAL_CLICKS": 2.0,
@@ -43,6 +45,8 @@ class SnapshotWebmasterTest(unittest.TestCase):
         self.assertEqual(queries["как затирать швы"]["impressions"], 177)
         self.assertEqual(queries["как затирать швы"]["clicks"], 2)
         self.assertAlmostEqual(queries["как затирать швы"]["position"], 5.2)
+        # окно выборки из raw echo — без него kpi-contract не нормирует клики к месяцу
+        self.assertEqual(snap["period"], {"start": "2026-06-27", "end": "2026-07-09"})
         # плоский формат по-прежнему работает
         flat = {"rows": [{"query": "флэт", "shows": 10, "clicks": 1, "position": 4.0}]}
         (tmp / "flat.json").write_text(json.dumps(flat, ensure_ascii=False), encoding="utf-8")
