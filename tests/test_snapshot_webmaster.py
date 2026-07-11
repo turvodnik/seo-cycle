@@ -25,6 +25,10 @@ RAW_V4 = {
         {"query_id": "b2", "query_text": "затирка для плитки",
          "indicators": {"TOTAL_SHOWS": 90.0, "TOTAL_CLICKS": 5.0,
                         "AVG_SHOW_POSITION": 3.0}},
+        # боевой gsse-кейс: у молодого хоста API отдаёт null-индикаторы
+        {"query_id": "c3", "query_text": "новый запрос без данных",
+         "indicators": {"TOTAL_SHOWS": None, "TOTAL_CLICKS": None,
+                        "AVG_SHOW_POSITION": None}},
     ],
 }
 
@@ -41,7 +45,9 @@ class SnapshotWebmasterTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         snap = json.loads((tmp / "snap.json").read_text(encoding="utf-8"))
         queries = {q["query"]: q for q in snap["queries"]}
-        self.assertEqual(len(queries), 2)
+        self.assertEqual(len(queries), 3)
+        self.assertEqual(queries["новый запрос без данных"]["impressions"], 0)
+        self.assertEqual(queries["новый запрос без данных"]["position"], 0.0)
         self.assertEqual(queries["как затирать швы"]["impressions"], 177)
         self.assertEqual(queries["как затирать швы"]["clicks"], 2)
         self.assertAlmostEqual(queries["как затирать швы"]["position"], 5.2)

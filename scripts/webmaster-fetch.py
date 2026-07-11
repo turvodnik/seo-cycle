@@ -48,6 +48,40 @@ from urllib.error import HTTPError
 API_BASE = "https://api.webmaster.yandex.net/v4"
 
 
+def api_get(path: str, token: str) -> dict:
+    req = urllib.request.Request(f"{API_BASE}{path}", headers={
+        "Authorization": f"OAuth {token}",
+        "Accept": "application/json",
+        "User-Agent": "seo-cycle/1.1 webmaster-fetch",
+    })
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def normalize_domain(value: str) -> str:
+    v = (value or "").strip().lower()
+    v = v.split("//")[-1].split("/")[0].split(":")[0]
+    return v[4:] if v.startswith("www.") else v
+
+
+def pick_host(hosts: list, domain: str) -> tuple:
+    """(host_id, why_not): верифицированный host по домену; без домена —
+    единственный верифицированный. Кандидаты https предпочитаются http."""
+    verified = [h for h in hosts if h.get("verified")]
+    pool = verified or list(hosts)
+    if domain:
+        want = normalize_domain(domain)
+        matched = [h for h in pool if normalize_domain(
+            h.get("unicode_host_url") or h.get("ascii_host_url") or h.get("host_id", "")) == want]
+        if not matched:
+            return None, f"домен {want} не найден среди {len(pool)} хостов аккаунта"
+        https = [h for h in matched if str(h.get("host_id", "")).startswith("https")]
+        return (https or matched)[0].get("host_id"), ""
+    if len(pool) == 1:
+        return pool[0].get("host_id"), ""
+    return None, f"{len(pool)} хостов в аккаунте — укажите --domain или --host"
+
+
 def fetch(user_id: str, host_id: str, token: str, start: str, end: str,
           order_by: str, limit: int) -> dict:
     params = [
@@ -80,6 +114,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--user-id", default=os.environ.get("YANDEX_WEBMASTER_USER_ID") or os.environ.get("YANDEX_USER_ID"))
     ap.add_argument("--host", default=os.environ.get("YANDEX_WEBMASTER_HOST_ID") or os.environ.get("YANDEX_HOST_ID"))
+    ap.add_argument("--domain", default="", help="Домен проекта для автоподбора host_id (когда --host не задан)")
     ap.add_argument("--token", default=os.environ.get("YANDEX_WEBMASTER_OAUTH_TOKEN") or os.environ.get("YANDEX_OAUTH_TOKEN"))
     ap.add_argument("--days", type=int, default=28)
     ap.add_argument("--start-date")
@@ -90,12 +125,31 @@ def main():
     ap.add_argument("--output", type=pathlib.Path)
     args = ap.parse_args()
 
+    if not args.token:
+        ap.error("Provide --token or set YANDEX_OAUTH_TOKEN env var")
+    # zero-config: user_id и host_id выводимы из API по одному токену
+    if not args.user_id:
+        try:
+            args.user_id = str(api_get("/user/", args.token).get("user_id") or "")
+        except Exception as e:
+            print(f"⚠ авто-user_id не удался: {e}", file=sys.stderr)
+        if args.user_id:
+            print(f"↪ user_id обнаружен по токену: {args.user_id}", file=sys.stderr)
+    if args.user_id and not args.host:
+        try:
+            hosts = api_get(f"/user/{args.user_id}/hosts/", args.token).get("hosts", [])
+            host_id, why_not = pick_host(hosts, args.domain)
+            if host_id:
+                args.host = host_id
+                print(f"↪ host обнаружен: {host_id}", file=sys.stderr)
+            else:
+                print(f"⚠ авто-host: {why_not}", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠ авто-host не удался: {e}", file=sys.stderr)
     if not args.user_id:
         ap.error("Provide --user-id or set YANDEX_USER_ID env var")
     if not args.host:
         ap.error("Provide --host or set YANDEX_WEBMASTER_HOST_ID env var")
-    if not args.token:
-        ap.error("Provide --token or set YANDEX_OAUTH_TOKEN env var")
 
     if args.start_date and args.end_date:
         start, end = args.start_date, args.end_date

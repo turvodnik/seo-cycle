@@ -59,8 +59,9 @@ def first_env(env: dict[str, str], names: tuple[str, ...]) -> str:
 
 
 def webmaster_ready(env: dict[str, str]) -> bool:
-    return all(first_env(env, group) for group in
-               (WEBMASTER_TOKEN_VARS, WEBMASTER_HOST_VARS, WEBMASTER_USER_VARS))
+    # user_id/host_id больше не обязательны: webmaster-fetch выводит их из API
+    # по токену (host — по project.domain конфига)
+    return bool(first_env(env, WEBMASTER_TOKEN_VARS))
 
 
 def run_step(script: str, args: list[str], root: pathlib.Path, env: dict[str, str],
@@ -134,8 +135,11 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
     else:
         raw_path = root / "seo" / "monitoring" / "raw" / f"webmaster-raw-{today.isoformat()}.json"
         raw_path.parent.mkdir(parents=True, exist_ok=True)
-        rc, _, stderr = run_step("webmaster-fetch.py",
-                                 ["--days", str(days), "--output", str(raw_path)], root, env)
+        fetch_args = ["--days", str(days), "--output", str(raw_path)]
+        domain = str(nested_get(cfg, "project.domain", "") or "")
+        if domain:
+            fetch_args += ["--domain", domain]
+        rc, _, stderr = run_step("webmaster-fetch.py", fetch_args, root, env)
         if rc != 0:
             note("fetch", False, stderr.strip().splitlines()[-1] if stderr.strip() else f"rc={rc}")
             findings.append({"id": "fetch_failed", "severity": "error",
@@ -220,18 +224,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("config", nargs="?", help="Path to seo-cycle.yaml")
-    parser.add_argument("--days", type=int, default=0, help="Окно выборки Вебмастера (default: pulse.days|14)")
-    parser.add_argument("--skip-fetch", action="store_true", help="Не ходить в сеть — только db/progress/свежесть")
-    parser.add_argument("--format", choices=("md", "json"), default="md")
-    args = parser.parse_args()
-
-    cfg_path = pathlib.Path(args.config).expanduser().resolve() if args.config else find_config(pathlib.Path.cwd())
-    if not cfg_path or not cfg_path.exists():
-        print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
-        return 2
+def pulse_project(cfg_path: pathlib.Path, args) -> tuple[dict, int]:
     cfg = load_yaml(cfg_path)
     root = project_root_for(cfg_path)
     global log
@@ -255,12 +248,61 @@ def main() -> int:
         messages = "; ".join(f["message"] for f in report["findings"] if f["severity"] == "critical")
         run_step("notify.py", [f"[pulse] {report['project']}: {messages}", "--level", "alert"],
                  root, env, timeout=30)
+    return report, (1 if has_critical else 0)
 
+
+def load_registry_projects(path: pathlib.Path) -> list[dict]:
+    if not path.exists():
+        return []
+    projects = load_yaml(path).get("projects") or []
+    return [p for p in projects if isinstance(p, dict) and p.get("path")
+            and str(p.get("status", "active")) == "active"]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("config", nargs="?", help="Path to seo-cycle.yaml")
+    parser.add_argument("--days", type=int, default=0, help="Окно выборки Вебмастера (default: pulse.days|14)")
+    parser.add_argument("--skip-fetch", action="store_true", help="Не ходить в сеть — только db/progress/свежесть")
+    parser.add_argument("--global", dest="global_run", action="store_true",
+                        help="Пульс всех active-проектов реестра (портфельный daily-джоб)")
+    parser.add_argument("--registry", type=pathlib.Path,
+                        default=SCRIPTS_DIR.parent / "config" / "projects-registry.yaml")
+    parser.add_argument("--format", choices=("md", "json"), default="md")
+    args = parser.parse_args()
+
+    if args.global_run:
+        entries = load_registry_projects(args.registry)
+        if not entries:
+            print(f"ERROR: нет active-проектов в реестре {args.registry}", file=sys.stderr)
+            return 2
+        rc = 0
+        reports = []
+        for entry in entries:
+            cfg_path = pathlib.Path(str(entry["path"])).expanduser() / "seo-cycle.yaml"
+            if not cfg_path.exists():
+                print(f"⚠ {entry.get('name') or entry['path']}: seo-cycle.yaml не найден — пропуск",
+                      file=sys.stderr)
+                continue
+            report, project_rc = pulse_project(cfg_path, args)
+            rc = max(rc, project_rc)
+            reports.append(report)
+            if args.format != "json":
+                print(render_markdown(report))
+        if args.format == "json":
+            print(json.dumps(reports, ensure_ascii=False, indent=2))
+        return rc
+
+    cfg_path = pathlib.Path(args.config).expanduser().resolve() if args.config else find_config(pathlib.Path.cwd())
+    if not cfg_path or not cfg_path.exists():
+        print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
+        return 2
+    report, rc = pulse_project(cfg_path, args)
     if args.format == "json":
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
         print(render_markdown(report), end="")
-    return 1 if has_critical else 0
+    return rc
 
 
 if __name__ == "__main__":

@@ -35,7 +35,7 @@ done
 if [[ "$(uname)" != "Darwin" ]]; then
   PROJECT="${PROJECT:-/path/to/project}"
   echo "# Linux: добавьте в crontab -e:"
-  echo "10 6 * * *  cd '$PROJECT' && '$LAUNCHER' pulse"
+  echo "10 6 * * *  '$LAUNCHER' pulse --global"
   echo "30 6 * * 1  '$LAUNCHER' progress --global --write --html"
   [[ $WITH_MONTHLY -eq 1 ]] && echo "0 7 1 * *   cd '$PROJECT' && '$LAUNCHER' run monthly"
   exit 0
@@ -90,7 +90,8 @@ DAILY="<key>StartCalendarInterval</key><dict><key>Hour</key><integer>6</integer>
 WEEKLY="<key>StartCalendarInterval</key><dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>"
 MONTHLY="<key>StartCalendarInterval</key><dict><key>Day</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>"
 
-write_plist "daily-progress" "$DAILY" "cd '$PROJECT' && '$LAUNCHER' pulse"
+# pulse --global идёт по реестру (все active-проекты); cd — только запасной контекст
+write_plist "daily-progress" "$DAILY" "cd '$PROJECT' && '$LAUNCHER' pulse --global"
 write_plist "weekly-portfolio" "$WEEKLY" "'$LAUNCHER' progress --global --write --html"
 if [[ $WITH_MONTHLY -eq 1 ]]; then
   write_plist "monthly-runner" "$MONTHLY" "cd '$PROJECT' && '$LAUNCHER' run monthly"

@@ -160,6 +160,18 @@ def from_webmaster(raw: dict) -> dict:
     (webmaster-fetch.py: query_text + indicators.TOTAL_SHOWS/TOTAL_CLICKS/AVG_SHOW_POSITION)."""
     out = {"engine": "yandex", "source": "webmaster", "queries": []}
     rows = raw.get("queries", raw.get("rows", []))
+
+    def num(*candidates, cast=float, default=0.0):
+        # API отдаёт null у молодых/малотрафиковых хостов — .get(default) от него не спасает
+        for c in candidates:
+            if c is None:
+                continue
+            try:
+                return cast(float(c))
+            except (TypeError, ValueError):
+                continue
+        return default
+
     for r in rows:
         indicators = r.get("indicators") or {}
         query = r.get("query") or r.get("query_text") or r.get("name", "")
@@ -167,11 +179,12 @@ def from_webmaster(raw: dict) -> dict:
             continue
         out["queries"].append({
             "query": query,
-            "impressions": int(r.get("shows", r.get("impressions", indicators.get("TOTAL_SHOWS", 0)))),
-            "clicks": int(r.get("clicks", indicators.get("TOTAL_CLICKS", 0))),
-            "ctr": float(r.get("ctr", 0.0)),
-            "position": float(r.get("position",
-                                    r.get("avgPosition", indicators.get("AVG_SHOW_POSITION", 0.0)))),
+            "impressions": num(r.get("shows"), r.get("impressions"),
+                               indicators.get("TOTAL_SHOWS"), cast=int, default=0),
+            "clicks": num(r.get("clicks"), indicators.get("TOTAL_CLICKS"), cast=int, default=0),
+            "ctr": num(r.get("ctr")),
+            "position": num(r.get("position"), r.get("avgPosition"),
+                            indicators.get("AVG_SHOW_POSITION")),
             "url": r.get("url", ""),
         })
     return out

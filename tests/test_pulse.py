@@ -23,11 +23,11 @@ spec.loader.exec_module(pulse)
 
 
 class PulseUnitTest(unittest.TestCase):
-    def test_webmaster_ready_requires_all_three(self) -> None:
-        env = {"YANDEX_OAUTH_TOKEN": "t", "YANDEX_HOST_ID": "https:x.ru:443"}
-        self.assertFalse(pulse.webmaster_ready(env))
-        env["YANDEX_WEBMASTER_USER_ID"] = "42"
-        self.assertTrue(pulse.webmaster_ready(env))
+    def test_webmaster_ready_needs_only_token(self) -> None:
+        # user_id/host_id выводятся из API — токена достаточно (zero-config проекты)
+        self.assertFalse(pulse.webmaster_ready({}))
+        self.assertFalse(pulse.webmaster_ready({"YANDEX_WEBMASTER_USER_ID": "42"}))
+        self.assertTrue(pulse.webmaster_ready({"YANDEX_OAUTH_TOKEN": "t"}))
 
     def test_freshness_gradation(self) -> None:
         today = dt.date(2026, 7, 10)
@@ -110,6 +110,32 @@ class PulseE2ETest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         report = json.loads(proc.stdout)
         self.assertIn("no_snapshots", [f["id"] for f in report["findings"]])
+
+    def test_global_walks_registry_and_skips_missing(self) -> None:
+        # портфельный daily-джоб: два active-проекта + paused + битый путь
+        self.write_snapshot(dt.date.today().isoformat())
+        second = self.tmp / "second"
+        second.mkdir()
+        (second / "seo-cycle.yaml").write_text("project:\n  name: second\n", encoding="utf-8")
+        registry = self.tmp / "registry.yaml"
+        registry.write_text(json.dumps({"projects": [
+            {"name": "pulse-test", "path": str(self.tmp), "status": "active"},
+            {"name": "second", "path": str(second), "status": "active"},
+            {"name": "paused", "path": str(self.tmp), "status": "paused"},
+            {"name": "ghost", "path": str(self.tmp / "nope"), "status": "active"},
+        ]}), encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "pulse.py"), "--global", "--registry", str(registry),
+             "--skip-fetch", "--format", "json"],
+            cwd=self.tmp, text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        reports = json.loads(proc.stdout)
+        self.assertEqual([r["project"] for r in reports], ["pulse-test", "second"])
+        self.assertIn("ghost", proc.stderr)  # пропуск честно объявлен
+        # у пустого second — findings, у живого — свежий срез
+        self.assertEqual(reports[0]["latest"]["top10"], 2)
+        self.assertIn("no_snapshots", [f["id"] for f in reports[1]["findings"]])
 
 
 if __name__ == "__main__":
