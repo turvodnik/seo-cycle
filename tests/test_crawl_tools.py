@@ -104,13 +104,21 @@ class CrawlToolsTest(unittest.TestCase):
         (drafts / "a.md").write_text(
             f"# Статья\nисточник ({self.base}/catalog/) и мёртвый ({self.base}/dead)\n",
             encoding="utf-8")
+        # боевая структура: publish-цепочка лежит в content-drafts/<дата>/articles/
+        nested = self.tmp / "seo" / "content-drafts" / "2026-06-29" / "articles"
+        nested.mkdir(parents=True)
+        (nested / "osb.md").write_text(
+            f"[source: ГОСТ]({self.base}/dead-nested)\n", encoding="utf-8")
         proc = self.run_script("link-liveness.py", "--live", "--write", "--format", "json")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         report = json.loads(proc.stdout)
-        self.assertEqual(report["links_found"], 2)
+        self.assertEqual(report["links_found"], 3)
         self.assertEqual(report["alive"], 1)
-        self.assertEqual(len(report["dead"]), 1)
-        self.assertIn("/dead", report["dead"][0]["url"])
+        self.assertEqual(len(report["dead"]), 2)
+        dead_urls = " ".join(d["url"] for d in report["dead"])
+        self.assertIn("/dead", dead_urls)
+        nested_entry = [d for d in report["dead"] if "dead-nested" in d["url"]]
+        self.assertTrue(any("content-drafts" in s for s in nested_entry[0]["sources"]))
         # повторный прогон без сети использует кэш
         proc2 = self.run_script("link-liveness.py", "--format", "json")
         self.assertEqual(json.loads(proc2.stdout)["alive"], 1)

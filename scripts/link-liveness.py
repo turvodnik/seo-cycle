@@ -43,6 +43,8 @@ def collect_links(project_root: pathlib.Path, own_domain: str) -> dict[str, list
     sources = [
         *(project_root / "seo" / "research-package" / "drafts").glob("*.md"),
         *(project_root / "seo" / "research-package" / "copywriter-ready").glob("*.md"),
+        # боевые проекты держат publish-цепочку в content-drafts/<дата>/[articles/]
+        *(project_root / "seo" / "content-drafts").rglob("*.md"),
         *(project_root / "seo" / "content-mirror" / "records").glob("*.json"),
     ]
     found: dict[str, list[str]] = {}
