@@ -12,6 +12,14 @@
 > **plywood +9.0k → membranes +8.5k → osp +7.7k**. Один ручной шаг: `bash
 > scripts/install-schedule.sh --project /Users/turvodnik/AI/emwoody` —
 > перевести daily-джоб на pulse.
+>
+> **Ревизия 11.07 (v1.90.1–v1.91)**: расписание перевыпущено — daily-джоб
+> теперь `pulse --global` (весь портфель, plist-XML починен). ✅ Шаг 4: KPI
+> Эмвуди включён (on_track; по пути убит баг «клики окна vs месячный план»).
+> ✅ Шаг 8 на 2/3: gsse подключён zero-config (авто user_id/host по токену) —
+> первый срез **топ-10 274 · клики 152**; PifagorLab ждёт GSC-источник в
+> pulse. Шаг 6 (crawl) запущен. Инженерное: actions bump сделан. Срез Эмвуди
+> 11.07: топ-10 379 (−2), клики 93.
 
 ## Что говорят данные сегодня
 
