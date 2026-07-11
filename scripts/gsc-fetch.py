@@ -109,6 +109,10 @@ def main():
     rows = data.get("rows", [])
     print(f"✓ {len(rows)} rows", file=sys.stderr)
 
+    # echo окна выборки — snapshot-build кладёт его в period, kpi-contract
+    # нормирует клики окна к месяцу
+    data.setdefault("date_from", start)
+    data.setdefault("date_to", end)
     out = json.dumps(data, ensure_ascii=False, indent=2)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

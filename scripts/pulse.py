@@ -58,10 +58,31 @@ def first_env(env: dict[str, str], names: tuple[str, ...]) -> str:
     return ""
 
 
+GSC_CRED_VARS = ("GOOGLE_APPLICATION_CREDENTIALS",)
+GSC_SITE_VARS = ("GSC_SITE_URL",)
+
+
 def webmaster_ready(env: dict[str, str]) -> bool:
     # user_id/host_id больше не обязательны: webmaster-fetch выводит их из API
     # по токену (host — по project.domain конфига)
     return bool(first_env(env, WEBMASTER_TOKEN_VARS))
+
+
+def gsc_ready(env: dict[str, str]) -> bool:
+    return bool(first_env(env, GSC_CRED_VARS)) and bool(first_env(env, GSC_SITE_VARS))
+
+
+def configured_sources(env: dict[str, str], domain: str, days: int) -> list[tuple[str, str, list[str]]]:
+    """(source, fetch-скрипт, args) для каждого настроенного источника позиций."""
+    sources: list[tuple[str, str, list[str]]] = []
+    if webmaster_ready(env):
+        args = ["--days", str(days)]
+        if domain:
+            args += ["--domain", domain]
+        sources.append(("webmaster", "webmaster-fetch.py", args))
+    if gsc_ready(env):
+        sources.append(("gsc", "gsc-fetch.py", ["--days", str(days)]))
+    return sources
 
 
 def run_step(script: str, args: list[str], root: pathlib.Path, env: dict[str, str],
@@ -125,37 +146,40 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
     def note(step: str, ok: bool, message: str) -> None:
         steps.append({"step": step, "ok": ok, "note": message})
 
-    # 1-2. fetch + snapshot (graceful: без токенов конвейер живёт на старых данных)
+    # 1-2. fetch + snapshot по каждому настроенному источнику
+    # (graceful: без токенов конвейер живёт на старых данных)
     if skip_fetch:
         note("fetch", True, "пропущен (--skip-fetch)")
-    elif not webmaster_ready(env):
-        note("fetch", False, "Вебмастер не настроен (auth login yandex)")
-        findings.append({"id": "fetch_not_configured", "severity": "warning",
-                         "message": "источник позиций не настроен — свежие срезы не снимаются"})
     else:
-        raw_path = root / "seo" / "monitoring" / "raw" / f"webmaster-raw-{today.isoformat()}.json"
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        fetch_args = ["--days", str(days), "--output", str(raw_path)]
         domain = str(nested_get(cfg, "project.domain", "") or "")
-        if domain:
-            fetch_args += ["--domain", domain]
-        rc, _, stderr = run_step("webmaster-fetch.py", fetch_args, root, env)
-        if rc != 0:
-            note("fetch", False, stderr.strip().splitlines()[-1] if stderr.strip() else f"rc={rc}")
-            findings.append({"id": "fetch_failed", "severity": "error",
-                             "message": "webmaster-fetch упал — работаем на прошлом срезе"})
-        else:
-            note("fetch", True, f"raw → {raw_path.relative_to(root)}")
-            snapshot_path = root / "seo" / "monitoring" / f"webmaster-snapshot-{today.isoformat()}.json"
-            rc, _, stderr = run_step("snapshot-build.py",
-                                     ["--source", "webmaster", "--input", str(raw_path),
-                                      "--output", str(snapshot_path)], root, env, timeout=60)
+        sources = configured_sources(env, domain, days)
+        if not sources:
+            note("fetch", False,
+                 "источник не настроен (auth login yandex | google-sa + GSC_SITE_URL)")
+            findings.append({"id": "fetch_not_configured", "severity": "warning",
+                             "message": "источник позиций не настроен — свежие срезы не снимаются"})
+        for source, script, fetch_args in sources:
+            raw_path = root / "seo" / "monitoring" / "raw" / f"{source}-raw-{today.isoformat()}.json"
+            raw_path.parent.mkdir(parents=True, exist_ok=True)
+            rc, _, stderr = run_step(script, [*fetch_args, "--output", str(raw_path)], root, env)
+            step = "fetch" if len(sources) == 1 else f"fetch:{source}"
             if rc != 0:
-                note("snapshot", False, stderr.strip()[-200:] or f"rc={rc}")
+                note(step, False, stderr.strip().splitlines()[-1] if stderr.strip() else f"rc={rc}")
+                findings.append({"id": "fetch_failed", "severity": "error",
+                                 "message": f"{script} упал — работаем на прошлом срезе"})
+                continue
+            note(step, True, f"raw → {raw_path.relative_to(root)}")
+            snapshot_path = root / "seo" / "monitoring" / f"{source}-snapshot-{today.isoformat()}.json"
+            rc, _, stderr = run_step("snapshot-build.py",
+                                     ["--source", source, "--input", str(raw_path),
+                                      "--output", str(snapshot_path)], root, env, timeout=60)
+            snap_step = "snapshot" if len(sources) == 1 else f"snapshot:{source}"
+            if rc != 0:
+                note(snap_step, False, stderr.strip()[-200:] or f"rc={rc}")
                 findings.append({"id": "snapshot_failed", "severity": "error",
                                  "message": "snapshot-build не собрал срез из raw-выгрузки"})
             else:
-                note("snapshot", True, f"{snapshot_path.relative_to(root)}")
+                note(snap_step, True, f"{snapshot_path.relative_to(root)}")
 
     # 3. db-sync
     rc, _, stderr = run_step("db-sync.py", [], root, env)

@@ -29,6 +29,25 @@ class PulseUnitTest(unittest.TestCase):
         self.assertFalse(pulse.webmaster_ready({"YANDEX_WEBMASTER_USER_ID": "42"}))
         self.assertTrue(pulse.webmaster_ready({"YANDEX_OAUTH_TOKEN": "t"}))
 
+    def test_gsc_ready_needs_credentials_and_site(self) -> None:
+        self.assertFalse(pulse.gsc_ready({"GOOGLE_APPLICATION_CREDENTIALS": "/sa.json"}))
+        self.assertFalse(pulse.gsc_ready({"GSC_SITE_URL": "sc-domain:x.eu"}))
+        self.assertTrue(pulse.gsc_ready({"GOOGLE_APPLICATION_CREDENTIALS": "/sa.json",
+                                         "GSC_SITE_URL": "sc-domain:x.eu"}))
+
+    def test_configured_sources_covers_both_engines(self) -> None:
+        env = {"YANDEX_OAUTH_TOKEN": "t",
+               "GOOGLE_APPLICATION_CREDENTIALS": "/sa.json", "GSC_SITE_URL": "sc-domain:x.eu"}
+        sources = pulse.configured_sources(env, "x.ru", 14)
+        self.assertEqual([s[0] for s in sources], ["webmaster", "gsc"])
+        self.assertIn("--domain", sources[0][2])   # webmaster получает домен для авто-host
+        self.assertEqual(sources[1][1], "gsc-fetch.py")
+        self.assertEqual(pulse.configured_sources({}, "x.ru", 14), [])
+        gsc_only = pulse.configured_sources(
+            {"GOOGLE_APPLICATION_CREDENTIALS": "/sa.json", "GSC_SITE_URL": "sc-domain:x.eu"},
+            "", 28)
+        self.assertEqual([s[0] for s in gsc_only], ["gsc"])
+
     def test_freshness_gradation(self) -> None:
         today = dt.date(2026, 7, 10)
         self.assertEqual(pulse.freshness_findings("2026-07-10", today, 3), [])
