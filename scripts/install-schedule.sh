@@ -57,8 +57,15 @@ if [[ -z "$PROJECT" || ! -f "$PROJECT/seo-cycle.yaml" ]]; then
 fi
 mkdir -p "$AGENTS_DIR"
 
-write_plist() { # name interval-xml program-args-xml
-  local name="$1" schedule="$2" args="$3"
+xml_escape() { # & < > обязаны быть сущностями внутри <string> (launchd прощает, plutil/PlistBuddy — нет)
+  local s="$1"
+  s="${s//&/&amp;}"; s="${s//</&lt;}"; s="${s//>/&gt;}"
+  printf '%s' "$s"
+}
+
+write_plist() { # name interval-xml program-args
+  local name="$1" schedule="$2" args
+  args="$(xml_escape "$3")"
   local plist="$AGENTS_DIR/$PREFIX.$name.plist"
   cat > "$plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

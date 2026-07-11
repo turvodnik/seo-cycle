@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.90.1] — 2026-07-11
+
+- Fix: `install-schedule.sh` wrote raw `&&` inside plist `<string>` — launchd tolerated it, but the XML was invalid (`plutil -lint` / PlistBuddy failed). Program arguments are now XML-escaped (`& < >`); боевые плисты перевыпущены и проходят `plutil -lint`.
+- CI: GitHub Actions bumped to Node24 versions (`actions/checkout@v5`, `actions/setup-python@v6`) — снято deprecation-предупреждение «Node.js 20 is deprecated» в каждом прогоне.
+- Ops: daily-джоб Эмвуди переведён с устаревшего `db && progress` на `seo-cycle pulse` (переустановка расписания), живой срез 2026-07-11 снят пульсом (топ-10 379, клики 93).
+
 ## [1.90.0] — 2026-07-10
 
 ### The live data pipeline: pulse, fuzzy forecast matching, freshness everywhere
