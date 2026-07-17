@@ -158,8 +158,19 @@ def from_metrika(raw: dict) -> dict:
 def from_webmaster(raw: dict) -> dict:
     """Я.Вебмастер «История запросов»: плоский экспорт ИЛИ сырой API v4
     (webmaster-fetch.py: query_text + indicators.TOTAL_SHOWS/TOTAL_CLICKS/AVG_SHOW_POSITION)."""
-    out = {"engine": "yandex", "source": "webmaster", "queries": []}
     rows = raw.get("queries", raw.get("rows", []))
+    out = {
+        "engine": "yandex",
+        "source": "webmaster",
+        "metric_scope": "query_sample",
+        "sitewide": False,
+        "sample": {
+            "loaded_rows": len(rows),
+            "available_rows": max(len(rows), int(raw.get("count", len(rows)) or len(rows))),
+        },
+        "identity": raw.get("_identity", {}),
+        "queries": [],
+    }
 
     def num(*candidates, cast=float, default=0.0):
         # API отдаёт null у молодых/малотрафиковых хостов — .get(default) от него не спасает
@@ -177,12 +188,15 @@ def from_webmaster(raw: dict) -> dict:
         query = r.get("query") or r.get("query_text") or r.get("name", "")
         if not query:
             continue
+        impressions = num(r.get("shows"), r.get("impressions"),
+                          indicators.get("TOTAL_SHOWS"), cast=int, default=0)
+        clicks = num(r.get("clicks"), indicators.get("TOTAL_CLICKS"), cast=int, default=0)
+        ctr = num(r.get("ctr"), default=None)
         out["queries"].append({
             "query": query,
-            "impressions": num(r.get("shows"), r.get("impressions"),
-                               indicators.get("TOTAL_SHOWS"), cast=int, default=0),
-            "clicks": num(r.get("clicks"), indicators.get("TOTAL_CLICKS"), cast=int, default=0),
-            "ctr": num(r.get("ctr")),
+            "impressions": impressions,
+            "clicks": clicks,
+            "ctr": ctr if ctr is not None else (clicks / impressions if impressions else 0.0),
             "position": num(r.get("position"), r.get("avgPosition"),
                             indicators.get("AVG_SHOW_POSITION")),
             "url": r.get("url", ""),
@@ -242,6 +256,20 @@ def _merge_snapshot(base: dict, addition: dict) -> dict:
     src_meta = {"source": addition.get("source"), "engine": addition.get("engine")}
     if src_meta not in base["sources"]:
         base["sources"].append(src_meta)
+    if len(base["sources"]) > 1:
+        for key in ("metric_scope", "sitewide", "sample", "identity"):
+            base.pop(key, None)
+
+    metadata = {
+        key: addition[key]
+        for key in ("metric_scope", "sitewide", "sample", "identity")
+        if key in addition
+    }
+    if metadata:
+        source = str(addition.get("source") or "unknown")
+        base.setdefault("source_metadata", {})[source] = metadata
+        if len(base["sources"]) == 1:
+            base.update(metadata)
 
     # period: окно данных источника (echo date_from/date_to из API) — без него
     # потребители (kpi-contract) не могут нормировать клики окна к месяцу

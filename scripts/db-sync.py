@@ -109,6 +109,39 @@ def safe_col(name: str) -> str:
     return c or "col"
 
 
+def normalize_domain(value: object) -> str:
+    raw = str(value or "").strip().lower()
+    raw = raw.split("//")[-1].split("/")[0].split(":")[0]
+    return raw[4:] if raw.startswith("www.") else raw
+
+
+def snapshot_identity(data: dict) -> dict:
+    direct = data.get("_identity") or data.get("identity")
+    if isinstance(direct, dict):
+        return direct
+    source_metadata = data.get("source_metadata")
+    if not isinstance(source_metadata, dict):
+        return {}
+    webmaster = source_metadata.get("webmaster")
+    if not isinstance(webmaster, dict):
+        return {}
+    identity = webmaster.get("identity")
+    return identity if isinstance(identity, dict) else {}
+
+
+def identity_matches_project(data: dict, project_domain: str) -> bool:
+    if not project_domain:
+        return True
+    identity = snapshot_identity(data)
+    if identity.get("host_match") is False:
+        return False
+    domains = [
+        normalize_domain(identity.get("expected_domain")),
+        normalize_domain(identity.get("selected_domain")),
+    ]
+    return all(not domain or domain == project_domain for domain in domains)
+
+
 def sync_csv(conn, table: str, path: pathlib.Path) -> int:
     if not path.exists():
         return -1
@@ -133,14 +166,26 @@ def sync_positions(conn, root: pathlib.Path) -> int:
     files = set()
     for pat in patterns:
         files.update(glob.glob(str(root / pat), recursive=True))
+    excluded_components = {"quarantine", "invalid"}
+    files = {
+        fp for fp in files
+        if not excluded_components.intersection(
+            part.lower() for part in pathlib.Path(fp).relative_to(root).parts
+        )
+    }
     conn.execute("DROP TABLE IF EXISTS positions")
     conn.execute("""CREATE TABLE positions (snapshot_date TEXT, engine TEXT, query TEXT,
                     position REAL, clicks INTEGER, impressions INTEGER, url TEXT)""")
+    cfg = load_cfg(root)
+    project = cfg.get("project", {}) if isinstance(cfg.get("project"), dict) else {}
+    project_domain = normalize_domain(project.get("domain"))
     n = 0
     for fp in sorted(files):
         try:
             data = json.loads(pathlib.Path(fp).read_text(encoding="utf-8"))
         except Exception:
+            continue
+        if not identity_matches_project(data, project_domain):
             continue
         date = data.get("date") or re.search(r"(\d{4}-\d{2}-\d{2})", fp)
         date = date.group(1) if hasattr(date, "group") else (date or "")

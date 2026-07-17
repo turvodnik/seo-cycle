@@ -40,7 +40,7 @@ API docs: https://yandex.ru/dev/webmaster/doc/dg/concepts/about.html
 """
 
 from __future__ import annotations
-import argparse, json, os, pathlib, sys, urllib.parse, urllib.request
+import argparse, json, os, pathlib, re, sys, urllib.parse, urllib.request
 from datetime import date, timedelta
 from urllib.error import HTTPError
 
@@ -60,7 +60,11 @@ def api_get(path: str, token: str) -> dict:
 
 def normalize_domain(value: str) -> str:
     v = (value or "").strip().lower()
-    v = v.split("//")[-1].split("/")[0].split(":")[0]
+    host_id = re.match(r"^[a-z]+:([^:]+)(?::\d+)?$", v)
+    if host_id and "://" not in v:
+        v = host_id.group(1)
+    else:
+        v = v.split("//")[-1].split("/")[0].split(":")[0]
     return v[4:] if v.startswith("www.") else v
 
 
@@ -80,6 +84,52 @@ def pick_host(hosts: list, domain: str) -> tuple:
     if len(pool) == 1:
         return pool[0].get("host_id"), ""
     return None, f"{len(pool)} хостов в аккаунте — укажите --domain или --host"
+
+
+def resolve_project_host(hosts: list, domain: str, explicit_host: str,
+                         environment_host: str) -> tuple[str, dict]:
+    """Resolve host with project identity as the authority.
+
+    When a project domain is supplied, an environment host is ignored because
+    a portfolio scheduler may have inherited it from another project. A CLI
+    host is accepted only after exact domain and token-visible-host checks.
+    """
+    expected = normalize_domain(domain)
+    if not expected:
+        selected = explicit_host or environment_host
+        if not selected:
+            raise ValueError("домен проекта или явный host обязателен")
+        return selected, {
+            "expected_domain": "",
+            "selected_domain": normalize_domain(selected),
+            "host_id": selected,
+            "host_source": "cli_explicit" if explicit_host else "environment_legacy",
+            "host_match": None,
+        }
+    if explicit_host and normalize_domain(explicit_host) != expected:
+        raise ValueError(f"явный host {normalize_domain(explicit_host)} не совпадает с доменом проекта {expected}")
+    if explicit_host:
+        visible = next((h for h in hosts if h.get("host_id") == explicit_host), None)
+        if not visible:
+            raise ValueError("явный host не найден среди хостов аккаунта")
+        selected = explicit_host
+        source = "cli_explicit"
+    else:
+        selected, why_not = pick_host(hosts, expected)
+        if not selected:
+            raise ValueError(why_not)
+        source = "api_domain_match"
+    selected_domain = normalize_domain(selected)
+    if selected_domain != expected:
+        raise ValueError(f"выбранный host {selected_domain} не совпадает с доменом проекта {expected}")
+    return selected, {
+        "expected_domain": expected,
+        "selected_domain": selected_domain,
+        "host_id": selected,
+        "host_source": source,
+        "host_match": True,
+        "environment_host_ignored": bool(environment_host and not explicit_host),
+    }
 
 
 def fetch(user_id: str, host_id: str, token: str, start: str, end: str,
@@ -113,7 +163,7 @@ def fetch(user_id: str, host_id: str, token: str, start: str, end: str,
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--user-id", default=os.environ.get("YANDEX_WEBMASTER_USER_ID") or os.environ.get("YANDEX_USER_ID"))
-    ap.add_argument("--host", default=os.environ.get("YANDEX_WEBMASTER_HOST_ID") or os.environ.get("YANDEX_HOST_ID"))
+    ap.add_argument("--host", default=None)
     ap.add_argument("--domain", default="", help="Домен проекта для автоподбора host_id (когда --host не задан)")
     ap.add_argument("--token", default=os.environ.get("YANDEX_WEBMASTER_OAUTH_TOKEN") or os.environ.get("YANDEX_OAUTH_TOKEN"))
     ap.add_argument("--days", type=int, default=28)
@@ -124,6 +174,7 @@ def main():
     ap.add_argument("--limit", type=int, default=500)
     ap.add_argument("--output", type=pathlib.Path)
     args = ap.parse_args()
+    environment_host = os.environ.get("YANDEX_WEBMASTER_HOST_ID") or os.environ.get("YANDEX_HOST_ID") or ""
 
     if not args.token:
         ap.error("Provide --token or set YANDEX_OAUTH_TOKEN env var")
@@ -135,13 +186,25 @@ def main():
             print(f"⚠ авто-user_id не удался: {e}", file=sys.stderr)
         if args.user_id:
             print(f"↪ user_id обнаружен по токену: {args.user_id}", file=sys.stderr)
-    if args.user_id and not args.host:
+    identity = {}
+    if args.user_id and args.domain:
         try:
             hosts = api_get(f"/user/{args.user_id}/hosts/", args.token).get("hosts", [])
-            host_id, why_not = pick_host(hosts, args.domain)
-            if host_id:
-                args.host = host_id
-                print(f"↪ host обнаружен: {host_id}", file=sys.stderr)
+            args.host, identity = resolve_project_host(
+                hosts, args.domain, args.host or "", environment_host,
+            )
+            print(f"↪ host подтверждён для {normalize_domain(args.domain)}: {args.host}", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠ project host validation: {e}", file=sys.stderr)
+            args.host = None
+    elif not args.host:
+        args.host = environment_host or None
+    if args.user_id and not args.host and not args.domain:
+        try:
+            hosts = api_get(f"/user/{args.user_id}/hosts/", args.token).get("hosts", [])
+            args.host, why_not = pick_host(hosts, "")
+            if args.host:
+                print(f"↪ host обнаружен: {args.host}", file=sys.stderr)
             else:
                 print(f"⚠ авто-host: {why_not}", file=sys.stderr)
         except Exception as e:
@@ -166,6 +229,10 @@ def main():
         print(f"ERROR: Webmaster API failed: {e}", file=sys.stderr)
         sys.exit(1)
 
+    if identity:
+        data["_identity"] = identity
+    data["date_from"] = start
+    data["date_to"] = end
     queries = data.get("queries", [])
     print(f"✓ {len(queries)} queries", file=sys.stderr)
 

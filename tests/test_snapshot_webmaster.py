@@ -18,6 +18,12 @@ RAW_V4 = {
     "count": 2,
     "date_from": "2026-06-27",
     "date_to": "2026-07-09",
+    "_identity": {
+        "expected_domain": "gsse.ru",
+        "selected_domain": "gsse.ru",
+        "host_id": "https:gsse.ru:443",
+        "host_match": True,
+    },
     "queries": [
         {"query_id": "a1", "query_text": "как затирать швы",
          "indicators": {"TOTAL_SHOWS": 177.0, "TOTAL_CLICKS": 2.0,
@@ -50,7 +56,12 @@ class SnapshotWebmasterTest(unittest.TestCase):
         self.assertEqual(queries["новый запрос без данных"]["position"], 0.0)
         self.assertEqual(queries["как затирать швы"]["impressions"], 177)
         self.assertEqual(queries["как затирать швы"]["clicks"], 2)
+        self.assertAlmostEqual(queries["как затирать швы"]["ctr"], 2 / 177)
         self.assertAlmostEqual(queries["как затирать швы"]["position"], 5.2)
+        self.assertEqual(snap["metric_scope"], "query_sample")
+        self.assertFalse(snap["sitewide"])
+        self.assertEqual(snap["sample"], {"loaded_rows": 3, "available_rows": 3})
+        self.assertEqual(snap["identity"]["expected_domain"], "gsse.ru")
         # окно выборки из raw echo — без него kpi-contract не нормирует клики к месяцу
         self.assertEqual(snap["period"], {"start": "2026-06-27", "end": "2026-07-09"})
         # плоский формат по-прежнему работает

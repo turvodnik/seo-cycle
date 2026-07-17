@@ -125,9 +125,34 @@ class AutomationRecommenderTest(unittest.TestCase):
         commands = {task["task_id"]: task["command"] for task in plan["tasks"]}
         self.assertIn("spend-guard.py", commands["spend_guard_watch"])
         self.assertIn("gsc-fetch.py", commands["search_console_index_watch"])
+        self.assertIn("--domain 'ru-ecommerce.test'", commands["search_console_index_watch"])
         self.assertIn("schema-validate.py", commands["schema_cwv_watch"])
         self.assertIn("monthly-runner.sh", commands["content_decay_refresh_queue"])
         self.assertIn("refresh --dry-run", commands["content_decay_refresh_queue"])
+
+    def test_search_console_plan_fails_closed_without_project_domain(self) -> None:
+        cfg_path = self.make_project(country="RU", project_type="ecommerce")
+        subprocess.run(
+            [sys.executable, str(AUTOMATION), str(cfg_path), "--apply", "--format", "json"],
+            cwd=cfg_path.parent,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        cfg["project"]["domain"] = ""
+        cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+        proc = subprocess.run(
+            [sys.executable, str(AUTOMATION_PLAN), str(cfg_path), "--include-disabled"],
+            cwd=cfg_path.parent,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("project.domain", proc.stderr)
 
 
 if __name__ == "__main__":

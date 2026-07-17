@@ -123,7 +123,8 @@ def governance_allows_schedules(cfg: dict[str, Any], policy: dict[str, Any]) -> 
     return not reasons, reasons
 
 
-def command_for_policy_task(project_root: pathlib.Path, task_id: str, mode: str) -> str:
+def command_for_policy_task(project_root: pathlib.Path, task_id: str, mode: str,
+                            project_domain: str) -> str:
     root = skill_root()
     latest_dir = "seo/automations/latest"
     if task_id == "usage_budget_watch":
@@ -156,11 +157,13 @@ def command_for_policy_task(project_root: pathlib.Path, task_id: str, mode: str)
             f"bash {shell_quote(root / 'scripts/monthly-runner.sh')} deindex --dry-run"
         )
     if task_id == "search_console_index_watch":
+        if not project_domain.strip():
+            raise ValueError("project.domain is required for search_console_index_watch")
         return (
             f"cd {shell_quote(project_root)} && "
             f"mkdir -p {latest_dir} && "
             f"if [ -n \"$GSC_SITE_URL\" ]; then python3 {shell_quote(root / 'scripts/gsc-fetch.py')} --days 28 --output seo/automations/latest/gsc-index.json; fi && "
-            f"if [ -n \"$YANDEX_OAUTH_TOKEN\" ] && [ -n \"$YANDEX_USER_ID\" ] && [ -n \"$YANDEX_WEBMASTER_HOST_ID\" ]; then python3 {shell_quote(root / 'scripts/webmaster-fetch.py')} --days 28 --output seo/automations/latest/yandex-webmaster.json; fi && "
+            f"if [ -n \"$YANDEX_OAUTH_TOKEN\" ]; then python3 {shell_quote(root / 'scripts/webmaster-fetch.py')} --domain {shell_quote(project_domain)} --days 28 --output seo/automations/latest/yandex-webmaster.json; fi && "
             f"python3 {shell_quote(root / 'scripts/governance-report.py')} --format md > seo/automations/latest-search-governance.md"
         )
     if task_id == "bing_index_watch":
@@ -196,6 +199,8 @@ def command_for_policy_task(project_root: pathlib.Path, task_id: str, mode: str)
 def build_tasks(cfg: dict[str, Any], policy: dict[str, Any], project_root: pathlib.Path, include_disabled: bool) -> list[Task]:
     root = skill_root()
     tasks: list[Task] = []
+    project = cfg.get("project", {}) if isinstance(cfg.get("project"), dict) else {}
+    project_domain = str(project.get("domain") or "").strip()
     monthly = cfg.get("monthly_automation", {}) if isinstance(cfg.get("monthly_automation"), dict) else {}
     schedule = monthly.get("schedule", {}) if isinstance(monthly.get("schedule"), dict) else {}
     monthly_enabled = bool(monthly.get("enabled"))
@@ -230,7 +235,7 @@ def build_tasks(cfg: dict[str, Any], policy: dict[str, Any], project_root: pathl
             Task(
                 task_id=task_id,
                 cron=cron,
-                command=command_for_policy_task(project_root, task_id, mode),
+                command=command_for_policy_task(project_root, task_id, mode, project_domain),
                 mode=mode,
                 source="automation-policy.yaml",
                 enabled=enabled,

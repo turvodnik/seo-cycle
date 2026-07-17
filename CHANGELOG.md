@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [1.92.2] — 2026-07-17
+
+### Project-safe Yandex monitoring
+
+- Fixed portfolio env leakage: when `pulse` supplies `project.domain`, `webmaster-fetch.py` ignores an inherited `YANDEX_WEBMASTER_HOST_ID`, resolves the exact token-visible domain host, and fails closed for an explicit foreign or invisible host.
+- Raw Webmaster evidence now includes non-secret `_identity` metadata (`expected_domain`, selected domain/host, source, match status, inherited-host ignored flag).
+- `snapshot-build.py` now computes missing CTR from the actual API v4 `TOTAL_CLICKS / TOTAL_SHOWS` values instead of silently writing zero.
+- Webmaster popular-query totals are explicitly scoped as `query_sample` with `sitewide: false`, loaded/available row counts, and per-source metadata for merged snapshots.
+- `db-sync.py` now excludes snapshots beneath any `quarantine` or `invalid` path component, preventing isolated cross-project evidence from re-entering `seo.db` on the next pulse.
+- Added regression tests for inherited Emwoody→GSSE host leakage, explicit host validation, CTR parsing, identity preservation, and query-sample semantics.
+- **Caught in the wild by this release**: a live `pulse --global` verification surfaced the exact leak the fix targets — PifagorLab (eu, `pifagorlab.com`, GSC-only) had **Emwoody's** two Yandex snapshots (07-12/07-13, «расход плиточного клея», «как затирать швы») physically in its monitoring dir, injected by the pre-fix daily job through a globally-inherited `YANDEX_WEBMASTER_HOST_ID`; 1000 foreign rows had entered its `seo.db` (surfacing as a false −383 top-10 «drop»). Today's fix already blocks new leaks (07-17 pulse fetched GSC only). Historical data isolated into `seo/monitoring/quarantine/` with an audit README; db-sync verified to keep those rows out on re-sync (yandex rows → 0), PifagorLab progress back to its real +3 top-10. GSSE checked clean (own queries, identity stamps `gsse.ru`).
+
 ## [1.92.1] — 2026-07-11
 
 - Fix: `link-liveness.py` сканировал только канонические `research-package/drafts|copywriter-ready` и mirror-записи — боевой проект держит publish-цепочку в `seo/content-drafts/<дата>/[articles/]` и получал честный, но бесполезный «0 ссылок». Теперь content-drafts обходится рекурсивно (тест с вложенной структурой). Примечание по Эмвуди: в статьях 06-28/29 источники цитируются текстом («СП 16») без URL — прежняя генерация до proof-гейта; для новых драфтов проверка живости заработает сразу.

@@ -62,6 +62,36 @@ class PickHostTest(unittest.TestCase):
         host_id, _ = wf.pick_host(only_unverified, "new.ru")
         self.assertEqual(host_id, "https:new.ru:443")
 
+    def test_project_domain_ignores_inherited_foreign_host(self) -> None:
+        selected, identity = wf.resolve_project_host(
+            self.HOSTS,
+            domain="gsse.ru",
+            explicit_host="",
+            environment_host="https:emwoody.ru:443",
+        )
+        self.assertEqual(selected, "https:gsse.ru:443")
+        self.assertEqual(identity["host_source"], "api_domain_match")
+        self.assertEqual(identity["expected_domain"], "gsse.ru")
+        self.assertTrue(identity["host_match"])
+
+    def test_explicit_foreign_host_fails_closed(self) -> None:
+        with self.assertRaisesRegex(ValueError, "не совпадает с доменом проекта"):
+            wf.resolve_project_host(
+                self.HOSTS,
+                domain="gsse.ru",
+                explicit_host="https:emwoody.ru:443",
+                environment_host="",
+            )
+
+    def test_explicit_host_must_be_visible_to_token(self) -> None:
+        with self.assertRaisesRegex(ValueError, "не найден среди хостов аккаунта"):
+            wf.resolve_project_host(
+                self.HOSTS,
+                domain="gsse.ru",
+                explicit_host="https:gsse.ru:80",
+                environment_host="",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
