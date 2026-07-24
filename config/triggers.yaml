@@ -23,6 +23,20 @@
 
 triggers:
   # ------- Запросы -------
+  # ВАЖНО про пороги: значения impressions ниже рассчитаны на сайты с высокой
+  # частотностью. На малых и средних проектах (десятки показов на запрос за
+  # окно среза) правила не сработают вовсе — движок будет молчать, и это
+  # выглядит как «проблем нет». Проверяйте охват: если сработало 0-1 правило
+  # на сотни запросов, снижайте пороги через project-override
+  # (<project>/seo-triggers.yaml + monitoring.triggers_file в seo-cycle.yaml),
+  # ориентируясь на реальное распределение показов в снапшоте.
+  - id: push_to_top3
+    when: "position >= 4 AND position <= 10 AND impressions > 20"
+    scope: queries
+    action: "Дожать до топ-3: усилить answer-unit под формулировку запроса, добавить таблицу/FAQ, перелинковать с категории и соседних статей"
+    priority: P0
+    delegate: content_strategist
+
   - id: low_ctr_in_top_positions
     when: "position >= 5 AND position <= 20 AND ctr < 0.02 AND impressions > 100"
     scope: queries
