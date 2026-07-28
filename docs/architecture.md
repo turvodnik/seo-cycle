@@ -1,126 +1,122 @@
-# Архитектура skill `seo-cycle`
+# Архитектура `seo-cycle` (v2)
+
+Обновлено: 2026-07-29 (v2.0.0 — модульные фазовые скиллы, версионированное хранилище).
 
 ## Принципы
 
 1. **Config-driven** — все решения зависят от `seo-cycle.yaml` проекта. Один кодовый базис для всех проектов.
-2. **Source-flexible** — источники данных (Wordstat, GSC, NW, ATP, LLM CLI, Perplexity) включаются независимо. Скилл пропускает то, что не enabled.
-3. **CMS-agnostic** — публикация делегируется проектным скиллам через `delegate.*`. Универсальный скилл сам не пишет в CMS — он оркестратор.
-4. **LLM-агностичный** — каждый шаг с LLM можно выполнить через Claude (внутри сессии), либо через external CLI (Antigravity, Codex), либо через Perplexity Pro. Выбор по доступности и задаче.
-5. **Идемпотентный** — повторный запуск той же фазы не ломает артефакты, а обновляет их с timestamp.
+2. **Source-flexible** — источники данных (Wordstat, GSC, NW, ATP, LLM CLI, Perplexity, XMLRiver, Serpstat, SpyFu) включаются независимо; скилл пропускает то, что не enabled/не доступно в регионе (`resolve-sources.py`).
+3. **CMS-agnostic** — публикация делегируется проектным скиллам через `delegate.*` / `publishing.publish_skills`.
+4. **LLM-агностичный** — каждый LLM-шаг выполняется через Claude, Codex CLI, Antigravity CLI или Perplexity — по доступности.
+5. **Идемпотентный** — повторный запуск фазы обновляет артефакты, а не ломает их.
+6. **Модульный (v2)** — фазы 1–10 разнесены по самостоятельным скиллам `skills/*`; корневой `SKILL.md` — тонкий оркестратор (Phase 0 + диспетчеризация). Каждый модуль запускается отдельно или стадией конвейера через `_state.json`.
+7. **Контекст-экономный** — агент грузит только оркестратор + модуль текущей фазы + нужные `_shared`-фрагменты; сырьё живёт на диске, в контекст идут дистилляты.
+8. **Секреты — в Keychain** — значения ключей живут в macOS Keychain (`ai-secret`), конфиги и `.env.example` содержат только имена.
 
 ## Поток управления
 
 ```
 Пользователь
     ↓
-Клод определяет: «нужен seo-cycle» (по триггерам из SKILL.md description)
+триггер полного цикла → корневой SKILL.md (оркестратор)
+триггер одной фазы    → skills/<модуль>/SKILL.md напрямую
     ↓
-Phase 0 — найти seo-cycle.yaml → если нет, INSTALL wizard
-                              → если есть, validate
-    ↓
-Phase 1 ← подключённые в config delegate.audit агенты
-Phase 2 ← по списку sources.*.enabled (Wordstat → Suggest → ATP → LLM CLI → Perplexity → ...)
-Phase 3 ← delegate.cluster_analysis
-Phase 4 ← delegate.semantic_brief (использует ~/.codex/skills/seo-cycle/templates/entity-map.template.md как fallback)
-Phase 5 ← delegate.content_strategy
-Phase 6 ← delegate.content_writer + quality gates (stop-words, fact-check, NW)
-Phase 7 ← delegate.publish_skills[<type>] (project-specific CMS handler)
-Phase 8 ← delegate.schema_markup
-Phase 9 ← delegate.google_data + delegate.yandex_specialist
-Phase 10 ← сам скилл + проектные lessons learned
+Phase 0 (оркестратор) — конфиг/wizard, цель, task-router, context-pack
+    ↓  cycle-state init/next
+Phase 1   skills/seo-audit       ← delegate.audit (+technical_audit)
+Phase 2–3 skills/seo-keywords    ← delegate.keyword_research + cluster_analysis (внешний репозиторий seo-keywords)
+Phase 4   skills/seo-entity-map  ← delegate.semantic_brief (fallback: его же templates/entity-map.template.md)
+Phase 5–6 skills/seo-writing     ← delegate.content_strategy + content_writer + gates (stop-words, fact-check, NW, draft-gate)
+Phase 7–8 skills/seo-publishing  ← publishing.publish_skills + delegate.schema_markup
+Phase 9   skills/seo-monitoring  ← delegate.google_data + yandex_specialist (pulse, snapshot-build, db-sync)
+Phase 10  skills/seo-iteration   ← triggers-eval + source-attribution + kpi/forecast
+    ↺ (gate каждой фазы: cycle-state gate <phase>; контент — через loop-runner)
 ```
 
-## Структура файлов скилла
+Три сервисных машины поверх фаз:
+- **loop-runner** (`scripts/loop-runner.py`) — автоцикл gate → repair → re-gate (exit 3 = LLM-ремонт, exit 1 = эскалация в approvals);
+- **governance/spend** (`usage-ledger.py`, `spend-guard.py`, `approvals.py`) — preflight и учёт платного;
+- **data pipeline** (`pulse` → `*-fetch.py` → `snapshot-build.py` → `db-sync.py` → `position-progress.py` → `triggers-eval.py`).
+
+## Структура репозитория (v2)
 
 ```
-~/.codex/skills/seo-cycle/
-├── SKILL.md                          # entry-point, orchestrator instructions
-├── INSTALL.md                        # setup wizard для нового проекта
-├── CHANGELOG.md                      # история изменений
-├── config/
-│   └── project.template.yaml         # эталонный шаблон проектного конфига
-├── prompts/                          # универсальные промпт-шаблоны
-│   ├── fact-check.md
-│   ├── entities-extract.md
-│   ├── semantic-core-llm.md
-│   ├── serp-news.md
-│   └── (deep-research.md — для будущего)
-├── scripts/                          # переносимые скрипты
-│   ├── validate-config.py            # валидатор seo-cycle.yaml
-│   ├── check-stop-words.py           # детектор стоп-слов (RU+EN+morphology)
-│   ├── yandex-suggest.py             # Яндекс Suggest API
-│   ├── google-suggest.py             # Google Suggest API
-│   ├── atp-fetch.py                  # AnswerThePublic API клиент
-│   ├── llm-cli-collect.sh            # параллельный Antigravity + Codex
-│   └── llm-cli-merge.py              # дедуп результатов
-├── templates/                        # шаблоны артефактов
-│   ├── entity-map.template.md
-│   ├── stop-words.md                 # документация правил
-│   └── (cycle-plan.template.md — для будущего)
-└── docs/
-    ├── architecture.md               # этот файл
-    ├── adapt.md                      # адаптация под проекты
-    ├── migration.md                  # миграция с emwoody-seo-cycle
-    └── troubleshooting.md            # FAQ
+seo-cycle/
+├── SKILL.md                     # ТОНКИЙ ОРКЕСТРАТОР: Phase 0, диспетчеризация, CLI, loop, ads
+├── AGENTS.md → SKILL.md         # entry-point Codex
+├── skills/
+│   ├── manifest.yaml            # реестр модулей (валидируется skill-manifest-validate.py)
+│   ├── _shared/                 # общие фрагменты: policy-intake, scorecard, rag-usage,
+│   │                            #   toolchain, setup-commands, customization, sources-of-truth, lessons
+│   ├── seo-audit/               # Phase 1   (SKILL.md + prompts/: competitor-analysis, local/)
+│   ├── seo-keywords/            # Phases 2–3 (контракт; реализация — внешний репозиторий seo-keywords)
+│   ├── seo-entity-map/          # Phase 4   (templates/: entity-map, programmatic-page)
+│   ├── seo-writing/             # Phases 5–6 (prompts/fact-check; templates/: cycle-plan, stop-words, stock-inventory)
+│   ├── seo-publishing/          # Phases 7–8 (templates/hreflang-matrix)
+│   ├── seo-monitoring/          # Phase 9   (prompts/: ai-visibility, ad-and-social, serp-news; templates/monitoring-report)
+│   └── seo-iteration/           # Phase 10  (prompts/page-rewrite-rescue)
+├── prompts/, templates/         # v1-пути: реальные файлы оркестратора (marketing-*) + СИМЛИНК-ШИМЫ
+│                                #   на переехавшие в skills/* файлы (совместимость, удаление в v3)
+├── scripts/                     # общий движок: ~180 CLI-скриптов + пакет seo_cycle_core/
+├── bin/seo-cycle                # единый CLI (scripts/seo_cycle_cli.py)
+├── config/                      # project.template.yaml, triggers.yaml, region-profiles/, projects-registry.yaml
+├── tests/                       # unittest-набор (обязателен зелёным до push)
+├── install.sh                   # ЕДИНЫЙ установщик: хранилище + версии + attach/detach/upgrade
+├── install-codex.sh, bootstrap-*.sh   # legacy-обёртки над install.sh (стабильные curl-URL)
+└── docs/                        # этот файл, adapt.md, migration.md, codex-runtime.md, knowledge-hub.md, ...
 ```
 
-## Структура проекта (что появляется после установки)
+## Дистрибуция (v2): хранилище + версии + attach
+
+```
+~/.codex/vendor/seo-cycle                    # единственный клон (fetch обновлений)
+~/.codex/vendor/versions/seo-cycle/vX.Y.Z    # read-only git worktree на каждый релиз-тег
+~/.codex/vendor/attached-projects.yaml       # machine-local реестр подключённых проектов
+
+<project>/.agents/external/seo-cycle → ~/.codex/vendor/versions/seo-cycle/vX.Y.Z
+<project>/.claude/skills/seo-cycle   → ../../.agents/external/seo-cycle
+<project>/.codex/skills/seo-cycle    → ../../.agents/external/seo-cycle
+<project>/.agents/external-skills.lock.yaml  # пин версии + commit
+```
+
+Проект без attach не содержит ни одного файла seo-cycle и не получает его в контекст агентов. Разные проекты — разные версии; `install.sh --upgrade-all` переводит все подключённые проекты на новый тег, откат — переключение пина.
+
+## Структура проекта (после attach)
 
 ```
 <project>/
-├── seo-cycle.yaml                    # КОНФИГ — единственный обязательный файл
-├── .env                              # API ключи (gitignore!)
-├── CLAUDE.md                         # правила проекта (опционально)
+├── seo-cycle.yaml               # КОНФИГ — единственный обязательный файл
+├── .env.example                 # только ИМЕНА ключей (значения — в Keychain через ai-secret)
+├── AGENTS.md                    # канонические правила проекта (CLAUDE.md и GEMINI.md — симлинки)
 ├── seo/
-│   ├── cycles/                       # снапшоты циклов
-│   │   └── <topic>-<YYYY-Qx>/
-│   │       ├── 00-discovery.md
-│   │       ├── 01-audit.md
-│   │       ├── 02-keywords.md
-│   │       ├── 03-clusters.md
-│   │       ├── 04-entity-maps/
-│   │       ├── 05-content-plan.md
-│   │       ├── 06-drafts/
-│   │       ├── 07-published.md
-│   │       ├── 08-schema.md
-│   │       ├── 09-monitoring/
-│   │       └── 10-iterations.md
-│   ├── entities/
-│   │   └── entities.yaml             # реестр сущностей проекта
-│   ├── research/
-│   │   ├── perplexity/
-│   │   │   ├── prompts/              # доп. промпты под нишу проекта
-│   │   │   └── results/              # результаты прогонов
-│   │   ├── atp/results/
-│   │   └── llm-cli/results/
-│   ├── prompts/                      # (опционально) override универсальных
-│   └── publish-log.csv               # лог публикаций
-├── blog/                             # черновики статей
-├── categories/                       # черновики категорий
-└── .claude/
-    └── skills/                       # ПРОЕКТНЫЕ субскиллы
-        ├── <project>-semantic-brief/
-        └── <project>-publish-*/
+│   ├── cycles/<topic>-<YYYY-Qx>/       # артефакты фаз 00–10 + _state.json
+│   ├── research/<source>/results/      # сырьё источников (gitignore)
+│   ├── research/distillates/           # дистилляты для контекста
+│   ├── research-package/               # канонический контент-конвейер с гейтами
+│   ├── reports/                        # отчёты для человека
+│   ├── knowledge/                      # вики (источник истины), corpus, rag.db
+│   ├── monitoring/, strategy/, setup/, loops/, ads/, logs/
+│   └── project-rules.md                # проектные override'ы
+├── workspace/{runs,results,history}    # малое рабочее (в git)
+├── workspace/{artifacts,cache,tmp}     # регенерируемое (gitignore)
+└── .agents/ .claude/ .codex/           # канонический слой + генерируемые поверхности
 ```
 
 ## Делегирование (`delegate.*`)
 
-Универсальный скилл делегирует специфичные задачи. В `seo-cycle.yaml`:
-
 ```yaml
 delegate:
-  semantic_brief: emwoody-semantic-brief          # проектный
+  semantic_brief: <project>-semantic-brief         # проектный
   audit: seo-auditor                               # глобальный агент
   keyword_research: seo-keyword-researcher
+  content_strategy: seo-content-strategist
   content_writer: seo-content-writer
   yandex_specialist: yandex-seo-specialist
   google_data: "claude-seo:seo-google"             # plugin skill
   schema_markup: "claude-seo:seo-schema"
 ```
 
-Если делегат не указан — используется fallback из `~/.codex/skills/seo-cycle/templates/`:
-- `templates/entity-map.template.md` — для Phase 4
-- `templates/cycle-plan.template.md` — для Phase 5 (TBD)
+Если делегат не указан — fallback-шаблоны модуля: `skills/seo-entity-map/templates/entity-map.template.md` (Phase 4), `skills/seo-writing/templates/cycle-plan.template.md` (Phase 5). Старые пути `templates/*.template.md` продолжают работать через шимы.
 
 ## Точки расширения
 
@@ -128,22 +124,24 @@ delegate:
 |---|---|
 | Новый источник данных | `sources.*` в конфиге + (опц.) скрипт в `scripts/` |
 | Новый CMS | `publishing.publish_skills.*` + проектный publish-скилл |
-| Новый язык стоп-слов | Добавить `XX_PATTERNS` в `check-stop-words.py` + PR |
-| Новая ниша с особыми правилами | `content_rules.*` + проектные субскиллы для проверок |
-| Новый LLM провайдер | Скрипт в `scripts/` по образцу `llm-cli-collect.sh` |
-| Новый тип schema | `templates/schema-<type>.template.jsonld` + handler в Phase 8 |
+| Новая фаза/модуль | каталог в `skills/` + запись в `skills/manifest.yaml` (валидатор следит за покрытием фаз) |
+| Новый язык стоп-слов | `XX_PATTERNS` в `check-stop-words.py` |
+| Новая ниша | `content_rules.*` + проектные субскиллы |
+| Новый триггер Phase 10 | `config/triggers.yaml` или `<project>/seo-triggers.yaml` (merge по `id`) |
+| Новый тип schema | шаблон + handler в `skills/seo-publishing` |
 
 ## Версионирование
 
-- **Major**: ломающие изменения в схеме `seo-cycle.yaml` (миграция конфигов)
-- **Minor**: новые источники, новые delegate-цели, расширение фаз
-- **Patch**: фиксы скриптов, доп. стоп-слова, доп. промпт-шаблоны
+- **Major**: ломающие изменения схемы `seo-cycle.yaml` ИЛИ контракта раскладки репозитория (v2.0.0 — модульные skills/, перенос prompts/templates под шимы).
+- **Minor**: новые источники, delegate-цели, модульные возможности.
+- **Patch**: фиксы скриптов, стоп-слова, промпты.
 
-См. `CHANGELOG.md`.
+См. `CHANGELOG.md`. Совместимость: v1-пути `prompts/*`, `templates/*` — симлинк-шимы до v3.
 
 ## Безопасность
 
-- Конфиг **не содержит секретов** — только имена env-vars (`api_key_env: NEURON_API_KEY`)
-- `.env` проекта — обязательно в gitignore
-- API ключи **не передаются** в LLM промпты — только используются для прямых API вызовов
-- Browser MCP сессии — на стороне пользователя, скилл не видит cookies / paswords
+- Конфиг **не содержит секретов** — только имена env-vars (`api_key_env: NEURON_API_KEY`).
+- Значения ключей — в macOS Keychain (`ai-secret set/run`); `.env` с значениями в проекте — нарушение политики (legacy переносится `ai-secret import`).
+- API-ключи **не передаются** в LLM-промпты — только в env дочерних процессов прямых API-вызовов.
+- Browser MCP сессии — на стороне пользователя; скилл не видит cookies/пароли.
+- Секрет-скан обязателен перед коммитом проекта (`scripts/secret-scan.mjs` из состава attach или проектный).

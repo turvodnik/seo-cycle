@@ -7,6 +7,16 @@
 
 # seo-cycle — полное руководство 🇷🇺
 
+> **Навигация v2 (модульная архитектура).** С v2.0.0 фазы вынесены в самостоятельные скиллы — актуальные контракты фаз читай в модулях, а не в этом длинном руководстве:
+> - Оркестратор, Phase 0, CLI, loop, ads — корневой `SKILL.md`
+> - Phase 1 аудит — `skills/seo-audit/SKILL.md` · Phases 2–3 семантика+кластеры — `skills/seo-keywords/SKILL.md`
+> - Phase 4 Entity Map — `skills/seo-entity-map/SKILL.md` · Phases 5–6 план+тексты — `skills/seo-writing/SKILL.md`
+> - Phases 7–8 публикация+schema — `skills/seo-publishing/SKILL.md` · Phase 9 мониторинг — `skills/seo-monitoring/SKILL.md` · Phase 10 итерации — `skills/seo-iteration/SKILL.md`
+> - Общие правила (политики, scorecard, RAG, кастомизация) — `skills/_shared/`
+> - Установка/обновление (хранилище версий, attach) — `INSTALL.md`; архитектура — `docs/architecture.md`
+>
+> GUIDE.md остаётся полным справочником инструментов и источников; полная нарезка по модулям запланирована на v2.1.
+
 > Универсальный SEO/контент-цикл-оркестратор для **Claude Code** и **Codex CLI**.
 > Один фреймворк ведёт сайт от стратегии и сбора семантики до публикации,
 > fact-check, мониторинга и итераций. Адаптируется под любой проект через

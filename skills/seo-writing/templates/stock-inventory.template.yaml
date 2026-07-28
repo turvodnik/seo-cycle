@@ -1,0 +1,136 @@
+# =============================================================================
+# stock-inventory.yaml — реестр складских позиций (для Stock-First правила)
+# =============================================================================
+# Этот файл — источник истины о том, что реально продаёт проект.
+# Используется правилом content_rules.stock_first в seo-cycle:
+#   - складские бренды первыми во всех текстах
+#   - складские SKU как primary feature
+#   - алерт если в драфте упоминается только конкурент без складского аналога
+#
+# Положи в корень проекта как `seo/stock-inventory.yaml` (или путь из
+# content_rules.stock_first.inventory_file). Обновляй при изменении ассортимента.
+#
+# Можно дополнительно поддерживать через WooCommerce / Shopify API
+# (content_rules.stock_first.stocked_skus_source: woocommerce_api).
+
+# -----------------------------------------------------------------------------
+# Бренды на складе
+# -----------------------------------------------------------------------------
+brands:
+  - slug: knauf-akustik
+    name_user_facing: "Шумоизоляция АкустиKNAUF"      # как пишем в текстах
+    name_en: "Knauf Akustik"
+    manufacturer: "Knauf"
+    country: "Германия"
+    role: primary                                       # primary | secondary | discontinued
+    categories: [shumoizolyacziya]                      # в каких категориях используется
+    description: |
+      Линейка минеральной ваты Knauf для звукоизоляции стен, перегородок и
+      перекрытий. Низкая плотность, высокий коэффициент звукопоглощения αw.
+    key_features:
+      - "коэффициент звукопоглощения αw 0.95-1.0"
+      - "класс горючести НГ"
+      - "плотность от 11 кг/м³"
+    competitors_for_context:                            # упоминаем только как сравнение
+      - "Технониколь Техноакустик"
+      - "Rockwool Акустик Баттс"
+      - "Isoroc Изоакустик"
+
+  # Пример secondary бренда
+  # - slug: example-brand
+  #   name_user_facing: "Example Brand"
+  #   role: secondary
+  #   categories: [...]
+  #   description: ...
+
+# -----------------------------------------------------------------------------
+# Категории каталога с указанием складских брендов
+# -----------------------------------------------------------------------------
+categories:
+  - slug: shumoizolyacziya
+    name: "Шумоизоляция"
+    url: "/teploizolyacziya/mineralnaya-vata/shumoizolyacziya/"
+    primary_brands: [knauf-akustik]                     # ссылки на brands.slug
+    secondary_brands: []                                 # дополнительные складские
+    competitors_for_context:
+      - "Технониколь Техноакустик"
+      - "Rockwool Акустик Баттс"
+      - "Isoroc Изоакустик"
+    notes: |
+      На складе только Шумоизоляция АкустиKNAUF. Все тексты пишем с ней
+      как primary feature. Альтернативы — только в сравнительной секции.
+
+  # Шаблон для других категорий:
+  # - slug: <slug>
+  #   name: "..."
+  #   url: "..."
+  #   primary_brands: [<brand_slug>, ...]
+  #   secondary_brands: [...]
+  #   competitors_for_context: ["...", "..."]
+  #   notes: |
+  #     ...
+
+# -----------------------------------------------------------------------------
+# SKU (опционально — детальный уровень)
+# -----------------------------------------------------------------------------
+# Если ведёшь учёт на уровне отдельных SKU — используй эту секцию.
+# Для маленьких ассортиментов можно ограничиться brands + categories.
+skus: []
+  # Пример:
+  # - sku: "akusti-knauf-50"
+  #   name: "Шумоизоляция АкустиKNAUF 50мм"
+  #   brand_slug: knauf-akustik
+  #   category_slug: shumoizolyacziya
+  #   wp_product_id: 12345
+  #   specifications:
+  #     thickness_mm: 50
+  #     density_kg_m3: 11
+  #     fire_class: НГ
+  #   price_indicator: "от 1500 ₽/м²"        # ориентир, не точная цена
+  #   stock_status: in_stock                  # in_stock | low_stock | out_of_stock
+  #   url: "/product/akusti-knauf-50/"
+
+# -----------------------------------------------------------------------------
+# Метаданные
+# -----------------------------------------------------------------------------
+meta:
+  last_updated: 2026-05-26
+  updated_by: "manual"                                  # manual | woocommerce_sync | csv_import
+  notes: |
+    Этот файл — источник истины о складе для контент-генерации.
+    Обновляется при изменении ассортимента; после обновления — Phase 10
+    цикла переосмысляет приоритеты в текущих текстах.
+
+# =============================================================================
+# Импорт из WooCommerce / Shopify (опционально)
+# =============================================================================
+# Можно полу-автоматически собирать brands/categories/skus из CMS.
+#
+# WooCommerce REST API (примерный workflow):
+#
+#   # 1. Бренды (если стоит плагин Woo Brands или таксономия product_brand)
+#   curl -u "$WOO_REST_API_KEY:$WOO_REST_API_SECRET" \
+#       "$WP_BASE_URL/wp-json/wp/v2/product_brand?per_page=100" \
+#       | jq '.[] | {slug: .slug, name_user_facing: .name}'
+#
+#   # 2. Категории (product_cat)
+#   curl -u "$WOO_REST_API_KEY:$WOO_REST_API_SECRET" \
+#       "$WP_BASE_URL/wp-json/wp/v2/product_cat?per_page=100"
+#
+#   # 3. Товары на складе (stock_status: instock)
+#   curl -u "$WOO_REST_API_KEY:$WOO_REST_API_SECRET" \
+#       "$WP_BASE_URL/wp-json/wc/v3/products?stock_status=instock&per_page=100"
+#
+# Shopify GraphQL Admin API:
+#
+#   query {
+#     products(first: 100, query: "status:active inventory_total:>0") {
+#       nodes {
+#         id title vendor productType
+#         variants(first: 5) { nodes { sku price inventoryQuantity } }
+#       }
+#     }
+#   }
+#
+# Результат конвертируешь в этот формат вручную или скриптом проекта.
+# В будущем — добавится `scripts/stock-sync-woo.py` и `stock-sync-shopify.py`.

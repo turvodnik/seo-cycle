@@ -1,0 +1,74 @@
+# Реестр модульных фазовых скиллов seo-cycle v2.
+# Проверяется scripts/skill-manifest-validate.py (tests/test_skill_manifest.py).
+# Оркестратор (корневой SKILL.md) владеет Phase 0 и диспетчеризацией.
+version: 2
+orchestrator:
+  entry: SKILL.md
+  phases: [0]
+modules:
+  seo-audit:
+    entry: skills/seo-audit/SKILL.md
+    phases: [1]
+    outputs: ["01-audit.md"]
+    standalone: true
+  seo-keywords:
+    entry: skills/seo-keywords/SKILL.md
+    phases: [2, 3]
+    outputs: ["02-keywords.md", "03-clusters.md"]
+    standalone: true
+    external_repo: seo-keywords
+  seo-entity-map:
+    entry: skills/seo-entity-map/SKILL.md
+    phases: [4]
+    outputs: ["04-entity-maps/"]
+    standalone: true
+  seo-writing:
+    entry: skills/seo-writing/SKILL.md
+    phases: [5, 6]
+    outputs: ["05-content-plan.md", "06-drafts/"]
+    standalone: true
+  seo-publishing:
+    entry: skills/seo-publishing/SKILL.md
+    phases: [7, 8]
+    outputs: ["07-published.md", "08-schema.md"]
+    standalone: true
+  seo-monitoring:
+    entry: skills/seo-monitoring/SKILL.md
+    phases: [9]
+    outputs: ["09-monitoring/"]
+    standalone: true
+  seo-iteration:
+    entry: skills/seo-iteration/SKILL.md
+    phases: [10]
+    outputs: ["10-iterations.md"]
+    standalone: true
+shared:
+  - skills/_shared/policy-intake.md
+  - skills/_shared/toolchain.md
+  - skills/_shared/scorecard.md
+  - skills/_shared/rag-usage.md
+  - skills/_shared/setup-commands.md
+  - skills/_shared/customization.md
+  - skills/_shared/sources-of-truth.md
+  - skills/_shared/lessons-learned.md
+# Симлинк-шимы совместимости (v1-пути; удаляются в v3):
+compat_shims:
+  - prompts/competitor-analysis.md
+  - prompts/competitor-pages-analysis.md
+  - prompts/local
+  - prompts/semantic-core-llm.md
+  - prompts/keyso-clustering-upload.md
+  - prompts/entities-extract.md
+  - prompts/fact-check.md
+  - prompts/ai-visibility.md
+  - prompts/ad-and-social.md
+  - prompts/serp-news.md
+  - prompts/page-rewrite-rescue.md
+  - templates/entity-map.template.md
+  - templates/programmatic-page.template.md
+  - templates/cycle-plan.template.md
+  - templates/stop-words.md
+  - templates/stock-inventory.template.yaml
+  - templates/keyword-queue.template.csv
+  - templates/hreflang-matrix.template.md
+  - templates/monitoring-report.template.md

@@ -1,0 +1,5 @@
+keyword,cluster,intent,nw_query_id,page_type,status,added_date,approved_date,approved_by,published_date,published_url,source,notes
+"минвата купить москва",minvata,commercial,,category,pending,2026-06-01,,,,,manual,
+"как выбрать минвату",minvata,informational,,spoke,pending,2026-06-01,,,,,manual,
+"плиточный клей выгодно",zatirka,commercial,,category,pending,2026-06-01,,,,,manual,
+"осп для пола толщина",osp,informational,,spoke,pending,2026-06-01,,,,,manual,
