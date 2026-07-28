@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.94.0] — 2026-07-29
+
+### Единый установщик: хранилище версий, attach/detach, мульти-агентные entrypoints, секреты в Keychain
+
+- **Новый `install.sh`** поглотил `install-codex.sh` + `bootstrap-claude.sh` + `bootstrap-codex.sh` (старые имена остались тонкими обёртками — задокументированные curl-URL продолжают работать; заодно закрыта рассинхронизация: bootstrap-claude указывал на легаси-путь `~/.codex/skills/seo-cycle` вместо vendor).
+- **Версионированное хранилище**: единственный клон `~/.codex/vendor/seo-cycle` + read-only снапшоты релизов `~/.codex/vendor/versions/seo-cycle/vX.Y.Z` (git worktree на тег — общие объекты, места не ест). Проект подключается симлинком `.agents/external/seo-cycle → <версия>`; пин пишется в `.agents/external-skills.lock.yaml` (managed-блок, остальное содержимое файла сохраняется). Разные проекты — разные версии; обновление одного не трогает другие.
+- **Команды жизненного цикла**: `--update` (fetch тегов), `--project DIR [--pin vX.Y.Z] [--sync]` (attach/перепин/регенерация поверхностей), `--detach`, `--upgrade-all` по machine-local реестру `~/.codex/vendor/attached-projects.yaml`.
+- **Мульти-агентные entrypoints**: attach создаёт канонический `AGENTS.md` проекта (реальный файл) и симлинки `CLAUDE.md → AGENTS.md`, `GEMINI.md → AGENTS.md` — Codex, Claude Code и Gemini/Antigravity читают один источник; существующие файлы не перезаписываются, отклонения от конвенции объявляются предупреждением.
+- **Секреты — в macOS Keychain**: bootstrap больше не создаёт `.env` с местами под значения. `.env.example` переписан как каталог имён с инструкцией `ai-secret set/run/import`; обнаруженный legacy `.env` вызывает предупреждение с командой миграции. INSTALL.md переориентирован (WP/MCP-ключи — через `ai-secret run`).
+- Гигиена: `.coverage` убран из git-трекинга (в `.gitignore`); CI shellcheck теперь проверяет и корневые установщики.
+
 ## [1.93.0] — 2026-07-24
 
 ### Phase 10 перестал молчать: правило `push_to_top3`, честные пороги, тесты

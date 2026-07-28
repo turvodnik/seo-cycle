@@ -1,38 +1,43 @@
-# seo-cycle: установка под новый проект
+# seo-cycle: установка
 
-Универсальный SEO-цикл скилл адаптируется под конкретный проект через конфиг `seo-cycle.yaml`. Этот документ — пошаговая инструкция для первой настройки.
+Универсальный SEO-цикл адаптируется под конкретный проект через конфиг `seo-cycle.yaml`. Этот документ — установка и первая настройка.
 
-## TL;DR
+## TL;DR — единый установщик `install.sh`
 
 ```bash
-# Вариант A — Codex-first bootstrap одной командой (рекомендуется)
+# 0. Хранилище (один раз на машину): клон + версии-worktree + CLI `seo-cycle`
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install.sh | bash
+
+# 1. Подключить проект (attach): канонический слой .agents/, поверхности
+#    .claude/.codex, AGENTS.md (+ симлинки CLAUDE.md/GEMINI.md), wizard конфига
 cd <project-root>
-curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash
-# shared update в ~/.codex/vendor + локальные skill symlinks + wizard + .env + setup reports
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install.sh | bash -s -- --project "$(pwd)"
 
-# Вариант B — Claude Code bootstrap
-cd <project-root>
-curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-claude.sh | bash
-# то же ядро в Codex path, плюс CLAUDE.md entrypoint
+# Обновления и версии
+~/.codex/vendor/seo-cycle/install.sh --update                          # fetch новых тегов в хранилище
+~/.codex/vendor/seo-cycle/install.sh --project <dir> --pin vX.Y.Z --sync   # перевести проект на версию
+~/.codex/vendor/seo-cycle/install.sh --upgrade-all                     # перевести все подключённые проекты
+~/.codex/vendor/seo-cycle/install.sh --project <dir> --detach          # отключить проект (файлы проекта не трогаются)
+```
 
-# Вариант C — ручная установка
-# 0. Установи/обнови ядро без запуска project wizard
-curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install-codex.sh | bash
+**Модель дистрибуции.** Код скачивается один раз в хранилище `~/.codex/vendor/seo-cycle`; каждый релиз-тег доступен как read-only снапшот `~/.codex/vendor/versions/seo-cycle/vX.Y.Z` (git worktree — общие объекты, места почти не занимает). Проект видит seo-cycle только после явного `--project` attach: симлинк `.agents/external/seo-cycle → <версия>` плюс поверхности `.claude/skills/` и `.codex/skills/`. Пин версии фиксируется в `.agents/external-skills.lock.yaml`; разные проекты спокойно живут на разных версиях, обновление одного не трогает другие. Проекты без attach не получают ни одного файла и ни строчки контекста агентов.
 
-# 0b. Опционально: установи локальный AI/dev toolchain для Codex/spec/research задач
+**Мульти-агентная конвенция.** Attach создаёт канонический `AGENTS.md` проекта (реальный файл) и симлинки `CLAUDE.md → AGENTS.md`, `GEMINI.md → AGENTS.md` — Codex, Claude Code и Gemini/Antigravity читают один и тот же источник. Существующие файлы не перезаписываются.
+
+**Секреты.** Значения API-ключей живут в macOS Keychain (инструмент `ai-secret`), а не в `.env`. `.env.example` в проекте — только список имён. Скрипты получают ключи через `ai-secret run <scope> -- <команда>`; legacy `.env` переносится разово командой `ai-secret import <scope> .env`.
+
+Legacy-обёртки (URL стабильны, внутри вызывают `install.sh`): `bootstrap-codex.sh`, `bootstrap-claude.sh`, `install-codex.sh`.
+
+```bash
+# Опционально: локальный AI/dev toolchain для Codex/spec/research задач
 bash ~/.codex/vendor/seo-cycle/scripts/install-ai-toolchain.sh --codex
 
-# 0c. Опционально: добавь NotebookLM MCP для curated expert knowledge base
+# Опционально: NotebookLM MCP для curated expert knowledge base
 bash ~/.codex/vendor/seo-cycle/scripts/install-ai-toolchain.sh --codex --notebooklm
 
-# 1. Скопируй шаблон конфига в корень проекта
-cp ~/.codex/vendor/seo-cycle/config/project.template.yaml \
-   <project-root>/seo-cycle.yaml
-
-# 2. Отредактируй под свой сайт (см. шаги ниже)
+# Ручной путь без wizard: скопируй шаблон конфига и провалидируй
+cp ~/.codex/vendor/seo-cycle/config/project.template.yaml <project-root>/seo-cycle.yaml
 $EDITOR <project-root>/seo-cycle.yaml
-
-# 3. Провалидируй
 python3 ~/.codex/vendor/seo-cycle/scripts/validate-config.py <project-root>/seo-cycle.yaml
 
 # 4. Сгенерируй безопасный стек инструментов
@@ -57,8 +62,9 @@ python3 ~/.codex/vendor/seo-cycle/scripts/serpstat-audit.py <project-root>/seo-c
 python3 ~/.codex/vendor/seo-cycle/scripts/labrika-source-pack.py <project-root>/seo-cycle.yaml --write
 python3 ~/.codex/vendor/seo-cycle/scripts/ai-bot-access-check.py <project-root>/seo-cycle.yaml --url https://example.com/ --write
 
-# 5. Добавь API-ключи в .env только по списку из access-key assistant
-$EDITOR <project-root>/.env
+# 5. Добавь API-ключи в Keychain только по списку из access-key assistant
+#    (значения вводятся скрытым вводом; .env с значениями не создаётся)
+ai-secret set <project-scope> <ИМЯ_КЛЮЧА>
 
 # 6. Готово — спрашивай Claude/Codex:
 # «давай запустим SEO-цикл для категории X»
@@ -84,7 +90,7 @@ seo-cycle --help          # полный список команд
 
 Каждая подкоманда — тонкая обёртка над соответствующим скриптом: все флаги (`--write`, `--live`, `--format` и т.д.) пробрасываются как есть, exit-коды и stdout-контракты не меняются.
 
-`bootstrap-codex.sh` по умолчанию ставит seo-cycle как **shared core + project-local entrypoints**: общий код в `~/.codex/vendor/seo-cycle`, а в проекте только symlink `./.codex/skills/seo-cycle`, `./.agents/skills/seo-cycle`, `./.claude/skills/seo-cycle`. Если проект не bootstrap'или, seo-cycle skills в нём не появляются и не читаются. Полный vendor clone в проект доступен через `--vendor-local`; legacy global skill exposure только через `--global-skill`. Project bootstrap запускает `init-project.sh`, создаёт `.env` из `.env.example`, добавляет `.env` в `.gitignore`, пишет `SEO_RUNTIME=codex`, `SEO_SEARCH_RUNTIME=direct`. WordPress/Novomira MCP не создаётся автоматически; включай его только явной командой или флагом `--with-wordpress-mcp`. `bootstrap-claude.sh` делает Claude-вариант и создаёт `CLAUDE.md`, если его ещё нет. Wizard спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
+`install.sh --project` ставит seo-cycle как **версионированное хранилище + project-local attach**: общий код в `~/.codex/vendor/`, в проекте — симлинк `.agents/external/seo-cycle` на конкретную версию и поверхности `./.codex/skills/seo-cycle`, `./.claude/skills/seo-cycle`. Если проект не подключали, seo-cycle в нём не появляется и не читается. Полный vendor clone в проект доступен через `--vendor-local`; legacy global skill exposure только через `--global-skill`. Attach создаёт `AGENTS.md` (+ симлинки `CLAUDE.md`/`GEMINI.md`), `.env.example` (только имена ключей — значения в Keychain через `ai-secret`), дефолтный `.gitignore` и запускает `init-project.sh`. WordPress/Novomira MCP не создаётся автоматически; включай его только флагом `--with-wordpress-mcp` или явной командой. Wizard спрашивает governance profile, monthly paid API/LLM budget и automation mode, чтобы по умолчанию не тратить токены и деньги без approval.
 
 WordPress/Novomira MCP не надо добавлять в глобальный `~/.codex/config.toml` и не надо включать во всех проектах. Для проекта, где он нужен, запускай:
 
@@ -93,23 +99,17 @@ cd <project-root>
 python3 ./.codex/skills/seo-cycle/scripts/project-mcp-config.py --write
 ```
 
-Это создаст/обновит только managed-блок в `./.codex/config.toml`. Реальные значения хранятся в `.env` проекта:
+Это создаст/обновит только managed-блок в `./.codex/config.toml`. Реальные значения живут в macOS Keychain (scope проекта) и попадают только в env дочернего процесса:
 
 ```bash
-WP_API_URL=https://example.com/wp-json/mcp/novamira
-WP_API_USERNAME=...
-WP_API_PASSWORD=...
+ai-secret set <project> WP_API_URL        # человек вводит значения скрытым вводом
+ai-secret set <project> WP_API_USERNAME
+ai-secret set <project> WP_API_PASSWORD
 ```
 
 Так MCP появляется только в текущем проекте, а URL/логин/ключ не перезаписывают другие сайты.
 
-Основной канал для WordPress остаётся REST API + Application Password:
-
-```bash
-WP_BASE_URL=https://example.com
-WP_USER=...
-WP_APP_PASSWORD=...
-```
+Основной канал для WordPress остаётся REST API + Application Password — ключи `WP_BASE_URL`, `WP_USER`, `WP_APP_PASSWORD` в том же Keychain-scope; скрипты публикации запускаются как `ai-secret run <project> -- python3 …`.
 
 Через него делаем стандартные операции: создавать/обновлять посты, страницы, товары, media, meta и использовать REST endpoints плагинов. Novomira MCP подключается только точечно, когда REST API недостаточно или нужны специальные abilities.
 

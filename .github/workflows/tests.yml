@@ -37,7 +37,7 @@ jobs:
       - name: shellcheck (error severity)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
-          shellcheck -S error scripts/*.sh
+          shellcheck -S error scripts/*.sh install.sh install-codex.sh bootstrap-claude.sh bootstrap-codex.sh
 
   coverage-core:
     runs-on: ubuntu-latest
