@@ -30,8 +30,14 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "init": {"script": "init-project.sh", "help": "Bootstrap a new project (wizard, config, policies)"},
     "intake": {"script": "project-intake-wizard.py", "help": "Detailed project intake wizard"},
     "journey": {"script": "project-journey.py", "help": "Current stage, blockers, and next commands"},
-    "status": {"script": "project-journey.py", "help": "Alias for journey"},
     "loop": {"script": "loop-runner.py", "help": "Bounded quality loop: check -> repair -> re-check"},
+    "triggers": {"script": "triggers-eval.py", "help": "Phase 10 action list from a snapshot (ranked by potential)"},
+    "snapshot": {"script": "snapshot-build.py", "help": "Normalize fetched data into snapshot.json"},
+    "cannibalization": {"script": "cannibalization-audit.py", "help": "Query→multiple-URL conflicts report"},
+    "lost-keywords": {"script": "lost-keywords.py", "help": "Lost/dropped queries between two snapshots"},
+    "ice": {"script": "ice-score.py", "help": "ICE prioritization (Impact x Confidence x Ease)"},
+    "attribution": {"script": "source-attribution.py", "help": "Which keyword sources actually rank (Phase 10)"},
+    "secret-scan": {"script": "secret-scan.py", "help": "Scan the project tree for leaked secret values"},
     "repair": {"script": "research-package-repair.py", "help": "Run the research-package repair layer"},
     "approvals": {"script": "approval-gate.py", "prepend": ["list"], "help": "List approval tickets"},
     "approve": {"script": "approval-gate.py", "prepend": ["approve"], "help": "Approve a ticket by id"},
@@ -124,13 +130,26 @@ def run_script(script: str, args: list[str], project: pathlib.Path) -> int:
     return proc.returncode
 
 
+def newest_snapshot(project: pathlib.Path) -> tuple[pathlib.Path | None, int | None]:
+    """Newest monitoring snapshot and its age in days (searches seo/**/*snapshot*.json)."""
+    candidates: list[pathlib.Path] = []
+    for pattern in ("seo/monitoring/**/*snapshot*.json", "seo/cycles/**/09-monitoring/*snapshot*.json"):
+        candidates.extend(project.glob(pattern))
+    candidates = [p for p in candidates if "quarantine" not in p.parts and "invalid" not in p.parts]
+    if not candidates:
+        return None, None
+    latest = max(candidates, key=lambda p: p.stat().st_mtime)
+    age_days = int((time.time() - latest.stat().st_mtime) // 86400)
+    return latest, age_days
+
+
 def cmd_doctor(args: list[str], project: pathlib.Path) -> int:
-    """Read-only aggregated health: config, journey, spend, ledger, providers."""
-    results: list[tuple[str, int]] = []
+    """Read-only aggregated health: config, journey, spend, ledger, providers, freshness."""
+    results: list[tuple[str, int, str]] = []
     for label, script, prepend in DOCTOR_STEPS:
         path = SCRIPTS_DIR / script
         if not path.exists():
-            results.append((label, -1))
+            results.append((label, -1, f"script not found: {script}"))
             continue
         proc = subprocess.run(
             [sys.executable, str(path), *prepend],
@@ -140,15 +159,70 @@ def cmd_doctor(args: list[str], project: pathlib.Path) -> int:
             capture_output=True,
             check=False,
         )
-        results.append((label, proc.returncode))
+        tail = ""
+        if proc.returncode != 0:
+            err_lines = [ln for ln in (proc.stderr or proc.stdout or "").strip().splitlines() if ln.strip()]
+            tail = " · ".join(err_lines[-2:])[:220]
+        results.append((label, proc.returncode, tail))
     print("# seo-cycle doctor\n")
     worst = 0
-    for label, rc in results:
-        status = "ok" if rc == 0 else "missing" if rc == -1 else f"needs attention (rc={rc})"
+    for label, rc, tail in results:
+        if rc == 0:
+            print(f"- {label}: ok")
+            continue
+        # missing script is a FAILURE, not a shrug — a silently absent check hides breakage
+        status = "MISSING" if rc == -1 else f"needs attention (rc={rc})"
         print(f"- {label}: {status}")
-        worst = max(worst, 0 if rc <= 0 else 1)
+        if tail:
+            print(f"    ↳ {tail}")
+        worst = 1
+    snap, age = newest_snapshot(project)
+    if snap is None:
+        print("- snapshot-freshness: нет снапшотов мониторинга (запусти `seo-cycle pulse`)")
+    elif age is not None and age >= 7:
+        print(f"- snapshot-freshness: ПРОСРОЧЕН — {age} дн. ({snap.name}); данные Phase 10 неактуальны")
+        worst = 1
+    elif age is not None and age >= 3:
+        print(f"- snapshot-freshness: warn — {age} дн. ({snap.name})")
+    else:
+        print(f"- snapshot-freshness: ok ({snap.name}, {age} дн.)")
+    rag_db = project / "seo" / "rag.db"
+    if rag_db.exists() and rag_db.stat().st_size > 0:
+        print(f"- rag-index: ok ({rag_db.stat().st_size // 1024} KB)")
+    else:
+        print("- rag-index: отсутствует (info; создать: `seo-cycle rag index --write`)")
     print("\nDetails: rerun any step directly, e.g. `seo-cycle spend` or `seo-cycle journey`.")
     return worst
+
+
+def cmd_status(args: list[str], project: pathlib.Path) -> int:
+    """Dashboard: project, snapshot age, loops/escalations, last triggers run — then journey."""
+    cfg_path = find_config(project)
+    name = None
+    if cfg_path:
+        name = ((load_yaml(cfg_path) or {}).get("project") or {}).get("name")
+    print(f"# seo-cycle status · {name or project.name}\n")
+    snap, age = newest_snapshot(project)
+    if snap is None:
+        print("- снапшот: нет (запусти `seo-cycle pulse`)")
+    else:
+        marker = "ok" if (age or 0) < 3 else ("warn" if (age or 0) < 7 else "ПРОСРОЧЕН")
+        print(f"- снапшот: {snap.name} · {age} дн. · {marker}")
+    iterations = sorted(project.glob("seo/**/10-iterations.md"), key=lambda p: p.stat().st_mtime)
+    if iterations:
+        latest_iter = iterations[-1]
+        iter_age = int((time.time() - latest_iter.stat().st_mtime) // 86400)
+        print(f"- triggers: {latest_iter.relative_to(project)} · {iter_age} дн.")
+    else:
+        print("- triggers: action list ещё не строился (`seo-cycle triggers <snapshot> --output 10-iterations.md`)")
+    loops_dir = project / "seo" / "loops"
+    if loops_dir.is_dir():
+        escalated = [p.name for p in loops_dir.glob("*.json")
+                     if "escalated" in p.read_text(encoding="utf-8", errors="replace")[:2000]]
+        if escalated:
+            print(f"- loops: ⚠ эскалации ждут человека: {', '.join(sorted(escalated)[:5])}")
+    print()
+    return run_script("project-journey.py", args, project)
 
 
 MENU_ACTIONS: tuple[tuple[str, str, list[str]], ...] = (
@@ -297,7 +371,9 @@ def command_overview() -> str:
             "  rag            Local RAG: rag index [--write|--global] | rag query \"<вопрос>\" [...]",
             "  sync           Site→local mirror via the publishing.cms adapter (wordpress|tilda|bitrix)",
             "  run            run monthly [...] | run script <name> [...] | run <task words>",
-            "  doctor         Read-only aggregated health check",
+            "  status         Dashboard: snapshot age, triggers, escalations + journey",
+            "  resume         Continue an interrupted quality loop (= loop ... --resume)",
+            "  doctor         Read-only aggregated health check (fails on missing checks & stale snapshots)",
             "  menu           Interactive menu (double-click entrypoint; picks a project from the registry)",
             "  version        Print skill version",
             "",
@@ -338,8 +414,20 @@ def main(argv: list[str] | None = None) -> int:
     if passthrough and passthrough[0] == "--":
         passthrough = passthrough[1:]
 
+    if "--project" in passthrough:
+        print("⚠ `--project` указан после подкоманды и уйдёт во вложенный скрипт. "
+              "Глобальный выбор проекта: seo-cycle --project DIR <command> ...", file=sys.stderr)
+
     if args.command == "doctor":
         return cmd_doctor(passthrough, project)
+    if args.command == "status":
+        return cmd_status(passthrough, project)
+    if args.command == "resume":
+        if not passthrough:
+            print("usage: seo-cycle resume <loop-target> <path> [...] (= loop ... --resume)", file=sys.stderr)
+            return 2
+        extra = [] if "--resume" in passthrough else ["--resume"]
+        return run_script("loop-runner.py", [*passthrough, *extra], project)
     if args.command == "menu":
         return cmd_menu(project)
     if args.command == "run":

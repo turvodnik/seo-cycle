@@ -88,6 +88,52 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(te.evaluate(small_site, [quiet])["striking_distance"]["total"], 1)
 
 
+class PotentialRankingTest(unittest.TestCase):
+    """v2: сортировка по потенциалу до обрезки, дедуп между приоритетами, derived-поля."""
+
+    def test_matches_sorted_by_potential_before_cap(self) -> None:
+        # раньше [:top] резал в порядке снапшота — ценная запись могла не попасть в топ
+        small = query("мелкий", 5.0, impressions=30, clicks=0)      # potential = 30*0.05
+        big = query("крупный", 5.0, impressions=800, clicks=0)      # potential = 800*0.05
+        rule = {"id": "push", "scope": "queries", "priority": "P0",
+                "when": "position >= 4 AND position <= 10 AND impressions > 20"}
+        results = te.evaluate({"queries": [small, big]}, [rule], top=1)
+        self.assertEqual(results["push"]["matches"][0]["query"], "крупный")
+        self.assertEqual(results["push"]["total"], 2)
+
+    def test_lower_priority_rule_does_not_repeat_claimed_items(self) -> None:
+        item = query("дубль", 6.0, impressions=200, clicks=0)
+        p0 = {"id": "p0_rule", "scope": "queries", "priority": "P0",
+              "when": "position >= 4 AND position <= 10 AND impressions > 20"}
+        p1 = {"id": "p1_rule", "scope": "queries", "priority": "P1",
+              "when": "ctr < 0.02 AND impressions > 100"}
+        results = te.evaluate({"queries": [item]}, [p1, p0], top=20)
+        self.assertIn("p0_rule", results)
+        self.assertNotIn("p1_rule", results)  # полностью перекрыто правилом выше
+
+    def test_derived_fields_and_cannibalization(self) -> None:
+        q1 = dict(query("затирка для плитки", 3.0, 400, 4), url="https://s.ru/a")
+        q2 = dict(query("затирка для плитки", 7.0, 90, 0), url="https://s.ru/b")
+        snapshot = {"queries": [q1, q2]}
+        rule = {"id": "cannibalization", "scope": "queries", "priority": "P1",
+                "when": "urls_for_query >= 2 AND impressions > 30"}
+        results = te.evaluate(snapshot, [rule])
+        self.assertEqual(results["cannibalization"]["total"], 2)
+        self.assertEqual(q1["urls_for_query"], 2)
+        self.assertAlmostEqual(q1["expected_ctr"], 0.10)
+        self.assertGreater(q1["potential"], 0)
+
+    def test_top4_zero_ctr_now_fires_default_rule(self) -> None:
+        # слепая зона v1: позиция 1-4 с CTR 0% не попадала ни под одно правило
+        if yaml is None:
+            self.skipTest("PyYAML is required")
+        rules = yaml.safe_load(DEFAULT_TRIGGERS.read_text(encoding="utf-8"))["triggers"]
+        snapshot = {"queries": [query("сильная позиция без кликов", 2.0, 300, 0)]}
+        results = te.evaluate(snapshot, rules)
+        self.assertIn("low_ctr_top4", results)
+        self.assertEqual(results["low_ctr_top4"]["rule"]["priority"], "P0")
+
+
 @unittest.skipUnless(yaml, "PyYAML is required")
 class DefaultRulesTest(unittest.TestCase):
     def test_push_to_top3_ships_by_default(self) -> None:
@@ -123,7 +169,10 @@ class ProjectOverrideTest(unittest.TestCase):
             "period": {"start": "2026-07-03", "end": "2026-07-17"},
             "sources": [{"source": "webmaster", "engine": "yandex"}],
             "queries": [query("затирка швов плитки", 12.0, 26, 0),
-                        query("как затирать швы", 4.3, 30, 2)],
+                        query("как затирать швы", 4.3, 30, 2),
+                        # ловится ТОЛЬКО проектным правилом (v2-дедуп не даёт
+                        # правилам ниже повторять записи, показанные выше)
+                        query("бренд-запрос", 2.0, 15, 0)],
         }), encoding="utf-8")
         override = self.tmp / "seo-triggers.yaml"
         override.write_text(yaml.safe_dump({"triggers": [

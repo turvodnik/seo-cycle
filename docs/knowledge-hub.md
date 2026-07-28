@@ -14,8 +14,10 @@ Knowledge Hub превращает набор SEO-артефактов прое�
 
 ## Установка в новом проекте
 
+Не запускай pipe-to-shell из сети: скачай установщик, просмотри, запусти локально (или используй уже установленное хранилище).
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash
+bash ~/.codex/vendor/seo-cycle/install.sh --project "$(pwd)"
 bash ./.codex/skills/seo-cycle/scripts/knowledge/wiki-refresh-all.sh
 bash ./.codex/skills/seo-cycle/scripts/knowledge/graphify-refresh.sh
 ```
@@ -27,7 +29,7 @@ Bootstrap ставит только локальные entrypoints проект�
 ## Обновление старого проекта
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash -s -- --skip-init
+bash ~/.codex/vendor/seo-cycle/install.sh --project "$(pwd)" --skip-init
 python3 ./.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py --write
 python3 ./.codex/skills/seo-cycle/scripts/project-upgrade-apply.py --write
 python3 ./.codex/skills/seo-cycle/scripts/setup-control-plane.py --write

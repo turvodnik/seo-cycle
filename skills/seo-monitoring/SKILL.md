@@ -26,7 +26,7 @@ description: Мониторинг (Phase 9): ежедневный pulse (GSC + �
 - `delegate.google_data` (`claude-seo:seo-google`) — GSC + GA4 + CrUX (если включено)
 - `delegate.yandex_specialist` — Я.Вебмастер + Метрика (если включено)
 
-**Cadence:** 2-недельные снапшоты в `09-monitoring/YYYY-MM-DD-snapshot.json` + markdown-надстройка `*.md` по `templates/monitoring-report.template.md`.
+**Cadence (единая, v2):** данные собираются **ежедневно** — `seo-cycle pulse` (или `pulse --global` daily-джобом): fetch → snapshot → db-sync → position-progress + алерты. **Раз в 2 недели** поверх ежедневных снапшотов строится человеческий отчёт по `templates/monitoring-report.template.md`. Свежесть снапшота проверяет `seo-cycle doctor` (warn ≥3 дн., fail ≥7 дн.). Важно: Вебмастер-выгрузка — это `query_sample` (обычно топ-500 запросов, `sitewide: false`); все производные цифры (forecast, KPI, триггеры) наследуют этот потолок.
 
 **Локальный мониторинг (если локальный бизнес):** раз в месяц снимать прогресс vs конкуренты на обеих картах — скорость отзывов (`review-velocity.py`), новые категории/рубрики, частота постов, прирост фото. Промпты — `prompts/local/`. Отставание → задача в Phase 10.
 

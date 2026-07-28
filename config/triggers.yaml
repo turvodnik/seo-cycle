@@ -7,6 +7,12 @@
 # с поддержкой AND. Доступные scope: queries | pages | cwv | behavior | backlinks
 #
 # Поля в queries: impressions, clicks, ctr, position, query, url, delta_impr, delta_pos
+# Вычисляемые поля queries (добавляет triggers-eval автоматически, v2):
+#   expected_ctr   — ожидаемый CTR по единой кривой позиции (seo_cycle_core.ctr)
+#   ctr_gap        — max(0, expected_ctr - ctr): недобор CTR против кривой
+#   urls_for_query — сколько разных URL ранжируется по этому запросу (каннибализация)
+#   potential      — impressions * ctr_gap: недополученные клики за окно среза;
+#                    по нему сортируются совпадения ДО обрезки --top
 # Поля в pages: url, impressions, clicks, sessions, behavior.bounce,
 #               behavior.time_on_page, behavior.conversions, last_fact_check
 # Поля в cwv: lcp_p75, inp_p75, cls_p75, status (good|needs_improvement|poor)
@@ -37,12 +43,33 @@ triggers:
     priority: P0
     delegate: content_strategist
 
+  - id: low_ctr_top4
+    when: "position >= 1 AND position <= 4 AND ctr_gap > 0.03 AND impressions > 50"
+    scope: queries
+    action: "Сниппет-работа в топ-4: CTR ниже ожидаемой кривой на сильной позиции — перепиши title/description под формулировку запроса, добавь быстрые ссылки/цену/микроразметку; это самые дешёвые клики (см. potential)"
+    priority: P0
+    delegate: content_writer
+
   - id: low_ctr_in_top_positions
     when: "position >= 5 AND position <= 20 AND ctr < 0.02 AND impressions > 100"
     scope: queries
     action: "Доработать meta_title + meta_description + AEO-абзац (первые 400 символов)"
     priority: P1
     delegate: content_writer
+
+  - id: cannibalization
+    when: "urls_for_query >= 2 AND impressions > 30"
+    scope: queries
+    action: "Каннибализация: по запросу ранжируется ≥2 URL — выбери канонический, объедини/перелинкуй страницы, разведи интенты или поставь 301; подробный разбор: scripts/cannibalization-audit.py"
+    priority: P1
+    delegate: content_strategist
+
+  - id: visibility_drop
+    when: "delta_impr < -50 AND impressions > 50"
+    scope: queries
+    action: "Падение видимости: показы просели против прошлого среза — проверь индексацию URL, выдачу конкурентов и сезонность до правок контента"
+    priority: P1
+    delegate: technical_audit
 
   - id: striking_distance
     when: "position >= 11 AND position <= 20 AND impressions > 50"
