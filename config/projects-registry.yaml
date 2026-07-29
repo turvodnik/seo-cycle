@@ -19,14 +19,14 @@ projects:
     cms: wordpress
     status: active
     monthly_automation: true
-  # PifagorLab ещё не перенесён на Mac Studio (миграция 2026-07-29 охватила
-  # emwoody и gsse). Путь остаётся старым до переноса; monthly_automation: false,
-  # поэтому monthly-runner --all его не трогает.
+  # Перенесён на Mac Studio 2026-07-29 (папка 3Dprint → pifagorlab.com).
+  # monthly_automation остаётся false до решения владельца: сайт молодой,
+  # месячный прогон включать имеет смысл после накопления GSC-данных.
   - name: "PifagorLab"
-    path: "/Users/turvodnik/AI/3Dprint"
+    path: "/Users/pifagor/Проекты ai/pifagorlab.com"
     region_profile: eu
     cms: static
-    status: paused
+    status: active
     monthly_automation: false
   - name: "ГРАДСТРОЙСЕРВИС"
     path: "/Users/pifagor/Проекты ai/gsse.ru"
