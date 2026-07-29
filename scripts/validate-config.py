@@ -39,6 +39,26 @@ CONFIG_SEARCH_PATHS = [
 ]
 
 
+
+def engine_names(cfg: dict) -> list[str]:
+    """Имена поисковиков из конфига, устойчиво к формату записи.
+
+    Канонический формат — список `{name, priority}` (см. project.template.yaml).
+    Исторический формат словаря (`engines: {google: true, yandex: false}`)
+    встречается в старых проектах: читаем и его, чтобы валидатор выдавал
+    внятную ошибку схемы вместо падения с трейсбеком.
+    """
+    raw = cfg.get("engines") or []
+    if isinstance(raw, dict):
+        return [str(name) for name, enabled in raw.items() if enabled]
+    names: list[str] = []
+    for item in raw:
+        if isinstance(item, dict) and item.get("name"):
+            names.append(str(item["name"]))
+        elif isinstance(item, str):
+            names.append(item)
+    return names
+
 def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
     for rel in CONFIG_SEARCH_PATHS:
         p = start_dir / rel
@@ -586,7 +606,7 @@ def check_observability_env(cfg: dict, env: dict, checklist: list, warnings: lis
         pass
 
     # Яндекс (если yandex в engines)
-    yandex_engines = any(e.get("name") == "yandex" for e in cfg.get("engines", []))
+    yandex_engines = "yandex" in engine_names(cfg)
     if yandex_engines:
         for src_name in ("yandex_metrika", "yandex_webmaster_history"):
             s = sources.get(src_name, {})
@@ -739,7 +759,7 @@ def main():
     print(f"  Project: {cfg.get('project',{}).get('name','?')} ({cfg.get('project',{}).get('domain','?')})")
     print(f"  Locale: {cfg.get('locale',{}).get('language','?')}-{cfg.get('locale',{}).get('country','?')} / {cfg.get('locale',{}).get('region','?')}")
     print(f"  Type: {cfg.get('project_type','?')} on {cfg.get('cms','?')}")
-    print(f"  Engines: {', '.join(e.get('name','?') for e in cfg.get('engines', []))}")
+    print(f"  Engines: {', '.join(engine_names(cfg)) or '?'}")
     print()
 
     if errors:

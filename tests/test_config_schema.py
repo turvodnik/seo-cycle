@@ -85,3 +85,36 @@ class StrictCliTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EnginesFormatToleranceTest(unittest.TestCase):
+    """engines в историческом формате словаря не должен ронять валидатор.
+
+    Найдено на живом проекте PifagorLab (2026-07-29): конфиг схемы v1.1 писал
+    `engines: {google: true, yandex: false}`, валидатор ожидал список
+    `{name, priority}` и падал с AttributeError вместо внятной ошибки схемы.
+    """
+
+    def _run(self, engines_block: str):
+        with tempfile.TemporaryDirectory() as td:
+            cfg = pathlib.Path(td) / "seo-cycle.yaml"
+            cfg.write_text(
+                "project:\n  name: T\n  domain: t.example\n"
+                "locale:\n  language: es\n  country: ES\n"
+                f"{engines_block}"
+                "project_type: local_business\n",
+                encoding="utf-8",
+            )
+            return subprocess.run(
+                [sys.executable, str(SCRIPTS / "validate-config.py"), str(cfg)],
+                capture_output=True, text=True, check=False,
+            )
+
+    def test_dict_engines_do_not_crash_the_validator(self):
+        proc = self._run("engines:\n  google: true\n  yandex: false\n  bing: true\n")
+        self.assertNotIn("Traceback", proc.stderr, proc.stderr)
+        self.assertNotIn("AttributeError", proc.stderr, proc.stderr)
+
+    def test_canonical_list_engines_still_work(self):
+        proc = self._run("engines:\n  - name: google\n    priority: 1\n")
+        self.assertNotIn("Traceback", proc.stderr, proc.stderr)
