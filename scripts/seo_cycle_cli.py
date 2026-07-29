@@ -222,6 +222,7 @@ def cmd_status(args: list[str], project: pathlib.Path) -> int:
         if escalated:
             print(f"- loops: ⚠ эскалации ждут человека: {', '.join(sorted(escalated)[:5])}")
     print()
+    sys.stdout.flush()  # дочерний journey пишет в fd напрямую — без flush его вывод обгонит наш
     return run_script("project-journey.py", args, project)
 
 
