@@ -14,19 +14,22 @@
 
 projects:
   - name: "Эмвуди"
-    path: "/Users/turvodnik/AI/emwoody"
+    path: "/Users/pifagor/Проекты ai/emwoody.ru"
     region_profile: ru
     cms: wordpress
     status: active
     monthly_automation: true
+  # PifagorLab ещё не перенесён на Mac Studio (миграция 2026-07-29 охватила
+  # emwoody и gsse). Путь остаётся старым до переноса; monthly_automation: false,
+  # поэтому monthly-runner --all его не трогает.
   - name: "PifagorLab"
     path: "/Users/turvodnik/AI/3Dprint"
     region_profile: eu
     cms: static
-    status: active
+    status: paused
     monthly_automation: false
   - name: "ГРАДСТРОЙСЕРВИС"
-    path: "/Users/turvodnik/AI/gsse"
+    path: "/Users/pifagor/Проекты ai/gsse.ru"
     region_profile: ru
     cms: wordpress
     status: active
