@@ -208,7 +208,7 @@ def cmd_status(args: list[str], project: pathlib.Path) -> int:
     else:
         marker = "ok" if (age or 0) < 3 else ("warn" if (age or 0) < 7 else "ПРОСРОЧЕН")
         print(f"- снапшот: {snap.name} · {age} дн. · {marker}")
-    iterations = sorted(project.glob("seo/**/10-iterations.md"), key=lambda p: p.stat().st_mtime)
+    iterations = sorted(project.glob("seo/**/10-iterations*.md"), key=lambda p: p.stat().st_mtime)
     if iterations:
         latest_iter = iterations[-1]
         iter_age = int((time.time() - latest_iter.stat().st_mtime) // 86400)
