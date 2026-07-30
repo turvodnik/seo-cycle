@@ -36,6 +36,7 @@ import sys
 from typing import Any
 
 from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.engines import engine_names
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.scorecard import score_from_findings, write_scorecard
@@ -72,15 +73,27 @@ def gsc_ready(env: dict[str, str]) -> bool:
     return bool(first_env(env, GSC_CRED_VARS)) and bool(first_env(env, GSC_SITE_VARS))
 
 
-def configured_sources(env: dict[str, str], domain: str, days: int) -> list[tuple[str, str, list[str]]]:
-    """(source, fetch-скрипт, args) для каждого настроенного источника позиций."""
+def configured_sources(env: dict[str, str], domain: str, days: int,
+                       engines: list[str] | None = None) -> list[tuple[str, str, list[str]]]:
+    """(source, fetch-скрипт, args) для каждого настроенного источника позиций.
+
+    `engines` — список движков проекта из конфига. Источник берётся, только если
+    его движок включён: глобальный токен агентства не должен тянуть Яндекс-Вебмастер
+    в проект, который на Яндексе не продвигается (регресс кросс-проектной утечки
+    2026-07-12). Пустой/None = ограничения нет (обратная совместимость).
+    """
+    allowed = {e.lower() for e in (engines or [])}
+
+    def engine_on(name: str) -> bool:
+        return not allowed or name in allowed
+
     sources: list[tuple[str, str, list[str]]] = []
-    if webmaster_ready(env):
+    if webmaster_ready(env) and engine_on("yandex"):
         args = ["--days", str(days)]
         if domain:
             args += ["--domain", domain]
         sources.append(("webmaster", "webmaster-fetch.py", args))
-    if gsc_ready(env):
+    if gsc_ready(env) and engine_on("google"):
         sources.append(("gsc", "gsc-fetch.py", ["--days", str(days)]))
     return sources
 
@@ -152,7 +165,7 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
         note("fetch", True, "пропущен (--skip-fetch)")
     else:
         domain = str(nested_get(cfg, "project.domain", "") or "")
-        sources = configured_sources(env, domain, days)
+        sources = configured_sources(env, domain, days, engine_names(cfg))
         if not sources:
             note("fetch", False,
                  "источник не настроен (auth login yandex | google-sa + GSC_SITE_URL)")

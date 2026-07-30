@@ -24,6 +24,9 @@ validate-config.py — валидатор seo-cycle.yaml.
 from __future__ import annotations
 import argparse, os, pathlib, sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from seo_cycle_core.engines import engine_names  # noqa: E402
+
 try:
     import yaml
 except ImportError:
@@ -39,25 +42,6 @@ CONFIG_SEARCH_PATHS = [
 ]
 
 
-
-def engine_names(cfg: dict) -> list[str]:
-    """Имена поисковиков из конфига, устойчиво к формату записи.
-
-    Канонический формат — список `{name, priority}` (см. project.template.yaml).
-    Исторический формат словаря (`engines: {google: true, yandex: false}`)
-    встречается в старых проектах: читаем и его, чтобы валидатор выдавал
-    внятную ошибку схемы вместо падения с трейсбеком.
-    """
-    raw = cfg.get("engines") or []
-    if isinstance(raw, dict):
-        return [str(name) for name, enabled in raw.items() if enabled]
-    names: list[str] = []
-    for item in raw:
-        if isinstance(item, dict) and item.get("name"):
-            names.append(str(item["name"]))
-        elif isinstance(item, str):
-            names.append(item)
-    return names
 
 def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
     for rel in CONFIG_SEARCH_PATHS:

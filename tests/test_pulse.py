@@ -159,3 +159,33 @@ class PulseE2ETest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PulseEngineScopeTest(unittest.TestCase):
+    """Источник опрашивается только если его движок включён в конфиге проекта.
+
+    Регресс кросс-проектной утечки (2026-07-12): глобальный OAuth-токен агентства
+    делал Вебмастер «настроенным» для любого проекта, включая eu-проект без Яндекса,
+    и в его мониторинг попадали чужие яндексовые срезы.
+    """
+
+    ENV = {
+        "YANDEX_OAUTH_TOKEN": "t",
+        "GOOGLE_APPLICATION_CREDENTIALS": "/tmp/sa.json",
+        "GSC_SITE_URL": "sc-domain:example.com",
+    }
+
+    def _names(self, engines):
+        return [s[0] for s in pulse.configured_sources(self.ENV, "example.com", 14, engines)]
+
+    def test_google_only_project_does_not_fetch_webmaster(self):
+        self.assertEqual(self._names(["google", "bing"]), ["gsc"])
+
+    def test_yandex_only_project_does_not_fetch_gsc(self):
+        self.assertEqual(self._names(["yandex"]), ["webmaster"])
+
+    def test_both_engines_keep_both_sources(self):
+        self.assertEqual(self._names(["yandex", "google"]), ["webmaster", "gsc"])
+
+    def test_no_engine_list_keeps_legacy_behaviour(self):
+        self.assertEqual(self._names(None), ["webmaster", "gsc"])
