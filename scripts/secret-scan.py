@@ -18,6 +18,7 @@ Exit: 0 чисто, 1 findings, 2 ошибка вызова.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import fnmatch
 import hashlib
 import json
@@ -34,6 +35,11 @@ SKIP_SUFFIXES = {
     ".ico", ".pdf", ".zip", ".gz", ".woff", ".woff2", ".mp4", ".mov", ".key",
 }
 ALLOW_PRAGMA = "secret-scan: allow"
+
+# Реестр ложных срабатываний (T-021, _tools/AGENTS.md §5): запись обязана
+# нести все эти поля, scope не может быть "*" (не сужать = не годится).
+LEDGER_REQUIRED_FIELDS = ("fingerprint", "scope", "rule", "reason", "recognized_by", "recognized_at", "review_after")
+SHA256_EMPTY = hashlib.sha256(b"").hexdigest()
 
 RULES: list[tuple[str, re.Pattern[str]]] = [
     ("private_key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
@@ -127,8 +133,13 @@ def scan_tree(root: pathlib.Path, max_bytes: int) -> list[dict[str, str]]:
 def load_ledger(path: pathlib.Path) -> list[dict]:
     """Реестр известных ложных срабатываний (см. .agents/security/false-positives.yaml).
 
-    Формат и запрет вносить настоящие секреты — README/AGENTS.md проекта,
-    а не этот скрипт; здесь только механика сверки.
+    Здесь только СТРУКТУРНАЯ целостность файла: битый YAML, не-объект верхнего
+    уровня, `entries` не список или элемент списка не объект (скаляр вместо
+    записи) — фатальны для гейта перед коммитом, поэтому явная ошибка и
+    exit 2, а не голый traceback. Смысловая валидация отдельной записи
+    (обязательные поля, запрет scope="*", запрет fingerprint пустой строки,
+    срок пересмотра) — в reconcile(), она же используется тестами напрямую
+    на списках без файла.
     """
     try:
         import yaml
@@ -137,46 +148,112 @@ def load_ledger(path: pathlib.Path) -> list[dict]:
         raise SystemExit(2)
     if not path.exists():
         return []
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return data.get("entries") or []
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        print(f"ERROR: реестр нечитаем: {path}: {exc}", file=sys.stderr)
+        raise SystemExit(2)
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        print(f"ERROR: реестр нечитаем: {path}: верхний уровень должен быть объектом (dict), "
+              f"получено {type(raw).__name__}", file=sys.stderr)
+        raise SystemExit(2)
+    entries = raw.get("entries") or []
+    if not isinstance(entries, list):
+        print(f"ERROR: реестр нечитаем: {path}: 'entries' должен быть списком, "
+              f"получено {type(entries).__name__}", file=sys.stderr)
+        raise SystemExit(2)
+    for item in entries:
+        if not isinstance(item, dict):
+            print(f"ERROR: реестр нечитаем: {path}: запись реестра должна быть объектом (dict), "
+                  f"получено {type(item).__name__}: {item!r}", file=sys.stderr)
+            raise SystemExit(2)
+    return entries
 
 
-def reconcile(findings: list[dict[str, str]], ledger: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+def validate_ledger_entry(entry: dict, today: dt.date) -> str | None:
+    """Смысловая проверка одной записи реестра (_tools/AGENTS.md §5).
+
+    None — запись валидна и действует. Иначе — причина отказа (строка):
+    запись с такой причиной НЕ участвует в подавлении находок (отвергается,
+    а не применяется частично). Причины: не хватает обязательного поля;
+    scope == "*" (список исключений не может ослеплять целый проект);
+    fingerprint == sha256("") (подавил бы находку без реального совпадения —
+    воспроизведённый гейтом обход защиты); review_after не похож на дату
+    или уже в прошлом (протухший срок — запись не подавляет, только явно
+    предупреждает, см. reconcile()).
+    """
+    if not isinstance(entry, dict):
+        return f"запись не объект (dict), получено {type(entry).__name__}"
+    missing = [field for field in LEDGER_REQUIRED_FIELDS if not entry.get(field)]
+    if missing:
+        return "не хватает обязательных полей: " + ", ".join(missing)
+    if entry["scope"] == "*":
+        return "scope не может быть '*' — область обязана быть конкретным файлом/глобом"
+    if entry["fingerprint"] == SHA256_EMPTY:
+        return "fingerprint == sha256('') — отвергнуто (не может ссылаться на настоящее совпадение)"
+    try:
+        review_after = dt.date.fromisoformat(str(entry["review_after"]))
+    except ValueError:
+        return f"review_after не похож на дату YYYY-MM-DD: {entry['review_after']!r}"
+    if review_after < today:
+        return f"review_after истёк ({review_after.isoformat()} < {today.isoformat()}) — запись просрочена"
+    return None
+
+
+def reconcile(findings: list[dict[str, str]], ledger: list[dict],
+              today: dt.date | None = None) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
     """Двусторонняя сверка находок с реестром.
 
-    Возвращает (активные_находки, подавленные_находки, протухшие_записи).
-    Запись подавляет находку, если совпал fingerprint (sha256 совпадения) И
-    находка попадает в scope (glob по относительному пути) И правило
-    совпадает (или scope/rule записи — "*"). Запись, которая не подавила ни
-    одной находки за этот прогон, — протухшая: она либо перестала что-либо
-    совпадать (код почистили), либо никогда не была точной — в обоих
-    случаях реестр должен явно спросить о пересмотре, а не молчать вечно.
+    Возвращает (активные_находки, подавленные_находки, протухшие_записи,
+    отвергнутые_записи). Запись подавляет находку, если совпал fingerprint
+    (sha256 совпадения) И находка попадает в scope (glob по относительному
+    пути) И правило совпадает (или rule записи — "*"). Только записи,
+    прошедшие validate_ledger_entry() (полные, узкие, не просроченные),
+    вообще допускаются к сверке — отвергнутые никогда никого не подавляют,
+    только сообщают о себе через `rejected`. Запись, прошедшая проверку, но
+    не подавившая ни одной находки за этот прогон, — протухшая: она либо
+    перестала что-либо совпадать (код почистили), либо никогда не была
+    точной — в обоих случаях реестр должен явно спросить о пересмотре, а не
+    молчать вечно.
     """
+    today = today or dt.date.today()
+    eligible: list[dict] = []
+    rejected: list[dict] = []
+    for entry in ledger:
+        reason = validate_ledger_entry(entry, today)
+        if reason is not None:
+            rejected.append({"entry": entry, "reason": reason})
+        else:
+            eligible.append(entry)
+
     active: list[dict] = []
     suppressed: list[dict] = []
     matched_ids: set[str] = set()
 
     for f in findings:
         hit = None
-        for entry in ledger:
-            if entry.get("fingerprint") != f.get("fingerprint"):
-                continue
-            scope = entry.get("scope", "*")
-            if scope != "*" and not fnmatch.fnmatch(f["file"], scope):
-                continue
-            rule = entry.get("rule", "*")
-            if rule != "*" and rule != f["rule"]:
-                continue
-            hit = entry
-            break
+        fp = f.get("fingerprint")
+        if fp is not None:
+            for entry in eligible:
+                if entry["fingerprint"] != fp:
+                    continue
+                if not fnmatch.fnmatch(f["file"], entry["scope"]):
+                    continue
+                rule = entry["rule"]
+                if rule != "*" and rule != f["rule"]:
+                    continue
+                hit = entry
+                break
         if hit is not None:
-            matched_ids.add(hit.get("id", hit.get("fingerprint")))
+            matched_ids.add(hit.get("id", hit["fingerprint"]))
             suppressed.append({**f, "ledger_id": hit.get("id")})
         else:
             active.append(f)
 
-    stale = [e for e in ledger if e.get("id", e.get("fingerprint")) not in matched_ids]
-    return active, suppressed, stale
+    stale = [e for e in eligible if e.get("id", e["fingerprint"]) not in matched_ids]
+    return active, suppressed, stale, rejected
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -198,14 +275,34 @@ def main(argv: list[str] | None = None) -> int:
 
     suppressed: list[dict] = []
     stale: list[dict] = []
+    rejected: list[dict] = []
     if args.ledger is not None:
         ledger = load_ledger(args.ledger)
-        findings, suppressed, stale = reconcile(findings, ledger)
+        findings, suppressed, stale, rejected = reconcile(findings, ledger)
+
+    for r in rejected:
+        entry = r["entry"]
+        eid = entry.get("id", "?") if isinstance(entry, dict) else "?"
+        print(f"⚠ запись реестра '{eid}' отклонена: {r['reason']}", file=sys.stderr)
+
+    # fingerprint — хеш РЕАЛЬНОГО совпадения (для generic_assignment/env_value
+    # словарно проверяем офлайн — пограничье §5). Печатаем только когда явно
+    # запрошен --ledger (нужен, чтобы завести запись реестра); без --ledger —
+    # никогда, и без --ledger вывод обязан остаться побайтно прежним (T-021
+    # фикс-заход по гейту).
+    show_fp = args.ledger is not None
+    findings_out = findings if show_fp else [{k: v for k, v in f.items() if k != "fingerprint"} for f in findings]
+    suppressed_out = suppressed if show_fp else [{k: v for k, v in s.items() if k != "fingerprint"} for s in suppressed]
 
     if args.format == "json":
-        print(json.dumps({"findings": findings, "count": len(findings),
-                          "suppressed": suppressed, "stale_ledger_entries": stale},
-                         ensure_ascii=False, indent=2))
+        payload: dict = {"findings": findings_out, "count": len(findings)}
+        if args.ledger is not None:
+            payload["suppressed"] = suppressed_out
+            payload["stale_ledger_entries"] = stale
+            payload["rejected_ledger_entries"] = [
+                {"id": (r["entry"].get("id", "?") if isinstance(r["entry"], dict) else "?"), "reason": r["reason"]}
+                for r in rejected]
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         for f in findings:
             print(f"✗ {f['file']}:{f['line']} [{f['rule']}] {f['match']}")

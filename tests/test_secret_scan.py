@@ -1,7 +1,10 @@
 """secret-scan.py: значения ловятся, имена/плейсхолдеры — нет, значения не печатаются."""
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import importlib.util
+import io
 import json
 import pathlib
 import sys
@@ -56,6 +59,23 @@ class SecretScanTest(unittest.TestCase):
         self.assertTrue(any(f["rule"] == "private_key" for f in self.scan()))
 
 
+def valid_entry(**overrides) -> dict:
+    """Полная, узкая, не просроченная запись реестра — базовая фикстура для тестов.
+    Переопредели только то поле, которое проверяешь на отказ."""
+    entry = {
+        "id": "fp-demo",
+        "fingerprint": "0" * 64,
+        "scope": "config.toml",
+        "rule": "generic_assignment",
+        "reason": "sk-packet внутри task-packet, не секрет",
+        "recognized_by": "test",
+        "recognized_at": "2026-08-01",
+        "review_after": "2099-01-01",
+    }
+    entry.update(overrides)
+    return entry
+
+
 class FalsePositiveLedgerTest(unittest.TestCase):
     """T-021: двусторонняя сверка находок с реестром ложных срабатываний."""
 
@@ -72,39 +92,149 @@ class FalsePositiveLedgerTest(unittest.TestCase):
         findings = self.scan()
         self.assertEqual(len(findings), 1, findings)
         fp = findings[0]["fingerprint"]
-        ledger = [{"id": "fp-demo", "fingerprint": fp, "scope": "*", "rule": "generic_assignment",
-                   "reason": "sk-packet внутри task-packet, не секрет"}]
-        active, suppressed, stale = ss.reconcile(findings, ledger)
+        ledger = [valid_entry(fingerprint=fp)]
+        active, suppressed, stale, rejected = ss.reconcile(findings, ledger)
         self.assertEqual(active, [], "покрытая находка не должна требовать разбора")
         self.assertEqual(len(suppressed), 1)
         self.assertEqual(stale, [], "запись сработала — не протухшая")
+        self.assertEqual(rejected, [], "полная узкая запись обязана быть принята")
 
     def test_negative_control_uncovered_finding_stays_active(self) -> None:
         """Отрицательный контроль: похожая, но НЕ покрытая реестром находка обязана остаться активной."""
         findings = self.scan()
         fp = findings[0]["fingerprint"]
-        wrong_ledger = [{"id": "fp-other", "fingerprint": "0" * 64, "scope": "*", "rule": "generic_assignment"}]
-        active, suppressed, stale = ss.reconcile(findings, wrong_ledger)
+        wrong_ledger = [valid_entry(id="fp-other", fingerprint="0" * 64)]
+        self.assertNotEqual(fp, "0" * 64)
+        active, suppressed, stale, rejected = ss.reconcile(findings, wrong_ledger)
         self.assertEqual(len(active), 1, "непокрытая находка обязана остаться в отчёте (скан краснеет)")
         self.assertEqual(suppressed, [])
         self.assertEqual(len(stale), 1, fp)
+        self.assertEqual(rejected, [])
 
     def test_stale_entry_warns_when_nothing_matches_anymore(self) -> None:
         """Запись реестра, которая ни на что не совпала (код почистили), — протухшая."""
-        active, suppressed, stale = ss.reconcile([], [{"id": "fp-dead", "fingerprint": "a" * 64, "scope": "*"}])
+        active, suppressed, stale, rejected = ss.reconcile(
+            [], [valid_entry(id="fp-dead", fingerprint="a" * 64)])
         self.assertEqual(active, [])
         self.assertEqual(suppressed, [])
         self.assertEqual(len(stale), 1)
         self.assertEqual(stale[0]["id"], "fp-dead")
+        self.assertEqual(rejected, [])
 
     def test_scope_glob_limits_suppression_to_matching_files(self) -> None:
         """Реестр не глобальный «на всё» — scope ограничивает подавление своим кодом (глоб по пути)."""
         findings = self.scan()
         fp = findings[0]["fingerprint"]
-        ledger = [{"id": "fp-scoped", "fingerprint": fp, "scope": "other/**", "rule": "generic_assignment"}]
-        active, suppressed, stale = ss.reconcile(findings, ledger)
+        ledger = [valid_entry(id="fp-scoped", fingerprint=fp, scope="other/**")]
+        active, suppressed, stale, rejected = ss.reconcile(findings, ledger)
         self.assertEqual(len(active), 1, "scope не совпал с файлом находки — подавлять нельзя")
         self.assertEqual(len(stale), 1)
+        self.assertEqual(rejected, [])
+
+    # --- Фикс-заход по гейту (2026-08-13): валидация записей реестра ---
+
+    def test_entry_missing_required_field_is_rejected_not_partially_applied(self) -> None:
+        """🟡№3: запись без одного из обязательных полей отвергается целиком, не подавляет ничего."""
+        findings = self.scan()
+        fp = findings[0]["fingerprint"]
+        entry = valid_entry(fingerprint=fp)
+        del entry["reason"]
+        active, suppressed, stale, rejected = ss.reconcile(findings, [entry])
+        self.assertEqual(len(active), 1, "неполная запись не должна подавлять находку")
+        self.assertEqual(suppressed, [])
+        self.assertEqual(len(rejected), 1)
+        self.assertIn("reason", rejected[0]["reason"])
+
+    def test_wildcard_scope_is_rejected(self) -> None:
+        """🟡№3: scope="*" — список исключений не может ослеплять весь проект целиком."""
+        findings = self.scan()
+        fp = findings[0]["fingerprint"]
+        entry = valid_entry(fingerprint=fp, scope="*")
+        active, suppressed, stale, rejected = ss.reconcile(findings, [entry])
+        self.assertEqual(len(active), 1, "запись со scope='*' не должна подавлять находку")
+        self.assertEqual(suppressed, [])
+        self.assertEqual(len(rejected), 1)
+
+    def test_sha256_of_empty_string_fingerprint_is_rejected(self) -> None:
+        """🟡№1 (обход из враждебного ревью): запись с fingerprint == sha256("") отвергается
+        и НЕ подавляет находку без реального совпадения (например, без поля Secret у gitleaks)."""
+        empty_fp = hashlib.sha256(b"").hexdigest()
+        # находка без реального совпадения — как gitleaks-отчёт без поля "Secret".
+        fabricated_finding = {"file": "prod/.env", "line": "1", "rule": "generic-api-key",
+                               "fingerprint": empty_fp}
+        entry = valid_entry(fingerprint=empty_fp, scope="prod/.env", rule="generic-api-key",
+                             reason="совсем другая находка, никак не про эту")
+        active, suppressed, stale, rejected = ss.reconcile([fabricated_finding], [entry])
+        self.assertEqual(len(active), 1, "запись с fingerprint sha256('') не должна подавлять НИЧЕГО")
+        self.assertEqual(suppressed, [], "обход воспроизведённый гейтом обязан остаться закрытым")
+        self.assertEqual(len(rejected), 1)
+        self.assertIn("sha256", rejected[0]["reason"])
+
+    def test_expired_review_after_does_not_suppress_but_warns(self) -> None:
+        """🟡№4: review_after — не мёртвое поле. Просроченная запись не подавляет, только предупреждает."""
+        findings = self.scan()
+        fp = findings[0]["fingerprint"]
+        entry = valid_entry(fingerprint=fp, review_after="2020-01-01")
+        active, suppressed, stale, rejected = ss.reconcile(findings, [entry], today=ss.dt.date(2026, 8, 13))
+        self.assertEqual(len(active), 1, "просроченная запись не должна подавлять находку")
+        self.assertEqual(suppressed, [])
+        self.assertEqual(len(rejected), 1)
+        self.assertIn("истёк", rejected[0]["reason"])
+
+    def test_review_after_not_yet_due_still_suppresses(self) -> None:
+        """Отрицательный контроль к предыдущему: НЕ просроченная запись работает как обычно."""
+        findings = self.scan()
+        fp = findings[0]["fingerprint"]
+        entry = valid_entry(fingerprint=fp, review_after="2099-01-01")
+        active, suppressed, stale, rejected = ss.reconcile(findings, [entry], today=ss.dt.date(2026, 8, 13))
+        self.assertEqual(active, [])
+        self.assertEqual(len(suppressed), 1)
+        self.assertEqual(rejected, [])
+
+    def test_load_ledger_missing_file_returns_empty(self) -> None:
+        active, suppressed, stale, rejected = ss.reconcile(self.scan(), ss.load_ledger(self.tmp / "no-such.yaml"))
+        self.assertEqual(len(active), 1)
+
+    def test_load_ledger_rejects_broken_yaml_with_error_and_exit2(self) -> None:
+        """🟡№5: битый YAML — понятная ошибка и exit 2, не голый traceback."""
+        bad = self.tmp / "broken.yaml"
+        bad.write_text("entries: [unclosed\n", encoding="utf-8")
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
+            ss.load_ledger(bad)
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("ERROR: реестр нечитаем", buf.getvalue())
+
+    def test_load_ledger_rejects_non_dict_top_level(self) -> None:
+        """🟡№5: реестр — не объект верхнего уровня (список вместо dict)."""
+        bad = self.tmp / "list-top.yaml"
+        bad.write_text("- a\n- b\n", encoding="utf-8")
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
+            ss.load_ledger(bad)
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("ERROR: реестр нечитаем", buf.getvalue())
+
+    def test_load_ledger_rejects_scalar_instead_of_entry(self) -> None:
+        """🟡№5: скаляр вместо записи (entries: [42]) — не голый traceback на .get()."""
+        bad = self.tmp / "scalar-entry.yaml"
+        bad.write_text("entries:\n  - 42\n", encoding="utf-8")
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
+            ss.load_ledger(bad)
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("ERROR: реестр нечитаем", buf.getvalue())
+
+    def test_json_output_without_ledger_has_no_fingerprint_or_ledger_keys(self) -> None:
+        """🔴 обратная совместимость: без --ledger JSON не содержит fingerprint/suppressed/stale_ledger_entries."""
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = ss.main([str(self.tmp), "--format", "json"])
+        self.assertEqual(code, 1)
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(set(payload.keys()), {"findings", "count"})
+        for f in payload["findings"]:
+            self.assertNotIn("fingerprint", f, "без --ledger fingerprint не должен утекать в отчёт")
 
 
 if __name__ == "__main__":
