@@ -37,9 +37,30 @@ SKIP_SUFFIXES = {
 ALLOW_PRAGMA = "secret-scan: allow"
 
 # Реестр ложных срабатываний (T-021, _tools/AGENTS.md §5): запись обязана
-# нести все эти поля, scope не может быть "*" (не сужать = не годится).
+# нести все эти поля, scope обязан доказуемо сужать дерево (см. _scope_has_literal_segment).
 LEDGER_REQUIRED_FIELDS = ("fingerprint", "scope", "rule", "reason", "recognized_by", "recognized_at", "review_after")
 SHA256_EMPTY = hashlib.sha256(b"").hexdigest()
+# Позитивный критерий узости scope (T-021, повторный гейт 2026-08-14): чёрный
+# список литералов ("*", "**") — дырявая проверка, второй гейт подряд находит
+# letter-equivalent форму ("*/*", "**/*", "**/**", "?*", "[a-z]*", "./**",
+# "/*" и т.д. — перечень бесконечен). Вместо перечня — позитивное требование:
+# после снятия глоб-мета-символов (*, ?, [...]-классы) хотя бы в одном
+# сегменте пути обязан остаться непустой буквенно-цифровой (или "_") остаток
+# — доказательство, что глоб реально привязан к конкретному месту в дереве,
+# а не совпадает с произвольным путём.
+_GLOB_META_RE = re.compile(r"\[[^\]]*\]|[*?]")
+
+
+def _scope_has_literal_segment(scope: object) -> bool:
+    """True, только если scope — непустая строка, и хотя бы один сегмент
+    пути (между "/") содержит буквы/цифры/"_" вне глоб-мета-символов."""
+    if not isinstance(scope, str) or not scope:
+        return False
+    for segment in scope.split("/"):
+        literal = _GLOB_META_RE.sub("", segment)
+        if any(ch.isalnum() or ch == "_" for ch in literal):
+            return True
+    return False
 
 RULES: list[tuple[str, re.Pattern[str]]] = [
     ("private_key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
@@ -133,13 +154,18 @@ def scan_tree(root: pathlib.Path, max_bytes: int) -> list[dict[str, str]]:
 def load_ledger(path: pathlib.Path) -> list[dict]:
     """Реестр известных ложных срабатываний (см. .agents/security/false-positives.yaml).
 
-    Здесь только СТРУКТУРНАЯ целостность файла: битый YAML, не-объект верхнего
-    уровня, `entries` не список или элемент списка не объект (скаляр вместо
-    записи) — фатальны для гейта перед коммитом, поэтому явная ошибка и
-    exit 2, а не голый traceback. Смысловая валидация отдельной записи
-    (обязательные поля, запрет scope="*", запрет fingerprint пустой строки,
-    срок пересмотра) — в reconcile(), она же используется тестами напрямую
-    на списках без файла.
+    Здесь только СТРУКТУРНАЯ целостность файла: путь не существует (битая
+    симлинка, опечатка), файл нечитаем (права/`chmod 000`), битый YAML,
+    не-объект верхнего уровня, `entries` не список или элемент списка не
+    объект (скаляр вместо записи) — фатальны для гейта перед коммитом,
+    поэтому явная ошибка и exit 2, а не голый traceback и не тихий пустой
+    реестр. Решение про несуществующий путь (гейт T-021, повторный заход):
+    `--ledger` всегда передаётся явно оператором/скриптом — значит опечатка
+    в пути обязана быть услышана, а не тихо привести к «реестр применён,
+    но пуст» (оператор иначе думает, что защита работает). Смысловая
+    валидация отдельной записи (обязательные поля, узость scope, запрет
+    fingerprint пустой строки, срок пересмотра) — в reconcile(), она же
+    используется тестами напрямую на списках без файла.
     """
     try:
         import yaml
@@ -147,10 +173,11 @@ def load_ledger(path: pathlib.Path) -> list[dict]:
         print("ERROR: для --ledger нужен PyYAML. `pip3 install pyyaml`", file=sys.stderr)
         raise SystemExit(2)
     if not path.exists():
-        return []
+        print(f"ERROR: реестр не найден: {path}", file=sys.stderr)
+        raise SystemExit(2)
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
+    except (yaml.YAMLError, OSError) as exc:
         print(f"ERROR: реестр нечитаем: {path}: {exc}", file=sys.stderr)
         raise SystemExit(2)
     if raw is None:
@@ -178,19 +205,24 @@ def validate_ledger_entry(entry: dict, today: dt.date) -> str | None:
     None — запись валидна и действует. Иначе — причина отказа (строка):
     запись с такой причиной НЕ участвует в подавлении находок (отвергается,
     а не применяется частично). Причины: не хватает обязательного поля;
-    scope == "*" (список исключений не может ослеплять целый проект);
-    fingerprint == sha256("") (подавил бы находку без реального совпадения —
-    воспроизведённый гейтом обход защиты); review_after не похож на дату
-    или уже в прошлом (протухший срок — запись не подавляет, только явно
-    предупреждает, см. reconcile()).
+    scope не сужает дерево (позитивный критерий — см.
+    _scope_has_literal_segment: чёрный список "*"/"**" ловился повторно в
+    letter-equivalent форме "*/*", "**/*", "?*", "[a-z]*" и т.д., поэтому
+    требуем ДОКАЗАТЕЛЬСТВО узости, а не перечисляем плохие строки; заодно
+    отвергает нестроковый scope — иначе fnmatch() в reconcile() падает
+    TypeError на int/bool/списке); fingerprint == sha256("") (подавил бы
+    находку без реального совпадения — воспроизведённый гейтом обход
+    защиты); review_after не похож на дату или уже в прошлом (протухший
+    срок — запись не подавляет, только явно предупреждает, см. reconcile()).
     """
     if not isinstance(entry, dict):
         return f"запись не объект (dict), получено {type(entry).__name__}"
     missing = [field for field in LEDGER_REQUIRED_FIELDS if not entry.get(field)]
     if missing:
         return "не хватает обязательных полей: " + ", ".join(missing)
-    if entry["scope"] in ("*", "**"):
-        return "scope не может быть '*'/'**' — эквивалент всего проекта, область обязана быть конкретным файлом/глобом"
+    if not _scope_has_literal_segment(entry["scope"]):
+        return (f"scope не сужает дерево — глоб обязан содержать хотя бы один литеральный "
+                f"сегмент пути вне *, ?, [...] (получено: {entry['scope']!r})")
     if entry["fingerprint"] == SHA256_EMPTY:
         return "fingerprint == sha256('') — отвергнуто (не может ссылаться на настоящее совпадение)"
     try:
@@ -302,7 +334,12 @@ def main(argv: list[str] | None = None) -> int:
             payload["rejected_ledger_entries"] = [
                 {"id": (r["entry"].get("id", "?") if isinstance(r["entry"], dict) else "?"), "reason": r["reason"]}
                 for r in rejected]
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        # default=str: PyYAML парсит незакавыченные ISO-даты в реестре
+        # (`recognized_at: 2026-08-13` — ровно формат из README/шаблона) в
+        # datetime.date, что json.dumps не умеет сериализовать нативно
+        # (TypeError, найдено повторным гейтом T-021). str(date(...)) даёт
+        # тот же ISO-формат, что и исходная запись в YAML.
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
     else:
         for f in findings:
             print(f"✗ {f['file']}:{f['line']} [{f['rule']}] {f['match']}")

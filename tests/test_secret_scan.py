@@ -166,6 +166,47 @@ class FalsePositiveLedgerTest(unittest.TestCase):
         self.assertEqual(suppressed, [])
         self.assertEqual(len(rejected), 1)
 
+    # --- Повторный гейт (2026-08-14): позитивный критерий узости scope ---
+
+    DEGENERATE_SCOPES = (
+        "*", "**", "*/*", "**/*", "**/**", "?*", "[a-z]*", "./**", "/*", "",
+    )
+    NARROW_SCOPES = ("prod/**", "prod/.env", "docs/*.md", "src/**/*.py")
+
+    def test_degenerate_scope_forms_are_all_rejected(self) -> None:
+        """Батарея вырожденных форм — все совпадают с произвольным путём,
+        чёрный список литералов ("*", "**") их не ловил (гейт нашёл дыру
+        второй раз подряд); позитивный критерий обязан отвергнуть все."""
+        findings = self.scan()
+        fp = findings[0]["fingerprint"]
+        for scope in self.DEGENERATE_SCOPES:
+            with self.subTest(scope=scope):
+                entry = valid_entry(fingerprint=fp, scope=scope)
+                active, suppressed, stale, rejected = ss.reconcile(findings, [entry])
+                self.assertEqual(len(active), 1, f"scope={scope!r} обязан быть отвергнут, а не подавить находку")
+                self.assertEqual(suppressed, [])
+                self.assertEqual(len(rejected), 1, f"scope={scope!r} обязан попасть в rejected")
+
+    def test_nonstring_scope_is_rejected_not_a_crash(self) -> None:
+        """Повторный гейт: нестроковый scope (42, True, список) раньше давал
+        TypeError из fnmatch(); теперь отвергается как невалидная запись,
+        без исключения, находка остаётся активной."""
+        findings = self.scan()
+        fp = findings[0]["fingerprint"]
+        for scope in (42, True, ["prod", "**"], None):
+            with self.subTest(scope=scope):
+                entry = valid_entry(fingerprint=fp, scope=scope)
+                active, suppressed, stale, rejected = ss.reconcile(findings, [entry])
+                self.assertEqual(len(active), 1)
+                self.assertEqual(suppressed, [])
+
+    def test_legitimate_narrow_scopes_still_suppress(self) -> None:
+        """Отрицательный контроль к предыдущим двум: позитивный критерий не
+        должен отсекать реально узкие законные глобы."""
+        for scope in self.NARROW_SCOPES:
+            with self.subTest(scope=scope):
+                self.assertTrue(ss._scope_has_literal_segment(scope), f"{scope!r} обязан считаться узким")
+
     def test_sha256_of_empty_string_fingerprint_is_rejected(self) -> None:
         """🟡№1 (обход из враждебного ревью): запись с fingerprint == sha256("") отвергается
         и НЕ подавляет находку без реального совпадения (например, без поля Secret у gitleaks)."""
@@ -202,9 +243,33 @@ class FalsePositiveLedgerTest(unittest.TestCase):
         self.assertEqual(len(suppressed), 1)
         self.assertEqual(rejected, [])
 
-    def test_load_ledger_missing_file_returns_empty(self) -> None:
-        active, suppressed, stale, rejected = ss.reconcile(self.scan(), ss.load_ledger(self.tmp / "no-such.yaml"))
-        self.assertEqual(len(active), 1)
+    def test_load_ledger_missing_path_errors_and_exits_2(self) -> None:
+        """Гейт T-021 (повторный заход): опечатка/битая симлинка в --ledger
+        раньше молча давала пустой реестр (оператор думал, что защита
+        применена) — теперь явная ошибка, exit 2, не тихий пропуск.
+        Решение сознательно меняет прежнее поведение: --ledger всегда
+        передаётся явно, значит опечатка в пути обязана быть слышна."""
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
+            ss.load_ledger(self.tmp / "no-such.yaml")
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("ERROR", buf.getvalue())
+
+    def test_load_ledger_unreadable_file_errors_and_exits_2(self) -> None:
+        """🟡 (повторный гейт): chmod 000 — раньше голый PermissionError-
+        traceback, exit 1 (OSError не ловился отдельно от yaml.YAMLError).
+        Теперь читаемая ошибка + exit 2, как и для битого YAML."""
+        unreadable = self.tmp / "unreadable.yaml"
+        unreadable.write_text("entries: []\n", encoding="utf-8")
+        unreadable.chmod(0o000)
+        buf = io.StringIO()
+        try:
+            with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
+                ss.load_ledger(unreadable)
+            self.assertEqual(ctx.exception.code, 2)
+            self.assertIn("ERROR: реестр нечитаем", buf.getvalue())
+        finally:
+            unreadable.chmod(0o644)  # иначе tempfile-cleanup не сможет удалить файл
 
     def test_load_ledger_rejects_broken_yaml_with_error_and_exit2(self) -> None:
         """🟡№5: битый YAML — понятная ошибка и exit 2, не голый traceback."""
@@ -235,6 +300,31 @@ class FalsePositiveLedgerTest(unittest.TestCase):
             ss.load_ledger(bad)
         self.assertEqual(ctx.exception.code, 2)
         self.assertIn("ERROR: реестр нечитаем", buf.getvalue())
+
+    def test_json_output_with_stale_entry_and_unquoted_yaml_date_does_not_crash(self) -> None:
+        """Повторный гейт (НОВОЕ): --format json + протухшая запись с
+        незакавыченными датами (`recognized_at: 2026-08-13` — ровно формат
+        из README/шаблона) раньше падала TypeError('date is not JSON
+        serializable'), потому что PyYAML парсит их в datetime.date."""
+        ledger_path = self.tmp / "ledger.yaml"
+        ledger_path.write_text(
+            "entries:\n"
+            "  - id: fp-dead\n"
+            "    fingerprint: '" + "a" * 64 + "'\n"
+            "    scope: nowhere/**\n"
+            "    rule: generic_assignment\n"
+            "    reason: тест\n"
+            "    recognized_by: test\n"
+            "    recognized_at: 2026-08-13\n"  # незакавычено -> yaml.date, не str
+            "    review_after: 2099-01-01\n",  # незакавычено -> yaml.date, не str
+            encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = ss.main([str(self.tmp), "--format", "json", "--ledger", str(ledger_path)])
+        payload = json.loads(buf.getvalue())  # не должно бросить TypeError при dumps внутри main()
+        self.assertEqual(len(payload["stale_ledger_entries"]), 1)
+        self.assertEqual(payload["stale_ledger_entries"][0]["recognized_at"], "2026-08-13")
+        self.assertEqual(code, 1)
 
     def test_json_output_without_ledger_has_no_fingerprint_or_ledger_keys(self) -> None:
         """🔴 обратная совместимость: без --ledger JSON не содержит fingerprint/suppressed/stale_ledger_entries."""
