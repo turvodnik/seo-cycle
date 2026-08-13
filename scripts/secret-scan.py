@@ -49,6 +49,9 @@ SHA256_EMPTY = hashlib.sha256(b"").hexdigest()
 # — доказательство, что глоб реально привязан к конкретному месту в дереве,
 # а не совпадает с произвольным путём.
 _GLOB_META_RE = re.compile(r"\[[^\]]*\]|[*?]")
+# Строгий формат review_after: date.fromisoformat() тише документа —
+# принимает и "20270101" (без дефисов) начиная с Python 3.11.
+_REVIEW_AFTER_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _scope_has_literal_segment(scope: object) -> bool:
@@ -225,6 +228,12 @@ def validate_ledger_entry(entry: dict, today: dt.date) -> str | None:
                 f"сегмент пути вне *, ?, [...] (получено: {entry['scope']!r})")
     if entry["fingerprint"] == SHA256_EMPTY:
         return "fingerprint == sha256('') — отвергнуто (не может ссылаться на настоящее совпадение)"
+    # date.fromisoformat() принимает и компактный формат без дефисов
+    # ("20270101") начиная с Python 3.11 — тише документированного
+    # "YYYY-MM-DD" (README/шаблон/это же сообщение об ошибке); явная
+    # проверка формата не даёт записи с "тихим" отклонением от контракта.
+    if not _REVIEW_AFTER_RE.match(str(entry["review_after"])):
+        return f"review_after не похож на дату YYYY-MM-DD: {entry['review_after']!r}"
     try:
         review_after = dt.date.fromisoformat(str(entry["review_after"]))
     except ValueError:

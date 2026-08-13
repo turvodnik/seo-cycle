@@ -200,12 +200,29 @@ class FalsePositiveLedgerTest(unittest.TestCase):
                 self.assertEqual(len(active), 1)
                 self.assertEqual(suppressed, [])
 
+    # scope -> путь находки, который под этим scope обязан РЕАЛЬНО совпасть
+    # (не только пройти validate_ledger_entry, но и подавиться в reconcile()).
+    NARROW_SCOPE_MATCHING_PATHS = {
+        "prod/**": "prod/.env",
+        "prod/.env": "prod/.env",
+        "docs/*.md": "docs/x.md",
+        "src/**/*.py": "src/a/b.py",
+    }
+
     def test_legitimate_narrow_scopes_still_suppress(self) -> None:
         """Отрицательный контроль к предыдущим двум: позитивный критерий не
-        должен отсекать реально узкие законные глобы."""
-        for scope in self.NARROW_SCOPES:
+        должен отсекать реально узкие законные глобы — сквозная проверка
+        через reconcile() (не только validate_ledger_entry/предикат:
+        подавление обязано СРАБОТАТЬ, а не просто «пройти валидацию»)."""
+        for scope, path in self.NARROW_SCOPE_MATCHING_PATHS.items():
             with self.subTest(scope=scope):
                 self.assertTrue(ss._scope_has_literal_segment(scope), f"{scope!r} обязан считаться узким")
+                finding = {"file": path, "line": "1", "rule": "generic_assignment", "fingerprint": "b" * 64}
+                entry = valid_entry(fingerprint="b" * 64, scope=scope, rule="generic_assignment")
+                active, suppressed, stale, rejected = ss.reconcile([finding], [entry])
+                self.assertEqual(active, [], f"scope={scope!r} обязан подавить находку {path!r}")
+                self.assertEqual(len(suppressed), 1)
+                self.assertEqual(rejected, [], f"scope={scope!r} — законная запись не должна отвергаться")
 
     def test_sha256_of_empty_string_fingerprint_is_rejected(self) -> None:
         """🟡№1 (обход из враждебного ревью): запись с fingerprint == sha256("") отвергается
@@ -242,6 +259,23 @@ class FalsePositiveLedgerTest(unittest.TestCase):
         self.assertEqual(active, [])
         self.assertEqual(len(suppressed), 1)
         self.assertEqual(rejected, [])
+
+    def test_review_after_compact_format_without_dashes_is_rejected(self) -> None:
+        """💭 (advisor, повторный гейт): date.fromisoformat() принимает и
+        компактный формат без дефисов ("20270101") с Python 3.11 — тише
+        документированного YYYY-MM-DD (README/шаблон/сообщение об ошибке).
+        Живая проверка на этом же интерпретаторе (см. «Результат»):
+        dt.date.fromisoformat('20270101') == date(2027, 1, 1), без ValueError."""
+        self.assertEqual(ss.dt.date.fromisoformat("20270101"), ss.dt.date(2027, 1, 1),
+                          "живое подтверждение, что именно этот формат ускользнул бы от голого fromisoformat()")
+        findings = self.scan()
+        fp = findings[0]["fingerprint"]
+        entry = valid_entry(fingerprint=fp, review_after="20270101")
+        active, suppressed, stale, rejected = ss.reconcile(findings, [entry], today=ss.dt.date(2026, 8, 13))
+        self.assertEqual(len(active), 1, "компактный формат даты не должен пройти валидацию")
+        self.assertEqual(suppressed, [])
+        self.assertEqual(len(rejected), 1)
+        self.assertIn("YYYY-MM-DD", rejected[0]["reason"])
 
     def test_load_ledger_missing_path_errors_and_exits_2(self) -> None:
         """Гейт T-021 (повторный заход): опечатка/битая симлинка в --ledger
