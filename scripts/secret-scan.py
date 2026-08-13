@@ -189,8 +189,8 @@ def validate_ledger_entry(entry: dict, today: dt.date) -> str | None:
     missing = [field for field in LEDGER_REQUIRED_FIELDS if not entry.get(field)]
     if missing:
         return "не хватает обязательных полей: " + ", ".join(missing)
-    if entry["scope"] == "*":
-        return "scope не может быть '*' — область обязана быть конкретным файлом/глобом"
+    if entry["scope"] in ("*", "**"):
+        return "scope не может быть '*'/'**' — эквивалент всего проекта, область обязана быть конкретным файлом/глобом"
     if entry["fingerprint"] == SHA256_EMPTY:
         return "fingerprint == sha256('') — отвергнуто (не может ссылаться на настоящее совпадение)"
     try:

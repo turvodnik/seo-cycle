@@ -155,6 +155,17 @@ class FalsePositiveLedgerTest(unittest.TestCase):
         self.assertEqual(suppressed, [])
         self.assertEqual(len(rejected), 1)
 
+    def test_double_star_scope_is_rejected_same_as_wildcard(self) -> None:
+        """fnmatch: "**" совпадает со всем деревом так же, как "*" (через "/" включительно) —
+        letter-equivalent обход запрета scope="*", если бы не был отдельно отвергнут."""
+        findings = self.scan()
+        fp = findings[0]["fingerprint"]
+        entry = valid_entry(fingerprint=fp, scope="**")
+        active, suppressed, stale, rejected = ss.reconcile(findings, [entry])
+        self.assertEqual(len(active), 1, "запись со scope='**' не должна подавлять находку")
+        self.assertEqual(suppressed, [])
+        self.assertEqual(len(rejected), 1)
+
     def test_sha256_of_empty_string_fingerprint_is_rejected(self) -> None:
         """🟡№1 (обход из враждебного ревью): запись с fingerprint == sha256("") отвергается
         и НЕ подавляет находку без реального совпадения (например, без поля Secret у gitleaks)."""
