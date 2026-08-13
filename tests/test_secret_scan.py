@@ -168,21 +168,39 @@ class FalsePositiveLedgerTest(unittest.TestCase):
 
     # --- Повторный гейт (2026-08-14): позитивный критерий узости scope ---
 
+    # Третий гейт (2026-08-14): батарея вырожденных форм. Путь находки —
+    # "prod/.env" (тот же, на котором гейт демонстрировал пробой маской
+    # "*e*"): при промахе валидации маска реально СОВПАДЁТ и находка будет
+    # подавлена, то есть тест краснеет и по active, и по suppressed, а не
+    # только по rejected.
     DEGENERATE_SCOPES = (
-        "*", "**", "*/*", "**/*", "**/**", "?*", "[a-z]*", "./**", "/*", "",
+        # закрыто прошлыми кругами
+        "*", "**", "*/*", "**/*", "**/**", "?*", "[a-z]*", ".*", "*[a-z]*",
+        "./**", "/*", "",
+        # пробой третьего гейта: буква в обёртке из звёздочек ничего не сужает
+        "*e*", "*o*", "**/*e*", "[!x]*e*", "**e**", "*_*",
+        "[a-z]a*", "a[a-z]*", "?a?", "**/a*", "{a,b}*", "Ω*",
+        # ".." литеральным сегментом считаться не должен
+        "..", "../..", "../../*e*",
+        # одиночная маска без литерального сегмента — названная цена фикса
+        "*.env",
+        # глоб на 1000+ символов
+        "*" * 500 + "e" + "*" * 500,
     )
-    NARROW_SCOPES = ("prod/**", "prod/.env", "docs/*.md", "src/**/*.py")
 
     def test_degenerate_scope_forms_are_all_rejected(self) -> None:
-        """Батарея вырожденных форм — все совпадают с произвольным путём,
-        чёрный список литералов ("*", "**") их не ловил (гейт нашёл дыру
-        второй раз подряд); позитивный критерий обязан отвергнуть все."""
-        findings = self.scan()
-        fp = findings[0]["fingerprint"]
+        """Батарея вырожденных форм — все совпадают почти с любым путём.
+        Чёрный список литералов их не ловил (первый гейт), критерий
+        «остатка после вычёркивания мета-символов» пробивался маской "*e*"
+        (третий гейт). Требование литерального сегмента обязано отвергнуть
+        все формы сразу, включая те, что никто не перечислял."""
+        finding = {"file": "prod/.env", "line": "1", "rule": "generic_assignment",
+                   "fingerprint": "b" * 64}
+        self.assertGreaterEqual(len(self.DEGENERATE_SCOPES), 23)
         for scope in self.DEGENERATE_SCOPES:
             with self.subTest(scope=scope):
-                entry = valid_entry(fingerprint=fp, scope=scope)
-                active, suppressed, stale, rejected = ss.reconcile(findings, [entry])
+                entry = valid_entry(fingerprint="b" * 64, scope=scope)
+                active, suppressed, stale, rejected = ss.reconcile([finding], [entry])
                 self.assertEqual(len(active), 1, f"scope={scope!r} обязан быть отвергнут, а не подавить находку")
                 self.assertEqual(suppressed, [])
                 self.assertEqual(len(rejected), 1, f"scope={scope!r} обязан попасть в rejected")
@@ -205,8 +223,15 @@ class FalsePositiveLedgerTest(unittest.TestCase):
     NARROW_SCOPE_MATCHING_PATHS = {
         "prod/**": "prod/.env",
         "prod/.env": "prod/.env",
+        "prod/*.env": "prod/.env",  # форма, которую предлагает сообщение об отказе
         "docs/*.md": "docs/x.md",
         "src/**/*.py": "src/a/b.py",
+        ".github/workflows/*.yml": ".github/workflows/ci.yml",
+        "scripts/seo-*.py": "scripts/seo-run.py",
+        "Проекты ai/gsse.ru/**": "Проекты ai/gsse.ru/prod/.env",
+        "прод/**": "прод/.env",
+        "Makefile": "Makefile",
+        "build/Dockerfile": "build/Dockerfile",
     }
 
     def test_legitimate_narrow_scopes_still_suppress(self) -> None:
