@@ -37,40 +37,48 @@ SKIP_SUFFIXES = {
 ALLOW_PRAGMA = "secret-scan: allow"
 
 # Реестр ложных срабатываний (T-021, _tools/AGENTS.md §5): запись обязана
-# нести все эти поля, scope обязан доказуемо сужать дерево (см. _scope_has_literal_segment).
+# нести все эти поля, scope обязан быть привязан к месту в дереве (см. _scope_is_anchored).
 LEDGER_REQUIRED_FIELDS = ("fingerprint", "scope", "rule", "reason", "recognized_by", "recognized_at", "review_after")
 SHA256_EMPTY = hashlib.sha256(b"").hexdigest()
-# Позитивный критерий узости scope (T-021, третий гейт 2026-08-14). Чёрный
-# список литералов ("*", "**") был дырявой проверкой — перечень форм
-# бесконечен. Но и первая версия позитивного критерия («после вычёркивания
-# глоб-символов в сегменте остался буквенно-цифровой ОСТАТОК») пробивалась
-# маской "*e*": остаток "e" есть, а fnmatch не считает "/" особым символом,
-# поэтому маска совпадает с любым путём, где встречается буква "e" (364 из
-# 400 файлов реального дерева). Требование к остатку заменено требованием
-# НАЛИЧИЯ ЛИТЕРАЛЬНОГО СЕГМЕНТА: хотя бы один сегмент пути (между "/")
-# обязан быть ПОЛНОСТЬЮ свободен от глоб-символов (*, ?, [, ]) И содержать
-# буквенно-цифровой символ или "_" (второе условие обязательно: без него
-# литеральным сегментом считается ".." и пролезает "../../*e*").
+# ЯКОРНЫЙ критерий узости scope (T-021, четвёртый гейт 2026-08-14). История
+# трёх отвергнутых версий, каждая — урок:
+#   1) чёрный список литералов ("*", "**") — перечень плохих форм бесконечен,
+#      пробивался "*/*", "?*", "[a-z]*";
+#   2) «в сегменте остался буквенно-цифровой ОСТАТОК после вычёркивания
+#      глоб-символов» — пробивался маской "*e*" (остаток "e" есть, но fnmatch
+#      не считает "/" особым символом, и маска совпадает с любым путём, где
+#      встречается буква "e" — 364 из 400 файлов реального дерева);
+#   3) «хотя бы ОДИН сегмент полностью литерален, где угодно в маске» —
+#      пробивался маской "**/.env": сегмент ".env" литерален, но привязывает
+#      подавление к ИМЕНИ файла, а не к МЕСТУ в дереве, и гасит .env на любой
+#      глубине в любом каталоге (тот же класс: "*/prod/*", "**/x/**").
+# Действующий инвариант: ПЕРВЫЙ сегмент (до первого "/") обязан быть
+# ПОЛНОСТЬЮ свободен от глоб-символов (*, ?, [, ]) И содержать буквенно-
+# цифровой символ или "_". Первое условие даёт якорь — маска не может
+# «плавать» по дереву; второе обязательно, иначе якорем считается ".." или
+# "." и пролезают "../../*e*", "./prod/**".
 _GLOB_META_CHARS = "*?[]"
 # Строгий формат review_after: date.fromisoformat() тише документа —
 # принимает и "20270101" (без дефисов) начиная с Python 3.11.
 _REVIEW_AFTER_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-def _scope_has_literal_segment(scope: object) -> bool:
-    """True, только если scope — непустая строка, и хотя бы один сегмент
-    пути (между "/") ПОЛНОСТЬЮ свободен от глоб-символов (*, ?, [, ]) и при
-    этом содержит буквы/цифры/"_". Цена такого инварианта названа явно:
-    одиночная маска "*.env" перестаёт быть валидной областью (нужен
-    "prod/*.env") — она накрывает любой .env в любом месте дерева."""
+def _scope_is_anchored(scope: object) -> bool:
+    """True, только если scope — непустая строка, ПЕРВЫЙ сегмент которой (до
+    первого "/") ПОЛНОСТЬЮ свободен от глоб-символов (*, ?, [, ]) и при этом
+    содержит букву/цифру/"_".
+
+    Цена якоря названа явно: невалидны и одиночная маска "*.env" (нужен
+    "prod/*.env"), и «эта проблема во всех папках тестов» — "**/tests/**" и
+    "./prod/**" тоже отвергаются, такие исключения придётся записывать по
+    местам ("src/tests/**", "prod/**"). Это осознанный fail-closed: маска,
+    не привязанная к месту, гасит совпадение по всему дереву."""
     if not isinstance(scope, str) or not scope:
         return False
-    for segment in scope.split("/"):
-        if any(ch in _GLOB_META_CHARS for ch in segment):
-            continue
-        if any(ch.isalnum() or ch == "_" for ch in segment):
-            return True
-    return False
+    head = scope.split("/", 1)[0]
+    if any(ch in _GLOB_META_CHARS for ch in head):
+        return False
+    return any(ch.isalnum() or ch == "_" for ch in head)
 
 RULES: list[tuple[str, re.Pattern[str]]] = [
     ("private_key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
@@ -186,17 +194,33 @@ def load_ledger(path: pathlib.Path) -> list[dict]:
         print(f"ERROR: реестр не найден: {path}", file=sys.stderr)
         raise SystemExit(2)
     try:
+        # UnicodeDecodeError — подкласс ValueError, а не OSError: без него
+        # реестр в чужой кодировке давал голый traceback вместо ERROR/exit 2.
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (yaml.YAMLError, OSError) as exc:
+    except (yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
         print(f"ERROR: реестр нечитаем: {path}: {exc}", file=sys.stderr)
         raise SystemExit(2)
+    # Пустой/битый реестр НЕ считается пустым молча: «не смог прочитать» не
+    # равно «прочитал, и там чисто». Легальная пустота записывается явно —
+    # `entries: []`.
     if raw is None:
-        return []
+        print(f"ERROR: реестр нечитаем: {path}: файл не содержит YAML-данных "
+              f"(пустой или только комментарии); пустой реестр записывается явно: 'entries: []'",
+              file=sys.stderr)
+        raise SystemExit(2)
     if not isinstance(raw, dict):
         print(f"ERROR: реестр нечитаем: {path}: верхний уровень должен быть объектом (dict), "
               f"получено {type(raw).__name__}", file=sys.stderr)
         raise SystemExit(2)
-    entries = raw.get("entries") or []
+    if "entries" not in raw:
+        print(f"ERROR: реестр нечитаем: {path}: нет ключа 'entries' (опечатка в имени ключа?); "
+              f"пустой реестр записывается явно: 'entries: []'", file=sys.stderr)
+        raise SystemExit(2)
+    entries = raw["entries"]
+    if entries is None:
+        print(f"ERROR: реестр нечитаем: {path}: 'entries' пуст (null); "
+              f"пустой реестр записывается явно: 'entries: []'", file=sys.stderr)
+        raise SystemExit(2)
     if not isinstance(entries, list):
         print(f"ERROR: реестр нечитаем: {path}: 'entries' должен быть списком, "
               f"получено {type(entries).__name__}", file=sys.stderr)
@@ -215,11 +239,11 @@ def validate_ledger_entry(entry: dict, today: dt.date) -> str | None:
     None — запись валидна и действует. Иначе — причина отказа (строка):
     запись с такой причиной НЕ участвует в подавлении находок (отвергается,
     а не применяется частично). Причины: не хватает обязательного поля;
-    scope не сужает дерево (позитивный критерий — см.
-    _scope_has_literal_segment: требуем НАЛИЧИЯ полностью литерального
-    сегмента, а не «остатка буквы после вычёркивания мета-символов» —
-    остаток пробивался маской "*e*", которая совпадает почти со всем
-    деревом; ДОКАЗАТЕЛЬСТВО узости вместо перечня плохих строк; заодно
+    scope не привязан к месту в дереве (якорный критерий — см.
+    _scope_is_anchored: требуем, чтобы ПЕРВЫЙ сегмент пути был полностью
+    литеральным, а не «хоть один литеральный сегмент где угодно» — последнее
+    пробивалось маской "**/.env", привязывающей подавление к имени файла, а
+    не к месту; ДОКАЗАТЕЛЬСТВО узости вместо перечня плохих строк; заодно
     отвергает нестроковый scope — иначе fnmatch() в reconcile() падает
     TypeError на int/bool/списке); fingerprint == sha256("") (подавил бы
     находку без реального совпадения — воспроизведённый гейтом обход
@@ -231,10 +255,11 @@ def validate_ledger_entry(entry: dict, today: dt.date) -> str | None:
     missing = [field for field in LEDGER_REQUIRED_FIELDS if not entry.get(field)]
     if missing:
         return "не хватает обязательных полей: " + ", ".join(missing)
-    if not _scope_has_literal_segment(entry["scope"]):
-        return (f"scope не сужает дерево: нужен хотя бы один сегмент пути ПОЛНОСТЬЮ без "
-                f"глоб-символов *?[] и с буквой/цифрой/_ — например 'prod/*.env' вместо "
-                f"'*.env' (получено: {entry['scope']!r})")
+    if not _scope_is_anchored(entry["scope"]):
+        return (f"scope не привязан к месту в дереве: ПЕРВЫЙ сегмент пути (до первого '/') "
+                f"обязан быть ПОЛНОСТЬЮ без глоб-символов *?[] и содержать букву/цифру/_ — "
+                f"например 'prod/*.env' вместо '*.env' и 'src/tests/**' вместо '**/tests/**' "
+                f"(получено: {entry['scope']!r})")
     if entry["fingerprint"] == SHA256_EMPTY:
         return "fingerprint == sha256('') — отвергнуто (не может ссылаться на настоящее совпадение)"
     # date.fromisoformat() принимает и компактный формат без дефисов
@@ -280,13 +305,17 @@ def reconcile(findings: list[dict[str, str]], ledger: list[dict],
 
     active: list[dict] = []
     suppressed: list[dict] = []
-    matched_ids: set[str] = set()
+    # Ключ — ПОРЯДКОВЫЙ НОМЕР записи, не её "id": два дубля одного id (или две
+    # записи без id с общим fingerprint и разными scope — штатный сценарий
+    # «тот же ложный текст в двух местах») схлопывались в один ключ, и
+    # совпадение одной навсегда прятало мёртвую вторую от двусторонней сверки.
+    matched_idx: set[int] = set()
 
     for f in findings:
-        hit = None
+        hit_idx = None
         fp = f.get("fingerprint")
         if fp is not None:
-            for entry in eligible:
+            for idx, entry in enumerate(eligible):
                 if entry["fingerprint"] != fp:
                     continue
                 if not fnmatch.fnmatch(f["file"], entry["scope"]):
@@ -294,15 +323,15 @@ def reconcile(findings: list[dict[str, str]], ledger: list[dict],
                 rule = entry["rule"]
                 if rule != "*" and rule != f["rule"]:
                     continue
-                hit = entry
+                hit_idx = idx
                 break
-        if hit is not None:
-            matched_ids.add(hit.get("id", hit["fingerprint"]))
-            suppressed.append({**f, "ledger_id": hit.get("id")})
+        if hit_idx is not None:
+            matched_idx.add(hit_idx)
+            suppressed.append({**f, "ledger_id": eligible[hit_idx].get("id")})
         else:
             active.append(f)
 
-    stale = [e for e in eligible if e.get("id", e["fingerprint"]) not in matched_ids]
+    stale = [e for idx, e in enumerate(eligible) if idx not in matched_idx]
     return active, suppressed, stale, rejected
 
 

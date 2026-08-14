@@ -182,27 +182,44 @@ class FalsePositiveLedgerTest(unittest.TestCase):
         "[a-z]a*", "a[a-z]*", "?a?", "**/a*", "{a,b}*", "Ω*",
         # ".." литеральным сегментом считаться не должен
         "..", "../..", "../../*e*",
-        # одиночная маска без литерального сегмента — названная цена фикса
+        # одиночная маска без литерального сегмента — цена, названная кругом 3
         "*.env",
         # глоб на 1000+ символов
         "*" * 500 + "e" + "*" * 500,
+        # ПРОБОЙ ЧЕТВЁРТОГО ГЕЙТА: литеральный сегмент есть, но НЕ первый —
+        # маска привязана к ИМЕНИ файла/каталога, а не к МЕСТУ в дереве, и
+        # гасит совпадение на любой глубине в любом каталоге.
+        "**/.env", "*/.env", "*/prod/*", "**/x/**", "*/[a-z]/x/*",
+        "**/tests/**", "?/prod/**", "[a-z]/prod/**",
+        # цена якоря, названная явно: относительный префикс якорем не является
+        "./prod/**", "~/prod/**",
+    )
+
+    # Пути находок подобраны так, чтобы КАЖДАЯ вырожденная форма реально
+    # совпала хотя бы с одним из них: при промахе валидации тест краснеет не
+    # только по `rejected`, но и по факту подавления — ровно картина гейта.
+    DEGENERATE_PROBE_PATHS = (
+        "prod/.env", "vendor/evil/deep/.env", "a/b/c/d/e/.env",
+        "x/prod/y", "a/x/b", "src/tests/t.py", "q/a/x/z",
     )
 
     def test_degenerate_scope_forms_are_all_rejected(self) -> None:
-        """Батарея вырожденных форм — все совпадают почти с любым путём.
-        Чёрный список литералов их не ловил (первый гейт), критерий
-        «остатка после вычёркивания мета-символов» пробивался маской "*e*"
-        (третий гейт). Требование литерального сегмента обязано отвергнуть
-        все формы сразу, включая те, что никто не перечислял."""
-        finding = {"file": "prod/.env", "line": "1", "rule": "generic_assignment",
-                   "fingerprint": "b" * 64}
-        self.assertGreaterEqual(len(self.DEGENERATE_SCOPES), 23)
+        """Батарея вырожденных форм — ни одна не привязана к месту в дереве.
+        Чёрный список литералов их не ловил (первый гейт), критерий «остатка
+        после вычёркивания мета-символов» пробивался маской "*e*" (третий
+        гейт), «хотя бы один литеральный сегмент где угодно» — маской
+        "**/.env" (четвёртый). Якорь обязан отвергнуть все формы сразу,
+        включая те, что никто не перечислял."""
+        findings = [{"file": p, "line": "1", "rule": "generic_assignment",
+                     "fingerprint": "b" * 64} for p in self.DEGENERATE_PROBE_PATHS]
+        self.assertGreaterEqual(len(self.DEGENERATE_SCOPES), 24)
         for scope in self.DEGENERATE_SCOPES:
             with self.subTest(scope=scope):
                 entry = valid_entry(fingerprint="b" * 64, scope=scope)
-                active, suppressed, stale, rejected = ss.reconcile([finding], [entry])
-                self.assertEqual(len(active), 1, f"scope={scope!r} обязан быть отвергнут, а не подавить находку")
-                self.assertEqual(suppressed, [])
+                active, suppressed, stale, rejected = ss.reconcile(findings, [entry])
+                self.assertEqual(suppressed, [], f"scope={scope!r} не должен подавлять НИЧЕГО")
+                self.assertEqual(len(active), len(self.DEGENERATE_PROBE_PATHS),
+                                 f"scope={scope!r} обязан быть отвергнут, а не подавить находку")
                 self.assertEqual(len(rejected), 1, f"scope={scope!r} обязан попасть в rejected")
 
     def test_nonstring_scope_is_rejected_not_a_crash(self) -> None:
@@ -232,16 +249,25 @@ class FalsePositiveLedgerTest(unittest.TestCase):
         "прод/**": "прод/.env",
         "Makefile": "Makefile",
         "build/Dockerfile": "build/Dockerfile",
+        # якорь не должен отсечь законное (круг 4)
+        "seo/**": "seo/research/raw/report.json",   # маска из демо-реестра gsse
+        "my.dir/**": "my.dir/x.txt",                # точка в имени каталога
+        "a b/**": "a b/x.txt",                      # пробел в первом сегменте
+        "v1.2/**": "v1.2/x.txt",                    # точки и цифры
+        "_/**": "_/x.txt",                          # только подчёркивание
+        "0/**": "0/x.txt",                          # только цифра
+        "a/b/c/d/e/f/g/h/i/j/**": "a/b/c/d/e/f/g/h/i/j/k.txt",  # глубокая вложенность
     }
 
     def test_legitimate_narrow_scopes_still_suppress(self) -> None:
-        """Отрицательный контроль к предыдущим двум: позитивный критерий не
+        """Отрицательный контроль к предыдущим двум: якорный критерий не
         должен отсекать реально узкие законные глобы — сквозная проверка
         через reconcile() (не только validate_ledger_entry/предикат:
         подавление обязано СРАБОТАТЬ, а не просто «пройти валидацию»)."""
+        self.assertGreaterEqual(len(self.NARROW_SCOPE_MATCHING_PATHS), 17)
         for scope, path in self.NARROW_SCOPE_MATCHING_PATHS.items():
             with self.subTest(scope=scope):
-                self.assertTrue(ss._scope_has_literal_segment(scope), f"{scope!r} обязан считаться узким")
+                self.assertTrue(ss._scope_is_anchored(scope), f"{scope!r} обязан считаться узким")
                 finding = {"file": path, "line": "1", "rule": "generic_assignment", "fingerprint": "b" * 64}
                 entry = valid_entry(fingerprint="b" * 64, scope=scope, rule="generic_assignment")
                 active, suppressed, stale, rejected = ss.reconcile([finding], [entry])
@@ -359,6 +385,80 @@ class FalsePositiveLedgerTest(unittest.TestCase):
             ss.load_ledger(bad)
         self.assertEqual(ctx.exception.code, 2)
         self.assertIn("ERROR: реестр нечитаем", buf.getvalue())
+
+    # --- Codex-ревью 2026-08-14 (P2/P3): битый реестр не смеет выглядеть ПУСТЫМ ---
+
+    def test_load_ledger_without_entries_key_is_an_error_not_an_empty_ledger(self) -> None:
+        """Опечатка в имени ключа ('entires') раньше давала тихий пустой
+        реестр: «не смог прочитать» выглядело как «прочитал, и там чисто»."""
+        bad = self.tmp / "typo-key.yaml"
+        bad.write_text("entires:\n  - id: fp-1\n", encoding="utf-8")
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
+            ss.load_ledger(bad)
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("entries", buf.getvalue())
+
+    def test_load_ledger_comments_only_is_an_error_not_an_empty_ledger(self) -> None:
+        bad = self.tmp / "comments-only.yaml"
+        bad.write_text("# только комментарии, ни одной записи\n", encoding="utf-8")
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
+            ss.load_ledger(bad)
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("entries: []", buf.getvalue())
+
+    def test_load_ledger_entries_null_is_an_error(self) -> None:
+        bad = self.tmp / "entries-null.yaml"
+        bad.write_text("entries:\n", encoding="utf-8")
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
+            ss.load_ledger(bad)
+        self.assertEqual(ctx.exception.code, 2)
+
+    def test_load_ledger_explicit_empty_list_is_legal(self) -> None:
+        """Отрицательный контроль к трём тестам выше: ЯВНАЯ пустота —
+        штатная (ровно так выглядит шаблон реестра нового проекта)."""
+        ok = self.tmp / "empty-ok.yaml"
+        ok.write_text("# шаблон нового проекта\nentries: []\n", encoding="utf-8")
+        self.assertEqual(ss.load_ledger(ok), [])
+
+    def test_load_ledger_non_utf8_errors_and_exits_2(self) -> None:
+        """UnicodeDecodeError — подкласс ValueError, а не OSError: раньше
+        реестр в чужой кодировке давал голый traceback вместо ERROR/exit 2."""
+        bad = self.tmp / "cp1251.yaml"
+        bad.write_bytes(b"entries: []\n# \xff\xfe\xff\n")
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
+            ss.load_ledger(bad)
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("ERROR: реестр нечитаем", buf.getvalue())
+
+    def test_duplicate_id_does_not_hide_the_dead_twin(self) -> None:
+        """🟡 четвёртого гейта / Codex P3: двусторонняя сверка ключевалась по
+        "id", поэтому дубли схлопывались и совпадение одной записи навсегда
+        прятало мёртвую вторую — это ровно критерий приёмки №3 тикета."""
+        finding = {"file": "prod/.env", "line": "1", "rule": "generic_assignment",
+                   "fingerprint": "b" * 64}
+        live = valid_entry(id="fp-1", fingerprint="b" * 64, scope="prod/**")
+        dead = valid_entry(id="fp-1", fingerprint="c" * 64, scope="docs/**")
+        active, suppressed, stale, rejected = ss.reconcile([finding], [live, dead])
+        self.assertEqual(len(suppressed), 1)
+        self.assertEqual(rejected, [])
+        self.assertEqual([e["scope"] for e in stale], ["docs/**"],
+                         "мёртвый дубль id обязан попасть в stale")
+
+    def test_two_entries_without_id_same_fingerprint_different_scope(self) -> None:
+        """Штатный сценарий: тот же ложный текст в двух местах, записи без
+        "id" — раньше обе схлопывались по общему fingerprint."""
+        finding = {"file": "prod/.env", "line": "1", "rule": "generic_assignment",
+                   "fingerprint": "b" * 64}
+        live = valid_entry(fingerprint="b" * 64, scope="prod/**")
+        dead = valid_entry(fingerprint="b" * 64, scope="docs/**")
+        del live["id"], dead["id"]
+        active, suppressed, stale, rejected = ss.reconcile([finding], [live, dead])
+        self.assertEqual(len(suppressed), 1)
+        self.assertEqual([e["scope"] for e in stale], ["docs/**"])
 
     def test_json_output_with_stale_entry_and_unquoted_yaml_date_does_not_crash(self) -> None:
         """Повторный гейт (НОВОЕ): --format json + протухшая запись с
