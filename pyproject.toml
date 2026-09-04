@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "seo-cycle"
+# Версия дублирует VERSION (не dynamic из файла — надёжнее для чистого
+# `pip install -e .` на разных версиях setuptools); совпадение проверяет
+# tests/test_pyproject.py.
+version = "2.1.0"
+description = "SEO/контент-цикл-оркестратор для Codex CLI и Claude Code"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+dependencies = [
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+# GA4 / GSC / GTM / Merchant Center / google-nlp-audit / google-trends.
+google = [
+    "google-api-python-client",
+    "google-auth",
+    "google-analytics-data",
+    "requests",
+    "beautifulsoup4",
+    "pytrends",
+]
+# scripts/knowledge/ — Graphify-граф (реальный пакет на PyPI называется
+# "graphifyy", см. scripts/install-ai-toolchain.sh: `uv tool install
+# graphifyy`; импортируется как `graphify`), zvec (опциональный
+# hybrid-index, скрипт работает и без него — см. zvec_available()).
+knowledge = [
+    "graphifyy",
+    "requests",
+    "zvec",
+]
+# ads-analytics / ads-apply / ads-draft-builder / google-ads-fetch /
+# google-ads-health сегодня используют только stdlib (urllib) — сторонних
+# пакетов нет. Группа заведена под будущий SDK, чтобы поверхность extras
+# не менялась, когда он появится.
+ads = []
+# scripts/dataforseo-fetch.py.
+dataforseo = [
+    "requests",
+]
+# gsc-indexing-queue / writerzen-source-pack — экспорт в Excel.
+export = [
+    "openpyxl",
+]
+# wp-photo-image — обработка изображений.
+media = [
+    "Pillow",
+]
+dev = [
+    "ruff",
+    "mypy",
+    "coverage",
+    "pydantic",
+]
+all = [
+    "google-api-python-client",
+    "google-auth",
+    "google-analytics-data",
+    "beautifulsoup4",
+    "pytrends",
+    "graphifyy",
+    "zvec",
+    "openpyxl",
+    "Pillow",
+    "requests",
+]
+
+[tool.setuptools]
+# Единственный настоящий импортируемый пакет в дереве (один __init__.py на
+# весь репозиторий) — остальное исполняемые скрипты, не пакеты. Явный
+# packages/package-dir вместо auto-discovery: корень репозитория держит
+# много не-пакетных каталогов (docs/, scripts/, tests/, templates/, ...),
+# на которых автообнаружение setuptools падает или ошибается с "Multiple
+# top-level packages discovered".
+packages = ["seo_cycle_core"]
+package-dir = { "seo_cycle_core" = "scripts/seo_cycle_core" }
