@@ -49,6 +49,14 @@ RUNTIME="all"
 MODE="store"          # store | update | project | upgrade-all
 DETACH=0
 SYNC_ONLY=0
+# NETWORK_ALLOWED is DELIBERATELY separate from SYNC_ONLY (R7): SYNC_ONLY
+# means "skip the project wizard/registry, just re-link" and is also reused
+# internally by upgrade_all() (which already called ensure_store and DOES
+# want an origin/SHA check with the data it just fetched). NETWORK_ALLOWED=0
+# means "make zero network calls" and is set ONLY by the user-facing --sync
+# flag below — it, not SYNC_ONLY, is what ensure_worktree()'s origin check
+# gates on.
+NETWORK_ALLOWED=1
 RUN_INIT=1
 REGISTER=0
 WITH_WORDPRESS_MCP="${SEO_CYCLE_WITH_WORDPRESS_MCP:-0}"
@@ -65,7 +73,7 @@ while [ "$#" -gt 0 ]; do
         --project) PROJECT_DIR="${2:?--project requires a directory}"; MODE="project"; shift 2 ;;
         --pin) PIN="${2:?--pin requires a tag}"; shift 2 ;;
         --runtime) RUNTIME="${2:?--runtime requires all|claude|codex}"; shift 2 ;;
-        --sync) SYNC_ONLY=1; RUN_INIT=0; shift ;;
+        --sync) SYNC_ONLY=1; RUN_INIT=0; NETWORK_ALLOWED=0; shift ;;
         --detach) DETACH=1; shift ;;
         --update) MODE="update"; shift ;;
         --upgrade-all) MODE="upgrade-all"; shift ;;
@@ -175,10 +183,14 @@ ensure_worktree() {
         warn "тег $tag не найден в $repo_dir"
         return 1
     fi
-    # --sync only re-links what an earlier attach already verified against
-    # origin — no network here by design (F-7/R3). Only the local snapshot
-    # reconciliation below (no network) still applies.
-    if [ "$SYNC_ONLY" != "1" ]; then
+    # Gated on NETWORK_ALLOWED, NOT SYNC_ONLY (R7): the user-facing --sync
+    # sets both and promises zero network calls, but upgrade_all() also sets
+    # SYNC_ONLY=1 to reuse this light re-link path while it already has
+    # network (it just ran ensure_store) and NEEDS the origin/SHA check —
+    # a divergent tag must not be silently written to the lock of four live
+    # sites during a re-pin. Only the local snapshot reconciliation below
+    # (no network) is unconditional.
+    if [ "$NETWORK_ALLOWED" = "1" ]; then
         local remote_out
         remote_out="$(git -C "$repo_dir" ls-remote --tags origin "refs/tags/$tag" 2>/dev/null || true)"
         if [ -z "$remote_out" ]; then
@@ -636,11 +648,13 @@ PYEOF
 
     # seo-keywords (optional sibling): pinned to a tag, same as seo-cycle —
     # no silent "track HEAD" default (R4/D5: that was D5 renamed, not fixed).
-    # Under --sync, reuse the already-locked pin instead of recomputing
-    # latest_tag() (R3/F-7: no network during --sync).
+    # Gated on NETWORK_ALLOWED, not SYNC_ONLY (R7 — see ensure_worktree()):
+    # a real --sync reuses the already-locked pin instead of recomputing
+    # latest_tag(); upgrade_all() (SYNC_ONLY=1 but NETWORK_ALLOWED=1) still
+    # gets a fresh latest_tag() against the network it already has.
     local have_kw=0 kw_target="" kw_pin="" kw_commit=""
     if [ -d "$KW_CORE/.git" ]; then
-        if [ "$SYNC_ONLY" = "1" ]; then
+        if [ "$NETWORK_ALLOWED" != "1" ]; then
             kw_pin="$(read_lock_version "$project_dir" "seo-keywords")"
         else
             kw_pin="$(latest_tag "$KW_CORE")"
@@ -653,7 +667,7 @@ PYEOF
             else
                 warn "seo-keywords: тег $kw_pin недоступен — пропускаю подключение"
             fi
-        elif [ "$SYNC_ONLY" != "1" ]; then
+        elif [ "$NETWORK_ALLOWED" = "1" ]; then
             warn "seo-keywords: в store нет тегов — пропускаю подключение (первый релиз ещё не вышел)"
         fi
     fi

@@ -47,6 +47,14 @@ fi
 
 SCHED_PATH="$HOME/.local/bin:$ROOT/.venv/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
+sq() { # escape a value for embedding inside a single-quoted '...' segment
+  # MUST be an unquoted expansion (see wrap_cmd's escaped= below for why):
+  # wrapping this in "..." turns \' into the two literal chars \+' instead
+  # of a plain '.
+  local out=${1//\'/\'\\\'\'}
+  printf "%s" "$out"
+}
+
 wrap_cmd() { # raw-command -> command, prefixed with ai-secret run <scope> when --scope is set
   local raw="$1"
   if [[ -n "$SCOPE" ]]; then
@@ -66,9 +74,9 @@ wrap_cmd() { # raw-command -> command, prefixed with ai-secret run <scope> when 
 if [[ "$(uname)" != "Darwin" ]]; then
   PROJECT="${PROJECT:-/path/to/project}"
   echo "# Linux: добавьте в crontab -e:"
-  echo "10 6 * * *  $(wrap_cmd "'$LAUNCHER' pulse --global")"
-  echo "30 6 * * 1  $(wrap_cmd "'$LAUNCHER' progress --global --write --html")"
-  [[ $WITH_MONTHLY -eq 1 ]] && echo "0 7 1 * *   $(wrap_cmd "cd '$PROJECT' && '$LAUNCHER' run monthly")"
+  echo "10 6 * * *  $(wrap_cmd "'$(sq "$LAUNCHER")' pulse --global")"
+  echo "30 6 * * 1  $(wrap_cmd "'$(sq "$LAUNCHER")' progress --global --write --html")"
+  [[ $WITH_MONTHLY -eq 1 ]] && echo "0 7 1 * *   $(wrap_cmd "cd '$(sq "$PROJECT")' && '$(sq "$LAUNCHER")' run monthly")"
   exit 0
 fi
 
@@ -131,10 +139,10 @@ WEEKLY="<key>StartCalendarInterval</key><dict><key>Weekday</key><integer>1</inte
 MONTHLY="<key>StartCalendarInterval</key><dict><key>Day</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>"
 
 # pulse --global идёт по реестру (все active-проекты); cd — только запасной контекст
-write_plist "daily-progress" "$DAILY" "cd '$PROJECT' && '$LAUNCHER' pulse --global"
-write_plist "weekly-portfolio" "$WEEKLY" "'$LAUNCHER' progress --global --write --html"
+write_plist "daily-progress" "$DAILY" "cd '$(sq "$PROJECT")' && '$(sq "$LAUNCHER")' pulse --global"
+write_plist "weekly-portfolio" "$WEEKLY" "'$(sq "$LAUNCHER")' progress --global --write --html"
 if [[ $WITH_MONTHLY -eq 1 ]]; then
-  write_plist "monthly-runner" "$MONTHLY" "cd '$PROJECT' && '$LAUNCHER' run monthly"
+  write_plist "monthly-runner" "$MONTHLY" "cd '$(sq "$PROJECT")' && '$(sq "$LAUNCHER")' run monthly"
 fi
 
 echo

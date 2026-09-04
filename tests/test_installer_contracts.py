@@ -234,6 +234,44 @@ class SyncOfflineTest(InstallerFixture):
         )
 
 
+class UpgradeAllHonestyTest(InstallerFixture):
+    """R7: fixing R3 (no network in --sync) must not silently disable the
+    origin/SHA check for --upgrade-all, which reuses --sync's code path
+    (SYNC_ONLY=1) internally but — unlike a real --sync — already has
+    network (it just ran ensure_store) and is exactly what T-055 runs
+    against four live sites. NETWORK_ALLOWED, not SYNC_ONLY, must gate the
+    origin check in ensure_worktree()."""
+
+    def test_upgrade_all_rejects_a_tag_diverged_from_origin(self) -> None:
+        # A real attach registers the project (registry_update) and writes
+        # the honest, origin-verified commit to the lock.
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        original_commit = self.read_lock()["external"]["seo-cycle"]["commit"]
+
+        # Diverge CORE's v1.0.0 locally without ever pushing — origin still
+        # has the ORIGINAL commit under that tag name (same setup as the
+        # same-named-tag test above, R6).
+        (self.core / "VERSION").write_text("1.0.0-upgrade-all-drift\n", encoding="utf-8")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local drift")
+        _git(self.core, "tag", "-f", "v1.0.0")
+
+        proc2 = self.run_install("--upgrade-all", "--pin", "v1.0.0")
+        self.assertNotEqual(
+            proc2.returncode, 0,
+            "upgrade-all обязан отказать на разошедшемся с origin теге, а не "
+            f"переписать лок — stdout/stderr: {proc2.stdout + proc2.stderr!r}",
+        )
+        self.assertEqual(
+            self.read_lock()["external"]["seo-cycle"]["commit"], original_commit,
+            "upgrade-all не должен переписывать лок расходящимся с origin коммитом",
+        )
+
+
 class ShimPinSelectionTest(unittest.TestCase):
     """Exercises bin/seo-cycle's own upward-search redirect (D7) directly,
     independent of install.sh — two fake SKILL_ROOTs, one is the project pin."""
@@ -277,6 +315,24 @@ class ShimPinSelectionTest(unittest.TestCase):
         )
         self.assertEqual(proc.stdout.strip(), "store-head", proc.stdout + proc.stderr)
         self.assertIn("версия хранилища, не пин проекта", proc.stderr)
+
+
+class NoSilentDefaultPinsTest(unittest.TestCase):
+    """Static guard for R4: a mutation that reintroduces the old
+    kw_pin="HEAD" default (D5 renamed rather than fixed) must be caught even
+    without running the slower git-fixture tests above. Mirrors the
+    pin="main" acceptance check from the original ticket."""
+
+    def test_no_silent_head_or_main_default_for_any_tool_pin(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        self.assertNotIn(
+            'kw_pin="HEAD"', source,
+            "seo-keywords не должен молча подставлять HEAD как псевдо-пин (R4/D5)",
+        )
+        self.assertNotIn(
+            'pin="main"', source,
+            "ни один тег не должен молча откатываться на main (D5)",
+        )
 
 
 if __name__ == "__main__":

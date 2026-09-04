@@ -132,7 +132,11 @@ class EveryJobIsWrappedTest(unittest.TestCase):
         )
         self.fake_launcher.chmod(0o755)
 
-        self.project = self.tmp / "проект с пробелом"
+        # Space, Cyrillic AND an embedded single quote — a path with a quote
+        # broke wrap_cmd's own nested single-quoting (pre-existing, not a
+        # T-049 regression; closed alongside R1's fix since it's the same
+        # sq()/wrap_cmd escaping code path).
+        self.project = self.tmp / "проект с пробелом и o'brien"
         self.project.mkdir()
 
     def _run_job(self, cmd: str) -> subprocess.CompletedProcess:
