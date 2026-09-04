@@ -23,6 +23,24 @@ spec = importlib.util.spec_from_file_location("dfs_fetch", SCRIPTS / "dataforseo
 dfs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(dfs)
 
+_find_config_patcher: mock._patch | None = None
+
+
+def setUpModule() -> None:
+    """Герметичность (T-059): fetch() зовёт effective_budget() -> find_config(),
+    который иначе ищет seo-cycle.yaml от реального cwd процесса unittest. Ни один
+    тест в этом файле не должен зависеть от того, что лежит на диске снаружи —
+    кроме ConfigBudgetTest, который явно переопределяет find_config() у себя
+    (вложенный mock.patch.object корректно восстанавливает это значение на выходе)."""
+    global _find_config_patcher
+    _find_config_patcher = mock.patch.object(dfs, "find_config", return_value=None)
+    _find_config_patcher.start()
+
+
+def tearDownModule() -> None:
+    if _find_config_patcher is not None:
+        _find_config_patcher.stop()
+
 
 def volume_response(cost: float = 0.05) -> dict:
     return {
