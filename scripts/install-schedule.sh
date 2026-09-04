@@ -10,8 +10,13 @@
 #   monthly  seo-cycle run monthly                               (только с --with-monthly)
 #
 # Usage:
-#   bash scripts/install-schedule.sh --project /path/to/project [--with-monthly]
+#   bash scripts/install-schedule.sh --project /path/to/project --scope <имя> [--with-monthly]
+#   bash scripts/install-schedule.sh --project /path/to/project --scope <имя> --dry-run
 #   bash scripts/install-schedule.sh --uninstall
+#
+# --scope <имя>   оборачивает каждую команду в `ai-secret run <имя> -- /usr/bin/env PATH=...`
+#                 (I-061: без обёртки webmaster-fetch деградирует молча — секретов нет).
+# --dry-run       печатает готовые plist'ы в stdout, ничего не пишет и не грузит в launchd.
 
 set -euo pipefail
 
@@ -22,22 +27,56 @@ PREFIX="com.seo-cycle"
 PROJECT=""
 WITH_MONTHLY=0
 UNINSTALL=0
+SCOPE=""
+DRY_RUN=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --project) PROJECT="$2"; shift 2;;
     --with-monthly) WITH_MONTHLY=1; shift;;
     --uninstall) UNINSTALL=1; shift;;
+    --scope) SCOPE="$2"; shift 2;;
+    --dry-run) DRY_RUN=1; shift;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
 
+if [[ -z "$SCOPE" ]]; then
+  echo "⚠ секреты не подмешаны (--scope не задан) — fetch деградирует тихо" >&2
+fi
+
+SCHED_PATH="$HOME/.local/bin:$ROOT/.venv/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+sq() { # escape a value for embedding inside a single-quoted '...' segment
+  # MUST be an unquoted expansion (see wrap_cmd's escaped= below for why):
+  # wrapping this in "..." turns \' into the two literal chars \+' instead
+  # of a plain '.
+  local out=${1//\'/\'\\\'\'}
+  printf "%s" "$out"
+}
+
+wrap_cmd() { # raw-command -> command, prefixed with ai-secret run <scope> when --scope is set
+  local raw="$1"
+  if [[ -n "$SCOPE" ]]; then
+    # /usr/bin/env's argv[0] must be a real executable — it cannot run a
+    # shell builtin like `cd` (R1: "cd '$PROJECT' && …" silently dropped
+    # the ai-secret/PATH wrapper and either no-op'd or exited 127). So the
+    # raw command — cd/&&/quoting included — is handed to `bash -c` as ONE
+    # argument, and env execs bash, not the raw text directly. Escape
+    # embedded single quotes for that nested single-quoted argument.
+    local escaped=${raw//\'/\'\\\'\'}
+    printf "%s" "'$HOME/.local/bin/ai-secret' run $SCOPE -- /usr/bin/env 'PATH=$SCHED_PATH' /bin/bash -c '$escaped'"
+  else
+    printf "%s" "$raw"
+  fi
+}
+
 if [[ "$(uname)" != "Darwin" ]]; then
   PROJECT="${PROJECT:-/path/to/project}"
   echo "# Linux: добавьте в crontab -e:"
-  echo "10 6 * * *  '$LAUNCHER' pulse --global"
-  echo "30 6 * * 1  '$LAUNCHER' progress --global --write --html"
-  [[ $WITH_MONTHLY -eq 1 ]] && echo "0 7 1 * *   cd '$PROJECT' && '$LAUNCHER' run monthly"
+  echo "10 6 * * *  $(wrap_cmd "'$(sq "$LAUNCHER")' pulse --global")"
+  echo "30 6 * * 1  $(wrap_cmd "'$(sq "$LAUNCHER")' progress --global --write --html")"
+  [[ $WITH_MONTHLY -eq 1 ]] && echo "0 7 1 * *   $(wrap_cmd "cd '$(sq "$PROJECT")' && '$(sq "$LAUNCHER")' run monthly")"
   exit 0
 fi
 
@@ -51,11 +90,13 @@ if [[ $UNINSTALL -eq 1 ]]; then
   exit 0
 fi
 
-if [[ -z "$PROJECT" || ! -f "$PROJECT/seo-cycle.yaml" ]]; then
+if [[ $DRY_RUN -eq 1 ]]; then
+  PROJECT="${PROJECT:-/path/to/project}"
+elif [[ -z "$PROJECT" || ! -f "$PROJECT/seo-cycle.yaml" ]]; then
   echo "ERROR: --project /path/to/project (с seo-cycle.yaml) обязателен" >&2
   exit 2
 fi
-mkdir -p "$AGENTS_DIR"
+[[ $DRY_RUN -eq 1 ]] || mkdir -p "$AGENTS_DIR"
 
 xml_escape() { # & < > обязаны быть сущностями внутри <string> (launchd прощает, plutil/PlistBuddy — нет)
   local s="$1"
@@ -65,9 +106,10 @@ xml_escape() { # & < > обязаны быть сущностями внутри
 
 write_plist() { # name interval-xml program-args
   local name="$1" schedule="$2" args
-  args="$(xml_escape "$3")"
+  args="$(xml_escape "$(wrap_cmd "$3")")"
   local plist="$AGENTS_DIR/$PREFIX.$name.plist"
-  cat > "$plist" <<PLIST
+  local content
+  content="$(cat <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -81,6 +123,12 @@ write_plist() { # name interval-xml program-args
   <key>StandardErrorPath</key><string>/tmp/$PREFIX.$name.log</string>
 </dict></plist>
 PLIST
+)"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "$content"
+    return 0
+  fi
+  printf "%s\n" "$content" > "$plist"
   launchctl unload "$plist" 2>/dev/null || true
   launchctl load "$plist"
   echo "✓ $PREFIX.$name (лог: /tmp/$PREFIX.$name.log)"
@@ -91,10 +139,10 @@ WEEKLY="<key>StartCalendarInterval</key><dict><key>Weekday</key><integer>1</inte
 MONTHLY="<key>StartCalendarInterval</key><dict><key>Day</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>"
 
 # pulse --global идёт по реестру (все active-проекты); cd — только запасной контекст
-write_plist "daily-progress" "$DAILY" "cd '$PROJECT' && '$LAUNCHER' pulse --global"
-write_plist "weekly-portfolio" "$WEEKLY" "'$LAUNCHER' progress --global --write --html"
+write_plist "daily-progress" "$DAILY" "cd '$(sq "$PROJECT")' && '$(sq "$LAUNCHER")' pulse --global"
+write_plist "weekly-portfolio" "$WEEKLY" "'$(sq "$LAUNCHER")' progress --global --write --html"
 if [[ $WITH_MONTHLY -eq 1 ]]; then
-  write_plist "monthly-runner" "$MONTHLY" "cd '$PROJECT' && '$LAUNCHER' run monthly"
+  write_plist "monthly-runner" "$MONTHLY" "cd '$(sq "$PROJECT")' && '$(sq "$LAUNCHER")' run monthly"
 fi
 
 echo
