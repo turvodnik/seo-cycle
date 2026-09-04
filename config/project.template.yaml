@@ -419,7 +419,7 @@ governance:
       monthly_usd_cap: 0
     dataforseo:
       enabled: false
-      monthly_usd_cap: 0
+      monthly_usd_cap: 5          # соответствует --budget в dataforseo-fetch.py
 
   # Автоцикл качества (loop-runner.py): gate -> repair -> re-check с лимитом
   # попыток и самопроверками (quality/evidence классы findings). При исчерпании
@@ -919,9 +919,18 @@ sources:
     location_id_env: GOOGLE_BUSINESS_LOCATION_ID
     note: "Local SEO без analytics tag."
   dataforseo:
-    enabled: false
-    requires_paid_subscription: true
-    delegate_to: "claude-seo:seo-dataforseo"
+    # Google SERP/частотность/Labs/бэклинки/onpage по всему миру (вкл. ЕС и РФ).
+    # Два пути к одним и тем же данным:
+    #   • MCP-сервер `dataforseo` — для диалога с агентом (см. .mcp.json проекта);
+    #   • helper_script — для конвейеров и cron (кэш + учёт трат по полю cost).
+    enabled: false              # включить после верификации аккаунта и budget approval
+    auth_env: DATAFORSEO_API_KEY_BASE64   # base64("login:password"), берётся из Keychain
+    mcp_server: dataforseo
+    helper_script: ./.codex/skills/seo-cycle/scripts/dataforseo-fetch.py
+    monthly_usd_cap: 5           # helper останавливается при исчерпании (--force снимает)
+    cache_ttl_days: 30
+    pricing_model: pay_as_you_go # тратится баланс аккаунта, подписки нет
+    note: "Аккаунт должен быть верифицирован в app.dataforseo.com, иначе все методы данных отвечают 40104."
   keyso:
     # Keys.so — Яндекс/РФ-данные (Wordstat-частоты, видимость, конкуренты, lost).
     # Вкл/выкл — из region_profile (ru/global). Лимит 10 запросов/10сек.
