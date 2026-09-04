@@ -10,22 +10,24 @@ description: Сбор семантического ядра из всех акт
 ## Контракт модуля
 
 - **Входы:** `seo-cycle.yaml` (`region_profile`, `sources.*`); `resolve-sources.py` — обязательный шаг 0
-- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `python3 scripts/cycle-state.py init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
+- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `seo-cycle cycle init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
 - **Выходы:** `02-keywords.md`, `03-clusters.md`, `seo/source-attribution.csv`, raw в `02a-*/02b-*`
-- **Gate:** `python3 scripts/cycle-state.py gate keywords` / `gate clusters`
+- **Gate:** `seo-cycle cycle gate keywords` / `gate clusters`
 - **Делегаты:** `delegate.keyword_research` (default `seo-keyword-researcher`), `delegate.cluster_analysis`
 - **Общие правила:** `../_shared/policy-intake.md` (политики/бюджеты проекта — прочитать до платных действий), `../_shared/scorecard.md` (самооценка после задачи), `../_shared/rag-usage.md` (переиспользуй накопленное).
 
 ---
 
 > **Внешний скилл.** Полная реализация фаз 2–3 вынесена в репозиторий `seo-keywords` (устанавливается вместе с seo-cycle, поверхность `.claude|.codex/skills/seo-keywords`). Если внешний скилл подключён — работай по нему; текст ниже остаётся каноническим контрактом входов/выходов и правил экономии.
+>
+> **Приоритет при конфликте.** При подключённом внешнем скилле `seo-keywords` (лок проекта, блок `external.seo-keywords`) его инструкции главнее; этот файл остаётся контрактом входов/выходов фазы и списком артефактов.
 ## Phase 2 — Keyword Research (Multi-source, config-driven)
 
 **Цель:** собрать полное семантическое ядро под тему **из всех активных источников региона**.
 
 **Шаг 0 — развернуть источники региона (обязательно, один раз):**
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/resolve-sources.py
+seo-cycle run script resolve-sources
 ```
 Скрипт читает `region_profile` из конфига (`ru`/`eu`/`us`/`global`), мёрджит с локальными `sources.*` override и печатает финальный список активных источников + пропущенных с причиной (напр. «ahrefs недоступно в регионе», «dataforseo через прокси»). Артефакт: `seo/cycles/<date>/active-sources.json`. **Запускай только источники из этого списка** — это и экономит токены, и не даёт дёрнуть инструмент, недоступный в регионе. Если в конфиге нет `region_profile` (legacy) — скрипт отдаёт `sources.*.enabled` как есть.
 

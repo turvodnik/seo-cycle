@@ -121,7 +121,7 @@ Pogo-sticking = пользователь возвращается на SERP в �
 
 ```bash
 # Стандартный QA + SXO gates:
-1. python3 ~/.codex/skills/seo-cycle/scripts/check-stop-words.py draft.md   # tone of voice
+1. seo-cycle run script check-stop-words draft.md   # tone of voice
 2. # Fact-check через Perplexity (правило #11)
 3. # Stock-first check (правило #10)
 4. # Прогон через NW evaluate (target >= 65)

@@ -232,7 +232,7 @@ def rag_posture(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, An
     db_path = rag_db_path(project_root, cfg)
     if not db_path.exists():
         return {"status": "not_indexed",
-                "hint": "python3 ~/.codex/skills/seo-cycle/scripts/rag-index.py --write"}
+                "hint": "seo-cycle run script rag-index --write"}
     try:
         conn = open_db(db_path)
         stats = index_stats(conn)
@@ -242,7 +242,7 @@ def rag_posture(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, An
     return {"status": "ready", "db": rel_display(project_root, db_path),
             "chunks": stats["chunks"], "embedded": stats["embedded"],
             "updated": dt.datetime.fromtimestamp(db_path.stat().st_mtime).isoformat(timespec="seconds"),
-            "query_hint": "python3 ~/.codex/skills/seo-cycle/scripts/rag-query.py \"<вопрос>\" --top-k 5"}
+            "query_hint": "seo-cycle run script rag-query \"<вопрос>\" --top-k 5"}
 
 
 def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route: bool) -> dict[str, Any]:
@@ -323,10 +323,10 @@ def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route:
         "human_secret_env_names": limit(env_names(tool_stack, launch_plan), 50),
         "rag": rag_posture(cfg, project_root),
         "next_commands": [
-            "python3 ~/.codex/skills/seo-cycle/scripts/context-pack.py --task \"<current task>\" --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task \"<current task>\" --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py report --write",
+            "seo-cycle context --task \"<current task>\" --write",
+            "seo-cycle run script task-router --task \"<current task>\" --write",
+            "seo-cycle spend --write",
+            "seo-cycle ledger report --write",
         ],
         "outputs": outputs,
     }

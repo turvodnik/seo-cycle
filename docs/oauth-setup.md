@@ -81,7 +81,7 @@ GOOGLE_APPLICATION_CREDENTIALS=/Users/<you>/.config/seo-cycle/google-credentials
 
 Проверка:
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/gsc-fetch.py --days 7 --row-limit 10 | head
+seo-cycle run script gsc-fetch --days 7 --row-limit 10 | head
 ```
 
 ## 3. Google Analytics 4 (GA4) доступ
@@ -98,7 +98,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/gsc-fetch.py --days 7 --row-limit 10 |
 
 Проверка:
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/ga4-fetch.py --days 7 --limit 10 | head
+seo-cycle run script ga4-fetch --days 7 --limit 10 | head
 ```
 
 ## 4. PageSpeed Insights
@@ -116,7 +116,7 @@ PSI работает **без авторизации**, но с лимитом ~
 
 Проверка:
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/psi-fetch.py https://example.com --strategy mobile
+seo-cycle run script psi-fetch https://example.com --strategy mobile
 ```
 
 ## 5. Яндекс OAuth (для Метрики и Вебмастера)
@@ -174,20 +174,20 @@ YANDEX_WEBMASTER_HOST_ID=https:example.com:443
 
 Проверка:
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/metrika-fetch.py --days 7 --limit 5
-python3 ~/.codex/skills/seo-cycle/scripts/webmaster-fetch.py --days 7 --limit 10
+seo-cycle run script metrika-fetch --days 7 --limit 5
+seo-cycle run script webmaster-fetch --days 7 --limit 10
 ```
 
 Переобход важных URL из общей очереди:
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/yandex-recrawl-submit.py seo-cycle.yaml \
+seo-cycle run script yandex-recrawl-submit seo-cycle.yaml \
   --queue-file seo/technical/gsc-indexing-request-queue.csv \
   --priority P0,P1 \
   --max 20 \
   --live \
   --write
 
-python3 ~/.codex/skills/seo-cycle/scripts/yandex-recrawl-submit.py seo-cycle.yaml \
+seo-cycle run script yandex-recrawl-submit seo-cycle.yaml \
   --mode status \
   --live \
   --write
@@ -209,7 +209,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/yandex-recrawl-submit.py seo-cycle.yam
    ```
 4. Запускать только важные URL и кэшировать результаты:
    ```bash
-   python3 ~/.codex/skills/seo-cycle/scripts/google-nlp-audit.py --help
+   seo-cycle run script google-nlp-audit --help
    ```
 
 ## 7. Google Merchant, Business Profile и YouTube
@@ -246,7 +246,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/yandex-recrawl-submit.py seo-cycle.yam
    ```
 4. Отправка URL из общей очереди:
    ```bash
-   python3 ~/.codex/skills/seo-cycle/scripts/indexnow-submit.py seo-cycle.yaml \
+   seo-cycle run script indexnow-submit seo-cycle.yaml \
      --queue-file seo/technical/gsc-indexing-request-queue.csv \
      --priority P0,P1 \
      --max 100 \
@@ -338,17 +338,17 @@ XMLRiver полезен как дешёвый enrichment provider для Google/
    ```
 4. Проверь readiness:
    ```bash
-   python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-health.py --write
+   seo-cycle run script xmlriver-health --write
    ```
 5. Безопасный импорт готового ответа:
    ```bash
-   python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-source-pack.py --query "Плита ОСП" --engine yandex --input-file serp.xml --write
-   python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-source-pack.py --query "Плита ОСП" --engine wordstat --input-file wordstat.json --input-format json --write
+   seo-cycle run script xmlriver-source-pack --query "Плита ОСП" --engine yandex --input-file serp.xml --write
+   seo-cycle run script xmlriver-source-pack --query "Плита ОСП" --engine wordstat --input-file wordstat.json --input-format json --write
    ```
 6. Live-запрос только после approval:
    ```bash
-   python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service xmlriver --category paid_api --requests 1 --fail-on-block
-   python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-source-pack.py --query "Плита ОСП" --engine yandex --additional searchsters,rs_y,y_of --live --allow-paid --write
+   seo-cycle ledger check --service xmlriver --category paid_api --requests 1 --fail-on-block
+   seo-cycle run script xmlriver-source-pack --query "Плита ОСП" --engine yandex --additional searchsters,rs_y,y_of --live --allow-paid --write
    ```
 
 ### 11.2. WriterZen browser/export
@@ -358,11 +358,11 @@ WriterZen подключается как browser/export provider: API-ключ 
 1. Открой [app.writerzen.net](https://app.writerzen.net/) и войди вручную.
 2. Первый раз запусти health, чтобы зафиксировать browser/export readiness:
    ```bash
-   python3 ~/.codex/skills/seo-cycle/scripts/writerzen-health.py --browser-available --write
+   seo-cycle run script writerzen-health --browser-available --write
    ```
 3. Запусти автоматический сбор по теме. Скрипт откроет WriterZen, создаст нужные отчёты, скачает CSV/XLSX в `seo/research/writerzen/imports/` и сразу импортирует:
    ```bash
-   python3 ~/.codex/skills/seo-cycle/scripts/writerzen-browser-collect.py --topic "Плита ОСП" --force-new-report --manual-fallback-seconds 120 --write
+   seo-cycle run script writerzen-browser-collect --topic "Плита ОСП" --force-new-report --manual-fallback-seconds 120 --write
    ```
 4. По умолчанию он создаёт/скачивает:
    - Topic Discovery — ширина темы и related topics.
@@ -371,11 +371,11 @@ WriterZen подключается как browser/export provider: API-ключ 
    - Domain Focus — конкуренты, domain/DA-like evidence, ranking windows.
 5. Если UI изменился, включи supervised fallback: скрипт откроет страницу и будет ждать ручного клика Export, а download всё равно поймает и импортирует:
    ```bash
-   python3 ~/.codex/skills/seo-cycle/scripts/writerzen-browser-collect.py --topic "Плита ОСП" --manual-fallback-seconds 180 --write
+   seo-cycle run script writerzen-browser-collect --topic "Плита ОСП" --manual-fallback-seconds 180 --write
    ```
 6. Если экспорт уже скачан вручную, импортируй его напрямую:
    ```bash
-   python3 ~/.codex/skills/seo-cycle/scripts/writerzen-source-pack.py --topic "Плита ОСП" --export-file seo/research/writerzen/imports/writerzen-keyword-planner.csv --write
+   seo-cycle run script writerzen-source-pack --topic "Плита ОСП" --export-file seo/research/writerzen/imports/writerzen-keyword-planner.csv --write
    ```
 
 Правило контекста: в LLM передавать только `seo/research/distillates/writerzen/latest-summary.md/json` и `seo/research/vector/source_pack.jsonl`, не исходные CSV/XLSX.
@@ -390,8 +390,8 @@ AI API keys нужны только для сравнительных AI visibil
 
 Перед любым AI API запуском:
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service gemini --category llm --usd 0.25 --fail-on-block
+seo-cycle spend --write
+seo-cycle ledger check --service gemini --category llm --usd 0.25 --fail-on-block
 ```
 
 ## 13. Безопасность

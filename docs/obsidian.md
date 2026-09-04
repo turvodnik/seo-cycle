@@ -30,7 +30,7 @@ stock_inventory:                  # для Stock-First правила
 
 Если `stock_inventory` ещё не создан — скопируй шаблон:
 ```bash
-cp ~/.codex/skills/seo-cycle/scripts/stock-inventory.template.yaml \
+cp ./.codex/skills/seo-cycle/scripts/stock-inventory.template.yaml \
    seo/stock-inventory.yaml
 # Заполни реальными складскими позициями
 ```
@@ -38,7 +38,7 @@ cp ~/.codex/skills/seo-cycle/scripts/stock-inventory.template.yaml \
 ## Первый запуск
 
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/obsidian-sync.py
+seo-cycle run script obsidian-sync
 ```
 
 Создаст vault со структурой:
@@ -128,7 +128,7 @@ obsidian-vault/
 
 Vault обновляется по запросу:
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/obsidian-sync.py
+seo-cycle run script obsidian-sync
 ```
 
 Изменения вручную в vault **будут перезаписаны** при следующем sync (если ты их вручную не перенесёшь в исходники).
@@ -137,7 +137,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/obsidian-sync.py
 
 ### После публикации новой статьи / категории
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/obsidian-sync.py
+seo-cycle run script obsidian-sync
 ```
 
 ### После обновления stock-inventory.yaml
@@ -145,17 +145,17 @@ python3 ~/.codex/skills/seo-cycle/scripts/obsidian-sync.py
 
 ### Полная пересборка (если структура изменилась)
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/obsidian-sync.py --rebuild
+seo-cycle run script obsidian-sync --rebuild
 ```
 
 ### Dry-run (посмотреть что будет создано)
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/obsidian-sync.py --dry-run
+seo-cycle run script obsidian-sync --dry-run
 ```
 
 ### Без wiki-links (для просмотра «как есть»)
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/obsidian-sync.py --no-links
+seo-cycle run script obsidian-sync --no-links
 ```
 
 ## Plugins в Obsidian
@@ -233,7 +233,7 @@ LLM-агностично: skill `seo-cycle` работает в **обоих** �
 
 2. **Sync:**
    ```bash
-   python3 ~/.codex/skills/seo-cycle/scripts/obsidian-sync.py
+   seo-cycle run script obsidian-sync
    ```
 
 3. **Результат в vault:**

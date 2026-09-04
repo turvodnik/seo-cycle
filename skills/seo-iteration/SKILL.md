@@ -10,7 +10,7 @@ description: Итерации по данным (Phase 10): triggers-eval по �
 ## Контракт модуля
 
 - **Входы:** свежий `09-monitoring/*-snapshot.json`, `config/triggers.yaml` (+ `<project>/seo-triggers.yaml` override)
-- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `python3 scripts/cycle-state.py init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
+- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `seo-cycle cycle init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
 - **Выходы:** `10-iterations.md` — приоритизированный action list (P0/P1/P2, URL/запросы, делегаты)
 - **Gate:** список отсортирован по потенциалу и дедуплицирован; KPI-статус посчитан при заполненной секции `kpi`
 - **Делегаты:** по правилам триггеров: `content_strategist` / `content_writer` / `seo-auditor` и др.
@@ -34,9 +34,9 @@ config/triggers.yaml                   ├→ triggers-eval.py → 10-iterations
 ### Команда
 
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/triggers-eval.py \
+seo-cycle triggers \
     09-monitoring/YYYY-MM-DD-snapshot.json \
-    ~/.codex/skills/seo-cycle/config/triggers.yaml \
+    ./.codex/skills/seo-cycle/config/triggers.yaml \
     --output 10-iterations.md \
     --project-yaml ./seo-cycle.yaml   # для project-override правил
 ```
@@ -58,7 +58,7 @@ python3 ~/.codex/skills/seo-cycle/scripts/triggers-eval.py \
 
 Замыкает петлю «откуда брали ключи → что сработало». Раз в квартал (когда накопились данные ≥30-60 дней) сопоставь лог источников со snapshot:
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/source-attribution.py \
+seo-cycle attribution \
     --csv seo/source-attribution.csv \
     --snapshot 09-monitoring/<date>-snapshot.json
 ```

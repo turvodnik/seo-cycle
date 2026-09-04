@@ -10,9 +10,9 @@ description: Аудит сайта в рамках seo-cycle (Phase 1): инде
 ## Контракт модуля
 
 - **Входы:** `seo-cycle.yaml`; доступы по `seo/setup/access-key-assistant.md`
-- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `python3 scripts/cycle-state.py init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
+- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `seo-cycle cycle init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
 - **Выходы:** `<cycles_root>/<topic>/01-audit.md` (+ `local/`, `competitor-analysis.md`)
-- **Gate:** `python3 scripts/cycle-state.py gate audit` — артефакт готов и непуст
+- **Gate:** `seo-cycle cycle gate audit` — артефакт готов и непуст
 - **Делегаты:** `delegate.audit` (default `seo-auditor`), `delegate.technical_audit`
 - **Общие правила:** `../_shared/policy-intake.md` (политики/бюджеты проекта — прочитать до платных действий), `../_shared/scorecard.md` (самооценка после задачи), `../_shared/rag-usage.md` (переиспользуй накопленное).
 

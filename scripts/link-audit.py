@@ -234,7 +234,7 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
         write=args.write,
         commands=[
             "npx -y linkinator https://example.com --recurse --format json > linkinator.json",
-            "python3 ~/.codex/skills/seo-cycle/scripts/link-audit.py seo-cycle.yaml --input-json linkinator.json --write",
+            "seo-cycle run script link-audit seo-cycle.yaml --input-json linkinator.json --write",
         ],
         cache_parts={"slug": "link-audit", "target_url": target_url, "payload": raw_payload},
     )

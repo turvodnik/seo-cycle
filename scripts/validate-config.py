@@ -16,7 +16,7 @@ validate-config.py — валидатор seo-cycle.yaml.
 - чек-лист «что подключить»
 
 Использование:
-    python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py [path-to-config]
+    seo-cycle validate [path-to-config]
 
 Если путь не указан — ищет в 4 стандартных локациях.
 """
@@ -537,7 +537,7 @@ def check_governance(cfg: dict, project_root: pathlib.Path, checklist: list, war
         planner = automation.get("planner_script") or (cfg.get("monthly_automation", {}) or {}).get("planner_script")
         if planner and not pathlib.Path(os.path.expanduser(planner)).exists():
             warnings.append(f"automation planner_script не найден: {planner}")
-        checklist.append("Сгенерировать и проверить schedule artifacts: python3 ~/.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled")
+        checklist.append("Сгенерировать и проверить schedule artifacts: seo-cycle run script automation-plan --write --include-disabled")
 
 
 def check_content_rules(cfg: dict, project_root: pathlib.Path, warnings: list):
@@ -695,7 +695,8 @@ def main():
             for p in CONFIG_SEARCH_PATHS:
                 print(f"    {p}", file=sys.stderr)
             print(f"\n  Скопируй шаблон:", file=sys.stderr)
-            print(f"    cp ~/.codex/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml", file=sys.stderr)
+            template = pathlib.Path(__file__).resolve().parent.parent / "config" / "project.template.yaml"
+            print(f"    cp {template} seo-cycle.yaml", file=sys.stderr)
             sys.exit(2)
 
     project_root = cfg_path.parent

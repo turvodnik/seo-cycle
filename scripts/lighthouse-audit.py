@@ -202,7 +202,7 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
         write=args.write,
         commands=[
             "npx -y lighthouse https://example.com --quiet --output=json --output-path=lighthouse.json --only-categories=performance,accessibility,best-practices,seo",
-            "python3 ~/.codex/skills/seo-cycle/scripts/lighthouse-audit.py seo-cycle.yaml --input-json lighthouse.json --write",
+            "seo-cycle run script lighthouse-audit seo-cycle.yaml --input-json lighthouse.json --write",
         ],
         notes=["Use Lighthouse MCP when configured; this CLI wrapper keeps the same data-contract for Codex projects."],
         cache_parts={"slug": "lighthouse-audit", "url": url, "device": args.device, "payload": raw_payload},

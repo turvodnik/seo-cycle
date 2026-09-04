@@ -24,16 +24,16 @@ apt update && apt install -y python3 python3-pip git
 pip3 install pyyaml pydantic
 
 # 2. Репо скилла + проекты
-git clone https://github.com/turvodnik/seo-cycle ~/.codex/skills/seo-cycle
+git clone https://github.com/turvodnik/seo-cycle ./.codex/skills/seo-cycle
 git clone <репо проекта> ~/projects/<name>          # seo-cycle.yaml внутри
 
 # 3. Ключи: глобальный профиль агентства (0600)
 mkdir -p ~/.seo-cycle && touch ~/.seo-cycle/env.global && chmod 600 ~/.seo-cycle/env.global
-# заполнить: ~/.codex/skills/seo-cycle/scripts/auth-assistant.py set YANDEX_OAUTH_TOKEN --global
+# заполнить: ./.codex/skills/seo-cycle/scripts/auth-assistant.py set YANDEX_OAUTH_TOKEN --global
 # клиентские ключи проекта — в .env проекта (auth-assistant.py set ... без --global)
 
 # 4. Реестр проектов
-cp ~/.codex/skills/seo-cycle/config/projects-registry.yaml ~/.seo-cycle/  # и правьте пути
+cp ./.codex/skills/seo-cycle/config/projects-registry.yaml ~/.seo-cycle/  # и правьте пути
 ```
 
 ## Расписание: systemd timer (надёжнее cron)

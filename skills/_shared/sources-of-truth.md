@@ -3,7 +3,7 @@
 1. `seo-cycle.yaml` — конфиг проекта
 2. `<project>/CLAUDE.md` — правила проекта (если есть)
 3. `<project>/seo/entities/entities.yaml` — реестр сущностей проекта
-4. `~/.codex/skills/seo-cycle/prompts/` — универсальные промпт-шаблоны
+4. `./.codex/skills/seo-cycle/prompts/` — универсальные промпт-шаблоны
 5. `<artifacts.research_root>` — результаты исследований (ATP, Perplexity, LLM CLI)
 6. `seo/loops/` — журналы автоциклов качества (attempts, delta, эскалации)
 7. `seo/ads/` — raw exports, аналитика и драфты платной рекламы

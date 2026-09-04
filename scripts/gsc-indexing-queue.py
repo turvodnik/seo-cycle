@@ -569,9 +569,9 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
         distillate_payload=distillate,
         write=args.write,
         commands=[
-            "python3 ~/.codex/skills/seo-cycle/scripts/gsc-indexing-queue.py seo-cycle.yaml --gsc-discovered-file exports/discovered.csv --sitemap https://example.com/sitemap.xml --technical-check --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/gsc-request-indexing-browser.py seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --max 10 --auto-click --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/gsc-indexing-recheck.py seo-cycle.yaml --submitted-log seo/technical/gsc-indexing-submit.json --gsc-discovered-file exports/discovered-after-7d.csv --write",
+            "seo-cycle run script gsc-indexing-queue seo-cycle.yaml --gsc-discovered-file exports/discovered.csv --sitemap https://example.com/sitemap.xml --technical-check --write",
+            "seo-cycle run script gsc-request-indexing-browser seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --max 10 --auto-click --write",
+            "seo-cycle run script gsc-indexing-recheck seo-cycle.yaml --submitted-log seo/technical/gsc-indexing-submit.json --gsc-discovered-file exports/discovered-after-7d.csv --write",
         ],
         notes=[
             "Google does not provide a general public API to request indexing for ordinary pages; queue submission uses the Search Console UI helper.",

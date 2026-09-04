@@ -410,7 +410,7 @@ def allowed_from(service: str, node: dict[str, Any], limits: dict[str, dict[str,
 
 def preflight_command(service: str, category: str, limits: dict[str, dict[str, Any]]) -> str:
     parts = [
-        "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check",
+        "seo-cycle ledger check",
         "--service",
         service,
         "--category",

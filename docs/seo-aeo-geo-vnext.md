@@ -22,59 +22,59 @@ Russian ecommerce, AI visibility, and source-backed content planning.
 Run the full report pack:
 
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/token-waste-audit.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/perplexity-health.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/notebooklm-health.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/perplexity-collect.py seo-cycle.yaml --topic "Плита ОСП" --write
-python3 ~/.codex/skills/seo-cycle/scripts/notebooklm-source-pack.py seo-cycle.yaml --topic "SEO evidence" --export-file notebook.md --write
-python3 ~/.codex/skills/seo-cycle/scripts/expert-source-pack.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/ai-brand-audit.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/answer-units-audit.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/eeat-evidence-map.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/geo-kpi-model.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/technical-guardrails-audit.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/snippet-sitemap-audit.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/traffic-drop-diagnostics.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/cannibalization-audit.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/log-bot-audit.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/ai-bot-access-check.py seo-cycle.yaml --url https://example.com/ --write
-python3 ~/.codex/skills/seo-cycle/scripts/link-audit.py seo-cycle.yaml --input-json linkinator.json --url https://example.com/ --write
-python3 ~/.codex/skills/seo-cycle/scripts/redirect-map-audit.py seo-cycle.yaml --input redirects.csv --base-url https://example.com --write
-python3 ~/.codex/skills/seo-cycle/scripts/gsc-url-inspection.py seo-cycle.yaml --input-json gsc-url-inspection.json --url https://example.com/ --site-url sc-domain:example.com --write
-python3 ~/.codex/skills/seo-cycle/scripts/gsc-indexing-export-browser.py seo-cycle.yaml --issue-url "<GSC Pages issue URL>" --manual-fallback-seconds 120 --build-queue --write
-python3 ~/.codex/skills/seo-cycle/scripts/gsc-indexing-queue.py seo-cycle.yaml --gsc-discovered-file exports/discovered.csv --gsc-performance-file exports/gsc-performance.json --woocommerce-file exports/woocommerce.csv --technical-check --top 20 --write
-python3 ~/.codex/skills/seo-cycle/scripts/gsc-request-indexing-browser.py seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --max 10 --auto-click --write
-python3 ~/.codex/skills/seo-cycle/scripts/gsc-indexing-recheck.py seo-cycle.yaml --submitted-log seo/technical/gsc-indexing-submit.json --gsc-discovered-file exports/discovered-after-7d.csv --gsc-performance-file exports/gsc-performance-after-7d.json --write
-python3 ~/.codex/skills/seo-cycle/scripts/indexnow-submit.py seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --priority P0,P1 --max 100 --live --write
-python3 ~/.codex/skills/seo-cycle/scripts/yandex-recrawl-submit.py seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --priority P0,P1 --max 20 --live --write
-python3 ~/.codex/skills/seo-cycle/scripts/yandex-recrawl-submit.py seo-cycle.yaml --mode status --live --write
-python3 ~/.codex/skills/seo-cycle/scripts/bing-url-inspection.py seo-cycle.yaml --input-json bing-url-info.json --url https://example.com/ --site-url https://example.com/ --write
-python3 ~/.codex/skills/seo-cycle/scripts/technical-mcp-health.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/lighthouse-audit.py seo-cycle.yaml --input-json lighthouse.json --url https://example.com/ --write
-python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py seo-cycle.yaml --action basic-info --report-id 123456 --write
-python3 ~/.codex/skills/seo-cycle/scripts/labrika-source-pack.py seo-cycle.yaml --export-file labrika-export.md --write
-python3 ~/.codex/skills/seo-cycle/scripts/labrika-health.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/technical-site-audit.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/ru-commerce-readiness.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/offpage-risk-audit.py seo-cycle.yaml --write
-python3 ~/.codex/skills/seo-cycle/scripts/conversion-sxo-audit.py seo-cycle.yaml --write
+seo-cycle run script token-waste-audit seo-cycle.yaml --write
+seo-cycle run script perplexity-health seo-cycle.yaml --write
+seo-cycle run script notebooklm-health seo-cycle.yaml --write
+seo-cycle run script perplexity-collect seo-cycle.yaml --topic "Плита ОСП" --write
+seo-cycle run script notebooklm-source-pack seo-cycle.yaml --topic "SEO evidence" --export-file notebook.md --write
+seo-cycle run script expert-source-pack seo-cycle.yaml --write
+seo-cycle run script ai-brand-audit seo-cycle.yaml --write
+seo-cycle run script answer-units-audit seo-cycle.yaml --write
+seo-cycle run script eeat-evidence-map seo-cycle.yaml --write
+seo-cycle run script geo-kpi-model seo-cycle.yaml --write
+seo-cycle run script technical-guardrails-audit seo-cycle.yaml --write
+seo-cycle run script snippet-sitemap-audit seo-cycle.yaml --write
+seo-cycle run script traffic-drop-diagnostics seo-cycle.yaml --write
+seo-cycle cannibalization seo-cycle.yaml --write
+seo-cycle run script log-bot-audit seo-cycle.yaml --write
+seo-cycle run script ai-bot-access-check seo-cycle.yaml --url https://example.com/ --write
+seo-cycle run script link-audit seo-cycle.yaml --input-json linkinator.json --url https://example.com/ --write
+seo-cycle run script redirect-map-audit seo-cycle.yaml --input redirects.csv --base-url https://example.com --write
+seo-cycle run script gsc-url-inspection seo-cycle.yaml --input-json gsc-url-inspection.json --url https://example.com/ --site-url sc-domain:example.com --write
+seo-cycle run script gsc-indexing-export-browser seo-cycle.yaml --issue-url "<GSC Pages issue URL>" --manual-fallback-seconds 120 --build-queue --write
+seo-cycle run script gsc-indexing-queue seo-cycle.yaml --gsc-discovered-file exports/discovered.csv --gsc-performance-file exports/gsc-performance.json --woocommerce-file exports/woocommerce.csv --technical-check --top 20 --write
+seo-cycle run script gsc-request-indexing-browser seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --max 10 --auto-click --write
+seo-cycle run script gsc-indexing-recheck seo-cycle.yaml --submitted-log seo/technical/gsc-indexing-submit.json --gsc-discovered-file exports/discovered-after-7d.csv --gsc-performance-file exports/gsc-performance-after-7d.json --write
+seo-cycle run script indexnow-submit seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --priority P0,P1 --max 100 --live --write
+seo-cycle run script yandex-recrawl-submit seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --priority P0,P1 --max 20 --live --write
+seo-cycle run script yandex-recrawl-submit seo-cycle.yaml --mode status --live --write
+seo-cycle run script bing-url-inspection seo-cycle.yaml --input-json bing-url-info.json --url https://example.com/ --site-url https://example.com/ --write
+seo-cycle run script technical-mcp-health seo-cycle.yaml --write
+seo-cycle run script lighthouse-audit seo-cycle.yaml --input-json lighthouse.json --url https://example.com/ --write
+seo-cycle run script serpstat-audit seo-cycle.yaml --action basic-info --report-id 123456 --write
+seo-cycle run script labrika-source-pack seo-cycle.yaml --export-file labrika-export.md --write
+seo-cycle run script labrika-health seo-cycle.yaml --write
+seo-cycle run script technical-site-audit seo-cycle.yaml --write
+seo-cycle run script ru-commerce-readiness seo-cycle.yaml --write
+seo-cycle run script offpage-risk-audit seo-cycle.yaml --write
+seo-cycle run script conversion-sxo-audit seo-cycle.yaml --write
 ```
 
 Optional inputs:
 
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/technical-guardrails-audit.py seo-cycle.yaml --robots robots.txt --write
-python3 ~/.codex/skills/seo-cycle/scripts/log-bot-audit.py seo-cycle.yaml --log access.log --write
-python3 ~/.codex/skills/seo-cycle/scripts/ai-bot-access-check.py seo-cycle.yaml --url https://example.com/ --categories llm,search --write
-python3 ~/.codex/skills/seo-cycle/scripts/traffic-drop-diagnostics.py seo-cycle.yaml --input traffic.csv --write
-python3 ~/.codex/skills/seo-cycle/scripts/cannibalization-audit.py seo-cycle.yaml --input cannibalization.csv --write
-python3 ~/.codex/skills/seo-cycle/scripts/link-audit.py seo-cycle.yaml --live --url https://example.com/ --write
-python3 ~/.codex/skills/seo-cycle/scripts/lighthouse-audit.py seo-cycle.yaml --live --url https://example.com/ --write
-GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN=... python3 ~/.codex/skills/seo-cycle/scripts/gsc-url-inspection.py seo-cycle.yaml --url https://example.com/ --site-url sc-domain:example.com --live --write
-BING_WEBMASTER_API_KEY=... python3 ~/.codex/skills/seo-cycle/scripts/bing-url-inspection.py seo-cycle.yaml --url https://example.com/ --site-url https://example.com/ --live --write
-SERPSTAT_API_KEY=... python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py seo-cycle.yaml --action start --project-id 123 --live --write
-SERPSTAT_API_KEY=... python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py seo-cycle.yaml --action set-settings --project-id 123 --settings-json serpstat-settings.json --live --write
-SERPSTAT_API_KEY=... python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py seo-cycle.yaml --action issue-report --report-id 456 --live --write
+seo-cycle run script technical-guardrails-audit seo-cycle.yaml --robots robots.txt --write
+seo-cycle run script log-bot-audit seo-cycle.yaml --log access.log --write
+seo-cycle run script ai-bot-access-check seo-cycle.yaml --url https://example.com/ --categories llm,search --write
+seo-cycle run script traffic-drop-diagnostics seo-cycle.yaml --input traffic.csv --write
+seo-cycle cannibalization seo-cycle.yaml --input cannibalization.csv --write
+seo-cycle run script link-audit seo-cycle.yaml --live --url https://example.com/ --write
+seo-cycle run script lighthouse-audit seo-cycle.yaml --live --url https://example.com/ --write
+GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN=... seo-cycle run script gsc-url-inspection seo-cycle.yaml --url https://example.com/ --site-url sc-domain:example.com --live --write
+BING_WEBMASTER_API_KEY=... seo-cycle run script bing-url-inspection seo-cycle.yaml --url https://example.com/ --site-url https://example.com/ --live --write
+SERPSTAT_API_KEY=... seo-cycle run script serpstat-audit seo-cycle.yaml --action start --project-id 123 --live --write
+SERPSTAT_API_KEY=... seo-cycle run script serpstat-audit seo-cycle.yaml --action set-settings --project-id 123 --settings-json serpstat-settings.json --live --write
+SERPSTAT_API_KEY=... seo-cycle run script serpstat-audit seo-cycle.yaml --action issue-report --report-id 456 --live --write
 ```
 
 ## Output

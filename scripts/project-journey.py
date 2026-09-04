@@ -64,7 +64,7 @@ def setup_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, An
         missing=missing,
         blockers=blockers,
         commands=[
-            "python3 ~/.codex/skills/seo-cycle/scripts/setup-control-plane.py --write",
+            "seo-cycle control-plane --write",
             "Fill seo/setup/setup-questionnaire.csv, then run setup-answer-plan.py --write when gaps remain.",
         ],
         exit_criteria=[
@@ -104,9 +104,9 @@ def governance_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[st
         missing=missing,
         warnings=warnings,
         commands=[
-            "python3 ~/.codex/skills/seo-cycle/scripts/access-key-assistant.py --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py --write",
+            "seo-cycle run script access-key-assistant --write",
+            "seo-cycle spend --write",
+            "seo-cycle run script launch-plan --write",
         ],
         exit_criteria=[
             "Required provider env names are known and secrets are stored only in .env/provider consoles.",
@@ -149,10 +149,10 @@ def evidence_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str,
         missing=missing,
         warnings=warnings,
         commands=[
-            "python3 ~/.codex/skills/seo-cycle/scripts/perplexity-health.py --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/notebooklm-health.py --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-health.py --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/expert-source-pack.py --write",
+            "seo-cycle run script perplexity-health --write",
+            "seo-cycle run script notebooklm-health --write",
+            "seo-cycle run script xmlriver-health --write",
+            "seo-cycle run script expert-source-pack --write",
         ],
         exit_criteria=[
             "At least one expert/source-pack path is available or an explicit degraded fallback is logged.",
@@ -182,9 +182,9 @@ def technical_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str
         evidence=evidence,
         missing=missing,
         commands=[
-            "python3 ~/.codex/skills/seo-cycle/scripts/link-audit.py --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/redirect-map-audit.py --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/technical-site-audit.py --write",
+            "seo-cycle run script link-audit --write",
+            "seo-cycle run script redirect-map-audit --write",
+            "seo-cycle run script technical-site-audit --write",
         ],
         exit_criteria=[
             "Broken links/redirects/indexability/CWV risks are logged or explicitly deferred.",
@@ -261,8 +261,8 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
         blockers=blockers,
         warnings=warnings,
         commands=[
-            f"python3 ~/.codex/skills/seo-cycle/scripts/loop-runner.py research-package {package_dir}",
-            f"python3 ~/.codex/skills/seo-cycle/scripts/research-package-quality.py {package_dir} --write --format plan",
+            f"seo-cycle loop research-package {package_dir}",
+            f"seo-cycle run script research-package-quality {package_dir} --write --format plan",
         ],
         exit_criteria=[
             "No critical findings remain.",
@@ -273,12 +273,12 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
 
 
 REPAIR_COMMANDS = {
-    "serp_validation_incomplete": "python3 ~/.codex/skills/seo-cycle/scripts/serp-validation-plan.py {package_dir} --write",
-    "semantic_core_url_drift": "python3 ~/.codex/skills/seo-cycle/scripts/semantic-core-resync.py {package_dir} --write",
-    "dirty_semantic_core_queries": "python3 ~/.codex/skills/seo-cycle/scripts/semantic-core-clean.py {package_dir} --write",
-    "orphan_internal_urls": "python3 ~/.codex/skills/seo-cycle/scripts/orphan-url-resolver.py {package_dir} --write",
-    "entity_map_md_yaml_drift": "python3 ~/.codex/skills/seo-cycle/scripts/entity-map-sync.py {package_dir} --write",
-    "google_nlp_not_aggregated": "python3 ~/.codex/skills/seo-cycle/scripts/google-nlp-aggregate.py {package_dir} --write",
+    "serp_validation_incomplete": "seo-cycle run script serp-validation-plan {package_dir} --write",
+    "semantic_core_url_drift": "seo-cycle run script semantic-core-resync {package_dir} --write",
+    "dirty_semantic_core_queries": "seo-cycle run script semantic-core-clean {package_dir} --write",
+    "orphan_internal_urls": "seo-cycle run script orphan-url-resolver {package_dir} --write",
+    "entity_map_md_yaml_drift": "seo-cycle run script entity-map-sync {package_dir} --write",
+    "google_nlp_not_aggregated": "seo-cycle run script google-nlp-aggregate {package_dir} --write",
 }
 
 
@@ -290,8 +290,8 @@ def repair_stage(package: dict[str, Any]) -> dict[str, Any]:
     missing = []
     blockers = []
     commands = [
-        f"python3 ~/.codex/skills/seo-cycle/scripts/loop-runner.py research-package {package_dir}",
-        f"python3 ~/.codex/skills/seo-cycle/scripts/research-package-repair.py {package_dir} --write",
+        f"seo-cycle loop research-package {package_dir}",
+        f"seo-cycle repair {package_dir} --write",
     ]
     if quality_failed and not package.get("repair_exists"):
         missing.append(f"{package_dir}/research-package-repair.json")
@@ -306,10 +306,10 @@ def repair_stage(package: dict[str, Any]) -> dict[str, Any]:
                     commands.append(command.format(package_dir=package_dir))
                 if finding_id == "serp_validation_incomplete":
                     commands.append(
-                        "python3 ~/.codex/skills/seo-cycle/scripts/serp-validation-import.py "
+                        "seo-cycle run script serp-validation-import "
                         f"{package_dir} --input-json <reviewed-serp-export.json> --write"
                     )
-        commands.append(f"python3 ~/.codex/skills/seo-cycle/scripts/research-package-quality.py {package_dir} --write --format plan")
+        commands.append(f"seo-cycle run script research-package-quality {package_dir} --write --format plan")
     failed_steps = int(((repair.get("summary") or {}) if isinstance(repair.get("summary"), dict) else {}).get("failed_steps") or 0)
     if failed_steps:
         blockers.append(f"research-package-repair has {failed_steps} failed steps.")
@@ -374,9 +374,9 @@ def brief_stage(package: dict[str, Any]) -> dict[str, Any]:
         blockers=blockers,
         warnings=warnings,
         commands=[
-            f"python3 ~/.codex/skills/seo-cycle/scripts/page-outline-v2.py {package_dir} --all-mvp --write",
-            f"python3 ~/.codex/skills/seo-cycle/scripts/page-outline-v2.py {package_dir} --priority P1 --write",
-            f"python3 ~/.codex/skills/seo-cycle/scripts/page-outline-quality.py {package_dir} --write --format markdown",
+            f"seo-cycle run script page-outline-v2 {package_dir} --all-mvp --write",
+            f"seo-cycle run script page-outline-v2 {package_dir} --priority P1 --write",
+            f"seo-cycle run script page-outline-quality {package_dir} --write --format markdown",
         ],
         exit_criteria=[
             "MVP/P1 pages have outline v2 files.",
@@ -432,9 +432,9 @@ def brief_stage_v3(package: dict[str, Any]) -> dict[str, Any]:
         blockers=blockers,
         warnings=warnings,
         commands=[
-            f"python3 ~/.codex/skills/seo-cycle/scripts/page-outline-v3.py {package_dir} --all-mvp --write",
-            f"python3 ~/.codex/skills/seo-cycle/scripts/page-outline-v3.py {package_dir} --priority P1 --write",
-            f"python3 ~/.codex/skills/seo-cycle/scripts/page-outline-quality.py {package_dir} --version v3 --write --format markdown",
+            f"seo-cycle run script page-outline-v3 {package_dir} --all-mvp --write",
+            f"seo-cycle run script page-outline-v3 {package_dir} --priority P1 --write",
+            f"seo-cycle run script page-outline-quality {package_dir} --version v3 --write --format markdown",
         ],
         exit_criteria=[
             "MVP/P1 pages have page-outline-v3 JSON/Markdown files.",
@@ -514,14 +514,14 @@ def content_draft_stage(package: dict[str, Any]) -> dict[str, Any]:
         blockers=blockers,
         warnings=warnings,
         commands=[
-            "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service neuronwriter --category paid_api --content-writer 1 --ai-credits 500 --fail-on-block",
-            "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service neuronwriter --category paid_api --plagiarism-checks 1 --fail-on-block",
+            "seo-cycle ledger check --service neuronwriter --category paid_api --content-writer 1 --ai-credits 500 --fail-on-block",
+            "seo-cycle ledger check --service neuronwriter --category paid_api --plagiarism-checks 1 --fail-on-block",
             f"Create or revise draft markdown under {package_dir}/drafts/ from {package_dir}/copywriter-ready/*.md, copywriting_playbook, writer_prompt_packet and source slots.",
-            f"python3 ~/.codex/skills/seo-cycle/scripts/loop-runner.py draft {package_dir}/drafts/<slug>.md --outline {package_dir}/page-outlines-v3/<slug>.json",
-            "bash ~/.codex/skills/seo-cycle/scripts/nw-cli.sh evaluate <query_id> <draft.html>",
-            "bash ~/.codex/skills/seo-cycle/scripts/nw-cli.sh plagiarism <query_id> <draft.html>",
-            "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py record --service neuronwriter --category paid_api --plagiarism-checks 1 --task \"final plagiarism check\" --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/project-journey.py --write",
+            f"seo-cycle loop draft {package_dir}/drafts/<slug>.md --outline {package_dir}/page-outlines-v3/<slug>.json",
+            "seo-cycle run script nw-cli.sh evaluate <query_id> <draft.html>",
+            "seo-cycle run script nw-cli.sh plagiarism <query_id> <draft.html>",
+            "seo-cycle ledger record --service neuronwriter --category paid_api --plagiarism-checks 1 --task \"final plagiarism check\" --write",
+            "seo-cycle journey --write",
         ],
         exit_criteria=[
             "Draft markdown exists for the selected MVP/P1 page.",
@@ -546,7 +546,7 @@ def implementation_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dic
         evidence=[f"approval gates: {', '.join(gates) or 'none'}"],
         warnings=warnings,
         commands=[
-            "python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task \"implement approved SEO changes\" --write",
+            "seo-cycle run script task-router --task \"implement approved SEO changes\" --write",
             "Run final Codex review before WordPress REST/API publishing or code changes.",
         ],
         exit_criteria=[
@@ -577,9 +577,9 @@ def monitoring_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[st
         evidence=evidence,
         missing=missing,
         commands=[
-            "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py report --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write",
+            "seo-cycle ledger report --write",
+            "seo-cycle run script growth-roadmap --write",
+            "seo-cycle run script automation-recommender --write",
         ],
         exit_criteria=[
             "Monitoring sources and next refresh cadence are defined.",
@@ -612,7 +612,7 @@ def build_action_plan(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "priority": "P0-final",
                 "stage": "monitoring_iteration",
                 "action": "Project journey is complete for this cycle; start monitoring and next refresh.",
-                "command": "python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py --write",
+                "command": "seo-cycle run script growth-roadmap --write",
                 "done": "Next cycle target is selected from monitored evidence.",
             }
         ]
@@ -643,7 +643,7 @@ def build_action_plan(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "priority": "P0-verify",
             "stage": current["id"],
             "action": "Rerun project journey before moving forward.",
-            "command": "python3 ~/.codex/skills/seo-cycle/scripts/project-journey.py --write",
+            "command": "seo-cycle journey --write",
             "done": "The current stage becomes done and the next stage is shown.",
         }
     )

@@ -392,10 +392,10 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
         "context_contract": context_contract,
         "context_manifest": context_manifest,
         "commands": [
-            "python3 ~/.codex/skills/seo-cycle/scripts/setup-control-plane.py --write --skip-intake",
-            f"python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task {json.dumps(task, ensure_ascii=False)} --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py report --write",
-            "python3 ~/.codex/skills/seo-cycle/scripts/governance-report.py --format md",
+            "seo-cycle control-plane --write --skip-intake",
+            f"seo-cycle run script task-router --task {json.dumps(task, ensure_ascii=False)} --write",
+            "seo-cycle ledger report --write",
+            "seo-cycle run script governance-report --format md",
         ],
     }
 

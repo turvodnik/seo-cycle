@@ -80,8 +80,8 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
             "Domain Focus competitor/export CSV/XLSX",
             "Plagiarism report only as fallback/manual evidence",
         ],
-        "browser_collect_command": "python3 ./.codex/skills/seo-cycle/scripts/writerzen-browser-collect.py seo-cycle.yaml --topic \"<seed>\" --force-new-report --manual-fallback-seconds 120 --write",
-        "ingest_command": "python3 ./.codex/skills/seo-cycle/scripts/writerzen-source-pack.py seo-cycle.yaml --export-file <writerzen-export.csv> --write",
+        "browser_collect_command": "seo-cycle run script writerzen-browser-collect seo-cycle.yaml --topic \"<seed>\" --force-new-report --manual-fallback-seconds 120 --write",
+        "ingest_command": "seo-cycle run script writerzen-source-pack seo-cycle.yaml --export-file <writerzen-export.csv> --write",
     }
     return {
         "provider": PROVIDER,

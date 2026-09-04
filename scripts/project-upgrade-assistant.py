@@ -49,7 +49,7 @@ FEATURES: list[dict[str, Any]] = [
         "artifacts": ["seo/setup/setup-blueprint.md", "seo/setup/setup-matrix.csv"],
         "question": "Generate the low-token country/engine/business/tools/budget/automation matrix?",
         "default_answer": "yes",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py --write",
+        "command": "seo-cycle run script setup-blueprint --write",
         "notes": "Useful for every upgraded project; secret-free.",
     },
     {
@@ -59,7 +59,7 @@ FEATURES: list[dict[str, Any]] = [
         "artifacts": ["seo/setup/setup-gap-audit.md", "seo/setup/setup-questionnaire.csv", "seo/setup/setup-answer-plan.md"],
         "question": "Create/update the missing-fields questionnaire and review-only answer plan?",
         "default_answer": "yes",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py --write",
+        "command": "seo-cycle run script setup-gap-audit --write",
         "notes": "Fill CSV with non-secret answers, then run setup-answer-plan.py --write.",
     },
     {
@@ -75,7 +75,7 @@ FEATURES: list[dict[str, Any]] = [
         "artifacts": ["seo/setup/project-upgrade-apply.md"],
         "question": "Enable the safe updater that applies reviewed missing policy_files keys with a backup?",
         "default_answer": "yes",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/project-upgrade-apply.py --write",
+        "command": "seo-cycle run script project-upgrade-apply --write",
         "notes": "Dry-run by default. Use --apply only after reviewing upgrade-questionnaire.csv; it only adds missing policy_files keys and never changes secrets, paid tools, schedules, publishing, or indexing.",
     },
     {
@@ -91,7 +91,7 @@ FEATURES: list[dict[str, Any]] = [
         "artifacts": ["seo/setup/project-journey.md", "seo/setup/project-journey-checklist.csv"],
         "question": "Enable the automatic step-by-step project journey that shows the current stage, missing inputs, blockers, next command, and exit criteria?",
         "default_answer": "yes",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/project-journey.py --write",
+        "command": "seo-cycle journey --write",
         "notes": "Read-only by default. It prevents skipping from setup/research into writing/publishing when quality gates or approvals are missing.",
     },
     {
@@ -115,7 +115,7 @@ FEATURES: list[dict[str, Any]] = [
         ],
         "question": "Enable the automatic page-outline v3 copywriter-ready brief and quality gate before writing or publishing MVP/P1 pages?",
         "default_answer": "yes",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/page-outline-v3.py seo/research-package --all-mvp --write && python3 ~/.codex/skills/seo-cycle/scripts/page-outline-quality.py seo/research-package --version v3 --write --format markdown && python3 ~/.codex/skills/seo-cycle/scripts/project-journey.py --write",
+        "command": "seo-cycle run script page-outline-v3 seo/research-package --all-mvp --write && seo-cycle run script page-outline-quality seo/research-package --version v3 --write --format markdown && seo-cycle journey --write",
         "notes": "Generates copywriter-ready briefs and checks word-count drift, SERP/page-type lock, tool-first ordering, SEO meta, schema, links, Answer Units, evidence, entities/triplets, visuals and fabricated first-person expertise. Journey then blocks at content_draft_gate until drafts and draft-quality-gate pass.",
     },
     {
@@ -157,7 +157,7 @@ FEATURES: list[dict[str, Any]] = [
         ],
         "question": "Enable the project Knowledge Hub that turns WordPress inventory, reports, rules, decisions, Graphify links and hybrid search into a low-token source of truth?",
         "default_answer": "yes_report_only",
-        "command": "SEO_CYCLE_PROJECT_ROOT=$(pwd) bash ./.codex/skills/seo-cycle/scripts/knowledge/wiki-refresh-all.sh && SEO_CYCLE_PROJECT_ROOT=$(pwd) bash ./.codex/skills/seo-cycle/scripts/knowledge/graphify-refresh.sh",
+        "command": "SEO_CYCLE_PROJECT_ROOT=$(pwd) seo-cycle run script knowledge/wiki-refresh-all.sh && SEO_CYCLE_PROJECT_ROOT=$(pwd) seo-cycle run script knowledge/graphify-refresh.sh",
         "notes": "Report-only by default. It stores distillates and project memory, does not store secrets, does not publish, does not submit indexing and does not call paid APIs. For project-specific review/comparison pages, add `seo/knowledge/review-cluster-seeds.json`; otherwise seeds are generated from real inventory.",
     },
     {
@@ -188,7 +188,7 @@ FEATURES: list[dict[str, Any]] = [
         ],
         "question": "Enable the repair layer for dirty semantic cores, URL/cluster drift, entity-map drift, Google NLP aggregation, orphan URLs, missing SERP validations and phase-2 spokes?",
         "default_answer": "yes",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/research-package-quality.py seo/research-package --write --format plan",
+        "command": "seo-cycle run script research-package-quality seo/research-package --write --format plan",
         "notes": "Run the specific repair scripts from the action plan. Use serp-validation-import.py only with reviewed JSON/CSV exports; the layer writes reviewable artifacts and does not publish or call paid APIs.",
     },
     {
@@ -198,7 +198,7 @@ FEATURES: list[dict[str, Any]] = [
         "artifacts": ["seo/setup/access-key-assistant.md", "seo/setup/access-key-assistant.csv"],
         "question": "Generate project-specific links and short instructions for only the needed keys/tokens?",
         "default_answer": "yes",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/access-key-assistant.py --write",
+        "command": "seo-cycle run script access-key-assistant --write",
         "notes": "Skips providers that are not applicable or blocked; never stores secret values.",
     },
     {
@@ -208,7 +208,7 @@ FEATURES: list[dict[str, Any]] = [
         "artifacts": ["seo/setup/spend-guard.md", "seo/setup/latest-usage-ledger.md"],
         "question": "Enable budget/subscription/token guardrails for this project?",
         "default_answer": "yes",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write && python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py report --write",
+        "command": "seo-cycle spend --write && seo-cycle ledger report --write",
         "notes": "Required before paid API, LLM, browser, subscription, or ads work.",
     },
     {
@@ -218,7 +218,7 @@ FEATURES: list[dict[str, Any]] = [
         "artifacts": ["seo/setup/tool-stack-report.md", "seo/setup/growth-roadmap.md", "seo/setup/onboarding-playbook.md"],
         "question": "Refresh project-specific tools, roadmap, and onboarding playbook?",
         "default_answer": "yes",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write && python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py --write && python3 ~/.codex/skills/seo-cycle/scripts/setup-onboarding.py --write",
+        "command": "seo-cycle run script tool-stack-recommender --write && seo-cycle run script growth-roadmap --write && seo-cycle run script setup-onboarding --write",
         "notes": "Keeps free/read-only tools first and gates paid/tracking/ads.",
     },
     {
@@ -246,7 +246,7 @@ FEATURES: list[dict[str, Any]] = [
         ],
         "question": "Enable token waste audit plus Perplexity/NotebookLM/XMLRiver/WriterZen health reports for low-token evidence workflows?",
         "default_answer": "yes_report_only",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/token-waste-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/perplexity-health.py --write && python3 ~/.codex/skills/seo-cycle/scripts/notebooklm-health.py --write && python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-health.py --write && python3 ~/.codex/skills/seo-cycle/scripts/writerzen-health.py --write",
+        "command": "seo-cycle run script token-waste-audit --write && seo-cycle run script perplexity-health --write && seo-cycle run script notebooklm-health --write && seo-cycle run script xmlriver-health --write && seo-cycle run script writerzen-health --write",
         "notes": "Report-only. Perplexity uses persistent browser/app when available, no password storage; NotebookLM falls back to browser/manual source-pack export if MCP tools are unavailable; XMLRiver lists cheap SERP/Wordstat capabilities and env names without live paid calls; WriterZen uses browser collection plus CSV/XLSX source-pack import.",
     },
     {
@@ -256,7 +256,7 @@ FEATURES: list[dict[str, Any]] = [
         "artifacts": ["seo/automations/automation-recommendations.md", "seo/automations/automation-plan.md"],
         "question": "Create report-only automation recommendations for this project?",
         "default_answer": "yes_report_only",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write && python3 ~/.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled",
+        "command": "seo-cycle run script automation-recommender --write && seo-cycle run script automation-plan --write --include-disabled",
         "notes": "Real cron/schedules remain disabled unless policy and explicit approval allow them.",
     },
     {
@@ -282,7 +282,7 @@ FEATURES: list[dict[str, Any]] = [
         "artifacts": ["seo/vnext/ai-brand-audit.md", "seo/vnext/expert-source-pack.md", "seo/vnext/technical-guardrails-audit.md"],
         "question": "Enable report-only SEO/AEO/GEO vNext audits: AI Brand, Answer Units, E-E-A-T, GEO KPI, logs, live AI bot access, technical, local/RU commerce, off-page, SXO, and expert sources?",
         "default_answer": "yes_report_only",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/expert-source-pack.py --write && python3 ~/.codex/skills/seo-cycle/scripts/ai-brand-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/technical-guardrails-audit.py --write",
+        "command": "seo-cycle run script expert-source-pack --write && seo-cycle run script ai-brand-audit --write && seo-cycle run script technical-guardrails-audit --write",
         "notes": "Additive and safe by default: no publishing, paid APIs, index submission, tracking tags, or ads. Live AI bot access check is explicit/manual because it sends public HTTP requests.",
     },
     {
@@ -346,7 +346,7 @@ FEATURES: list[dict[str, Any]] = [
         ],
         "question": "Enable technical-site report pack for rollup, broken links, redirect maps, GSC/Bing URL inspection, GSC indexing queue/recheck, IndexNow, Yandex recrawl, optional MCP health, Lighthouse/CWV, guarded Serpstat Site Audit, and Labrika export/health?",
         "default_answer": "yes_report_only",
-        "command": "python3 ~/.codex/skills/seo-cycle/scripts/link-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/redirect-map-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/lighthouse-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/gsc-url-inspection.py --write && python3 ~/.codex/skills/seo-cycle/scripts/bing-url-inspection.py --write && python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py --write && python3 ~/.codex/skills/seo-cycle/scripts/labrika-source-pack.py --write && python3 ~/.codex/skills/seo-cycle/scripts/labrika-health.py --write && python3 ~/.codex/skills/seo-cycle/scripts/technical-mcp-health.py --write && python3 ~/.codex/skills/seo-cycle/scripts/technical-site-audit.py --write",
+        "command": "seo-cycle run script link-audit --write && seo-cycle run script redirect-map-audit --write && seo-cycle run script lighthouse-audit --write && seo-cycle run script gsc-url-inspection --write && seo-cycle run script bing-url-inspection --write && seo-cycle run script serpstat-audit --write && seo-cycle run script labrika-source-pack --write && seo-cycle run script labrika-health --write && seo-cycle run script technical-mcp-health --write && seo-cycle run script technical-site-audit --write",
         "notes": "Report-only by default. Live HTTP/API calls require --live/--technical-check; GSC/Bing URL inspection is read-only with env tokens. GSC request indexing is a separate browser helper and requires explicit --auto-click. IndexNow and Yandex recrawl are explicit live index-submission actions with env keys/tokens. Serpstat requires SERPSTAT_API_KEY and credit/budget approval. Labrika stays manual/export until a public API is confirmed.",
     },
 ]

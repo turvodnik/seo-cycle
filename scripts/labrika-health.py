@@ -48,7 +48,7 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
         "summary": summary,
         "top_findings": findings,
         "next_commands": [
-            "python3 ~/.codex/skills/seo-cycle/scripts/labrika-source-pack.py seo-cycle.yaml --export-file labrika-export.md --write",
+            "seo-cycle run script labrika-source-pack seo-cycle.yaml --export-file labrika-export.md --write",
         ],
         "citations": ["https://labrika.com/seo-auditor"],
         "support_questions": findings[0]["evidence"]["support_questions"],

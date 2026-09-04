@@ -3,7 +3,7 @@
 Если задача касается развития самого `seo-cycle`, больших рефакторингов, evidence ingestion или построения графов знаний, можно использовать локальный support-набор:
 
 ```bash
-bash ~/.codex/skills/seo-cycle/scripts/install-ai-toolchain.sh --codex
+seo-cycle run script install-ai-toolchain.sh --codex
 ```
 
 Назначение:

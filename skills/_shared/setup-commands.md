@@ -2,37 +2,37 @@
 
 9. Сгенерировать и проверить рекомендации автоматизаций:
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write
-# после review: python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --apply
-python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-onboarding.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-blueprint.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/access-key-assistant.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-gap-audit.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/setup-answer-plan.py --write  # после заполнения setup-questionnaire.csv
-python3 ~/.codex/skills/seo-cycle/scripts/launch-plan.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/token-waste-audit.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/perplexity-health.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/notebooklm-health.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/xmlriver-health.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/perplexity-collect.py --topic "<тема>" --write
-python3 ~/.codex/skills/seo-cycle/scripts/notebooklm-source-pack.py --topic "<тема>" --export-file <export.md> --write
-python3 ~/.codex/skills/seo-cycle/scripts/expert-source-pack.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/ai-brand-audit.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/answer-units-audit.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/technical-guardrails-audit.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/link-audit.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/redirect-map-audit.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/gsc-url-inspection.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/bing-url-inspection.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/lighthouse-audit.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/technical-mcp-health.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/serpstat-audit.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/labrika-source-pack.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/labrika-health.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/technical-site-audit.py --write
-python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write
-# после review: python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --apply
+seo-cycle run script tool-stack-recommender --write
+# после review: seo-cycle run script tool-stack-recommender --apply
+seo-cycle run script growth-roadmap --write
+seo-cycle run script setup-onboarding --write
+seo-cycle run script setup-blueprint --write
+seo-cycle run script project-upgrade-assistant --write
+seo-cycle run script access-key-assistant --write
+seo-cycle run script setup-gap-audit --write
+seo-cycle run script setup-answer-plan --write  # после заполнения setup-questionnaire.csv
+seo-cycle run script launch-plan --write
+seo-cycle spend --write
+seo-cycle run script token-waste-audit --write
+seo-cycle run script perplexity-health --write
+seo-cycle run script notebooklm-health --write
+seo-cycle run script xmlriver-health --write
+seo-cycle run script perplexity-collect --topic "<тема>" --write
+seo-cycle run script notebooklm-source-pack --topic "<тема>" --export-file <export.md> --write
+seo-cycle run script expert-source-pack --write
+seo-cycle run script ai-brand-audit --write
+seo-cycle run script answer-units-audit --write
+seo-cycle run script technical-guardrails-audit --write
+seo-cycle run script link-audit --write
+seo-cycle run script redirect-map-audit --write
+seo-cycle run script gsc-url-inspection --write
+seo-cycle run script bing-url-inspection --write
+seo-cycle run script lighthouse-audit --write
+seo-cycle run script technical-mcp-health --write
+seo-cycle run script serpstat-audit --write
+seo-cycle run script labrika-source-pack --write
+seo-cycle run script labrika-health --write
+seo-cycle run script technical-site-audit --write
+seo-cycle run script automation-recommender --write
+# после review: seo-cycle run script automation-recommender --apply
 ```
