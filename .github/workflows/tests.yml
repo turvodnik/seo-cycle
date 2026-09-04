@@ -13,8 +13,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Install ruff
-        run: python -m pip install --quiet ruff
+      - name: Install project (dev extras)
+        run: python -m pip install --quiet -e ".[dev]"
       - name: Lint (errors, undefined names, unused imports/vars, bugbear)
         run: ruff check --select E9,F63,F7,F82,F401,F841,B,PLE scripts/ tests/
 
@@ -25,8 +25,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Install mypy
-        run: python -m pip install --quiet mypy pyyaml pydantic
+      - name: Install project (dev extras)
+        run: python -m pip install --quiet -e ".[dev]"
       - name: mypy on the core package
         run: mypy scripts/seo_cycle_core --ignore-missing-imports
 
@@ -46,8 +46,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Install deps
-        run: python -m pip install --quiet coverage pyyaml
+      - name: Install project (dev extras)
+        run: python -m pip install --quiet -e ".[dev]"
       - name: In-process coverage of seo_cycle_core (subprocess-driven tests not counted)
         run: |
           coverage run --source=scripts/seo_cycle_core -m unittest discover -s tests
@@ -64,11 +64,19 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install test dependencies
-        run: python -m pip install --quiet pyyaml
+      - name: Install project (dev extras)
+        run: python -m pip install --quiet -e ".[dev]"
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
       - name: Strict config-schema validation of the template (informational)
-        run: |
-          python -m pip install --quiet pydantic
-          python scripts/validate-config.py config/project.template.yaml --strict || true
+        run: python scripts/validate-config.py config/project.template.yaml --strict || true
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Secret scan (bare Python — base mode needs no PyYAML, no install step)
+        run: python scripts/secret-scan.py . --format json
