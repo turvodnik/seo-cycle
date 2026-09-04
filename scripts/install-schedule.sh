@@ -50,7 +50,14 @@ SCHED_PATH="$HOME/.local/bin:$ROOT/.venv/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 wrap_cmd() { # raw-command -> command, prefixed with ai-secret run <scope> when --scope is set
   local raw="$1"
   if [[ -n "$SCOPE" ]]; then
-    printf "%s" "'$HOME/.local/bin/ai-secret' run $SCOPE -- /usr/bin/env 'PATH=$SCHED_PATH' $raw"
+    # /usr/bin/env's argv[0] must be a real executable — it cannot run a
+    # shell builtin like `cd` (R1: "cd '$PROJECT' && …" silently dropped
+    # the ai-secret/PATH wrapper and either no-op'd or exited 127). So the
+    # raw command — cd/&&/quoting included — is handed to `bash -c` as ONE
+    # argument, and env execs bash, not the raw text directly. Escape
+    # embedded single quotes for that nested single-quoted argument.
+    local escaped=${raw//\'/\'\\\'\'}
+    printf "%s" "'$HOME/.local/bin/ai-secret' run $SCOPE -- /usr/bin/env 'PATH=$SCHED_PATH' /bin/bash -c '$escaped'"
   else
     printf "%s" "$raw"
   fi

@@ -111,6 +111,26 @@ class TagNotOnOriginTest(InstallerFixture):
         self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertFalse(self.lock_path().exists(), "лок не должен создаваться при отказе")
 
+    def test_same_named_tag_pointing_at_a_different_commit_is_rejected(self) -> None:
+        """R6/D3: a tag existing on origin BY NAME is not enough — if the
+        local repo's same-named tag points at a different commit (stale
+        local clone, or the tag was re-pointed only locally), attaching it
+        must fail rather than silently accept an unverifiable commit."""
+        # Diverge local core's v1.0.0 from what's on origin, without ever
+        # pushing the change — origin still has the ORIGINAL commit under
+        # that tag name.
+        (self.core / "VERSION").write_text("1.0.0-local-drift\n", encoding="utf-8")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local drift")
+        _git(self.core, "tag", "-f", "v1.0.0")  # local-only repoint, never pushed
+
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertFalse(self.lock_path().exists(), "лок не должен создаваться при расхождении SHA с origin")
+
 
 class SnapshotSHAReconciliationTest(InstallerFixture):
     def test_moved_tag_rebuilds_snapshot_and_lock(self) -> None:
@@ -166,7 +186,7 @@ class DetachHonestTest(InstallerFixture):
 
 
 class SyncOfflineTest(InstallerFixture):
-    def test_sync_does_not_touch_network(self) -> None:
+    def test_sync_works_when_the_transport_is_blocked(self) -> None:
         self.run_install(
             "--project", str(self.project), "--pin", "v1.0.0",
             "--skip-init", "--no-migrate-old-global",
@@ -177,6 +197,41 @@ class SyncOfflineTest(InstallerFixture):
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("seo-cycle", self.read_lock().get("external", {}))
+
+    def test_sync_makes_zero_ls_remote_calls(self) -> None:
+        """R3 negative control: GIT_ALLOW_PROTOCOL= only proves --sync
+        survives an instantly-refused transport, not that it never tried —
+        on a genuinely dead network each blocked ls-remote can hang tens of
+        seconds instead of failing fast. A git spy that logs every
+        invocation is the actual proof --sync makes no network calls."""
+        self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+
+        real_git = shutil.which("git")
+        spy_dir = self.tmp / "git-spy"
+        spy_dir.mkdir()
+        spy_log = self.tmp / "git-spy.log"
+        (spy_dir / "git").write_text(
+            "#!/usr/bin/env bash\n"
+            f'echo "$*" >> "{spy_log}"\n'
+            f'exec "{real_git}" "$@"\n',
+            encoding="utf-8",
+        )
+        (spy_dir / "git").chmod(0o755)
+
+        proc = self.run_install(
+            "--project", str(self.project), "--sync",
+            env={"PATH": f"{spy_dir}:{os.environ['PATH']}"},
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        log_text = spy_log.read_text(encoding="utf-8") if spy_log.exists() else ""
+        network_calls = [line for line in log_text.splitlines() if "ls-remote" in line or " fetch" in line]
+        self.assertEqual(
+            network_calls, [],
+            f"--sync сделал сетевые вызовы git: {network_calls!r}",
+        )
 
 
 class ShimPinSelectionTest(unittest.TestCase):

@@ -169,21 +169,36 @@ latest_tag() {
 ensure_worktree() {
     local repo_dir="$1" tool="$2" tag="$3"
     local dest="$VERSIONS_DIR/$tool/$tag"
-    local remote_tags
-    remote_tags="$(git -C "$repo_dir" ls-remote --tags origin "refs/tags/$tag" 2>/dev/null || true)"
-    if [ -n "$remote_tags" ]; then
-        : # confirmed on origin
-    elif git -C "$repo_dir" ls-remote --tags origin 'refs/tags/v*' >/dev/null 2>&1; then
-        warn "тег $tag не найден на origin ($tool)"
-        return 1
-    else
-        warn "offline: не удалось проверить тег $tag на origin, беру локальный — воспроизводимость не гарантирована"
-    fi
     local tag_commit
     tag_commit="$(git -C "$repo_dir" rev-parse "refs/tags/$tag^{commit}" 2>/dev/null || true)"
     if [ -z "$tag_commit" ]; then
         warn "тег $tag не найден в $repo_dir"
         return 1
+    fi
+    # --sync only re-links what an earlier attach already verified against
+    # origin — no network here by design (F-7/R3). Only the local snapshot
+    # reconciliation below (no network) still applies.
+    if [ "$SYNC_ONLY" != "1" ]; then
+        local remote_out
+        remote_out="$(git -C "$repo_dir" ls-remote --tags origin "refs/tags/$tag" 2>/dev/null || true)"
+        if [ -z "$remote_out" ]; then
+            if git -C "$repo_dir" ls-remote --tags origin 'refs/tags/v*' >/dev/null 2>&1; then
+                warn "тег $tag не найден на origin ($tool)"
+                return 1
+            fi
+            warn "offline: не удалось проверить тег $tag на origin, беру локальный — воспроизводимость не гарантирована"
+        else
+            # Compare commits, not just the tag name (R6/D3): a local tag can
+            # share a name with origin's tag while pointing at a different
+            # commit (re-tagged release, stale local clone).
+            local remote_commit
+            remote_commit="$(printf '%s\n' "$remote_out" | grep '\^{}$' | awk '{print $1}')"
+            [ -n "$remote_commit" ] || remote_commit="$(printf '%s\n' "$remote_out" | awk 'NR==1{print $1}')"
+            if [ -n "$remote_commit" ] && [ "$remote_commit" != "$tag_commit" ]; then
+                warn "тег $tag локально указывает на ${tag_commit:0:8}, а на origin — на ${remote_commit:0:8}; запусти install.sh --update"
+                return 1
+            fi
+        fi
     fi
     if [ -e "$dest/SKILL.md" ] || [ -e "$dest/VERSION" ]; then
         local snapshot_commit
@@ -300,6 +315,22 @@ update_store_only() {
 }
 
 # ------------------------------------------------------------- project layer
+
+# Read the pinned version of one tool from an existing lock (empty if absent).
+read_lock_version() {
+    local project_dir="$1" tool="$2"
+    local lock_path="$project_dir/.agents/external-skills.lock.yaml"
+    [ -f "$lock_path" ] || return 0
+    python3 - "$lock_path" "$tool" <<'PYEOF' 2>/dev/null || true
+import sys
+try:
+    import yaml
+except ImportError:
+    sys.exit(0)
+data = yaml.safe_load(open(sys.argv[1])) or {}
+print(((data.get("external") or {}).get(sys.argv[2]) or {}).get("version") or "")
+PYEOF
+}
 
 # Update the managed entries of .agents/external-skills.lock.yaml (preserves the
 # rest of the file). Requires pyyaml; degrades to a warning without it.
@@ -603,17 +634,28 @@ PYEOF
     commit="$(git -C "$target" rev-parse HEAD 2>/dev/null || echo unknown)"
     log "▶ seo-cycle @ $pin ($commit)"
 
-    # seo-keywords: latest tag worktree, else clone HEAD.
+    # seo-keywords (optional sibling): pinned to a tag, same as seo-cycle —
+    # no silent "track HEAD" default (R4/D5: that was D5 renamed, not fixed).
+    # Under --sync, reuse the already-locked pin instead of recomputing
+    # latest_tag() (R3/F-7: no network during --sync).
     local have_kw=0 kw_target="" kw_pin="" kw_commit=""
     if [ -d "$KW_CORE/.git" ]; then
-        kw_pin="$(latest_tag "$KW_CORE")"
-        if [ -n "$kw_pin" ]; then
-            kw_target="$(ensure_worktree "$KW_CORE" "seo-keywords" "$kw_pin")" || { kw_target="$KW_CORE"; kw_pin="HEAD"; }
+        if [ "$SYNC_ONLY" = "1" ]; then
+            kw_pin="$(read_lock_version "$project_dir" "seo-keywords")"
         else
-            kw_target="$KW_CORE"; kw_pin="HEAD"
+            kw_pin="$(latest_tag "$KW_CORE")"
         fi
-        kw_commit="$(git -C "$kw_target" rev-parse HEAD 2>/dev/null || echo unknown)"
-        have_kw=1
+        if [ -n "$kw_pin" ]; then
+            kw_target="$(ensure_worktree "$KW_CORE" "seo-keywords" "$kw_pin")" || kw_target=""
+            if [ -n "$kw_target" ]; then
+                kw_commit="$(git -C "$kw_target" rev-parse HEAD 2>/dev/null || echo unknown)"
+                have_kw=1
+            else
+                warn "seo-keywords: тег $kw_pin недоступен — пропускаю подключение"
+            fi
+        elif [ "$SYNC_ONLY" != "1" ]; then
+            warn "seo-keywords: в store нет тегов — пропускаю подключение (первый релиз ещё не вышел)"
+        fi
     fi
 
     mkdir -p "$project_dir/.agents/external"
