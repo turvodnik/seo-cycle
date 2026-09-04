@@ -17,7 +17,7 @@ resolve-sources.py — разворачивает региональный пр�
 (каталог можно переопределить через --out).
 
 Использование:
-    python3 ~/.codex/skills/seo-cycle/scripts/resolve-sources.py [config] [--out DIR] [--json]
+    seo-cycle run script resolve-sources [config] [--out DIR] [--json]
 """
 
 from __future__ import annotations

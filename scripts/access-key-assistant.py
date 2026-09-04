@@ -510,8 +510,8 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
         ],
         "next_actions": [
             "Fill only the needed .env names from this report.",
-            "Run `python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py` after editing .env.",
-            "Run `python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write` before paid/quota/LLM/API work.",
+            "Run `seo-cycle validate` after editing .env.",
+            "Run `seo-cycle spend --write` before paid/quota/LLM/API work.",
         ],
     }
     return report

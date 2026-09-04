@@ -19,7 +19,7 @@ SQLite-БД. Это фундамент Этапа 1: единая точка п�
 Idempotent: каждый запуск пересоздаёт таблицы из текущих файлов.
 
 Использование:
-    python3 ~/.codex/skills/seo-cycle/scripts/db-sync.py [--db PATH] [--root DIR]
+    seo-cycle db [--db PATH] [--root DIR]
 """
 
 from __future__ import annotations

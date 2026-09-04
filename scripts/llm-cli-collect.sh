@@ -226,7 +226,7 @@ if [[ $HAS_AGY -ge 1 && $HAS_CODEX -ge 1 ]]; then
     MERGED="$OUTDIR/${SLUG}-merged-${DATE}.md"
     echo ""
     echo "Следующий шаг — merge:"
-    echo "  python3 ~/.codex/skills/seo-cycle/scripts/llm-cli-merge.py \\"
+    echo "  seo-cycle run script llm-cli-merge \\"
     echo "      \"$ANTIGRAVITY_OUT\" \"$CODEX_OUT\" \\"
     echo "      -o \"$MERGED\""
 fi

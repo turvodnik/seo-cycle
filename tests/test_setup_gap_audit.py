@@ -109,7 +109,7 @@ class SetupGapAuditTest(unittest.TestCase):
         self.assertIn("google_business_profile", report["signals"]["local_platforms"])
         local_row = next(row for row in report["questionnaire"]["rows"] if row["field"] == "local.business_profile_urls")
         self.assertIn("seo-cycle.yaml", local_row["target_file"])
-        self.assertIn("project-intake", local_row["follow_up_command"])
+        self.assertIn("seo-cycle intake", local_row["follow_up_command"])
 
 
 if __name__ == "__main__":

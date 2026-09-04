@@ -126,7 +126,7 @@ class SpendGuardTest(unittest.TestCase):
         self.assertEqual(services["neuronwriter"]["limits"]["ai_credits"]["remaining"], 103800)
         self.assertTrue(services["openai"]["allowed_now"])
         self.assertEqual(services["openai"]["limits"]["usd"]["remaining"], 8.5)
-        self.assertIn("usage-ledger.py check", services["openai"]["preflight_command"])
+        self.assertIn("seo-cycle ledger check", services["openai"]["preflight_command"])
         self.assertNotIn("=", "\n".join(report["env_names"]))
 
 

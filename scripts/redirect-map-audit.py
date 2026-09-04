@@ -179,7 +179,7 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
         distillate_payload=distillate,
         write=args.write,
         commands=[
-            "python3 ~/.codex/skills/seo-cycle/scripts/redirect-map-audit.py seo-cycle.yaml --input redirects.csv --base-url https://example.com --write",
+            "seo-cycle run script redirect-map-audit seo-cycle.yaml --input redirects.csv --base-url https://example.com --write",
         ],
         cache_parts={"slug": "redirect-map-audit", "rows": rows, "base_url": args.base_url, "live": args.live},
     )

@@ -243,7 +243,7 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
         distillate_payload=distillate,
         write=args.write,
         commands=[
-            "INDEXNOW_KEY=*** INDEXNOW_KEY_LOCATION=https://example.com/key.txt python3 ~/.codex/skills/seo-cycle/scripts/indexnow-submit.py seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --priority P0,P1 --max 100 --live --write",
+            "INDEXNOW_KEY=*** INDEXNOW_KEY_LOCATION=https://example.com/key.txt seo-cycle run script indexnow-submit seo-cycle.yaml --queue-file seo/technical/gsc-indexing-request-queue.csv --priority P0,P1 --max 100 --live --write",
         ],
         notes=["IndexNow can submit up to 10,000 URLs per POST. HTTP 200 only means the URLs were received, not indexed."],
         cache_parts={"slug": "indexnow-submit", "host": host, "urls": urls, "endpoints": endpoints, "live": bool(args.live)},

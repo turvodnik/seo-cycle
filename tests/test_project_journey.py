@@ -103,7 +103,7 @@ class ProjectJourneyTest(unittest.TestCase):
 
         self.assertEqual(report["status"], "needs_work")
         self.assertEqual(report["current_stage"]["id"], "setup_foundation")
-        self.assertIn("setup-control-plane.py --write", report["action_plan"][0]["command"])
+        self.assertIn("seo-cycle control-plane --write", report["action_plan"][0]["command"])
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "project-journey.md").exists())
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "project-journey-checklist.csv").exists())
 
@@ -130,8 +130,8 @@ class ProjectJourneyTest(unittest.TestCase):
         self.assertEqual(report["status"], "blocked")
         self.assertEqual(report["current_stage"]["id"], "research_package_repair")
         self.assertTrue(any("serp_validation_incomplete" in item for item in report["missing_for_next_step"]))
-        self.assertTrue(any("research-package-repair.py" in command for command in report["current_stage"]["next_commands"]))
-        self.assertTrue(any("serp-validation-plan.py" in command for command in report["current_stage"]["next_commands"]))
+        self.assertTrue(any("seo-cycle repair" in command for command in report["current_stage"]["next_commands"]))
+        self.assertTrue(any("seo-cycle run script serp-validation-plan" in command for command in report["current_stage"]["next_commands"]))
         deep = next(stage for stage in report["stages"] if stage["id"] == "deep_page_briefs")
         self.assertEqual(deep["status"], "pending")
 
@@ -150,7 +150,7 @@ class ProjectJourneyTest(unittest.TestCase):
         self.assertEqual(report["status"], "blocked")
         self.assertEqual(report["current_stage"]["id"], "research_quality_gate")
         self.assertTrue(any("rerun" in item.lower() for item in report["missing_for_next_step"]))
-        self.assertTrue(any("research-package-quality.py" in command for command in report["current_stage"]["next_commands"]))
+        self.assertTrue(any("seo-cycle run script research-package-quality" in command for command in report["current_stage"]["next_commands"]))
 
     def test_page_outline_quality_is_required_before_implementation(self) -> None:
         cfg_path = self.make_project()
@@ -164,7 +164,7 @@ class ProjectJourneyTest(unittest.TestCase):
         self.assertEqual(report["status"], "needs_work")
         self.assertEqual(report["current_stage"]["id"], "deep_page_briefs")
         self.assertIn("seo/research-package/page-outline-quality.json", report["missing_for_next_step"])
-        self.assertTrue(any("page-outline-quality.py" in command for command in report["current_stage"]["next_commands"]))
+        self.assertTrue(any("seo-cycle run script page-outline-quality" in command for command in report["current_stage"]["next_commands"]))
 
         (package / "page-outline-quality.json").write_text(
             json.dumps(
@@ -204,7 +204,7 @@ class ProjectJourneyTest(unittest.TestCase):
         self.assertEqual(report["status"], "needs_work")
         self.assertEqual(report["current_stage"]["id"], "deep_page_briefs_v3")
         self.assertIn("seo/research-package/page-outline-quality.json", report["missing_for_next_step"])
-        self.assertTrue(any("page-outline-v3.py" in command for command in report["current_stage"]["next_commands"]))
+        self.assertTrue(any("seo-cycle run script page-outline-v3" in command for command in report["current_stage"]["next_commands"]))
         self.assertTrue(any("--version v3" in command for command in report["current_stage"]["next_commands"]))
 
         (package / "page-outline-quality.json").write_text(
@@ -270,8 +270,8 @@ class ProjectJourneyTest(unittest.TestCase):
         self.assertEqual(report["status"], "needs_work")
         self.assertEqual(report["current_stage"]["id"], "content_draft_gate")
         self.assertIn("seo/research-package/drafts/*.md", report["missing_for_next_step"])
-        self.assertTrue(any("usage-ledger.py check --service neuronwriter" in command for command in report["current_stage"]["next_commands"]))
-        self.assertTrue(any("loop-runner.py draft" in command for command in report["current_stage"]["next_commands"]))
+        self.assertTrue(any("seo-cycle ledger check --service neuronwriter" in command for command in report["current_stage"]["next_commands"]))
+        self.assertTrue(any("seo-cycle loop draft" in command for command in report["current_stage"]["next_commands"]))
 
     def test_content_draft_gate_requires_draft_quality_report(self) -> None:
         cfg_path = self.make_project()
