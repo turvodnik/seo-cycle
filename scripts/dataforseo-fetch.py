@@ -193,7 +193,7 @@ def show(rows: list, headers: list, args) -> None:
     if args.md:
         print(md_table(headers, rows))
     else:
-        print(json.dumps([dict(zip(headers, r)) for r in rows], ensure_ascii=False, indent=2))
+        print(json.dumps([dict(zip(headers, r, strict=True)) for r in rows], ensure_ascii=False, indent=2))
 
 
 # ---------- подкоманды ----------
