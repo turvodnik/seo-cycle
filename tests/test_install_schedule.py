@@ -172,7 +172,14 @@ class EveryJobIsWrappedTest(unittest.TestCase):
                 "CALLED:", result.stdout,
                 f"{name}: the real launcher never ran — {result.stdout!r}",
             )
-            if "daily-progress" in name or "monthly-runner" in name:
+            # monthly-runner always `cd`s into the project on both
+            # platforms; daily-progress only does on macOS (the Linux
+            # crontab form of that job has never `cd`'d — pulse --global
+            # doesn't need project cwd there; pre-existing platform
+            # asymmetry, out of scope here — this test only proves the
+            # jobs that DO cd still land in the right directory).
+            job_should_cd = "monthly-runner" in name or (IS_DARWIN and "daily-progress" in name)
+            if job_should_cd:
                 self.assertTrue(
                     self.pwd_sentinel.exists(),
                     f"{name}: the launcher never wrote its cwd sentinel",
