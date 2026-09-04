@@ -41,12 +41,27 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "$SCOPE" ]]; then
+  echo "⚠ секреты не подмешаны (--scope не задан) — fetch деградирует тихо" >&2
+fi
+
+SCHED_PATH="$HOME/.local/bin:$ROOT/.venv/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+wrap_cmd() { # raw-command -> command, prefixed with ai-secret run <scope> when --scope is set
+  local raw="$1"
+  if [[ -n "$SCOPE" ]]; then
+    printf "%s" "'$HOME/.local/bin/ai-secret' run $SCOPE -- /usr/bin/env 'PATH=$SCHED_PATH' $raw"
+  else
+    printf "%s" "$raw"
+  fi
+}
+
 if [[ "$(uname)" != "Darwin" ]]; then
   PROJECT="${PROJECT:-/path/to/project}"
   echo "# Linux: добавьте в crontab -e:"
-  echo "10 6 * * *  '$LAUNCHER' pulse --global"
-  echo "30 6 * * 1  '$LAUNCHER' progress --global --write --html"
-  [[ $WITH_MONTHLY -eq 1 ]] && echo "0 7 1 * *   cd '$PROJECT' && '$LAUNCHER' run monthly"
+  echo "10 6 * * *  $(wrap_cmd "'$LAUNCHER' pulse --global")"
+  echo "30 6 * * 1  $(wrap_cmd "'$LAUNCHER' progress --global --write --html")"
+  [[ $WITH_MONTHLY -eq 1 ]] && echo "0 7 1 * *   $(wrap_cmd "cd '$PROJECT' && '$LAUNCHER' run monthly")"
   exit 0
 fi
 
@@ -68,25 +83,10 @@ elif [[ -z "$PROJECT" || ! -f "$PROJECT/seo-cycle.yaml" ]]; then
 fi
 [[ $DRY_RUN -eq 1 ]] || mkdir -p "$AGENTS_DIR"
 
-if [[ -z "$SCOPE" ]]; then
-  echo "⚠ секреты не подмешаны (--scope не задан) — fetch деградирует тихо" >&2
-fi
-
 xml_escape() { # & < > обязаны быть сущностями внутри <string> (launchd прощает, plutil/PlistBuddy — нет)
   local s="$1"
   s="${s//&/&amp;}"; s="${s//</&lt;}"; s="${s//>/&gt;}"
   printf '%s' "$s"
-}
-
-SCHED_PATH="$HOME/.local/bin:$ROOT/.venv/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-
-wrap_cmd() { # raw-command -> command, prefixed with ai-secret run <scope> when --scope is set
-  local raw="$1"
-  if [[ -n "$SCOPE" ]]; then
-    printf "%s" "'$HOME/.local/bin/ai-secret' run $SCOPE -- /usr/bin/env 'PATH=$SCHED_PATH' $raw"
-  else
-    printf "%s" "$raw"
-  fi
 }
 
 write_plist() { # name interval-xml program-args

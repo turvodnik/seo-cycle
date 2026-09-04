@@ -55,6 +55,7 @@ class InstallerFixture(unittest.TestCase):
             encoding="utf-8",
         )
         (bin_dir / "seo-cycle").chmod(0o755)
+        _git(self.seed, "checkout", "-q", "-B", "main")
         _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
         _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "seed")
         _git(self.seed, "tag", "v1.0.0")
