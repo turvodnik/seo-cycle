@@ -6,7 +6,7 @@
 
 - Claude Code читает `SKILL.md` (распознаёт скилл по frontmatter).
 - Codex читает `AGENTS.md` — **симлинк на `SKILL.md`** (тот же контент).
-- Canonical checkout живёт в `~/.codex/skills/seo-cycle`. `~/.claude/skills/seo-cycle` и `~/.agents/skills/seo-cycle` — совместимые symlinks на Codex-ядро.
+- Canonical checkout живёт в `./.codex/skills/seo-cycle`. `~/.claude/skills/seo-cycle` и `~/.agents/skills/seo-cycle` — совместимые symlinks на Codex-ядро.
 
 Codex-first установка нового проекта:
 
@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-
 
 Запуск Codex-сессии из корня проекта:
 ```bash
-ln -sf ~/.codex/skills/seo-cycle/AGENTS.md ./AGENTS.md   # один раз, чтобы Codex подхватил
+ln -sf ./.codex/skills/seo-cycle/AGENTS.md ./AGENTS.md   # один раз, чтобы Codex подхватил
 export SEO_RUNTIME=codex
 codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
   "Прочитай AGENTS.md и seo-cycle.yaml. Запусти SEO-цикл Phase 2 для кластера 'минеральная вата'."
@@ -78,21 +78,21 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 
 - использовать NeuronWriter как primary SERP/NLP content editor только в пределах limits-файла;
 - использовать Google Cloud Natural Language только как guarded technical entity audit с cache/unit caps;
-- перед дорогим сбором, браузером, публикацией или schedule запускать `python3 ~/.codex/skills/seo-cycle/scripts/governance-report.py --format md`;
-- перед началом большого цикла обновлять compact readiness, setup blueprint, upgrade/access assistants, token-waste/provider health и gap audit: `python3 ~/.codex/skills/seo-cycle/scripts/setup-control-plane.py --write`;
-- перед конкретной задачей строить bounded route: `python3 ~/.codex/skills/seo-cycle/scripts/task-router.py --task "<цель пользователя>" --write` и запускать только фазы/источники из `seo/setup/latest-task-route.md`;
-- после route строить context pack: `python3 ~/.codex/skills/seo-cycle/scripts/context-pack.py --task "<цель пользователя>" --write` и читать `seo/setup/context-pack.md` первым; использовать `context_manifest` для read order/source caps/blocked raw artifacts, подробные отчёты открывать только по read order;
-- перед расходом токенов/API/credits/ads строить spend guard `python3 ~/.codex/skills/seo-cycle/scripts/spend-guard.py --write`; если сервис не allowed, нужен approval/policy. Затем делать preflight `usage-ledger.py check --service <tool> ... --fail-on-block`, после расхода фиксировать `usage-ledger.py record --service <tool> ... --write`;
-- перед подключением Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструментов строить stack: `python3 ~/.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write`; `--apply` только после review, без секретов;
-- перед широким циклом строить top-N roadmap: `python3 ~/.codex/skills/seo-cycle/scripts/growth-roadmap.py --write` и начинать с `seo/setup/growth-roadmap.md`;
-- перед первым запуском строить onboarding: `python3 ~/.codex/skills/seo-cycle/scripts/setup-onboarding.py --write`; human-secret значения вводятся только в `.env`/кабинетах;
+- перед дорогим сбором, браузером, публикацией или schedule запускать `seo-cycle run script governance-report --format md`;
+- перед началом большого цикла обновлять compact readiness, setup blueprint, upgrade/access assistants, token-waste/provider health и gap audit: `seo-cycle control-plane --write`;
+- перед конкретной задачей строить bounded route: `seo-cycle run script task-router --task "<цель пользователя>" --write` и запускать только фазы/источники из `seo/setup/latest-task-route.md`;
+- после route строить context pack: `seo-cycle context --task "<цель пользователя>" --write` и читать `seo/setup/context-pack.md` первым; использовать `context_manifest` для read order/source caps/blocked raw artifacts, подробные отчёты открывать только по read order;
+- перед расходом токенов/API/credits/ads строить spend guard `seo-cycle spend --write`; если сервис не allowed, нужен approval/policy. Затем делать preflight `usage-ledger.py check --service <tool> ... --fail-on-block`, после расхода фиксировать `usage-ledger.py record --service <tool> ... --write`;
+- перед подключением Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking инструментов строить stack: `seo-cycle run script tool-stack-recommender --write`; `--apply` только после review, без секретов;
+- перед широким циклом строить top-N roadmap: `seo-cycle run script growth-roadmap --write` и начинать с `seo/setup/growth-roadmap.md`;
+- перед первым запуском строить onboarding: `seo-cycle run script setup-onboarding --write`; human-secret значения вводятся только в `.env`/кабинетах;
 - перед чтением подробных setup-отчётов строить context pack, token-waste/provider health, setup blueprint, upgrade/access assistants, gap audit/questionnaire и launch contract: `context-pack.py --write`, `token-waste-audit.py --write`, `perplexity-health.py --write`, `notebooklm-health.py --write`, `xmlriver-health.py --write`, `setup-blueprint.py --write`, `project-upgrade-assistant.py --write`, `access-key-assistant.py --write`, `setup-gap-audit.py --write`, после заполнения questionnaire — `setup-answer-plan.py --write`, затем `launch-plan.py --write`; начинать с `seo/setup/context-pack.md`, потом `seo/setup/token-waste-audit.md`, `seo/setup/perplexity-health.md`, `seo/setup/notebooklm-health.md`, `seo/setup/xmlriver-health.md`, `seo/setup/setup-blueprint.md`, `seo/setup/upgrade-questionnaire.csv`, `seo/setup/access-key-assistant.md`, потом `seo/setup/setup-questionnaire.csv` / `seo/setup/setup-gap-audit.md`, после заполнения CSV — `seo/setup/setup-answer-plan.md`, затем `seo/setup/launch-plan.md`;
 - для writing после research package обязательно запускать `research-package-quality.py --write` → `research-package-repair.py --write` или точечные repair-команды из action plan → при внешней SERP-проверке `serp-validation-import.py --input-json/--input-csv --write` → повторный `research-package-quality.py --write` → `page-outline-v3.py --all-mvp --write`/`--priority P1 --write` → `page-outline-quality.py --version v3 --write` → draft из `copywriter-ready/*.md` в `<package>/drafts/*.md` → `draft-quality-gate.py <draft.md> --outline <page-outlines-v3/slug.json> --write` → повторный `project-journey.py --write`; если repair/import свежее quality, journey блокирует writing до rerun quality, а после v3 блокирует implementation/publishing на `content_draft_gate`, пока draft gate не чистый; NeuronWriter запускать только после `usage-ledger.py check --service neuronwriter --category paid_api --content-writer 1 --ai-credits 500 --fail-on-block` и использовать как scoring/evaluate/import слой; raw research открывать только по конкретному source slot/fact-check item;
 - для SEO/AEO/GEO vNext строить report-only артефакты: `expert-source-pack.py --write`, `ai-brand-audit.py --write`, `answer-units-audit.py --write`, `eeat-evidence-map.py --write`, `geo-kpi-model.py --write`, `technical-guardrails-audit.py --write`, `snippet-sitemap-audit.py --write`, `traffic-drop-diagnostics.py --write`, `cannibalization-audit.py --write`, `log-bot-audit.py --write`, `ai-bot-access-check.py --url https://example.com/ --write`, `ru-commerce-readiness.py --write`, `offpage-risk-audit.py --write`, `conversion-sxo-audit.py --write`; все они не публикуют, не отправляют URL в индекс, не ставят теги и не вызывают paid API по умолчанию; live AI bot access check запускается явно, потому что делает публичные HTTP-запросы;
-- рекомендации schedule строить через `python3 ~/.codex/skills/seo-cycle/scripts/automation-recommender.py --write`; он использует tool-stack/spend-guard и покрывает spend, indexability, search consoles, Bing, schema/CWV, content decay, ecommerce/local и AI visibility; применять через `--apply` только после review, `--allow-schedules` только по явному разрешению;
-- детальную настройку стран/поисковиков/регионов/ads/local/merchant/tools/governance делать через `python3 ~/.codex/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write` или `--defaults --write`;
-- точечную настройку проекта делать через `python3 ~/.codex/skills/seo-cycle/scripts/project-profile.py --write`; `--apply` только после review generated overlay/report;
-- schedule-артефакты создавать через `python3 ~/.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled`; expanded tasks должны оставаться report-only/dry-run/env-gated до approval, реальный cron install — только при двойном разрешении governance + `seo/automation-policy.yaml`;
+- рекомендации schedule строить через `seo-cycle run script automation-recommender --write`; он использует tool-stack/spend-guard и покрывает spend, indexability, search consoles, Bing, schema/CWV, content decay, ecommerce/local и AI visibility; применять через `--apply` только после review, `--allow-schedules` только по явному разрешению;
+- детальную настройку стран/поисковиков/регионов/ads/local/merchant/tools/governance делать через `seo-cycle intake --interactive --write` или `--defaults --write`;
+- точечную настройку проекта делать через `seo-cycle run script project-profile --write`; `--apply` только после review generated overlay/report;
+- schedule-артефакты создавать через `seo-cycle run script automation-plan --write --include-disabled`; expanded tasks должны оставаться report-only/dry-run/env-gated до approval, реальный cron install — только при двойном разрешении governance + `seo/automation-policy.yaml`;
 - держать low-token режим: raw data на диск, в контекст только distillates/top-N, progressive disclosure вместо чтения всего репозитория; после широкого сбора запускать `token-waste-audit.py --write`;
 - проверять robots/Content-Signal policy: `search=yes, ai-input=yes, ai-train=no` допустимо как запрет обучения, но публичный `robots.txt` не должен содержать PHP warnings/HTML или editor preview мусор;
 - не ставить зарубежные tracking tags/pixels на РФ-проекты без явного разрешения policy;
@@ -133,4 +133,4 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 
 ## Поддержание симлинка
 
-`AGENTS.md → SKILL.md` создаётся один раз: `cd ~/.codex/skills/seo-cycle && ln -sf SKILL.md AGENTS.md`. Git хранит симлинк (mode 120000) — переживает `clone`. Проверка: `ls -l AGENTS.md`.
+`AGENTS.md → SKILL.md` создаётся один раз: `cd ./.codex/skills/seo-cycle && ln -sf SKILL.md AGENTS.md`. Git хранит симлинк (mode 120000) — переживает `clone`. Проверка: `ls -l AGENTS.md`.

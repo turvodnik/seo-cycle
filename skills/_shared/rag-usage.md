@@ -5,7 +5,7 @@
 ```bash
 seo-cycle rag query "<primary keyword>" --top-k 5 --source-type source_pack --source-type distillate
 seo-cycle rag query "<сущность>" --global          # пересечения с другими проектами агентства
-python3 scripts/page-outline-v3.py <pkg> --all-mvp --rag --write   # брифы с related_passages
+seo-cycle run script page-outline-v3 <pkg> --all-mvp --rag --write   # брифы с related_passages
 ```
 
 Индекс обновляй `seo-cycle rag index --write` после новых distillates/drafts (инкрементально, дёшево). Кросс-проектный: `rag index --global` по projects-registry.

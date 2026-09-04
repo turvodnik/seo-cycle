@@ -10,7 +10,7 @@ description: Entity Map по методике Шестакова (Phase 4): су
 ## Контракт модуля
 
 - **Входы:** `03-clusters.md` (кластер → страницы); RAG-подсказки (`_shared/rag-usage.md`)
-- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `python3 scripts/cycle-state.py init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
+- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `seo-cycle cycle init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
 - **Выходы:** `04-entity-maps/<slug>.entity-map.md` на каждую страницу
 - **Gate:** evidence cross-check (Antigravity + Perplexity) обязателен; `scripts/entity-graph-quality.py <package> --write`
 - **Делегаты:** `delegate.semantic_brief` (проектный скилл, иначе `templates/entity-map.template.md`)

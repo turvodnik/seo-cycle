@@ -10,7 +10,7 @@ description: CMS-aware публикация (WordPress REST + App Password ка�
 ## Контракт модуля
 
 - **Входы:** `06-drafts/*.publish.md`, `publishing.*` из конфига, `business_profile`
-- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `python3 scripts/cycle-state.py init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
+- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `seo-cycle cycle init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
 - **Выходы:** `07-published.md` (URL+дата), `08-schema.md`, лог в `artifacts.publish_log`
 - **Gate:** verify GET+браузер после публикации; img без alt / inline без caption = блокер; фейковый AggregateRating запрещён
 - **Делегаты:** `publishing.publish_skills` (проектные), `delegate.schema_markup` (default `claude-seo:seo-schema`)
@@ -64,8 +64,8 @@ description: CMS-aware публикация (WordPress REST + App Password ка�
 
 **E-E-A-T: канонический узел организации (обязательно).** Не оставляй `author`/`publisher` голым `{"@type":"Organization","name":...}`. Собери единый узел из `business_profile` и ссылайся на него через `@id`:
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/schema-org-build.py build              # посмотреть узел
-python3 ~/.codex/skills/seo-cycle/scripts/schema-org-build.py inject schema/*.json  # вставить + переписать author/publisher на @id
+seo-cycle run script schema-org-build build              # посмотреть узел
+seo-cycle run script schema-org-build inject schema/*.json  # вставить + переписать author/publisher на @id
 ```
 Узел несёт trust-сигналы (address, telephone, openingHours, areaServed, knowsAbout, sameAs) — это то, что связывает контент с реальным бизнесом и усиливает Authoritativeness/Trust. Инжект идемпотентен. Требует секцию `business_profile` в конфиге.
 

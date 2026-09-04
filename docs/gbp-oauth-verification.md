@@ -42,9 +42,9 @@ Google-аккаунта, автоматизировать его нельзя. �
 
 ```bash
 set -a; . ./.env; set +a
-python3 ~/.codex/skills/seo-cycle/scripts/gbp-oauth-helper.py            # локальный redirect
+seo-cycle run script gbp-oauth-helper            # локальный redirect
 # или без локального сервера:
-python3 ~/.codex/skills/seo-cycle/scripts/gbp-oauth-helper.py --print-url-only
+seo-cycle run script gbp-oauth-helper --print-url-only
 ```
 
 Токен печатается один раз в stderr и никуда не сохраняется — внесите его в

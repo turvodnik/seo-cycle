@@ -10,7 +10,7 @@ description: Контент-план (hub-and-spoke, KPI-90d) и написан�
 ## Контракт модуля
 
 - **Входы:** `04-entity-maps/*`, `page-outline-v3` брифы (`copywriter-ready/*.md`), RAG-контекст
-- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `python3 scripts/cycle-state.py init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
+- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `seo-cycle cycle init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
 - **Выходы:** `05-content-plan.md`; `06-drafts/*.publish.md` (+ `fact_check_log` frontmatter)
 - **Gate:** `seo-cycle loop draft <draft.md> --outline <outline.json>` — exit 0; стоп-слова, fact-check, alt/caption — блокеры
 - **Делегаты:** `delegate.content_strategy` (default `seo-content-strategist`), `delegate.content_writer` (default `seo-content-writer`)
@@ -60,7 +60,7 @@ description: Контент-план (hub-and-spoke, KPI-90d) и написан�
 
 **E-E-A-T trust-блок (если есть `fact_check_log`):** сгенерируй видимый блок «Источники» в конец статьи —
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/eeat-render.py 06-drafts/<name>.publish.md
+seo-cycle run script eeat-render 06-drafts/<name>.publish.md
 ```
 Рендерятся только источники с verdict достоверно/частично; спорные — править формулировку в тексте, а не «подтверждать». Это прямой Trust-сигнал.
 

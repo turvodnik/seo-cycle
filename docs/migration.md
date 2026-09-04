@@ -25,7 +25,7 @@
 
 ```bash
 cd /Users/turvodnik/AI/emwoody
-cp ~/.codex/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml
+cp ./.codex/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml
 ```
 
 Заполнить значениями emwoody (см. готовый пример ниже).
@@ -33,7 +33,7 @@ cp ~/.codex/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml
 ### Этап 2. Валидация и подключение
 
 ```bash
-python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py
+seo-cycle validate
 ```
 
 Закрыть `[ ]` пункты чек-листа.
@@ -147,7 +147,7 @@ sources:
     method: browser_mcp
   yandex_suggest:
     enabled: true
-    script: ~/.codex/skills/seo-cycle/scripts/yandex-suggest.py
+    script: ./.codex/skills/seo-cycle/scripts/yandex-suggest.py
   yandex_serp_blocks:
     enabled: true
     method: browser_mcp
@@ -170,10 +170,10 @@ sources:
     min_days_after_publish: 30
   google_trends:
     enabled: true
-    script: ~/.codex/skills/seo-cycle/scripts/google-trends.py
+    script: ./.codex/skills/seo-cycle/scripts/google-trends.py
   google_suggest:
     enabled: true
-    script: ~/.codex/skills/seo-cycle/scripts/google-suggest.py
+    script: ./.codex/skills/seo-cycle/scripts/google-suggest.py
   dataforseo:
     enabled: false
 
@@ -192,8 +192,8 @@ sources:
     codex:
       enabled: true
       cmd: codex
-    parallel_collect_script: ~/.codex/skills/seo-cycle/scripts/llm-cli-collect.sh
-    merge_script: ~/.codex/skills/seo-cycle/scripts/llm-cli-merge.py
+    parallel_collect_script: ./.codex/skills/seo-cycle/scripts/llm-cli-collect.sh
+    merge_script: ./.codex/skills/seo-cycle/scripts/llm-cli-merge.py
 
   answerthepublic:
     enabled: true
@@ -277,7 +277,7 @@ content_rules:
 quality_gates:
   stop_words_check:
     enabled: true
-    script: ~/.codex/skills/seo-cycle/scripts/check-stop-words.py
+    script: ./.codex/skills/seo-cycle/scripts/check-stop-words.py
     fail_on_match: true
   neuronwriter_score:
     enabled: true
@@ -344,7 +344,7 @@ delegate:
 
 ## Проверка миграции
 
-1. `python3 ~/.codex/skills/seo-cycle/scripts/validate-config.py` → 0 errors
+1. `seo-cycle validate` → 0 errors
 2. Запустить мелкий цикл («покажи фазы для категории X в режиме dry-run»)
 3. Проверить, что артефакты сохраняются в `seo/cycles/` правильно
 4. Проверить, что quality gates срабатывают на тестовом тексте с эпитетами

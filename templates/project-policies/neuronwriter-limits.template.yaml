@@ -58,7 +58,7 @@ spend_policy:
       - early_outlines
       - throwaway_drafts
       - pages_not_planned_for_publish
-    preflight_command: "python3 ~/.codex/skills/seo-cycle/scripts/usage-ledger.py check --service neuronwriter --category paid_api --plagiarism-checks 1 --fail-on-block"
+    preflight_command: "seo-cycle ledger check --service neuronwriter --category paid_api --plagiarism-checks 1 --fail-on-block"
   monitored_prompts:
     use_for:
       - ai_visibility_brand_queries

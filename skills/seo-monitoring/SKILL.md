@@ -10,7 +10,7 @@ description: Мониторинг (Phase 9): ежедневный pulse (GSC + �
 ## Контракт модуля
 
 - **Входы:** API-токены источников (Keychain через ai-secret), `config/projects-registry.yaml` для `pulse --global`
-- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `python3 scripts/cycle-state.py init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
+- **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `seo-cycle cycle init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
 - **Выходы:** `09-monitoring/YYYY-MM-DD-snapshot.json` + markdown-отчёт; `seo.db` через `db-sync`
 - **Gate:** freshness: снапшоту < 3 дней (warn) / < 7 дней (error) — проверяется в `doctor`
 - **Делегаты:** `delegate.google_data` (`claude-seo:seo-google`), `delegate.yandex_specialist`
