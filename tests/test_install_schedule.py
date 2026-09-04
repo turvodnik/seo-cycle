@@ -117,10 +117,18 @@ class EveryJobIsWrappedTest(unittest.TestCase):
         )
         ai_secret.chmod(0o755)
 
+        # The launcher writes its cwd to a sentinel FILE rather than stdout —
+        # comparing file content sidesteps any CI log-masking of paths and
+        # keeps the assertion strictly about the value the process actually
+        # saw, not about what a terminal chose to render.
+        self.pwd_sentinel = self.tmp / "launcher-pwd.txt"
         self.fake_launcher = self.tmp / "fakebin" / "seo-cycle"
         self.fake_launcher.parent.mkdir(parents=True)
         self.fake_launcher.write_text(
-            '#!/usr/bin/env bash\necho "CALLED:$*:PWD=$PWD"\n', encoding="utf-8",
+            "#!/usr/bin/env bash\n"
+            'echo "CALLED:$*"\n'
+            f'pwd > "{self.pwd_sentinel}"\n',
+            encoding="utf-8",
         )
         self.fake_launcher.chmod(0o755)
 
@@ -153,6 +161,7 @@ class EveryJobIsWrappedTest(unittest.TestCase):
         self.assertEqual(set(commands), expect_keys)
 
         for name, cmd in commands.items():
+            self.pwd_sentinel.unlink(missing_ok=True)
             result = self._run_job(cmd)
             self.assertEqual(result.returncode, 0, f"{name}: {result.stderr}")
             self.assertIn(
@@ -164,8 +173,13 @@ class EveryJobIsWrappedTest(unittest.TestCase):
                 f"{name}: the real launcher never ran — {result.stdout!r}",
             )
             if "daily-progress" in name or "monthly-runner" in name:
-                self.assertIn(
-                    f"PWD={self.project}", result.stdout,
+                self.assertTrue(
+                    self.pwd_sentinel.exists(),
+                    f"{name}: the launcher never wrote its cwd sentinel",
+                )
+                seen_pwd = self.pwd_sentinel.read_text(encoding="utf-8").strip()
+                self.assertEqual(
+                    pathlib.Path(seen_pwd).resolve(), self.project.resolve(),
                     f"{name}: cd into the project did not survive the ai-secret/env wrapper",
                 )
 
