@@ -60,6 +60,10 @@ class InstallerFixture(unittest.TestCase):
         _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "seed")
         _git(self.seed, "tag", "v1.0.0")
         _git(self.seed, "push", "-q", "origin", "main", "--tags")
+        # A bare repo's default branch follows the runner's git config
+        # (init.defaultBranch); pin origin's HEAD symref to "main" explicitly
+        # so a clone always checks out a real branch regardless of that default.
+        _git(self.origin, "symbolic-ref", "HEAD", "refs/heads/main")
 
         # Isolated HOME: nothing this test does can touch the real machine's
         # ~/.local/bin, ~/.codex or ~/.agents.
