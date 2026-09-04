@@ -386,6 +386,7 @@ CloakBrowser/CloakMCP и другие stealth/anti-bot инструменты н
 | `keyso-save.py` | Сохранить группу доменов (конкуренты) **в кабинет Keys.so** (write-API `/report/group`) | `python3 keyso-save.py group-report --from-config` | rid отчёта в Keys.so |
 | `keyso-clustering-export.py` | Подготовить файл ключей для clustering Keys.so (загрузка — браузером, см. `prompts/keyso-clustering-upload.md`) | `python3 keyso-clustering-export.py --from-keyso-cache <домен> --out keys.txt` | .txt по ключу на строку |
 | `spyfu-fetch.py` | Competitor/PPC US/UK/EU (не РФ) | `python3 spyfu-fetch.py domain-stats <domain> --cc US` | md-таблица; usage-трекер $-бюджета |
+| `dataforseo-fetch.py` | **DataForSEO**: SERP, частотность Google Ads, Labs (идеи/связанные/ranked/конкуренты), бэклинки, onpage. Мировые данные, вкл. ЕС и РФ | `ai-secret run global -- python3 dataforseo-fetch.py volume "<ключ>" --location 2643743 --md` | md-таблица; кэш 30д; учёт трат по полю `cost` (`_usage.json`) + стоп по `--budget`. В диалоге те же данные даёт MCP-сервер `dataforseo` |
 | `atp-fetch.py` | Шаблоны вопросов AnswerThePublic (en/us) | `python3 atp-fetch.py "<en keyword>"` | md с questions/prepositions/comparisons |
 | `nw-cli.sh` | NeuronWriter: SERP terms/entities/score | `bash nw-cli.sh get <query_id>` | terms, entities, competitors, target score |
 | `llm-cli-collect.sh` | Параллельный сбор Antigravity + Codex (RUNTIME-aware, deep-режим); Antigravity обязателен для семантики/интентов/сущностей | `bash llm-cli-collect.sh "<тема>"` | 2 файла сырья + подсказка merge |
@@ -920,6 +921,7 @@ CloakBrowser/CloakMCP and other stealth/anti-bot tools are not part of the stand
 | `keyso-save.py` | Save a domain group (competitors) **into the Keys.so account** (write-API `/report/group`) | `python3 keyso-save.py group-report --from-config` | report rid in Keys.so |
 | `keyso-clustering-export.py` | Prepare keyword file for Keys.so clustering (upload via browser, see `prompts/keyso-clustering-upload.md`) | `python3 keyso-clustering-export.py --from-keyso-cache <domain> --out keys.txt` | .txt one keyword per line |
 | `spyfu-fetch.py` | Competitor/PPC US/UK/EU (not RU) | `python3 spyfu-fetch.py domain-stats <domain> --cc US` | md table; $-budget tracker |
+| `dataforseo-fetch.py` | **DataForSEO**: SERP, Google Ads volume, Labs (ideas/related/ranked/competitors), backlinks, onpage. Worldwide incl. EU and RU | `ai-secret run global -- python3 dataforseo-fetch.py volume "<kw>" --location 2643743 --md` | md table; 30d cache; real spend from API `cost` (`_usage.json`) + `--budget` stop. Same data in chat via the `dataforseo` MCP server |
 | `atp-fetch.py` | AnswerThePublic question templates (en/us) | `python3 atp-fetch.py "<en keyword>"` | md questions/prepositions/comparisons |
 | `nw-cli.sh` | NeuronWriter: SERP terms/entities/score | `bash nw-cli.sh get <query_id>` | terms, entities, competitors, target score |
 | `llm-cli-collect.sh` | Parallel Antigravity + Codex (RUNTIME-aware, deep mode); Antigravity is mandatory for semantics/intents/entities | `bash llm-cli-collect.sh "<topic>"` | 2 raw files + merge hint |

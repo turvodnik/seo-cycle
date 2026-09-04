@@ -2,6 +2,49 @@
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-08-02
+
+### Feature: DataForSEO — реальная интеграция вместо заглушки
+
+- **`scripts/dataforseo-fetch.py`** — клиент DataForSEO API для конвейеров: `balance`,
+  `serp`, `volume` (Google Ads), `ideas`/`related`/`ranked`/`competitors` (Labs),
+  `backlinks`, `onpage`. Кэш на диск (30д), md-таблицы, общие опции работают и до, и
+  после подкоманды.
+- **Учёт денег по факту**: трата берётся из поля `cost` каждого ответа API и копится в
+  `seo/research/dataforseo/_usage.json` помесячно; при исчерпании `--budget` (умолч. 5 USD)
+  скрипт останавливается до платного вызова. Никаких выдуманных прайс-листов в коде.
+- **Авторизация** — `DATAFORSEO_API_KEY_BASE64` (готовый base64) или пара
+  `DATAFORSEO_LOGIN`/`DATAFORSEO_PASSWORD`. Значение живёт в Keychain и приходит через
+  `ai-secret run global`; в `.env` проектов — только имена.
+- **Движок `engines.dataforseo`** в `config/project.template.yaml` заменил мёртвую
+  заглушку `delegate_to: claude-seo:seo-dataforseo`: `auth_env`, `helper_script`,
+  `mcp_server`, `monthly_usd_cap`, `cache_ttl_days` + предупреждение про верификацию аккаунта.
+- **MCP-путь** для диалога с агентом: локальный сервер `dataforseo` (обёртка
+  `~/.local/bin/dataforseo-mcp`, пакет `dataforseo-mcp-server` 2.9.11, модули
+  SERP+KEYWORDS_DATA+ONPAGE+DATAFORSEO_LABS ≈ 44 инструмента). Подключается по проектам
+  через `.mcp.json` / `.gemini/settings.json`; ключ в конфиги не попадает.
+- **`docs/dataforseo.md`** — когда MCP, когда скрипт, деньги, коды локаций, включение в проекте.
+- Тесты `test_dataforseo_fetch.py` (авторизация, кэш-хит, стоп по бюджету, `--force`,
+  ошибка API, сортировка вывода): 350 → 359.
+
+### Feature: Реестр ложных срабатываний секрет-скана (T-021)
+
+- **`scripts/secret-scan.py --ledger <path>`** — опциональная сверка находок с реестром
+  ложных срабатываний (`.agents/security/false-positives.yaml`-подобный YAML): запись
+  подавляет находку, только если совпал `fingerprint` (sha256 значения) и находка попадает
+  в узкую `scope` записи (первый сегмент пути без wildcard-символов, привязка к месту, а не
+  только к имени файла). Без `--ledger` поведение и побайтный вывод не меняются — обратная
+  совместимость сохранена.
+- **Формат записи реестра**: обязательные поля `fingerprint, scope, rule, reason,
+  recognized_by, recognized_at, review_after`; запись без любого из них или с широкой
+  `scope` (`*`, `**`, `**/tests/**` и т.п.) отвергается инструментом, а не применяется.
+  Просроченные (`review_after` в прошлом) и более не совпадающие записи отмечаются как
+  устаревшие и не подавляют находки молча.
+- **JSON-вывод `secret-scan --format json` расширен** ключами `fingerprint` (хеш реального
+  совпадения, только при активном `--ledger`), `suppressed` (список находок, подавленных
+  реестром, с `ledger_id` подавившей записи) и `stale_ledger_entries` (записи реестра,
+  которые больше ни на что не совпали, — кандидаты на удаление).
+
 ## [2.0.2] — 2026-07-30
 
 ### Fix: pulse опрашивал источник выключенного движка (регресс кросс-проектной утечки)

@@ -189,7 +189,7 @@ def load_ledger(path: pathlib.Path) -> list[dict]:
         import yaml
     except ImportError:
         print("ERROR: для --ledger нужен PyYAML. `pip3 install pyyaml`", file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(2) from None
     if not path.exists():
         print(f"ERROR: реестр не найден: {path}", file=sys.stderr)
         raise SystemExit(2)
@@ -199,7 +199,7 @@ def load_ledger(path: pathlib.Path) -> list[dict]:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
         print(f"ERROR: реестр нечитаем: {path}: {exc}", file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(2) from None
     # Пустой/битый реестр НЕ считается пустым молча: «не смог прочитать» не
     # равно «прочитал, и там чисто». Легальная пустота записывается явно —
     # `entries: []`.

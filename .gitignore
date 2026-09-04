@@ -6,3 +6,5 @@ __pycache__/
 graphify-out/
 .claude/
 .coverage
+.ruff_cache/
+.mypy_cache/
