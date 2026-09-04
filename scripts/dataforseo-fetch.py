@@ -26,12 +26,15 @@ Auth: Authorization: Basic <base64("login:password")>.
 
 Экономия и защита от неожиданных трат:
   • кэш на диск (--ttl дней, по умолчанию 30) — повтор той же выборки = 0 расходов;
-  • месячный счётчик реальных трат `_usage.json` из поля `cost` ответов;
-  • стоп при исчерпании месячного лимита (--budget, по умолчанию 5 USD; --force снимает).
+  • месячный счётчик реальных трат `_usage.json` из поля `cost` ответов; битый/
+    нечитаемый файл учёта — это отказ, а не «потрачено 0» (--force снимает осознанно);
+  • стоп при исчерпании месячного лимита — минимум из --budget (по умолчанию 5 USD)
+    и cost_controls.dataforseo.monthly_usd_cap проекта, если конфиг найден; --force
+    снимает стоп.
 
 Примеры:
   ai-secret run global -- python3 dataforseo-fetch.py balance
-  ai-secret run global -- python3 dataforseo-fetch.py volume "минеральная вата" --location 2643743 --md
+  ai-secret run global -- python3 dataforseo-fetch.py volume "минеральная вата" --location 2840 --md
   ai-secret run global -- python3 dataforseo-fetch.py serp "kuchyne na miru" --location 2203 --language cs --md
 """
 
@@ -39,15 +42,20 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import datetime
+import fcntl
 import hashlib
 import json
 import os
 import pathlib
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
+
+from seo_cycle_core.config import find_config, load_yaml, nested_get
 
 API_BASE = "https://api.dataforseo.com/v3"
 DEFAULT_OUT = "seo/research/dataforseo"
@@ -81,31 +89,79 @@ def load_auth(env: dict | None = None) -> str:
 
 # ---------- учёт расходов ----------
 
+class UsageLedgerError(RuntimeError):
+    """_usage.json существует, но не читается: испорчен, не JSON, либо неожиданная
+    схема. НЕ трактуется как «потрачено 0» — иначе бюджетный стоп молча пропускает
+    платный вызов (T-059: ровно так и происходило до этого фикса)."""
+
+
 def usage_file(out_dir: pathlib.Path) -> pathlib.Path:
     return out_dir / "_usage.json"
 
 
 def load_usage(out_dir: pathlib.Path) -> dict:
+    """Месячный учёт трат. Нечитаемый/повреждённый файл поднимает UsageLedgerError,
+    а не тихо возвращает «потрачено 0» — вызывающая сторона (fetch()) решает, что
+    делать: по умолчанию отказ, --force осознанно считает месяц заново."""
     f = usage_file(out_dir)
     month = datetime.date.today().strftime("%Y-%m")
-    if f.exists():
-        try:
-            u = json.loads(f.read_text(encoding="utf-8"))
-            if u.get("month") == month:
-                return u
-        except (ValueError, OSError):
-            pass
-    return {"month": month, "spent_usd": 0.0, "calls": 0}
+    if not f.exists():
+        return {"month": month, "spent_usd": 0.0, "calls": 0}
+    try:
+        u = json.loads(f.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as e:
+        raise UsageLedgerError(f"{f}: {e}") from e
+    spent = u.get("spent_usd") if isinstance(u, dict) else None
+    if not isinstance(spent, (int, float)) or isinstance(spent, bool):
+        raise UsageLedgerError(f"{f}: нет числового поля spent_usd (испорченная схема)")
+    if u.get("month") != month:
+        return {"month": month, "spent_usd": 0.0, "calls": 0}
+    return u
 
 
 def save_usage(out_dir: pathlib.Path, u: dict) -> None:
-    usage_file(out_dir).write_text(json.dumps(u, indent=2, ensure_ascii=False), encoding="utf-8")
+    """Атомарная запись: временный файл в той же папке + os.replace — читатель
+    никогда не увидит полузаписанный _usage.json при обрыве процесса (T-059)."""
+    path = usage_file(out_dir)
+    fd, tmp_name = tempfile.mkstemp(dir=out_dir, prefix=".usage-", suffix=".json.tmp")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(u, f, indent=2, ensure_ascii=False)
+    os.replace(tmp_name, path)
+
+
+@contextlib.contextmanager
+def usage_lock(out_dir: pathlib.Path):
+    """Файловая блокировка на время «проверка бюджета -> платный вызов -> запись
+    расхода» (T-059): без неё параллельные fetch() читают один и тот же старый
+    _usage.json, и последняя запись побеждает, теряя чужой расход."""
+    lock_path = out_dir / "_usage.json.lock"
+    with open(lock_path, "a", encoding="utf-8") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
+def effective_budget(args) -> float:
+    """--budget, ограниченный сверху cost_controls.dataforseo.monthly_usd_cap
+    проекта, если конфиг найден и поле задано числом (T-059; docs/dataforseo.md
+    обещает именно эту синхронизацию). Конфиг без секции — поведение как раньше."""
+    cfg_path = find_config(pathlib.Path.cwd())
+    if cfg_path is None:
+        return args.budget
+    cap = nested_get(load_yaml(cfg_path), "cost_controls.dataforseo.monthly_usd_cap")
+    if isinstance(cap, (int, float)) and not isinstance(cap, bool):
+        return min(args.budget, float(cap))
+    return args.budget
 
 
 # ---------- транспорт ----------
 
 def call(b64: str, path: str, payload: dict | None) -> dict:
-    """POST (live-методы) либо GET (без payload). Ошибки API поднимаются наверх."""
+    """POST (live-методы) либо GET (без payload). Ошибки API, сети и битого JSON
+    поднимаются как управляемый sys.exit с понятным сообщением, а не голый
+    traceback (T-059)."""
     data = None
     if payload is not None:
         data = json.dumps([payload]).encode("utf-8")
@@ -117,10 +173,16 @@ def call(b64: str, path: str, payload: dict | None) -> dict:
     )
     try:
         with urllib.request.urlopen(req, timeout=120) as r:
-            return json.loads(r.read())
+            raw = r.read()
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")[:300]
         sys.exit(f"ERROR DataForSEO HTTP {e.code}: {body}")
+    except (urllib.error.URLError, TimeoutError) as e:
+        sys.exit(f"ERROR DataForSEO: сеть недоступна ({e}).")
+    try:
+        return json.loads(raw)
+    except ValueError as e:
+        sys.exit(f"ERROR DataForSEO: битый ответ, не JSON ({e}).")
 
 
 def response_cost(resp: dict) -> float:
@@ -141,6 +203,16 @@ def first_result(resp: dict) -> list:
     return t.get("result") or []
 
 
+def _task_status_ok(resp: dict) -> bool:
+    """Task-level статус (в отличие от общего resp["status_code"], который fetch()
+    уже проверил выше) — нужен только для решения «кэшировать ответ или нет»
+    (T-059). Сам exit на ошибке задачи по-прежнему делает first_result()."""
+    tasks = resp.get("tasks") or []
+    if not tasks:
+        return True
+    return tasks[0].get("status_code") in (20000, None)
+
+
 # ---------- кэш ----------
 
 def cache_path(out_dir: pathlib.Path, path: str, payload: dict | None) -> pathlib.Path:
@@ -149,7 +221,10 @@ def cache_path(out_dir: pathlib.Path, path: str, payload: dict | None) -> pathli
 
 
 def fetch(b64: str, path: str, payload: dict | None, args) -> dict:
-    """Кэш → бюджет-гард → вызов → учёт расхода. Возвращает распарсенный ответ."""
+    """Кэш → бюджет-гард → вызов → учёт расхода. Возвращает распарсенный ответ.
+    Проверка бюджета, платный вызов и запись расхода идут под одной файловой
+    блокировкой (usage_lock, T-059) — иначе параллельные fetch теряют чужой
+    расход. Ответ с task-level ошибкой в кэш не пишется."""
     out_dir = pathlib.Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     cpath = cache_path(out_dir, path, payload)
@@ -158,24 +233,44 @@ def fetch(b64: str, path: str, payload: dict | None, args) -> dict:
         print(f"↩ кэш (<{args.ttl}д): {cpath} — без расходов", file=sys.stderr)
         return json.loads(cpath.read_text(encoding="utf-8"))
 
-    u = load_usage(out_dir)
-    if u["spent_usd"] >= args.budget and not args.force:
-        sys.exit(f"ERROR: месячный лимит DataForSEO исчерпан "
-                 f"(${u['spent_usd']:.4f}/${args.budget}, месяц {u['month']}). "
-                 f"--force чтобы продолжить или подними --budget.")
+    with usage_lock(out_dir):
+        try:
+            u = load_usage(out_dir)
+        except UsageLedgerError as e:
+            if not args.force:
+                sys.exit(f"ERROR: файл учёта трат повреждён ({e}). Это отказ, а не "
+                         f"«потрачено 0» — иначе бюджетный стоп пропустит платный "
+                         f"вызов вслепую. Почини или удали {usage_file(out_dir)}, "
+                         f"либо --force, чтобы посчитать месяц заново (старый файл "
+                         f"будет переписан).")
+            print(f"⚠ файл учёта трат повреждён, --force: считаю месяц с нуля ({e})",
+                  file=sys.stderr)
+            u = {"month": datetime.date.today().strftime("%Y-%m"), "spent_usd": 0.0, "calls": 0}
 
-    resp = call(b64, path, payload)
-    if resp.get("status_code") not in (20000, None):
-        sys.exit(f"ERROR DataForSEO: {resp.get('status_code')} {resp.get('status_message')}")
+        budget = effective_budget(args)
+        if u["spent_usd"] >= budget and not args.force:
+            sys.exit(f"ERROR: месячный лимит DataForSEO исчерпан "
+                     f"(${u['spent_usd']:.4f}/${budget}, месяц {u['month']}). "
+                     f"--force чтобы продолжить или подними --budget.")
 
-    cost = response_cost(resp)
-    u["spent_usd"] = round(u.get("spent_usd", 0.0) + cost, 6)
-    u["calls"] = u.get("calls", 0) + 1
-    save_usage(out_dir, u)
-    print(f"↑ запрос {path}: ${cost:.4f} · за месяц ${u['spent_usd']:.4f} "
-          f"({u['calls']} вызовов)", file=sys.stderr)
+        resp = call(b64, path, payload)
+        if resp.get("status_code") not in (20000, None):
+            sys.exit(f"ERROR DataForSEO: {resp.get('status_code')} {resp.get('status_message')}")
 
-    cpath.write_text(json.dumps(resp, ensure_ascii=False, indent=2), encoding="utf-8")
+        cost = response_cost(resp)
+        u["spent_usd"] = round(u.get("spent_usd", 0.0) + cost, 6)
+        u["calls"] = u.get("calls", 0) + 1
+        save_usage(out_dir, u)
+        print(f"↑ запрос {path}: ${cost:.4f} · за месяц ${u['spent_usd']:.4f} "
+              f"({u['calls']} вызовов)", file=sys.stderr)
+
+        task_ok = _task_status_ok(resp)
+
+    if task_ok:
+        cpath.write_text(json.dumps(resp, ensure_ascii=False, indent=2), encoding="utf-8")
+    else:
+        msg = (resp.get("tasks") or [{}])[0].get("status_message")
+        print(f"⚠ задача вернула ошибку ({msg}) — ответ не кэшируется", file=sys.stderr)
     return resp
 
 
@@ -229,8 +324,13 @@ def cmd_volume(b64, args):
     show(rows, ["ключ", "частотность", "конкуренция", "CPC"], args)
 
 
-def _labs_keywords(b64, args, path, key_field="keyword"):
-    payload = {"keyword": args.keyword, "location_code": args.location,
+def _labs_keywords(b64, args, path, key_field="keyword", *, seed_as_list=False):
+    """seed_as_list=True шлёт seed-ключ как `keywords: [...]` — так требует
+    контракт dataforseo_labs/google/keyword_ideas/live (T-059); related_keywords
+    ждёт одиночный `keyword`, поведение по умолчанию не меняется."""
+    seed_key = "keywords" if seed_as_list else "keyword"
+    seed_val = [args.keyword] if seed_as_list else args.keyword
+    payload = {seed_key: seed_val, "location_code": args.location,
                "language_code": args.language, "limit": args.limit}
     resp = fetch(b64, path, payload, args)
     items = ((first_result(resp) or [{}])[0].get("items") or [])
@@ -244,7 +344,7 @@ def _labs_keywords(b64, args, path, key_field="keyword"):
 
 
 def cmd_ideas(b64, args):
-    _labs_keywords(b64, args, "dataforseo_labs/google/keyword_ideas/live")
+    _labs_keywords(b64, args, "dataforseo_labs/google/keyword_ideas/live", seed_as_list=True)
 
 
 def cmd_related(b64, args):
@@ -309,7 +409,8 @@ def add_common(p: argparse.ArgumentParser, sub: bool) -> None:
     p.add_argument("--out", default=d(DEFAULT_OUT), help=f"папка кэша и учёта (умолч. {DEFAULT_OUT})")
     p.add_argument("--ttl", type=float, default=d(DEFAULT_TTL_DAYS), help="возраст кэша в днях")
     p.add_argument("--budget", type=float, default=d(DEFAULT_BUDGET_USD),
-                   help="месячный лимит трат, USD")
+                   help="месячный лимит трат, USD (итог — минимум с "
+                        "cost_controls.dataforseo.monthly_usd_cap проекта, если задан)")
     p.add_argument("--force", action="store_true", default=d(False),
                    help="игнорировать исчерпанный лимит")
     p.add_argument("--md", action="store_true", default=d(False),
