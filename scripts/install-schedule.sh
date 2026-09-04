@@ -10,8 +10,13 @@
 #   monthly  seo-cycle run monthly                               (только с --with-monthly)
 #
 # Usage:
-#   bash scripts/install-schedule.sh --project /path/to/project [--with-monthly]
+#   bash scripts/install-schedule.sh --project /path/to/project --scope <имя> [--with-monthly]
+#   bash scripts/install-schedule.sh --project /path/to/project --scope <имя> --dry-run
 #   bash scripts/install-schedule.sh --uninstall
+#
+# --scope <имя>   оборачивает каждую команду в `ai-secret run <имя> -- /usr/bin/env PATH=...`
+#                 (I-061: без обёртки webmaster-fetch деградирует молча — секретов нет).
+# --dry-run       печатает готовые plist'ы в stdout, ничего не пишет и не грузит в launchd.
 
 set -euo pipefail
 
@@ -22,12 +27,16 @@ PREFIX="com.seo-cycle"
 PROJECT=""
 WITH_MONTHLY=0
 UNINSTALL=0
+SCOPE=""
+DRY_RUN=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --project) PROJECT="$2"; shift 2;;
     --with-monthly) WITH_MONTHLY=1; shift;;
     --uninstall) UNINSTALL=1; shift;;
+    --scope) SCOPE="$2"; shift 2;;
+    --dry-run) DRY_RUN=1; shift;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -51,11 +60,17 @@ if [[ $UNINSTALL -eq 1 ]]; then
   exit 0
 fi
 
-if [[ -z "$PROJECT" || ! -f "$PROJECT/seo-cycle.yaml" ]]; then
+if [[ $DRY_RUN -eq 1 ]]; then
+  PROJECT="${PROJECT:-/path/to/project}"
+elif [[ -z "$PROJECT" || ! -f "$PROJECT/seo-cycle.yaml" ]]; then
   echo "ERROR: --project /path/to/project (с seo-cycle.yaml) обязателен" >&2
   exit 2
 fi
-mkdir -p "$AGENTS_DIR"
+[[ $DRY_RUN -eq 1 ]] || mkdir -p "$AGENTS_DIR"
+
+if [[ -z "$SCOPE" ]]; then
+  echo "⚠ секреты не подмешаны (--scope не задан) — fetch деградирует тихо" >&2
+fi
 
 xml_escape() { # & < > обязаны быть сущностями внутри <string> (launchd прощает, plutil/PlistBuddy — нет)
   local s="$1"
@@ -63,11 +78,23 @@ xml_escape() { # & < > обязаны быть сущностями внутри
   printf '%s' "$s"
 }
 
+SCHED_PATH="$HOME/.local/bin:$ROOT/.venv/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+wrap_cmd() { # raw-command -> command, prefixed with ai-secret run <scope> when --scope is set
+  local raw="$1"
+  if [[ -n "$SCOPE" ]]; then
+    printf "%s" "'$HOME/.local/bin/ai-secret' run $SCOPE -- /usr/bin/env 'PATH=$SCHED_PATH' $raw"
+  else
+    printf "%s" "$raw"
+  fi
+}
+
 write_plist() { # name interval-xml program-args
   local name="$1" schedule="$2" args
-  args="$(xml_escape "$3")"
+  args="$(xml_escape "$(wrap_cmd "$3")")"
   local plist="$AGENTS_DIR/$PREFIX.$name.plist"
-  cat > "$plist" <<PLIST
+  local content
+  content="$(cat <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -81,6 +108,12 @@ write_plist() { # name interval-xml program-args
   <key>StandardErrorPath</key><string>/tmp/$PREFIX.$name.log</string>
 </dict></plist>
 PLIST
+)"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "$content"
+    return 0
+  fi
+  printf "%s\n" "$content" > "$plist"
   launchctl unload "$plist" 2>/dev/null || true
   launchctl load "$plist"
   echo "✓ $PREFIX.$name (лог: /tmp/$PREFIX.$name.log)"

@@ -84,6 +84,10 @@ log()  { echo "$*"; }
 warn() { echo "⚠ $*" >&2; }
 
 abs_path() {
+    (cd "$1" && pwd)
+}
+
+abs_path_create() {
     mkdir -p "$1"
     (cd "$1" && pwd)
 }
@@ -133,24 +137,73 @@ ensure_python_deps() {
     fi
 }
 
+
+# Tags that exist on origin AND locally (sorted newest-first). Falls back to
+# local-only tags when origin is unreachable, with an explicit warning — the
+# resulting pin is then not guaranteed reproducible from GitHub (D3).
 latest_tag() {
     local repo_dir="$1"
-    git -C "$repo_dir" tag --list 'v*' --sort=-v:refname 2>/dev/null | head -1
+    local local_tags remote_tags common
+    local_tags="$(git -C "$repo_dir" tag --list 'v*' --sort=-v:refname 2>/dev/null)"
+    [ -n "$local_tags" ] || return 0
+    remote_tags="$(git -C "$repo_dir" ls-remote --tags origin 'refs/tags/v*' 2>/dev/null \
+        | sed -E 's#.*refs/tags/(v[^\^]+)(\^\{\})?$#\1#' | sort -u)"
+    if [ -z "$remote_tags" ]; then
+        local t
+        t="$(printf "%s\n" "$local_tags" | head -1)"
+        [ -n "$t" ] && warn "offline: беру локальный тег $t, воспроизводимость не гарантирована" >&2
+        printf "%s\n" "$t"
+        return 0
+    fi
+    common="$(printf "%s\n" "$local_tags" | while IFS= read -r t; do
+        [ -n "$t" ] || continue
+        printf "%s\n" "$remote_tags" | grep -qxF "$t" && printf "%s\n" "$t"
+    done)"
+    printf "%s\n" "$common" | head -1
 }
 
 # Create (or reuse) a read-only worktree for a tag. Prints the worktree path.
+# Verifies the existing snapshot's HEAD still matches the tag's commit and
+# rebuilds it on mismatch (D4) — a tag can be moved to a new commit after the
+# worktree was created (e.g. a re-tagged release).
 ensure_worktree() {
     local repo_dir="$1" tool="$2" tag="$3"
     local dest="$VERSIONS_DIR/$tool/$tag"
-    if [ ! -e "$dest/SKILL.md" ] && [ ! -e "$dest/VERSION" ]; then
-        rm -rf "$dest" 2>/dev/null || true
-        git -C "$repo_dir" worktree prune 2>/dev/null || true
-        mkdir -p "$(dirname "$dest")"
-        if ! git -C "$repo_dir" worktree add --quiet --detach "$dest" "refs/tags/$tag" 2>/dev/null; then
-            warn "не удалось создать worktree для $tool@$tag"
-            return 1
-        fi
+    local remote_tags
+    remote_tags="$(git -C "$repo_dir" ls-remote --tags origin "refs/tags/$tag" 2>/dev/null || true)"
+    if [ -n "$remote_tags" ]; then
+        : # confirmed on origin
+    elif git -C "$repo_dir" ls-remote --tags origin 'refs/tags/v*' >/dev/null 2>&1; then
+        warn "тег $tag не найден на origin ($tool)"
+        return 1
+    else
+        warn "offline: не удалось проверить тег $tag на origin, беру локальный — воспроизводимость не гарантирована"
     fi
+    local tag_commit
+    tag_commit="$(git -C "$repo_dir" rev-parse "refs/tags/$tag^{commit}" 2>/dev/null || true)"
+    if [ -z "$tag_commit" ]; then
+        warn "тег $tag не найден в $repo_dir"
+        return 1
+    fi
+    if [ -e "$dest/SKILL.md" ] || [ -e "$dest/VERSION" ]; then
+        local snapshot_commit
+        snapshot_commit="$(git -C "$dest" rev-parse HEAD 2>/dev/null || true)"
+        if [ "$snapshot_commit" = "$tag_commit" ]; then
+            printf "%s\n" "$dest"
+            return 0
+        fi
+        warn "снапшот $tag пересобран: ${snapshot_commit:0:8}→${tag_commit:0:8}"
+        chmod -R u+w "$dest" 2>/dev/null || true
+        git -C "$repo_dir" worktree remove --force "$dest" 2>/dev/null || rm -rf "$dest"
+    fi
+    rm -rf "$dest" 2>/dev/null || true
+    git -C "$repo_dir" worktree prune 2>/dev/null || true
+    mkdir -p "$(dirname "$dest")"
+    if ! git -C "$repo_dir" worktree add --quiet --detach "$dest" "refs/tags/$tag" 2>/dev/null; then
+        warn "не удалось создать worktree для $tool@$tag"
+        return 1
+    fi
+    chmod -R a-w "$dest" 2>/dev/null || true
     printf "%s\n" "$dest"
 }
 
@@ -274,6 +327,28 @@ ext[tool] = {
 lock_path.parent.mkdir(parents=True, exist_ok=True)
 lock_path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False))
 print(f"✓ lock: {tool} @ {version} ({commit[:8]})")
+PYEOF
+}
+
+remove_lock_entry() {
+    local project_dir="$1" tool="$2"
+    local lock_path="$project_dir/.agents/external-skills.lock.yaml"
+    [ -f "$lock_path" ] || return 0
+    python3 - "$lock_path" "$tool" <<'PYEOF' || warn "lock не очищен (нет pyyaml?)"
+import sys, pathlib
+try:
+    import yaml
+except ImportError:
+    sys.exit(1)
+lock_path = pathlib.Path(sys.argv[1])
+tool = sys.argv[2]
+data = yaml.safe_load(lock_path.read_text()) or {}
+ext = data.get("external") or {}
+if tool in ext:
+    del ext[tool]
+    data["external"] = ext
+    lock_path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False))
+    print(f"✓ lock: {tool} запись удалена")
 PYEOF
 }
 
@@ -435,6 +510,9 @@ detach_project() {
     for name in seo-cycle seo-keywords; do
         [ -L "$project_dir/.agents/external/$name" ] && rm "$project_dir/.agents/external/$name"
     done
+    for name in seo-cycle seo-keywords; do
+        remove_lock_entry "$project_dir" "$name"
+    done
     registry_update remove "$project_dir"
     log "✓ seo-cycle отключён от проекта: $project_dir"
     log "  (AGENTS.md, seo-cycle.yaml и данные проекта не тронуты)"
@@ -468,7 +546,15 @@ run_existing_project_upgrade() {
 
 attach_project() {
     local project_dir="$1"
-    project_dir="$(abs_path "$project_dir")"
+    if [ "$DETACH" = "1" ] || [ "$SYNC_ONLY" = "1" ]; then
+        if [ ! -d "$1" ]; then
+            echo "ERROR: путь не существует: $1" >&2
+            exit 1
+        fi
+        project_dir="$(abs_path "$1")"
+    else
+        project_dir="$(abs_path_create "$1")"
+    fi
     log ""
     log "▶ Project: $project_dir"
 
@@ -500,13 +586,19 @@ PYEOF
 )"
     fi
     [ -n "$pin" ] || pin="$(latest_tag "$CORE")"
-    [ -n "$pin" ] || pin="main"
+    if [ -z "$pin" ]; then
+        warn "в store нет тегов; укажи --pin main явно (трекинг HEAD) или запусти install.sh --update"
+        exit 1
+    fi
 
     local target commit
     if [ "$pin" = "main" ]; then
         target="$CORE"
     else
-        target="$(ensure_worktree "$CORE" "seo-cycle" "$pin")" || { warn "тег $pin недоступен — использую main"; pin="main"; target="$CORE"; }
+        target="$(ensure_worktree "$CORE" "seo-cycle" "$pin")" || {
+            warn "тег $pin не найден; запусти install.sh --update"
+            exit 1
+        }
     fi
     commit="$(git -C "$target" rev-parse HEAD 2>/dev/null || echo unknown)"
     log "▶ seo-cycle @ $pin ($commit)"
@@ -516,9 +608,9 @@ PYEOF
     if [ -d "$KW_CORE/.git" ]; then
         kw_pin="$(latest_tag "$KW_CORE")"
         if [ -n "$kw_pin" ]; then
-            kw_target="$(ensure_worktree "$KW_CORE" "seo-keywords" "$kw_pin")" || { kw_target="$KW_CORE"; kw_pin="main"; }
+            kw_target="$(ensure_worktree "$KW_CORE" "seo-keywords" "$kw_pin")" || { kw_target="$KW_CORE"; kw_pin="HEAD"; }
         else
-            kw_target="$KW_CORE"; kw_pin="main"
+            kw_target="$KW_CORE"; kw_pin="HEAD"
         fi
         kw_commit="$(git -C "$kw_target" rev-parse HEAD 2>/dev/null || echo unknown)"
         have_kw=1
@@ -623,7 +715,11 @@ case "$MODE" in
         log "  install.sh --project /path/to/project [--pin vX.Y.Z]"
         ;;
     project)
-        ensure_store
+        if [ "$SYNC_ONLY" = "1" ] || [ "$DETACH" = "1" ]; then
+            [ -d "$CORE/.git" ] || { warn "store не инициализирован — запусти install.sh без флагов"; exit 1; }
+        else
+            ensure_store
+        fi
         attach_project "$PROJECT_DIR"
         ;;
     upgrade-all)

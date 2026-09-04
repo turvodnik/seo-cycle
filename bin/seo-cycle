@@ -1,10 +1,56 @@
 #!/usr/bin/env python3
-"""Launcher for the unified seo-cycle CLI (see scripts/seo_cycle_cli.py)."""
+"""Launcher for the unified seo-cycle CLI (see scripts/seo_cycle_cli.py).
 
+The global shim (~/.local/bin/seo-cycle) is a symlink into the shared vendor
+store's HEAD. Run from inside an attached project, that would silently
+execute the store's HEAD instead of the project's pinned version (D7). So
+before running, this launcher looks upward from $PWD for
+.agents/external/seo-cycle (the pinned worktree an attach created) and, if
+found and different from this launcher's own root, re-execs that project's
+own bin/seo-cycle instead. A guard env var prevents infinite recursion.
+"""
+
+import os
 import pathlib
 import sys
 
 SKILL_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+
+def _find_project_pin(start: pathlib.Path) -> pathlib.Path | None:
+    cur = start
+    while True:
+        candidate = cur / ".agents" / "external" / "seo-cycle"
+        if candidate.is_dir():
+            return candidate.resolve()
+        if cur.parent == cur:
+            return None
+        cur = cur.parent
+
+
+def _maybe_redirect_to_project_pin() -> None:
+    if os.environ.get("SEO_CYCLE_SHIM_REDIRECTED") == "1":
+        return
+    pinned = _find_project_pin(pathlib.Path.cwd())
+    if pinned is None:
+        print(
+            "⚠ seo-cycle: версия хранилища, не пин проекта "
+            "(нет .agents/external/seo-cycle выше по дереву)",
+            file=sys.stderr,
+        )
+        return
+    pinned_launcher = pinned / "bin" / "seo-cycle"
+    if not pinned_launcher.is_file():
+        return
+    if pinned.resolve() == SKILL_ROOT.resolve():
+        return
+    env = dict(os.environ)
+    env["SEO_CYCLE_SHIM_REDIRECTED"] = "1"
+    os.execve(sys.executable, [sys.executable, str(pinned_launcher), *sys.argv[1:]], env)
+
+
+_maybe_redirect_to_project_pin()
+
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 from seo_cycle_cli import main  # noqa: E402
