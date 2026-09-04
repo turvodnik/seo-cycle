@@ -29,8 +29,8 @@ Auth: Authorization: Basic <base64("login:password")>.
   • месячный счётчик реальных трат `_usage.json` из поля `cost` ответов; битый/
     нечитаемый файл учёта — это отказ, а не «потрачено 0» (--force снимает осознанно);
   • стоп при исчерпании месячного лимита — минимум из --budget (по умолчанию 5 USD)
-    и cost_controls.dataforseo.monthly_usd_cap проекта, если конфиг найден; --force
-    снимает стоп.
+    и governance.subscriptions.dataforseo.monthly_usd_cap проекта, если конфиг
+    найден; --force снимает стоп.
 
 Примеры:
   ai-secret run global -- python3 dataforseo-fetch.py balance
@@ -144,13 +144,15 @@ def usage_lock(out_dir: pathlib.Path):
 
 
 def effective_budget(args) -> float:
-    """--budget, ограниченный сверху cost_controls.dataforseo.monthly_usd_cap
-    проекта, если конфиг найден и поле задано числом (T-059; docs/dataforseo.md
-    обещает именно эту синхронизацию). Конфиг без секции — поведение как раньше."""
+    """--budget, ограниченный сверху governance.subscriptions.dataforseo.monthly_usd_cap
+    проекта, если конфиг найден и поле задано числом (T-059). Тот же путь читают
+    scripts/spend-guard.py и scripts/usage-ledger.py для всех платных подписок
+    проекта — это установленная конвенция схемы, а не новая. Конфиг без секции —
+    поведение как раньше (только --budget)."""
     cfg_path = find_config(pathlib.Path.cwd())
     if cfg_path is None:
         return args.budget
-    cap = nested_get(load_yaml(cfg_path), "cost_controls.dataforseo.monthly_usd_cap")
+    cap = nested_get(load_yaml(cfg_path), "governance.subscriptions.dataforseo.monthly_usd_cap")
     if isinstance(cap, (int, float)) and not isinstance(cap, bool):
         return min(args.budget, float(cap))
     return args.budget
@@ -410,7 +412,7 @@ def add_common(p: argparse.ArgumentParser, sub: bool) -> None:
     p.add_argument("--ttl", type=float, default=d(DEFAULT_TTL_DAYS), help="возраст кэша в днях")
     p.add_argument("--budget", type=float, default=d(DEFAULT_BUDGET_USD),
                    help="месячный лимит трат, USD (итог — минимум с "
-                        "cost_controls.dataforseo.monthly_usd_cap проекта, если задан)")
+                        "governance.subscriptions.dataforseo.monthly_usd_cap проекта, если задан)")
     p.add_argument("--force", action="store_true", default=d(False),
                    help="игнорировать исчерпанный лимит")
     p.add_argument("--md", action="store_true", default=d(False),

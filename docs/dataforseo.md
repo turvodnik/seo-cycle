@@ -44,7 +44,7 @@ HTTP 403 / `40104`** («Please verify your account»), а бесплатный `
 стоимость из поля `cost` каждого ответа и складывает её в `seo/research/dataforseo/_usage.json`
 (сброс помесячно, запись атомарная и под файловой блокировкой — параллельные запуски не
 теряют чужой расход). Стоп срабатывает по минимуму из `--budget` (по умолчанию 5 USD) и
-`cost_controls.dataforseo.monthly_usd_cap` проекта, если конфиг найден; `--force` снимает
+`governance.subscriptions.dataforseo.monthly_usd_cap` проекта, если конфиг найден; `--force` снимает
 стоп осознанно. Битый или нечитаемый `_usage.json` — это отказ с подсказкой, а не «потрачено
 0»: молчаливый пропуск платного вызова недопустим. Кэш на 30 дней означает: повторный запрос
 той же выборки не стоит ничего (ответы с ошибкой задачи в кэш не попадают — переспросятся).
@@ -71,7 +71,7 @@ onpage      https://…/page   # мгновенный технический р�
 ## Включение в проекте
 
 1. В `<проект>/seo-cycle.yaml`: `engines.dataforseo.enabled: true` и
-   `cost_controls.dataforseo.monthly_usd_cap` под ваш аппетит.
+   `governance.subscriptions.dataforseo.monthly_usd_cap` под ваш аппетит.
 2. MCP-сервер уже прописан в `.mcp.json` проекта (Claude Code) и
    `.gemini/settings.json` (Gemini CLI); у Codex сервер глобальный.
 3. Первый запуск Claude Code в проекте попросит подтвердить MCP-сервер — это разовое действие.

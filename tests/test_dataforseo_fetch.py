@@ -180,8 +180,12 @@ class LedgerCorruptionTest(unittest.TestCase):
 
 
 class ConfigBudgetTest(unittest.TestCase):
-    """T-059: cost_controls.dataforseo.monthly_usd_cap проекта берётся как минимум
-    с --budget; конфиг без секции не меняет поведение."""
+    """T-059: governance.subscriptions.dataforseo.monthly_usd_cap проекта берётся
+    как минимум с --budget; конфиг без секции не меняет поведение. Путь —
+    установленная конвенция схемы (тот же читают scripts/spend-guard.py и
+    scripts/usage-ledger.py для всех платных подписок проекта), НЕ придуман для
+    этого тикета — см. test_effective_budget_reads_real_project_template ниже,
+    который сверяется с настоящим config/project.template.yaml."""
 
     def setUp(self) -> None:
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-cfg-"))
@@ -196,13 +200,15 @@ class ConfigBudgetTest(unittest.TestCase):
     def test_config_without_dataforseo_section_keeps_cli_budget(self) -> None:
         with mock.patch.object(dfs, "find_config", return_value=self.fake_cfg_path), \
              mock.patch.object(dfs, "load_yaml",
-                               return_value={"cost_controls": {"keys_so": {"monthly_request_cap": 100}}}):
+                               return_value={"governance": {"subscriptions":
+                                             {"keys_so": {"monthly_request_cap": 100}}}}):
             self.assertEqual(dfs.effective_budget(self.args), self.args.budget)
 
     def test_config_cap_lower_than_cli_budget_wins(self) -> None:
         with mock.patch.object(dfs, "find_config", return_value=self.fake_cfg_path), \
              mock.patch.object(dfs, "load_yaml",
-                               return_value={"cost_controls": {"dataforseo": {"monthly_usd_cap": 0.02}}}):
+                               return_value={"governance": {"subscriptions":
+                                             {"dataforseo": {"monthly_usd_cap": 0.02}}}}):
             self.assertEqual(dfs.effective_budget(self.args), 0.02)
 
     def test_config_cap_never_raises_cli_budget(self) -> None:
@@ -211,18 +217,32 @@ class ConfigBudgetTest(unittest.TestCase):
         self.args.budget = 0.5
         with mock.patch.object(dfs, "find_config", return_value=self.fake_cfg_path), \
              mock.patch.object(dfs, "load_yaml",
-                               return_value={"cost_controls": {"dataforseo": {"monthly_usd_cap": 999}}}):
+                               return_value={"governance": {"subscriptions":
+                                             {"dataforseo": {"monthly_usd_cap": 999}}}}):
             self.assertEqual(dfs.effective_budget(self.args), 0.5)
 
     def test_config_cap_triggers_stop_before_paid_call(self) -> None:
         dfs.save_usage(self.tmp, {"month": dfs.load_usage(self.tmp)["month"], "spent_usd": 0.02, "calls": 1})
         with mock.patch.object(dfs, "find_config", return_value=self.fake_cfg_path), \
              mock.patch.object(dfs, "load_yaml",
-                               return_value={"cost_controls": {"dataforseo": {"monthly_usd_cap": 0.01}}}):
+                               return_value={"governance": {"subscriptions":
+                                             {"dataforseo": {"monthly_usd_cap": 0.01}}}}):
             with mock.patch.object(dfs, "call") as called:
                 with self.assertRaises(SystemExit):
                     dfs.fetch("b64", "some/path", {"k": 1}, self.args)
                 called.assert_not_called()
+
+    def test_effective_budget_reads_real_project_template(self) -> None:
+        """Контракт-тест: config/project.template.yaml реально определяет
+        governance.subscriptions.dataforseo.monthly_usd_cap (значение 5, совпадает
+        с DEFAULT_BUDGET_USD). Ловит будущий дрейф пути между кодом и шаблоном —
+        именно такой дрейф допустил первый вариант этого фикса (cost_controls.*,
+        путь, которого в шаблоне не существует)."""
+        template = ROOT / "config" / "project.template.yaml"
+        self.assertTrue(template.exists(), template)
+        with mock.patch.object(dfs, "find_config", return_value=template):
+            self.args.budget = 999.0
+            self.assertEqual(dfs.effective_budget(self.args), 5.0)
 
     def test_same_spend_without_config_does_not_trigger_guard(self) -> None:
         """Негативный контроль к предыдущему тесту: тот же расход (0.02) и тот же
