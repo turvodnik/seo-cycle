@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Refactor: общее ядро для семи `*-health.py` вместо ручных копий (T-053)
+
+- Внутренний рефакторинг, поведение и форматы отчётов не изменились:
+  `seo/setup/<провайдер>-health.md`/`.json` для `gbp`, `google-ads`,
+  `merchant`, `yandex-direct`, `yandex-business`, `notebooklm`, `perplexity`
+  — побайтно те же, что и до правки (24 golden-случая,
+  `tests/fixtures/health/`, `tests/test_health_core.py`).
+- Новый `scripts/seo_cycle_core/health.py` (`HealthSpec` + `run_health()`,
+  по образцу `vnext_audit_core.py`): семь скриптов были ручными копиями
+  одного шаблона (audit §5.1, difflib line-similarity 0.58–0.69) — фикс в
+  одной копии не попадал в остальные (так в v2.0.2 фикс «источник
+  выключенного движка» остался только в `pulse.py`). Теперь argparse/
+  config-loading/write-dispatch — один источник; `test_core_fix_reaches_
+  all_providers` доказывает, что правка одной строки в ядре видна во всех
+  семи без правки самих скриптов.
+- `coerce_int()` (`seo_cycle_core/config.py`): битое целое в конфиге
+  (`monitoring.snapshot_max_age_days` в `seo_cycle_cli.py`, `pulse.days` в
+  `pulse.py`) больше не роняет инструмент трассировкой стека — предупреждение
+  в stderr и честный дефолт.
+
 ### Fix: документация без лжи — README, INSTALL Шаг 4, битые ссылки, мёртвые доки (T-051)
 
 - `README.md`: убран жёсткий номер версии из шапки — версия, которую ставит

@@ -5,14 +5,12 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import json
 import pathlib
-import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for
+from seo_cycle_core.config import load_yaml, policy_path, project_root_for
+from seo_cycle_core.health import HealthSpec, run_health
 from seo_cycle_core.providers import perplexity_health
-from seo_cycle_core.reports import write_report_bundle
 
 
 def output_paths(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, pathlib.Path]:
@@ -80,38 +78,20 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("config", nargs="?", help="Path to seo-cycle.yaml")
-    parser.add_argument("--browser-available", action="store_true", help="Mark an already logged-in browser/app session as usable.")
-    parser.add_argument("--app-path", action="append", default=[], help="Additional Perplexity.app path to test.")
-    parser.add_argument("--write", action="store_true", help="Write seo/setup/perplexity-health.* artifacts.")
-    parser.add_argument("--format", choices=("md", "json"), default="md")
-    args = parser.parse_args()
-
-    if args.config:
-        cfg_path = pathlib.Path(args.config).expanduser().resolve()
-    else:
-        found = find_config(pathlib.Path.cwd())
-        if not found:
-            print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
-            return 2
-        cfg_path = found.resolve()
-    if not cfg_path.exists():
-        print(f"ERROR: {cfg_path} not found", file=sys.stderr)
-        return 2
-
-    report = build_report(cfg_path, args)
-    if args.write:
-        paths = output_paths(load_yaml(cfg_path), project_root_for(cfg_path))
-        write_report_bundle(paths, render_markdown(report), report)
-        print(f"Wrote {paths['markdown']}")
-    elif args.format == "json":
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-    else:
-        print(render_markdown(report), end="")
-    return 0
-
+SPEC = HealthSpec(
+    slug="perplexity",
+    style="policy",
+    write_help="Write seo/setup/perplexity-health.* artifacts.",
+    build_report=build_report,
+    render_markdown=render_markdown,
+    output_paths=output_paths,
+    extra_arguments=[
+        {"flags": ("--browser-available",), "action": "store_true",
+         "help": "Mark an already logged-in browser/app session as usable."},
+        {"flags": ("--app-path",), "action": "append", "default": [],
+         "help": "Additional Perplexity.app path to test."},
+    ],
+)
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_health(SPEC))

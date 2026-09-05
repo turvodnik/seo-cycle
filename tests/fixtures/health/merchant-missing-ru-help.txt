@@ -1,0 +1,14 @@
+usage: merchant-health.py [-h] [--write] [--format {md,json}] [config]
+
+Report Google Merchant Center readiness without making API calls. For
+`region_profile: ru` a missing Merchant setup is `region_limited` — Google
+Shopping is suspended for RF stores, the expected product-feed channel is
+Yandex (see yml-feed-audit.py for the local YML validator).
+
+positional arguments:
+  config              Path to seo-cycle.yaml
+
+options:
+  -h, --help          show this help message and exit
+  --write             Write seo/setup/merchant-health.* artifacts.
+  --format {md,json}

@@ -1,0 +1,16 @@
+usage: gbp-health.py [-h] [--write] [--format {md,json}] [config]
+
+Report Google Business Profile API readiness without making API calls. GBP API
+access is gated by Google's OAuth verification for the business.manage scope —
+a real approval process, not just keys. Until it is granted the honest status
+is `needs_oauth_verification`, and the working path stays the browser workflow
+(prompts/local/google-maps.md via Chrome MCP) plus manual exports ingested by
+`gbp-fetch.py --input-file`.
+
+positional arguments:
+  config              Path to seo-cycle.yaml
+
+options:
+  -h, --help          show this help message and exit
+  --write             Write seo/setup/gbp-health.* artifacts.
+  --format {md,json}

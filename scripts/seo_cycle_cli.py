@@ -19,7 +19,7 @@ import sys
 import time
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import coerce_int, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.monitoring import find_latest_snapshot, monitoring_dir
@@ -167,8 +167,11 @@ def cmd_doctor(args: list[str], project: pathlib.Path) -> int:
     """
     cfg_path = find_config(project)
     cfg = load_yaml(cfg_path) if cfg_path else {}
-    max_age = int(nested_get(cfg, "monitoring.snapshot_max_age_days", DEFAULT_SNAPSHOT_MAX_AGE_DAYS)
-                 or DEFAULT_SNAPSHOT_MAX_AGE_DAYS)
+    max_age = coerce_int(
+        nested_get(cfg, "monitoring.snapshot_max_age_days", DEFAULT_SNAPSHOT_MAX_AGE_DAYS),
+        DEFAULT_SNAPSHOT_MAX_AGE_DAYS,
+        name="monitoring.snapshot_max_age_days",
+    )
     results: list[tuple[str, int, str]] = []
     for label, script, prepend in DOCTOR_STEPS:
         path = SCRIPTS_DIR / script

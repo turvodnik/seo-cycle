@@ -1,0 +1,11 @@
+{
+  "rc_json": 2,
+  "rc_md": 2,
+  "stderr_json": "ERROR: seo-cycle.yaml not found in <CWD-ROOT>/no-config\n",
+  "stderr_md": "ERROR: seo-cycle.yaml not found in <CWD-ROOT>/no-config\n",
+  "write_meta": {
+    "rc": null,
+    "stderr": "",
+    "stdout": ""
+  }
+}

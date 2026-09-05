@@ -3,16 +3,11 @@
 
 from __future__ import annotations
 
-import argparse
 import datetime as dt
-import json
-import pathlib
-import sys
 from typing import Any
 
 from seo_cycle_core.ads import ads_config, env_status, platform_health_status, primary_platform
-from seo_cycle_core.config import find_config, load_yaml, project_root_for
-from seo_cycle_core.reports import write_report_bundle
+from seo_cycle_core.health import HealthSpec, render_sections, run_health
 
 PLATFORM = "yandex_direct"
 OFFICIAL_DOCS = [
@@ -20,16 +15,6 @@ OFFICIAL_DOCS = [
     "https://yandex.ru/dev/direct/doc/reports/reports.html",
     "https://yandex.ru/dev/direct/doc/dg/concepts/sandbox.html",
 ]
-
-
-def output_paths(project_root: pathlib.Path) -> dict[str, pathlib.Path]:
-    base = project_root / "seo" / "setup"
-    return {
-        "markdown": base / "yandex-direct-health.md",
-        "json": base / "yandex-direct-health.json",
-        "latest_markdown": base / "latest-yandex-direct-health.md",
-        "latest_json": base / "latest-yandex-direct-health.json",
-    }
 
 
 def build_report(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -79,39 +64,23 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Env names: {', '.join(f'`{name}`' for name in report['env_names'])}"
         + (f" (missing: {', '.join(report['missing_env'])})" if report["missing_env"] else ""),
         f"- API default: `{report['api_default']}`",
-        "",
-        "## Capabilities",
     ]
-    lines.extend(f"- {item}" for item in report["capabilities"])
-    lines.extend(["", "## Guardrails"])
-    lines.extend(f"- {item}" for item in report["guardrails"])
-    lines.extend(["", "## Official Docs"])
-    lines.extend(f"- {url}" for url in report["official_docs"])
+    lines.extend(render_sections([
+        ("Capabilities", report["capabilities"]),
+        ("Guardrails", report["guardrails"]),
+        ("Official Docs", report["official_docs"]),
+    ]))
     return "\n".join(lines) + "\n"
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("config", nargs="?", help="Path to seo-cycle.yaml")
-    parser.add_argument("--write", action="store_true", help="Write seo/setup/yandex-direct-health.* artifacts.")
-    parser.add_argument("--format", choices=("md", "json"), default="md")
-    args = parser.parse_args()
-
-    cfg_path = pathlib.Path(args.config).expanduser().resolve() if args.config else find_config(pathlib.Path.cwd())
-    if not cfg_path or not cfg_path.exists():
-        print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
-        return 2
-    cfg = load_yaml(cfg_path)
-    project_root = project_root_for(cfg_path)
-    report = build_report(cfg)
-    if args.write:
-        write_report_bundle(output_paths(project_root), render_markdown(report), report)
-    if args.format == "json":
-        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
-    else:
-        print(render_markdown(report), end="")
-    return 0
-
+SPEC = HealthSpec(
+    slug="yandex-direct",
+    style="simple",
+    description=__doc__,
+    write_help="Write seo/setup/yandex-direct-health.* artifacts.",
+    build_report=build_report,
+    render_markdown=render_markdown,
+)
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_health(SPEC))
