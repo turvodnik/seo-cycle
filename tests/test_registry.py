@@ -24,6 +24,8 @@ building blocks in ``seo_cycle_core.registry``.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import pathlib
 import shutil
@@ -135,6 +137,35 @@ class RegistryPathResolutionTest(unittest.TestCase):
         self.assertTrue(os.access(target, os.W_OK), "migrated registry must be writable")
         with target.open("a", encoding="utf-8") as fh:
             fh.write("# appended without raising\n")
+        # 0600, not merely "writable": the file holds real machine paths and
+        # domains — same sensitivity class as env_profile.py's 0600 for
+        # credentials (gate review, T-061 fix-up round 3, 🟡9). `& 0o777`
+        # strips the leading file-type bits `stat` otherwise includes.
+        self.assertEqual(
+            oct(target.stat().st_mode & 0o777), oct(0o600),
+            "migrated registry must be 0600, matching env_profile.py's precedent for the same "
+            "class of machine-local sensitive file — not merely 'owner can write'",
+        )
+
+    def test_migration_prints_a_notice_to_stderr(self) -> None:
+        """Silent migration hides two things from a human: which of several
+        legacy copies won, and that an old copy is still sitting on disk
+        (gate review, T-061 fix-up round 3, 💭). One line to stderr fixes
+        both without touching stdout that a caller might parse."""
+        skill_root = pathlib.Path(tempfile.mkdtemp(prefix="seo-registry-notice-tool-"))
+        self.addCleanup(lambda: shutil.rmtree(skill_root, ignore_errors=True))
+        legacy = legacy_registry_path(skill_root)
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text("projects: []\n", encoding="utf-8")
+
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            target = registry_path(skill_root)
+
+        notice = buf.getvalue()
+        self.assertIn("перенесён", notice)
+        self.assertIn(str(legacy), notice)
+        self.assertIn(str(target), notice)
 
     def test_existing_target_wins_legacy_is_not_reapplied(self) -> None:
         skill_root = pathlib.Path(tempfile.mkdtemp(prefix="seo-registry-tool2-"))

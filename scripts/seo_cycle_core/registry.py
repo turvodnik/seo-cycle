@@ -52,6 +52,7 @@ from __future__ import annotations
 import os
 import pathlib
 import shutil
+import sys
 
 
 def registry_path(skill_root: pathlib.Path | None = None) -> pathlib.Path:
@@ -88,7 +89,17 @@ def _migrate_legacy(target: pathlib.Path, skill_root: pathlib.Path | None) -> No
         # very next write to it (appending a project) would fail the same
         # way the migration exists to prevent. This file is meant to be
         # writable machine state from here on, regardless of where it came
-        # from.
-        target.chmod(0o644)
+        # from. 0o600 (owner read/write only), not 0o644: the file holds
+        # real machine paths and domains — the same sensitivity class as
+        # `env_profile.global_env_path()`, which uses 0o600 for exactly this
+        # reason (gate review, T-061 fix-up round 3: the two shell
+        # duplicates below only added the owner-write bit onto whatever
+        # mode the source had, which could leave group/other read bits
+        # intact — all three implementations now agree on 0o600).
+        target.chmod(0o600)
+        print(
+            f"реестр перенесён: {legacy} → {target}",
+            file=sys.stderr,
+        )
     except OSError:
         pass  # best-effort — caller treats a still-missing target as "no registry yet"
