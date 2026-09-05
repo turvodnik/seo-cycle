@@ -419,7 +419,10 @@ governance:
       monthly_usd_cap: 0
     dataforseo:
       enabled: false
-      monthly_usd_cap: 5          # соответствует --budget в dataforseo-fetch.py
+      monthly_usd_cap: 5          # реальный денежный лимит: dataforseo-fetch.py берёт
+                                  # min(--budget, это значение); см. пояснение у
+                                  # engines.dataforseo.monthly_usd_cap ниже — то поле
+                                  # справочное, код читает ЭТО
 
   # Автоцикл качества (loop-runner.py): gate -> repair -> re-check с лимитом
   # попыток и самопроверками (quality/evidence классы findings). При исчерпании
@@ -919,7 +922,9 @@ sources:
     location_id_env: GOOGLE_BUSINESS_LOCATION_ID
     note: "Local SEO без analytics tag."
   dataforseo:
-    # Google SERP/частотность/Labs/бэклинки/onpage по всему миру (вкл. ЕС и РФ).
+    # Google SERP/частотность/Labs/бэклинки/onpage по всему миру, кроме РФ и
+    # Белоруссии — DataForSEO исключила обе локации из всех API и баз с марта
+    # 2022 (dataforseo.com/update/russia-and-belarus-api-locations).
     # Два пути к одним и тем же данным:
     #   • MCP-сервер `dataforseo` — для диалога с агентом (см. .mcp.json проекта);
     #   • helper_script — для конвейеров и cron (кэш + учёт трат по полю cost).
@@ -927,7 +932,9 @@ sources:
     auth_env: DATAFORSEO_API_KEY_BASE64   # base64("login:password"), берётся из Keychain
     mcp_server: dataforseo
     helper_script: ./.codex/skills/seo-cycle/scripts/dataforseo-fetch.py
-    monthly_usd_cap: 5           # helper останавливается при исчерпании (--force снимает)
+    monthly_usd_cap: 5           # справочно; dataforseo-fetch.py читает НЕ это поле,
+                                 # а governance.subscriptions.dataforseo.monthly_usd_cap
+                                 # (см. выше) — держите оба значения в одном числе вручную
     cache_ttl_days: 30
     pricing_model: pay_as_you_go # тратится баланс аккаунта, подписки нет
     note: "Аккаунт должен быть верифицирован в app.dataforseo.com, иначе все методы данных отвечают 40104."
