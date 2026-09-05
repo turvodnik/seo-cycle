@@ -378,10 +378,22 @@ fi
 
 # Дозапись проекта в общий реестр (идемпотентно — по path)
 REGISTRY="$SKILL_ROOT/config/projects-registry.yaml"
+REGISTRY_EXAMPLE="$SKILL_ROOT/config/projects-registry.example.yaml"
 PROJECT_PATH="$(pwd)"
 if [ "${SEO_CYCLE_SKIP_REGISTRY:-0}" = "1" ]; then
     echo "ℹ Реестр проектов пропущен (SEO_CYCLE_SKIP_REGISTRY=1)"
-elif [ -f "$REGISTRY" ]; then
+else
+    if [ ! -f "$REGISTRY" ] && [ -f "$REGISTRY_EXAMPLE" ]; then
+        # Первое подключение на этой машине — локальный реестр не
+        # отслеживается git'ом (T-061: содержит реальные пути/домены),
+        # поэтому создаём его сам, а не требуем ручного копирования. Берём
+        # только шапку с комментариями из шаблона (до строки "projects:"),
+        # без примерной записи-заглушки — она бы засоряла реальный реестр.
+        sed '/^projects:/q' "$REGISTRY_EXAMPLE" > "$REGISTRY"
+        echo "✓ Локальный реестр создан (пуст, из шаблона): $REGISTRY"
+    fi
+fi
+if [ "${SEO_CYCLE_SKIP_REGISTRY:-0}" != "1" ] && [ -f "$REGISTRY" ]; then
     if grep -q "path: \"$PROJECT_PATH\"" "$REGISTRY" 2>/dev/null; then
         echo "ℹ Проект уже в реестре ($REGISTRY) — пропускаю"
     else

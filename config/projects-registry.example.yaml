@@ -1,0 +1,28 @@
+# =============================================================================
+# projects-registry.example.yaml — шаблон реестра проектов под seo-cycle
+# =============================================================================
+# Реальный реестр — config/projects-registry.yaml (в .gitignore: содержит
+# абсолютные пути и домены владельца, в публичный репозиторий не уезжает).
+# monthly-runner.sh --all и другие --global команды итерируют по НЕМУ, не по
+# этому шаблону. init-project.sh создаёт config/projects-registry.yaml из
+# этого шаблона автоматически при первом добавлении проекта, если файла ещё
+# нет (см. scripts/init-project.sh).
+#
+# Скопируй вручную, если нужно завести реестр заранее:
+#   cp config/projects-registry.example.yaml config/projects-registry.yaml
+#
+# Поля проекта:
+#   name           — человеческое имя
+#   path           — абсолютный путь к корню проекта (где лежит seo-cycle.yaml)
+#   region_profile — ru | eu | us | global
+#   cms            — wordpress | shopify | nextjs | static | ...
+#   status         — active | paused | archived
+#   monthly_automation — true/false (участвует ли в monthly-runner --all)
+
+projects:
+  - name: "Example Project"
+    path: "/path/to/your/project"
+    region_profile: ru
+    cms: wordpress
+    status: active
+    monthly_automation: true

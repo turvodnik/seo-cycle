@@ -11,3 +11,7 @@ graphify-out/
 *.egg-info/
 build/
 dist/
+
+# Реальный реестр проектов машины (пути/домены владельца) — шаблон см.
+# config/projects-registry.example.yaml (T-061).
+config/projects-registry.yaml

@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+### Fix: личные пути машины владельца убраны из публичного дерева (T-061)
+
+- `config/projects-registry.yaml` (реальные пути и домены трёх проектов
+  владельца) переименован в `config/projects-registry.example.yaml` с
+  обезличенным содержимым (`/path/to/your/project`); реальное имя файла
+  добавлено в `.gitignore`. `scripts/init-project.sh` теперь создаёт
+  локальный `config/projects-registry.yaml` из шапки шаблона автоматически
+  при первом подключении проекта, если файла ещё нет — ручное копирование
+  не требуется. Все читатели файла (`monthly-runner.sh`, `pulse.py`,
+  `seo_cycle_cli.py`, `position-progress.py`, `webapp.py`, `rag-index.py`)
+  продолжают читать тот же путь `config/projects-registry.yaml` — правка не
+  тронула ни один из них.
+- `docs/automated-monthly.md:74` и `docs/migration.md:27` — личный путь
+  предыдущей машины владельца заменён на `/Users/<you>/AI/emwoody`, тем же
+  способом, что уже применяют `config/project.template.yaml` и
+  `docs/oauth-setup.md`.
+- Два самоссылающихся упоминания того же пути в `CHANGELOG.md` (записи
+  T-051/T-059, где путь цитировался как «обезличено») тоже анонимизированы —
+  иначе honest changelog сам оставался источником утечки.
+- Новый сторожевой тест `tests/test_no_personal_paths.py`: по каждому
+  git-tracked файлу ищет `/Users/NAME/...` и `/home/NAME/...` с NAME, не
+  входящим в список безопасных плейсхолдеров (`you`, `username`, `user`,
+  `name`, `seo`-пример из `docs/vps-deployment.md`).
+- **История не переписывалась** (SPEC «что не делаем» — тег/архив/зеркало
+  фиксируют содержимое навсегда, но переписывание истории ломает SHA чужих
+  клонов и тегов): старые коммиты `config/projects-registry.yaml` по-прежнему
+  содержат реальные пути и домены — `git log -p --all -S "Проекты ai" --
+  config/projects-registry.yaml` их показывает. Убрано только из рабочего
+  дерева/будущих коммитов.
+
 ### Fix: документация без лжи — README, INSTALL Шаг 4, битые ссылки, мёртвые доки (T-051)
 
 - `README.md`: убран жёсткий номер версии из шапки — версия, которую ставит
@@ -29,7 +59,7 @@
   и `INSTALL.md`, ссылок на файл в репозитории не было).
 - `docs/improvement-roadmap.md` перенесён в `docs/history/improvement-roadmap-2026-07.md`
   с пометкой «исторический документ, данные на 2026-07, статусы не обновляются»; путь
-  `/Users/turvodnik/AI/emwoody` обезличен.
+  `/Users/<you>/AI/emwoody` обезличен.
 - `GUIDE.md:389/924` (шпаргалка `dataforseo-fetch.py`): убрано ложное «Мировые данные,
   вкл. ЕС и РФ» / «Worldwide incl. EU and RU» и неподтверждённый пример
   `--location 2643743` — приведено в соответствие с канонической формулировкой T-059 в
@@ -244,7 +274,7 @@ Vladimir 04.09 (записано в `optimize/SPEC-seo-cycle-fixes.md`, п. 13) 
 - **`call()`** — `URLError`/`TimeoutError`/битый JSON-ответ дают управляемый
   `sys.exit` с сообщением вместо голого traceback; `HTTPError` — как раньше.
 - **Документация** — `docs/dataforseo.md` и `.env.example`: убран личный путь
-  `/Users/pifagor/.local/bin/dataforseo-mcp` (→ `~/.local/bin/...`); убрано ложное
+  `/Users/<you>/.local/bin/dataforseo-mcp` (→ `~/.local/bin/...`); убрано ложное
   обещание поддержки РФ (DataForSEO исключила РФ и Белоруссию из всех локаций с
   марта 2022 — источник: dataforseo.com/update/russia-and-belarus-api-locations);
   пример гео-кода `--location 2643743` (не подтверждён как Москва и в любом случае

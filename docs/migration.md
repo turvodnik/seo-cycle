@@ -24,7 +24,7 @@
 ### Этап 1. Установка конфига (5 мин)
 
 ```bash
-cd /Users/turvodnik/AI/emwoody
+cd /Users/<you>/AI/emwoody
 cp ./.codex/skills/seo-cycle/config/project.template.yaml seo-cycle.yaml
 ```
 

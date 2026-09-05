@@ -605,7 +605,8 @@ sources:
 ├── config/
 │   ├── project.template.yaml            # шаблон конфига проекта
 │   ├── region-profiles/{ru,eu,us,global}.yaml   # пресеты источников по региону
-│   ├── projects-registry.yaml           # реестр всех проектов (для monthly-runner --all)
+│   ├── projects-registry.example.yaml   # шаблон реестра; реальный projects-registry.yaml — локальный,
+│   │                                    #   в .gitignore, создаётся init-project.sh (для monthly-runner --all)
 │   └── triggers.yaml                    # правила Phase 10
 ├── prompts/                             # универсальные промпты
 ├── scripts/                             # переносимые скрипты (resolve-sources, db-sync,
