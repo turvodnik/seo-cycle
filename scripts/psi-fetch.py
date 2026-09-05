@@ -92,12 +92,14 @@ def main():
     if len(urls) > 1 and not args.output_dir:
         print("Batch mode: используй --output-dir для результатов (или один URL через --output)", file=sys.stderr)
 
+    skipped = 0
     for i, url in enumerate(urls):
         print(f"[{i+1}/{len(urls)}] PSI {args.strategy}: {url}", file=sys.stderr)
         try:
             data = fetch(url, args.strategy, args.api_key)
         except Exception as e:
             print(f"  skip: {e}", file=sys.stderr)
+            skipped += 1
             continue
 
         # Сохраняем результат
@@ -116,6 +118,15 @@ def main():
         if i < len(urls) - 1:
             time.sleep(args.sleep)
 
+    if skipped:
+        print(f"пропущено {skipped} из {len(urls)} URL из-за ошибок PSI API,"
+              " подробности выше", file=sys.stderr)
+    if skipped and skipped == len(urls):
+        return 2
+    if skipped:
+        return 1
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

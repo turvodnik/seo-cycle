@@ -139,7 +139,15 @@ def crawl(start: str, *, max_pages: int, max_depth: int, delay: float, timeout: 
         if body:
             try:
                 parser.feed(body)
-            except Exception:  # noqa: BLE001 - malformed html must not kill the crawl
+            except Exception:  # noqa: BLE001 - defensive: stdlib html.parser is
+                # lenient by design (Python 3.5+ dropped `strict` mode) and does
+                # not raise on malformed markup — confirmed empirically against
+                # 22+ hostile inputs (T-052 review). A counter/log promise here
+                # would be dead code that never fires, i.e. exactly the kind of
+                # "tool claims to do something it never does" this ticket exists
+                # to remove — so this stays a plain defensive catch, undocumented
+                # as a feature, unlike the completeness-affecting except blocks
+                # actually fixed by this ticket (psi-fetch.py, pulse.py sources).
                 pass
         internal: list[str] = []
         for href in parser.links:

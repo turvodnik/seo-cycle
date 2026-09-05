@@ -100,6 +100,48 @@ class CliDispatchTest(unittest.TestCase):
         proc = self.run_cli("--project", str(other), "validate", cwd=self.tmp)
         self.assertNotIn("Traceback", proc.stderr)
 
+    def _write_snapshot(self, age_days: int) -> None:
+        import os
+        import time
+        snap = self.tmp / "seo" / "monitoring" / "webmaster-snapshot-2026-01-01.json"
+        snap.parent.mkdir(parents=True, exist_ok=True)
+        snap.write_text("{}", encoding="utf-8")
+        stamp = time.time() - age_days * 86400
+        os.utime(snap, (stamp, stamp))
+
+    def test_doctor_prints_numeric_threshold_and_agy_line(self) -> None:
+        # T-052 (C7): --help promised "fails on stale snapshots" but never named
+        # the threshold, and doctor never mentioned whether `agy` (Antigravity,
+        # mandatory for Phase 2) was even installed.
+        (self.tmp / "seo-cycle.yaml").write_text("project:\n  name: cli-doctor\n", encoding="utf-8")
+        self._write_snapshot(age_days=1)
+        proc = self.run_cli("doctor")
+        # config-шаг требует governance-секцию, которой в минимальной фикстуре
+        # нет — это уже существующее (не T-052) поведение validate-config.py,
+        # поэтому здесь мы не утверждаем итоговый rc, только конкретные строки.
+        self.assertIn("порог 7", proc.stdout, proc.stdout + proc.stderr)
+        self.assertIn("agy:", proc.stdout)
+        self.assertIn("perplexity-key:", proc.stdout)
+
+    def test_doctor_honors_configured_snapshot_max_age(self) -> None:
+        (self.tmp / "seo-cycle.yaml").write_text(
+            "project:\n  name: cli-doctor\nmonitoring:\n  snapshot_max_age_days: 2\n", encoding="utf-8")
+        self._write_snapshot(age_days=5)
+        proc = self.run_cli("doctor")
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("ПРОСРОЧЕН", proc.stdout)
+        self.assertIn("порог 2", proc.stdout)
+
+    def test_status_without_config_errors_before_header(self) -> None:
+        # T-052: раньше status печатал шапку («снапшот: нет», «triggers не
+        # строился») ДО того, как обнаруживал отсутствие конфига — читалось
+        # как реальное состояние проекта, а не как «проекта тут вообще нет».
+        proc = self.run_cli("status")
+        self.assertEqual(proc.returncode, 2)
+        self.assertNotIn("seo-cycle status", proc.stdout)
+        self.assertNotIn("снапшот", proc.stdout)
+        self.assertIn("ERROR: seo-cycle.yaml not found", proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

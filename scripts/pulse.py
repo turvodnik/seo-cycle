@@ -22,7 +22,8 @@ Config (всё опционально):
 
 Usage:
   python3 scripts/pulse.py [--days 14] [--skip-fetch] [--format md|json]
-Exit: 0 ok/warnings · 1 critical (просадка или конвейер сломан) · 2 config error
+Exit: 0 все источники успешны · 1 частичная деградация (часть источников/шагов
+упала, просадка топ-10) · 2 конфиг не найден ИЛИ все источники упали
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from seo_cycle_core.config import find_config, load_yaml, nested_get, project_ro
 from seo_cycle_core.engines import engine_names
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
+from seo_cycle_core.monitoring import monitoring_dir
 from seo_cycle_core.scorecard import score_from_findings, write_scorecard
 
 log = setup_logging("pulse")
@@ -155,6 +157,8 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
     today = dt.date.today()
     steps: list[dict[str, Any]] = []
     findings: list[dict[str, Any]] = []
+    sources_total = 0
+    failed_sources: list[str] = []
 
     def note(step: str, ok: bool, message: str) -> None:
         steps.append({"step": step, "ok": ok, "note": message})
@@ -166,23 +170,26 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
     else:
         domain = str(nested_get(cfg, "project.domain", "") or "")
         sources = configured_sources(env, domain, days, engine_names(cfg))
+        sources_total = len(sources)
+        mon_dir = monitoring_dir(cfg, root)  # T-052 R3: тот же ключ, что читают doctor/status/dashboard
         if not sources:
             note("fetch", False,
                  "источник не настроен (auth login yandex | google-sa + GSC_SITE_URL)")
             findings.append({"id": "fetch_not_configured", "severity": "warning",
                              "message": "источник позиций не настроен — свежие срезы не снимаются"})
         for source, script, fetch_args in sources:
-            raw_path = root / "seo" / "monitoring" / "raw" / f"{source}-raw-{today.isoformat()}.json"
+            raw_path = mon_dir / "raw" / f"{source}-raw-{today.isoformat()}.json"
             raw_path.parent.mkdir(parents=True, exist_ok=True)
             rc, _, stderr = run_step(script, [*fetch_args, "--output", str(raw_path)], root, env)
             step = "fetch" if len(sources) == 1 else f"fetch:{source}"
             if rc != 0:
                 note(step, False, stderr.strip().splitlines()[-1] if stderr.strip() else f"rc={rc}")
                 findings.append({"id": "fetch_failed", "severity": "error",
-                                 "message": f"{script} упал — работаем на прошлом срезе"})
+                                 "message": f"{source}: {script} упал — работаем на прошлом срезе"})
+                failed_sources.append(source)
                 continue
             note(step, True, f"raw → {raw_path.relative_to(root)}")
-            snapshot_path = root / "seo" / "monitoring" / f"{source}-snapshot-{today.isoformat()}.json"
+            snapshot_path = mon_dir / f"{source}-snapshot-{today.isoformat()}.json"
             rc, _, stderr = run_step("snapshot-build.py",
                                      ["--source", source, "--input", str(raw_path),
                                       "--output", str(snapshot_path)], root, env, timeout=60)
@@ -190,7 +197,8 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
             if rc != 0:
                 note(snap_step, False, stderr.strip()[-200:] or f"rc={rc}")
                 findings.append({"id": "snapshot_failed", "severity": "error",
-                                 "message": "snapshot-build не собрал срез из raw-выгрузки"})
+                                 "message": f"{source}: snapshot-build не собрал срез из raw-выгрузки"})
+                failed_sources.append(source)
             else:
                 note(snap_step, True, f"{snapshot_path.relative_to(root)}")
 
@@ -228,6 +236,30 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
         findings.append(drop)
 
     score = score_from_findings(findings)
+
+    # Честность кодов возврата (T-052): агрегируем статус ИСТОЧНИКОВ данных
+    # (yandex/gsc), а не срез старости/дрейфа — те и раньше не были фатальны
+    # (freshness/no_snapshots — самостоятельная проверка doctor/status, тесты
+    # уже фиксируют для них rc=0), и это поведение не трогаем. Деградация —
+    # это когда конвейер САМ упал: источник не ответил, snapshot-build/db-sync/
+    # progress завершились с ошибкой, либо просадка топ-10 (critical, как раньше).
+    pipeline_broken_ids = {"fetch_failed", "snapshot_failed", "db_sync_failed", "progress_failed"}
+    hard_findings = [f for f in findings
+                     if f["severity"] == "critical" or f["id"] in pipeline_broken_ids]
+    all_sources_failed = sources_total > 0 and len(failed_sources) == sources_total
+    degraded = bool(hard_findings)
+    total_failure = all_sources_failed
+
+    degraded_message = None
+    if total_failure:
+        degraded_message = f"всё упало: ни один источник не ответил ({', '.join(failed_sources)})"
+    elif degraded:
+        if failed_sources:
+            degraded_message = f"частично: {', '.join(failed_sources)} не ответил(и)"
+        else:
+            first = hard_findings[0]
+            degraded_message = f"частично: {first['message']}"
+
     return {
         "audit_id": "pulse",
         "date": today.isoformat(),
@@ -238,11 +270,17 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
         "latest": progress.get("latest") or {},
         "delta_vs_previous": progress.get("delta_vs_previous") or {},
         "score": score,
+        "degraded": degraded,
+        "total_failure": total_failure,
+        "degraded_message": degraded_message,
     }
 
 
 def render_markdown(report: dict[str, Any]) -> str:
     lines = [f"# Pulse — {report['project']} · {report['date']}", ""]
+    if report.get("degraded_message"):
+        lines.append(f"⚠ {report['degraded_message']}")
+        lines.append("")
     for step in report["steps"]:
         mark = "✓" if step["ok"] else "✗"
         lines.append(f"- {mark} {step['step']}: {step['note']}")
@@ -285,7 +323,13 @@ def pulse_project(cfg_path: pathlib.Path, args) -> tuple[dict, int]:
         messages = "; ".join(f["message"] for f in report["findings"] if f["severity"] == "critical")
         run_step("notify.py", [f"[pulse] {report['project']}: {messages}", "--level", "alert"],
                  root, env, timeout=30)
-    return report, (1 if has_critical else 0)
+    if report.get("total_failure"):
+        rc = 2
+    elif report.get("degraded"):
+        rc = 1
+    else:
+        rc = 0
+    return report, rc
 
 
 def load_registry_projects(path: pathlib.Path) -> list[dict]:
