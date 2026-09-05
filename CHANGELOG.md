@@ -81,35 +81,59 @@
 ### Fix: закрыт класс «битое значение конфига роняет инструмент трассировкой» целиком (T-063)
 
 - Сплошной поиск по всему дереву (не по списку из предыдущих отчётов — файлы
-  менялись слиянием PR #8/#9) нашёл 19 незащищённых мест конверсии значения
-  из конфига проекта в `int`/`float`, помимо трёх, закрытых в T-052/T-053:
-  `pulse.py` (дробный близнец `pulse.drop_alert_pct` — та же болезнь, что и
-  `pulse.stale_after_days`, но `float(...)`, не `int(...)`), `ads-analytics.py`,
-  `seo-forecast.py`, `ads-apply.py`, `budget-mix-planner.py`,
-  `seo_cycle_core/rag.py`, `seo_cycle_core/loop.py`, `token-waste-audit.py`,
-  `seo_cycle_core/context.py`, `context-pack.py`, `yandex-direct-fetch.py`,
-  `google-ads-fetch.py`.
+  менялись слиянием PR #8/#9) нашёл **19** незащищённых мест конверсии
+  значения из конфига проекта в `int`/`float` в 12 файлах, помимо трёх,
+  закрытых в T-052/T-053: `pulse.py` (дробный близнец `pulse.drop_alert_pct`
+  — та же болезнь, что и `pulse.stale_after_days`, но `float(...)`, не
+  `int(...)`), `ads-analytics.py`, `seo-forecast.py`, `ads-apply.py`,
+  `budget-mix-planner.py`, `seo_cycle_core/rag.py`, `seo_cycle_core/loop.py`,
+  `token-waste-audit.py`, `seo_cycle_core/context.py`, `context-pack.py`,
+  `yandex-direct-fetch.py`, `google-ads-fetch.py`.
 - Новый `coerce_float()` в `seo_cycle_core/config.py` — дробный аналог
   `coerce_int()` (T-053): та же семантика (мусор → warning на stderr с
   именем ключа + дефолт, никогда не роняет процесс).
-  Каждое из 19 мест закрыто через `coerce_int()`/`coerce_float()` с ИМЕНЕМ
+  Каждое место закрыто через `coerce_int()`/`coerce_float()` с ИМЕНЕМ
   испорченного ключа в сообщении (`governance.token_policy.*`,
   `ads.apply.*`, `kpi.*`, `rag.*` и т.д.) — человек видит, какой ключ
   испорчен и каким значением, без трассировки стека.
-- Оба хелпера получили `falsy_to_default: bool = True` (гейт-ревью T-063):
-  у 9 из 19 мест исходный код НЕ имел `... or default` — там явный `0` уже
-  был легитимным, отличным от дефолта значением (`cache_ttl_hours: 0` =
-  «не доверять кэшу», `max_raw_rows_loaded: 0` = «не грузить ничего»), и
-  наивное повторное использование идиомы `value or default` везде тихо
-  сломало бы принятое поведение на здоровом конфиге. На этих 9 местах
-  (`context-pack.py` ×5, `yandex-direct-fetch.py` ×2,
-  `google-ads-fetch.py` ×1, `loop.py` ×1) передаётся
-  `falsy_to_default=False` — явный `0` теперь гарантированно выживает.
+- Оба хелпера получили `falsy_to_default: bool = True`: у части мест
+  исходный код НЕ имел `... or default` — там явный `0` уже был легитимным,
+  отличным от дефолта значением (`cache_ttl_hours: 0` = «не доверять
+  кэшу», `max_raw_rows_loaded: 0` = «не грузить ничего»), и наивное
+  повторное использование идиомы `value or default` везде тихо сломало бы
+  принятое поведение на здоровом конфиге. На этих местах передаётся
+  `falsy_to_default=False` — явный `0` гарантированно выживает.
+- **Гейт вернул тикет дважды** — по существу, не формально:
+  1. `int(float("inf"))` раняет `OverflowError`, НЕ `TypeError`/`ValueError`
+     — те два исключения, что ловил `coerce_int()`. YAML разбирает голое
+     `.inf`/`.nan` в конфиге прямо в питоновский `float`, минуя строку, так
+     что защита пропускала целый класс входа на ВСЕХ уже «закрытых» местах.
+     Исправлено: оба хелпера ловят `OverflowError` тоже; `coerce_float()`
+     дополнительно отклоняет НЕконечный результат (`inf`/`-inf`/`nan`) как
+     мусор — иначе вызывающий код, делающий арифметику и затем голый
+     `round()`/`int()` НЕ через `coerce_int()`, падал сколь угодно далеко
+     от точки, где мусор реально попал в систему (репродукция гейта:
+     `kpi-contract.py`'s `round(tolerance * 100)`).
+  2. Поиск по буквальному написанию вызова пропустил **15** мест в 5
+     файлах, спрятанных за обёртками: `setup-gap-audit.py:369`,
+     `research-package-quality.py:235` (голый `int()`/`float()` с `or
+     default`), `spend-guard.py` и `launch-plan.py` (по 6 мест каждый —
+     СВОИ приватные копии `numeric()`, никогда не импортированные из
+     `seo_cycle_core.config`, с результатом, усекаемым незащищённым внешним
+     `int()`), `kpi-contract.py` (`numeric()`, обёрнутый в `float()` без
+     внешнего `int()`, но с результатом, доходящим до голого `round()`
+     несколькими строками ниже). Трассировка потока данных (а не повтор
+     того же grep) нашла ЕЩЁ одно место того же класса, не названное
+     гейтом: `seo-forecast.py::load_ctr_curve()` кладёт незащищённый
+     `float(value)` из оверрайда `kpi.ctr_curve` прямо в словарь, который
+     позже суммируется в `total`, — голый `round(total)` в `build_report()`
+     падает, если оверрайд был `.inf`/`.nan`.
+  Итог: **35 мест в 17 файлах** (не 19, как в первом заходе, и не 5, как в
+  отчёте T-053).
 - Каждое место закрыто СВОИМ тестом с негативным контролем (мутация «вернуть
-  голый `int()`/`float()` в этом месте» или «убрать `falsy_to_default=False`»
-  валит именно этот тест, не общий) — `tests/test_coerce_config_sites.py`
-  (36 тестов) + `tests/test_coerce_int.py` (дробный твин `pulse.drop_alert_pct`
-  + юнит-тесты на сам флаг `falsy_to_default`).
+  голый `int()`/`float()`», «убрать `falsy_to_default=False`» или «убрать
+  проверку на `inf`/`nan`» валит именно этот тест, не общий) —
+  `tests/test_coerce_config_sites.py` + `tests/test_coerce_int.py`.
 - Осознанно НЕ тронуто (см. docstring `test_coerce_config_sites.py`):
   конверсии значений из ОТВЕТОВ API (`nested_get(row, "metrics...")` в
   `ads-analytics.py`/`google-ads-fetch.py` — другой, уже отслеженный класс
@@ -117,7 +141,9 @@
   собственным `try/except ValueError`, никогда не падал; loop-state JSON
   (`seo_cycle_core/loop.py::no_progress()`/`decide_next()`) — наше
   собственное сгенерированное состояние, уже санитизированное при записи,
-  не пользовательский конфиг.
+  не пользовательский конфиг; `ice-score.py` — вход не из конфига проекта
+  (CSV, задаваемый аргументом CLI), и `clamp()` уже ограничивает результат
+  диапазоном `[1, 10]`, так что `inf`/`nan` туда физически не проходят.
 
 ### Refactor: общее ядро для семи `*-health.py` вместо ручных копий (T-053)
 
