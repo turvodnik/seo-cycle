@@ -263,7 +263,7 @@ sources:
 ```yaml
   neuronwriter:
     enabled: true
-    api_key_env: NEURON_API_KEY        # ключ в .env
+    api_key_env: NEURON_API_KEY        # имя env-переменной (значение — в Keychain через ai-secret)
     project_id: "<твой ID из NW>"
 
   answerthepublic:
@@ -581,7 +581,7 @@ sources:
 <project-root>/
 ├── seo-cycle.yaml                       # КОНФИГ проекта
 ├── CLAUDE.md                            # правила проекта (опционально)
-├── .env                                 # API ключи (gitignore!)
+├── .env.example                         # только имена ключей (значения — в Keychain через ai-secret)
 ├── seo/
 │   ├── cycles/<topic>-<quarter>/        # снапшоты циклов (создаётся скиллом)
 │   ├── entities/entities.yaml           # реестр сущностей
@@ -615,7 +615,7 @@ sources:
 
 **«Конфиг не найден»** — скилл искал в 4 локациях, всех нет. Проверь имя файла и место (см. начало этого документа).
 
-**«Source X enabled but env-var Y not set»** — открой .env, добавь ключ; или временно отключи источник.
+**«Source X enabled but env-var Y not set»** — зарегистрируй ключ через `ai-secret set <project-scope> <ИМЯ>` (см. Шаг 4); или временно отключи источник.
 
 **«delegate.* refers to skill that doesn't exist»** — либо установи нужный project-local skill/agent в `.agents/skills/` или `.claude/skills/`, либо удали поле из `delegate.*` — используется fallback.
 
@@ -627,9 +627,9 @@ sources:
 
 ## Как поделиться скиллом
 
-Скилл самодостаточен: вся общая логика — в `~/.codex/vendor/seo-cycle/` (код, конфиг-шаблон, профили, промпты, доки). В проекте лежат только локальные entrypoints/symlinks, конфиг, правила и ключи (`.env`, `seo-cycle.yaml`, `seo/project-rules.md`, контент).
+Скилл самодостаточен: вся общая логика — в `~/.codex/vendor/seo-cycle/` (код, конфиг-шаблон, профили, промпты, доки). В проекте лежат только локальные entrypoints/symlinks, конфиг, правила и `.env.example` (`seo-cycle.yaml`, `seo/project-rules.md`, контент) — значения ключей в проекте не хранятся, они в Keychain через `ai-secret`.
 
-**Что шарить:** GitHub repo `turvodnik/seo-cycle`. Секретов в нём нет — ключи только в `.env` проектов.
+**Что шарить:** GitHub repo `turvodnik/seo-cycle`. Секретов в нём нет — значения ключей живут в Keychain каждой машины, в проектах — только имена (`.env.example`).
 
 **Способы:**
 1. **Git-репозиторий (рекомендуется).**
@@ -646,7 +646,8 @@ sources:
 pip3 install pyyaml requests pillow beautifulsoup4 google-auth
 cd <свой-проект>
 ./.codex/skills/seo-cycle/scripts/init-project.sh   # wizard → seo-cycle.yaml
-# заполнить .env своими ключами (см. .env.example)
+# зарегистрировать ключи в Keychain по .env.example (см. Шаг 4)
+ai-secret set <project-scope> <ИМЯ_КЛЮЧА>
 python3 ./.codex/skills/seo-cycle/scripts/validate-config.py
 ```
 Дальше — в Claude Code или Codex: «запусти SEO-цикл для категории X».
