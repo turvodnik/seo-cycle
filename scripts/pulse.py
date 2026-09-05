@@ -229,7 +229,7 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
         except (OSError, json.JSONDecodeError):
             progress = {}
     latest_date = str(((progress.get("latest") or {}).get("date")) or "")
-    stale_after = int(nested_get(cfg, "pulse.stale_after_days", 3) or 3)
+    stale_after = coerce_int(nested_get(cfg, "pulse.stale_after_days", 3), 3, name="pulse.stale_after_days")
     findings.extend(freshness_findings(latest_date, today, stale_after))
     drop = drop_finding(progress, float(nested_get(cfg, "pulse.drop_alert_pct", 5) or 5))
     if drop:

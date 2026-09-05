@@ -4,11 +4,18 @@
 T-052 reviewer (round 3) flagged an unguarded `int(...)` on an unvalidated
 config value at two sites introduced/touched by T-052:
 `scripts/seo_cycle_cli.py:170` (`monitoring.snapshot_max_age_days`) and
-`scripts/pulse.py:307` (`pulse.days`, pre-existing). Before this fix, a
+`scripts/pulse.py:309` (`pulse.days`, pre-existing). Before this fix, a
 config like `pulse: {days: "soon"}` raised `ValueError` with a full
 traceback instead of falling back to the default. This test proves the
 negative control: garbage in, no crash, sane fallback, warning on stderr —
 at the shared helper AND at both call sites end-to-end via `doctor`.
+
+T-053 review round 1 found a THIRD instance of the same pattern in the same
+call chain (`pulse_project` -> `build_pulse`), 77 lines above the one
+already fixed: `scripts/pulse.py:232` (`pulse.stale_after_days`) — the
+`coerce_int` warning at line 309 printed fine and `pulse` still died with a
+traceback four lines later. `PulseSurvivesBadStaleAfterConfigTest` below is
+the reviewer's own reproduction, end-to-end through the real script.
 """
 
 from __future__ import annotations
@@ -80,6 +87,46 @@ class DoctorSurvivesBadMaxAgeConfigTest(unittest.TestCase):
             cwd=tmp, text=True, capture_output=True, check=False,
         )
         self.assertNotIn("Traceback (most recent call last)", proc.stderr)
+
+
+class PulseSurvivesBadStaleAfterConfigTest(unittest.TestCase):
+    """Reviewer's own reproduction for the third occurrence
+    (`pulse.stale_after_days`, `scripts/pulse.py:232`) — garbage values that
+    must be rejected without a traceback, and two that must pass through as
+    valid (`true` == 1, a numeric-looking string with whitespace)."""
+
+    def _run_pulse(self, stale_after_value: str) -> subprocess.CompletedProcess:
+        import shutil
+        import tempfile
+
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="coerce-int-pulse-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        (tmp / "seo-cycle.yaml").write_text(
+            "project: {name: X, domain: x.test}\n"
+            "region_profile: ru\n"
+            "pulse:\n"
+            "  days: 14\n"
+            f"  stale_after_days: {stale_after_value}\n",
+            encoding="utf-8",
+        )
+        return subprocess.run(
+            [sys.executable, str(SCRIPTS / "pulse.py"), str(tmp / "seo-cycle.yaml"), "--skip-fetch"],
+            cwd=tmp, text=True, capture_output=True, check=False,
+        )
+
+    def test_garbage_values_do_not_raise(self) -> None:
+        for bad in ("not-a-number", '"3.5"', "[1]", "{a: 1}"):
+            with self.subTest(value=bad):
+                proc = self._run_pulse(bad)
+                self.assertNotIn("Traceback (most recent call last)", proc.stderr)
+                self.assertIn("WARNING: bad integer config value (pulse.stale_after_days)", proc.stderr)
+
+    def test_valid_looking_values_pass_through(self) -> None:
+        for ok in ("true", '" 12 "'):
+            with self.subTest(value=ok):
+                proc = self._run_pulse(ok)
+                self.assertNotIn("Traceback (most recent call last)", proc.stderr)
+                self.assertNotIn("WARNING: bad integer config value", proc.stderr)
 
 
 if __name__ == "__main__":

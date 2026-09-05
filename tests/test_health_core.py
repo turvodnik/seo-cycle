@@ -26,18 +26,17 @@ Two things this test proves:
 from __future__ import annotations
 
 import contextlib
-import importlib.util
 import io
 import json
 import os
 import pathlib
 import re
+import runpy
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-from types import ModuleType
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -233,24 +232,26 @@ class HealthGoldenTest(unittest.TestCase):
                     self.assertEqual(golden_write, {})
 
 
-def _load_wrapper_module(script: str) -> ModuleType:
-    """Load a `scripts/*-health.py` wrapper the way `test_monitoring_path_
-    consistency.py` (T-052) does: hyphenated filenames can't be `import`ed,
-    so load by file path instead of by name."""
-    mod_name = f"health_core_test_{script.replace('-', '_').replace('.py', '')}"
-    spec = importlib.util.spec_from_file_location(mod_name, SCRIPTS / script)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 class CoreFixReachesAllProvidersTest(unittest.TestCase):
     """The regression this ticket exists to prevent: v2.0.2 fixed the
     "config not found" wording in ONE hand-copied script and it never
     reached the other five. Patch that ONE message in the shared engine —
     `seo_cycle_core.health.MISSING_CONFIG_MSG` — and show it changes the
-    output of all seven wrappers, without touching a single wrapper file."""
+    output of all seven wrappers, without touching a single wrapper file.
+
+    Review round 1 caught this test passing against a MUTATED `gbp-health.py`
+    that no longer went through the shared engine at all (its own local
+    copy of `_run_simple`, byte-identical output) — exactly the v2.0.2
+    failure shape. Root cause: `importlib.util.spec_from_file_location` +
+    `exec_module()` only *defines* `SPEC`/`run_health` in the loaded module;
+    it never executes the wrapper's `if __name__ == "__main__":` line, so a
+    wrapper that stopped calling the shared `run_health` at all was never
+    actually exercised — the test called `health_core.run_health(module.SPEC)`
+    itself, bypassing whatever the wrapper's own `__main__` block does.
+    Fix: run the wrapper as a real subprocess-equivalent via
+    `runpy.run_path(path, run_name="__main__")`, which executes the file's
+    `__main__` block for real, so a wrapper that silently stopped going
+    through the shared engine makes the patched message disappear."""
 
     def test_core_fix_reaches_all_providers(self) -> None:
         import seo_cycle_core.health as health_core
@@ -261,19 +262,20 @@ class CoreFixReachesAllProvidersTest(unittest.TestCase):
         with mock.patch.object(health_core, "MISSING_CONFIG_MSG", "PATCHED-BY-CORE-FIX: {cwd}"):
             for script in ALL_SEVEN_SCRIPTS:
                 with self.subTest(script=script):
-                    module = _load_wrapper_module(script)
                     old_argv, old_cwd = sys.argv, pathlib.Path.cwd()
                     stderr = io.StringIO()
                     try:
                         sys.argv = [script]
                         os.chdir(empty_dir)
                         with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as exc:
-                            raise SystemExit(health_core.run_health(module.SPEC))
+                            runpy.run_path(str(SCRIPTS / script), run_name="__main__")
                     finally:
                         sys.argv = old_argv
                         os.chdir(old_cwd)
                     self.assertEqual(exc.exception.code, 2)
-                    self.assertIn("PATCHED-BY-CORE-FIX", stderr.getvalue())
+                    self.assertIn("PATCHED-BY-CORE-FIX", stderr.getvalue(),
+                                  f"{script} did not see the core patch — it is not going through "
+                                  "the shared engine (the exact v2.0.2 failure shape)")
 
 
 if __name__ == "__main__":
