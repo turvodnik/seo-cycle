@@ -5,9 +5,14 @@ Two invariants:
 1. Every relative markdown link inside the top-level docs (README, INSTALL,
    GUIDE, SKILL, docs/*.md) points at a file that actually exists in the repo.
    A broken link is a promise the repo does not keep.
-2. No markdown file contains a line shaped like a real secret example
-   (``NAME=<16+ chars of letters/digits>``) — only variable *names* belong in
-   docs; values live in the macOS Keychain via `ai-secret` (global rules, §5).
+2. No markdown file contains a line shaped like a real secret example — only
+   variable *names* belong in docs; values live in the macOS Keychain via
+   `ai-secret` (global rules, §5). "Shaped like a real secret" covers three
+   cases: a known provider token prefix (`atp_pk_live_`, `sk-`, `ghp_`, ...)
+   even truncated with a placeholder ellipsis; the WordPress Application
+   Password shape (4 groups of 4 alnum chars — `xxxx xxxx xxxx xxxx` IS this
+   shape, not a safe placeholder); or any other >=12-char alnum/`_`/`-` blob
+   without an obvious placeholder marker (`your_`, `_here`, `example`, ...).
 """
 import pathlib
 import re
@@ -25,16 +30,48 @@ DOC_FILES = [
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
-# NAME=VALUE where VALUE looks like a real secret (>=16 chars, letters/digits/
-# common token punctuation, no leading placeholder marker).
-SECRET_VALUE_RE = re.compile(
-    r"^[A-Z][A-Z0-9_]*=([A-Za-z0-9_\-]{16,})\s*$"
+# NAME=VALUE line — VALUE is whatever follows "=" to end of line (may contain
+# spaces, e.g. a WordPress Application Password).
+NAME_VALUE_RE = re.compile(r"^[A-Z][A-Z0-9_]*=(.+)$")
+
+# Known provider token prefixes — any of these appearing in a value marks it
+# as secret-shaped regardless of length (catches e.g. `atp_pk_live_...`,
+# where the trailing dots are a placeholder but the prefix itself is real).
+PROVIDER_PREFIX_RE = re.compile(
+    r"(atp_pk_live_|atp_sk_live_|sk-|sk_live_|pk_live_|ck_[a-z0-9]|cs_[a-z0-9]|"
+    r"ghp_|gho_|ghu_|ghs_|AKIA|xox[baprs]-|eyJ)",
+    re.IGNORECASE,
 )
-PLACEHOLDER_VALUES = {
-    "your_key_here",
-    "example",
-    "changeme",
-}
+
+# WordPress Application Password shape: 4 groups of 4 alnum chars separated
+# by single spaces (`xxxx xxxx xxxx xxxx` is this shape, not a safe
+# "obviously fake" placeholder — it is exactly what a real one looks like).
+WP_APP_PASSWORD_RE = re.compile(r"^[A-Za-z0-9]{4}(?: [A-Za-z0-9]{4}){3}$")
+
+PLACEHOLDER_MARKERS = ("your_", "_here", "example", "changeme", "placeholder")
+
+
+def is_secret_shaped(value):
+    value = value.strip()
+    if not value:
+        return False
+    # strip a trailing ellipsis placeholder before checking prefixes
+    bare = re.sub(r"[.…]+$", "", value)
+    if PROVIDER_PREFIX_RE.search(bare):
+        return True
+    if WP_APP_PASSWORD_RE.match(value):
+        return True
+    compact = value.replace(" ", "")
+    if len(compact) < 12:
+        return False
+    if not re.fullmatch(r"[A-Za-z0-9_\-]+", compact):
+        return False
+    low = compact.lower()
+    if any(marker in low for marker in PLACEHOLDER_MARKERS):
+        return False
+    if set(low) <= {"x"}:
+        return False
+    return True
 
 
 def iter_doc_files():
@@ -86,15 +123,11 @@ class TestDocsLinks(unittest.TestCase):
             except (UnicodeDecodeError, OSError):
                 continue
             for i, line in enumerate(text.splitlines(), 1):
-                m = SECRET_VALUE_RE.match(line.strip())
+                m = NAME_VALUE_RE.match(line.strip())
                 if not m:
                     continue
-                value = m.group(1)
-                if value.lower() in PLACEHOLDER_VALUES:
-                    continue
-                if set(value) <= {"x", "X"}:
-                    continue
-                hits.append(f"{path.relative_to(ROOT)}:{i}: {line.strip()}")
+                if is_secret_shaped(m.group(1)):
+                    hits.append(f"{path.relative_to(ROOT)}:{i}: {line.strip()}")
         self.assertEqual(
             hits, [], "secret-shaped example value in docs:\n" + "\n".join(hits)
         )
