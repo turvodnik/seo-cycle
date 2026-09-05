@@ -36,7 +36,7 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import coerce_int, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.engines import engine_names
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
@@ -306,7 +306,7 @@ def pulse_project(cfg_path: pathlib.Path, args) -> tuple[dict, int]:
     log = setup_logging("pulse", root, cfg)
     env = env_chain(root)
 
-    days = args.days or int(nested_get(cfg, "pulse.days", 14) or 14)
+    days = args.days or coerce_int(nested_get(cfg, "pulse.days", 14), 14, name="pulse.days")
     report = build_pulse(root, cfg, env, days, args.skip_fetch)
 
     write_scorecard(

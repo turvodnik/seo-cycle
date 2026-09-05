@@ -91,6 +91,23 @@ def numeric(value: Any, default: float = 0) -> float:
         return float(default)
 
 
+def coerce_int(value: Any, default: int, *, name: str = "") -> int:
+    """Like `numeric()`, but for config values that gate integer arithmetic
+    (day counts, thresholds). Preserves the existing `int(value or default)`
+    falsy-fallback semantics (0/""/None all mean "use default"), but a
+    garbage non-numeric value must not crash the tool with a traceback —
+    warn once and fall back instead (T-052 review: unguarded `int(...)` on
+    an unvalidated config value at seo_cycle_cli.py:170 and pulse.py:307)."""
+    try:
+        return int(value or default)
+    except (TypeError, ValueError):
+        import sys
+
+        label = f" ({name})" if name else ""
+        print(f"WARNING: bad integer config value{label}: {value!r} — using default {default}", file=sys.stderr)
+        return default
+
+
 def nested_get(data: dict[str, Any], dotted: str, default: Any = None) -> Any:
     cur: Any = data
     for part in dotted.split("."):
