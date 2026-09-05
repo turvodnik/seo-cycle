@@ -397,7 +397,10 @@ seo/project-intake.yaml
 .codex/skills/seo-cycle -> ~/.codex/vendor/seo-cycle
 .agents/skills/seo-cycle -> .codex/skills/seo-cycle
 .claude/skills/seo-cycle -> .codex/skills/seo-cycle
-.codex/config.toml        # project-local MCP wrapper, secrets read from .env
+.codex/config.toml        # project-local MCP wrapper (известное исключение: этот
+                           # конкретный интеграционный путь пока читает секреты из
+                           # .env при MCP-старте, а не через ai-secret — легаси
+                           # project-mcp-config.py, чинится отдельно, не Шагом 4)
 AGENTS.md                 # project-local wrapper, if project did not have one
 ```
 
@@ -438,7 +441,7 @@ python3 ./.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-d
 
 `project-upgrade-assistant.py` — review-only помощник для существующих проектов. Сравнивает проект с текущим template/control-plane surface, пишет `seo/setup/upgrade-assistant.md/json`, latest copies и `seo/setup/upgrade-questionnaire.csv` с yes/no/defer вопросами. `seo-cycle.yaml` не меняет.
 
-`access-key-assistant.py` — project-specific помощник по ключам/токенам. Читает tool-stack decision report и `.env`, пишет `seo/setup/access-key-assistant.md/json/csv` только с нужными провайдерами, env names, ссылками и шагами. Secret values не печатает и не сохраняет.
+`access-key-assistant.py` — project-specific помощник по ключам/токенам. Читает tool-stack decision report, пишет `seo/setup/access-key-assistant.md/json/csv` только с нужными провайдерами, env names, ссылками и шагами. Secret values не печатает и не сохраняет; известное исключение — сгенерированные шаги-подсказки этого конкретного помощника пока советуют «скопировать в `.env`» вместо `ai-secret set` (легаси текст самого скрипта, чинится отдельно, не Шагом 4).
 
 `setup-gap-audit.py` — детальный first-run readiness audit. Пишет `seo/setup/setup-gap-audit.md/json`, `seo/setup/setup-questionnaire.md/csv/json` и latest copies: score, missing fields, owner questions, target files, follow-up commands и project-type-aware проверки local/ecommerce/budget/tools без вывода секретов.
 
