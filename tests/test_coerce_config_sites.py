@@ -427,7 +427,7 @@ class AdsCacheTtlHoursTest(unittest.TestCase):
         self.assertNotIn("Traceback (most recent call last)", proc.stderr)
         self.assertIn("ads.cache_ttl_hours", proc.stderr)
 
-    def test_explicit_zero_ttl_is_not_silently_replaced_by_default(self) -> None:
+    def test_yandex_direct_fetch_explicit_zero_ttl_is_not_silently_replaced(self) -> None:
         """T-063 review: `float(ads.get("cache_ttl_hours", 24))` had no
         `or default` — `cache_ttl_hours: 0` legitimately means "never trust
         the cache" and must NOT become the 24h default. Proven behaviorally
@@ -439,6 +439,19 @@ class AdsCacheTtlHoursTest(unittest.TestCase):
         self._seed_raw("yandex_direct", "stats", {"rows": []})
         proc = subprocess.run(
             [sys.executable, str(SCRIPTS / "yandex-direct-fetch.py"), "--report", "stats", "--format", "json"],
+            cwd=self.tmp, text=True, capture_output=True, check=False,
+        )
+        self.assertNotIn("Traceback (most recent call last)", proc.stderr)
+        self.assertNotIn("WARNING", proc.stderr)
+        self.assertIn("No fresh cache", proc.stderr)
+
+    def test_google_ads_fetch_explicit_zero_ttl_is_not_silently_replaced(self) -> None:
+        """Same as above, for `scripts/google-ads-fetch.py:220` — its own,
+        separate `coerce_float(..., falsy_to_default=False)` call site."""
+        self._write_cfg("0")
+        self._seed_raw("google_ads", "search_terms", {"results": []})
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "google-ads-fetch.py"), "--report", "search_terms", "--format", "json"],
             cwd=self.tmp, text=True, capture_output=True, check=False,
         )
         self.assertNotIn("Traceback (most recent call last)", proc.stderr)
