@@ -104,6 +104,104 @@
   проходить молча — иначе непонятно, какая из нескольких найденных легаси-
   копий выиграла и что старые копии остаются на диске нетронутыми.
 
+### Fix: закрыт класс «битое значение конфига роняет инструмент трассировкой» целиком (T-063)
+
+- Сплошной поиск (позже признанный самим гейтом «негодным в принципе» — см. ниже)
+  закрыл через новые `coerce_int()`/`coerce_float()` (`seo_cycle_core/config.py`,
+  дробный — новый в T-063, целый — из T-053) большинство мест, где значение из
+  конфига проекта преобразуется в `int`/`float` без защиты: `pulse.py`
+  (дробный близнец `pulse.drop_alert_pct`), `ads-analytics.py`, `seo-forecast.py`,
+  `ads-apply.py`, `budget-mix-planner.py`, `seo_cycle_core/{rag,loop,context}.py`,
+  `token-waste-audit.py`, `context-pack.py`, `yandex-direct-fetch.py`,
+  `google-ads-fetch.py`, `setup-gap-audit.py`, `research-package-quality.py`,
+  `spend-guard.py`, `launch-plan.py`, `kpi-contract.py`. Каждое место — с ИМЕНЕМ
+  испорченного ключа в предупреждении на stderr, ни одно не роняет процесс.
+- **Число мест (точный подсчёт AST-обходом, не подсчётом руками — команда ниже
+  повторяема кем угодно):**
+  ```
+  python3 - <<'PY'
+  import ast, pathlib
+  tot=0; files=set()
+  for f in sorted(pathlib.Path("scripts").rglob("*.py")):
+      if f.name=="config.py" and "seo_cycle_core" in str(f): continue
+      n=sum(1 for x in ast.walk(ast.parse(f.read_text()))
+            if isinstance(x,ast.Call) and isinstance(x.func,ast.Name)
+            and x.func.id in ("coerce_int","coerce_float"))
+      if n: tot+=n; files.add(str(f))
+  print(tot, "вызовов в", len(files), "файлах")
+  PY
+  ```
+  → **47 вызовов в 18 файлах**; минус 3, доставшихся от T-053 (`pulse.py` ×2,
+  `seo_cycle_cli.py` ×1, не в этом тикете) = **44** новых вызова в **17** файлах,
+  плюс одно место, защищённое БЕЗ вызова хелпера
+  (`seo-forecast.py::load_ctr_curve()`, см. ниже) = **45 мест в 17 файлах**.
+  Раньше здесь публиковались числа 19, затем 35 — оба были подсчитаны вручную по
+  своему же списку и оба оказались неверны; впредь — только этой командой.
+- **Гейт вернул тикет трижды** — из них два круга нашли, что чинить нужно другим
+  методом, а не по адресам:
+  1. *(круг 2, часть 1)* `int(float("inf"))` роняет `OverflowError`, не
+     `TypeError`/`ValueError` — YAML разбирает голое `.inf`/`.nan` в конфиге
+     прямо в питоновский `float`, минуя строку, так что защита пропускала целый
+     класс входа на ВСЕХ уже «закрытых» местах. `coerce_int()`/`coerce_float()`
+     теперь ловят `OverflowError` тоже.
+  2. *(круг 2, часть 2)* Поиск по буквальному написанию вызова не видит ни
+     обёрток (`int(numeric(...))`), ни падений ниже по потоку — пропустил 15
+     мест в 5 файлах (`setup-gap-audit.py`, `research-package-quality.py`,
+     `spend-guard.py` ×6, `launch-plan.py` ×6, `kpi-contract.py`), плюс
+     `seo-forecast.py::load_ctr_curve()` нашёлся трассировкой потока данных, а
+     не грепом.
+  3. *(круг 2, часть 3 — ДВЕ РЕГРЕССИИ, внесённые самой починкой)*
+     - **`coerce_float()` стал отклонять `inf`/`-inf`/`nan` КАК РЕЗУЛЬТАТ** —
+       это сломало здоровый конфиг: `ads.cache_ttl_hours: .inf` («кэш не
+       протухает никогда»), `ads.analytics.wasted_spend_min_cost: .inf` («не
+       алертить») и ещё 9 мест из 13 принимали `.inf` на `origin/main` без
+       единой ошибки. Откачено: `coerce_float()` больше НЕ трогает бесконечный
+       результат — он не был мусором. Падения ниже по потоку (`round(x)` без
+       `ndigits` на `.inf`/`.nan`) закрыты в точке падения новым
+       `safe_round()` (`seo_cycle_core/config.py`) — `kpi-contract.py`'s
+       `round(tolerance * 100)`, несколько мест в `seo-forecast.py`'s
+       `build_report()`/`confidence_interval()`.
+     - **Замена `int(numeric(x, d))` → `coerce_int(x, d)` в `spend-guard.py`
+       и `launch-plan.py` сузила приём значения.** `numeric()` шла через
+       `float()` (принимала `'2.5'`/`'1e3'` строкой), `coerce_int()` — через
+       `int()` (не принимает). `coerce_int()` получил `via_float: bool =
+       False` — `via_float=True` на этих 12 местах восстанавливает
+       float-first разбор, сохраняя защиту от `OverflowError`.
+  4. *(тот же круг, поиск с нуля методом «трассировка + AST», не грепом)*
+     ещё 6 мест того же класса, падавших и на `origin/main`, и на промежуточном
+     HEAD: три ПРИВАТНЫЕ копии `numeric()`/`numeric_value()` без `OverflowError`
+     в except (`validate-config.py`, `growth-roadmap.py`, `triggers-eval.py`) —
+     **удалены, все три файла импортируют общий `seo_cycle_core.config.numeric()`
+     вместо своей копии**, а не патчатся по отдельности в четвёртый раз;
+     сравнение `float` со строкой в `triggers-eval.py` (нечисловой порог в
+     `triggers.yaml`) — обёрнуто в `try/except TypeError`; деление на ноль в
+     `budget-mix-planner.py` при `kpi.budget.ppc_step: 0` — та же защита
+     `if ppc_step else 0`, что уже стояла у соседнего `cost_per_article`;
+     переполнение `dt.date()` C-`long` на огромном годе в `kpi-contract.py`'s
+     `parse_month()` — `OverflowError` добавлен в except.
+- **Новый критерий приёмки (взамен «поиск пуст», отменённого гейтом как метод,
+  негодный в принципе):** дифференциальный прогон матрицы значений
+  `0, "", None, "abc", [1], {}, "2.5", 1e3, .inf, -.inf, .nan, 10**400, True` по
+  каждому числовому ключу конфига, BASE (`origin/main`) vs HEAD — расхождение
+  допустимо только там, где BASE падал трассировкой. Прогон и результат — в
+  `tests/test_value_matrix.py` (или отчёте тикета, если тестом не оформлено).
+- Каждое место — свой тест с негативным контролем (мутация «вернуть голый
+  `int()`/`float()`», «убрать `via_float=True`», «вернуть проверку на
+  `inf`/`nan` в `coerce_float()`» и т.п. валит именно этот тест, не общий) —
+  `tests/test_coerce_config_sites.py` + `tests/test_coerce_int.py`.
+- Осознанно НЕ тронуто: конверсии значений из ОТВЕТОВ API
+  (`nested_get(row, "metrics...")` в `ads-analytics.py`/`google-ads-fetch.py` —
+  другой, уже отслеженный класс риска, см. T-059); `numeric()`-копии в
+  `gsc-indexing-queue.py`/`gsc-indexing-recheck.py` (парсят строки из GSC-выгрузок,
+  не конфиг, другая форма — запятая как десятичный разделитель); `google-nlp-audit.py::env_int()`
+  (свой try/except, никогда не падал); loop-state JSON (наше сгенерированное
+  состояние, не конфиг); `ice-score.py` (вход — CLI-CSV, не конфиг проекта,
+  `clamp()` уже ограничивает `[1, 10]`); `wp-photo-image.py`/
+  `skill-manifest-validate.py` (тот же паттерн, но `except Exception`
+  в `__main__`/не проектный конфиг — трассировки не даёт); `kpi.months_to_target`
+  с огромным целым (`range()`/цикл зависает без выхода, не трассировка) —
+  решение о верхней границе за постановщиком.
+
 ### Refactor: общее ядро для семи `*-health.py` вместо ручных копий (T-053)
 
 - Внутренний рефакторинг, поведение и форматы отчётов не изменились:

@@ -29,7 +29,7 @@ import sys
 from typing import Any
 
 from seo_cycle_core.ads import ads_config, load_latest_raw
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, write_text
+from seo_cycle_core.config import coerce_float, find_config, load_yaml, nested_get, project_root_for, write_text
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
 
@@ -167,8 +167,12 @@ def wasted_ngrams(terms: list[dict[str, Any]], wasted_min: float) -> list[dict[s
 
 def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, Any]:
     ads = ads_config(cfg)
-    threshold = float(nested_get(ads, "analytics.top_position_threshold", 3) or 3)
-    wasted_min = float(nested_get(ads, "analytics.wasted_spend_min_cost", 300) or 300)
+    threshold = coerce_float(
+        nested_get(ads, "analytics.top_position_threshold", 3), 3, name="ads.analytics.top_position_threshold"
+    )
+    wasted_min = coerce_float(
+        nested_get(ads, "analytics.wasted_spend_min_cost", 300), 300, name="ads.analytics.wasted_spend_min_cost"
+    )
     organic_top = load_organic_top(project_root, cfg, threshold)
     core = load_semantic_core_keywords(project_root)
     terms = direct_search_terms(project_root) + google_search_terms(project_root)

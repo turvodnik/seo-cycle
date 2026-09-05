@@ -17,7 +17,16 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import boolish, find_config, load_yaml, policy_path, project_root_for, rel_display, skill_root
+from seo_cycle_core.config import (
+    boolish,
+    coerce_int,
+    find_config,
+    load_yaml,
+    policy_path,
+    project_root_for,
+    rel_display,
+    skill_root,
+)
 from seo_cycle_core.context import build_context_manifest
 
 
@@ -79,11 +88,35 @@ def token_contract(cfg: dict[str, Any], route: dict[str, Any], launch_plan: dict
         "cache_first": boolish(route_caps.get("cache_first", launch_caps.get("cache_first", token.get("cache_first", True)))),
         "progressive_disclosure": boolish(route_caps.get("progressive_disclosure", token.get("progressive_disclosure", True))),
         "require_distillate_before_synthesis": boolish(launch_caps.get("require_distillate_before_synthesis", token.get("require_distillate_before_synthesis", True))),
-        "max_context_input_tokens_per_phase": int(route_caps.get("max_context_input_tokens_per_phase", launch_caps.get("max_context_input_tokens_per_phase", token.get("max_context_input_tokens_per_phase", 45000)))),
-        "max_raw_rows_loaded": int(route_caps.get("max_raw_rows_loaded", launch_caps.get("max_raw_rows_loaded", token.get("max_raw_rows_loaded", 200)))),
-        "distillate_max_lines": int(route_caps.get("distillate_max_lines", launch_caps.get("distillate_max_lines", token.get("distillate_max_lines", 220)))),
-        "browser_session_budget_minutes": int(route_caps.get("browser_session_budget_minutes", launch_caps.get("browser_session_budget_minutes", token.get("browser_session_budget_minutes", 20)))),
-        "browser_pages_per_phase_cap": int(route_caps.get("browser_pages_per_phase_cap", launch_caps.get("browser_pages_per_phase_cap", token.get("browser_pages_per_phase_cap", 20)))),
+        # falsy_to_default=False: the original here had no `or default` —
+        # an explicit 0 (e.g. "load nothing") was already a legitimate,
+        # meaningfully-different-from-default value and must keep surviving
+        # as 0, not silently become the default (T-063 review).
+        "max_context_input_tokens_per_phase": coerce_int(
+            route_caps.get("max_context_input_tokens_per_phase", launch_caps.get(
+                "max_context_input_tokens_per_phase", token.get("max_context_input_tokens_per_phase", 45000)
+            )), 45000, name="governance.token_policy.max_context_input_tokens_per_phase", falsy_to_default=False,
+        ),
+        "max_raw_rows_loaded": coerce_int(
+            route_caps.get("max_raw_rows_loaded", launch_caps.get(
+                "max_raw_rows_loaded", token.get("max_raw_rows_loaded", 200)
+            )), 200, name="governance.token_policy.max_raw_rows_loaded", falsy_to_default=False,
+        ),
+        "distillate_max_lines": coerce_int(
+            route_caps.get("distillate_max_lines", launch_caps.get(
+                "distillate_max_lines", token.get("distillate_max_lines", 220)
+            )), 220, name="governance.token_policy.distillate_max_lines", falsy_to_default=False,
+        ),
+        "browser_session_budget_minutes": coerce_int(
+            route_caps.get("browser_session_budget_minutes", launch_caps.get(
+                "browser_session_budget_minutes", token.get("browser_session_budget_minutes", 20)
+            )), 20, name="governance.token_policy.browser_session_budget_minutes", falsy_to_default=False,
+        ),
+        "browser_pages_per_phase_cap": coerce_int(
+            route_caps.get("browser_pages_per_phase_cap", launch_caps.get(
+                "browser_pages_per_phase_cap", token.get("browser_pages_per_phase_cap", 20)
+            )), 20, name="governance.token_policy.browser_pages_per_phase_cap", falsy_to_default=False,
+        ),
     }
 
 

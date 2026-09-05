@@ -33,7 +33,7 @@ from seo_cycle_core.ads import (
     save_raw,
     summary_paths,
 )
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import coerce_float, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
 
@@ -217,7 +217,10 @@ def main() -> int:
             return 1
         ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report}")
     else:
-        cached = load_latest_raw(project_root, PLATFORM, args.report, ttl_hours=float(ads.get("cache_ttl_hours", 24)))
+        cached = load_latest_raw(
+            project_root, PLATFORM, args.report,
+            ttl_hours=coerce_float(ads.get("cache_ttl_hours", 24), 24, name="ads.cache_ttl_hours", falsy_to_default=False),
+        )
         if cached is None:
             print(
                 f"No fresh cache for `{args.report}`. Provide --input-file <export.json> or run with --live "

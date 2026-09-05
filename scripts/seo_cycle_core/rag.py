@@ -23,7 +23,7 @@ import struct
 import urllib.request
 from typing import Any, Iterator
 
-from .config import nested_get
+from .config import coerce_int, nested_get
 
 DEFAULT_CHUNK_CHARS = 1200
 DEFAULT_CHUNK_OVERLAP = 150
@@ -163,8 +163,12 @@ def iter_project_documents(project_root: pathlib.Path, cfg: dict[str, Any]
                            ) -> Iterator[tuple[str, pathlib.Path, list[tuple[str, dict[str, Any]]]]]:
     """Yield (source_type, absolute_path, [(chunk_text, meta), ...]) per document."""
     sources = nested_get(cfg, "rag.sources", list(DEFAULT_SOURCES)) or list(DEFAULT_SOURCES)
-    max_chars = int(nested_get(cfg, "rag.chunk_chars", DEFAULT_CHUNK_CHARS) or DEFAULT_CHUNK_CHARS)
-    overlap = int(nested_get(cfg, "rag.chunk_overlap", DEFAULT_CHUNK_OVERLAP) or DEFAULT_CHUNK_OVERLAP)
+    max_chars = coerce_int(
+        nested_get(cfg, "rag.chunk_chars", DEFAULT_CHUNK_CHARS), DEFAULT_CHUNK_CHARS, name="rag.chunk_chars"
+    )
+    overlap = coerce_int(
+        nested_get(cfg, "rag.chunk_overlap", DEFAULT_CHUNK_OVERLAP), DEFAULT_CHUNK_OVERLAP, name="rag.chunk_overlap"
+    )
 
     def md_chunks(path: pathlib.Path) -> list[tuple[str, dict[str, Any]]]:
         try:

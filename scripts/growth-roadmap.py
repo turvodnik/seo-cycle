@@ -18,6 +18,8 @@ import subprocess
 import sys
 from typing import Any
 
+from seo_cycle_core.config import numeric
+
 try:
     import yaml
 except ImportError:
@@ -132,13 +134,6 @@ def boolish(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"true", "yes", "y", "1", "enabled", "да", "д"}
     return bool(value)
-
-
-def numeric(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def country(cfg: dict[str, Any], intake: dict[str, Any]) -> str:

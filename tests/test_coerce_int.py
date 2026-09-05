@@ -68,6 +68,95 @@ class CoerceIntUnitTest(unittest.TestCase):
         self.assertIn("monitoring.snapshot_max_age_days", stderr.getvalue())
 
 
+class CoerceIntOverflowTest(unittest.TestCase):
+    """T-063 gate round 2: `int(float("inf"))` raises `OverflowError`, NOT
+    `TypeError`/`ValueError` — the two exceptions the original `coerce_int()`
+    caught. YAML parses a bare `.inf`/`-.inf` config value straight into the
+    Python float `inf` (no string involved), so this crash reached every
+    site `coerce_int()` protects, defeating the whole ticket at once.
+    Reviewer's own reproduction: `pulse.stale_after_days: .inf` -> rc=1
+    with a traceback, even through the "fixed" `coerce_int()`."""
+
+    def test_positive_infinity_does_not_raise(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = coerce_int(float("inf"), 3, name="pulse.stale_after_days")
+        self.assertEqual(result, 3)
+        self.assertIn("pulse.stale_after_days", stderr.getvalue())
+        self.assertIn("inf", stderr.getvalue())
+
+    def test_negative_infinity_does_not_raise(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = coerce_int(float("-inf"), 3, name="pulse.stale_after_days")
+        self.assertEqual(result, 3)
+
+    def test_infinity_does_not_raise_with_falsy_to_default_false(self) -> None:
+        # `inf` is truthy either way, so this exercises the OTHER branch of
+        # the falsy_to_default switch through the same OverflowError path.
+        result = coerce_int(float("inf"), 3, falsy_to_default=False)
+        self.assertEqual(result, 3)
+
+
+class PulseSurvivesInfiniteStaleAfterConfigTest(unittest.TestCase):
+    """End-to-end reproduction of the gate's own finding: a bare `.inf` in
+    `pulse.stale_after_days` (YAML parses it directly into the float `inf`,
+    no string coercion involved) must not crash `pulse.py`."""
+
+    def _run_pulse(self, stale_after_value: str) -> subprocess.CompletedProcess:
+        import shutil
+        import tempfile
+
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="coerce-int-inf-pulse-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        (tmp / "seo-cycle.yaml").write_text(
+            "project: {name: X, domain: x.test}\n"
+            "region_profile: ru\n"
+            "pulse:\n"
+            "  days: 14\n"
+            f"  stale_after_days: {stale_after_value}\n",
+            encoding="utf-8",
+        )
+        return subprocess.run(
+            [sys.executable, str(SCRIPTS / "pulse.py"), str(tmp / "seo-cycle.yaml"), "--skip-fetch"],
+            cwd=tmp, text=True, capture_output=True, check=False,
+        )
+
+    def test_positive_and_negative_infinity_do_not_raise(self) -> None:
+        for bad in (".inf", "-.inf"):
+            with self.subTest(value=bad):
+                proc = self._run_pulse(bad)
+                self.assertNotIn("Traceback (most recent call last)", proc.stderr)
+                self.assertIn("WARNING: bad integer config value (pulse.stale_after_days)", proc.stderr)
+
+
+class CoerceIntFalsyToDefaultFlagTest(unittest.TestCase):
+    """T-063 review: `int(value or default)` is only correct where the
+    ORIGINAL call site also had `or default` — 9 of the 19 T-063 sites
+    didn't, and there an explicit `0` was already a legitimate,
+    meaningfully-different-from-default value (e.g. `max_raw_rows_loaded: 0`
+    = "load nothing") that must keep surviving as `0`. `falsy_to_default`
+    is the switch: default `True` keeps the historical coerce_int()
+    behavior (this class's sibling test above), `False` preserves the
+    no-`or` original."""
+
+    def test_default_true_still_treats_zero_as_unset(self) -> None:
+        self.assertEqual(coerce_int(0, 14), 14)
+
+    def test_false_preserves_explicit_zero(self) -> None:
+        self.assertEqual(coerce_int(0, 14, falsy_to_default=False), 0)
+
+    def test_false_still_falls_back_on_none(self) -> None:
+        self.assertEqual(coerce_int(None, 14, falsy_to_default=False), 14)
+
+    def test_false_still_warns_and_falls_back_on_garbage(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = coerce_int("garbage", 14, name="ads.cache_ttl_hours", falsy_to_default=False)
+        self.assertEqual(result, 14)
+        self.assertIn("ads.cache_ttl_hours", stderr.getvalue())
+
+
 class DoctorSurvivesBadMaxAgeConfigTest(unittest.TestCase):
     """End-to-end: `seo-cycle doctor` (via seo_cycle_cli.py status/doctor)
     must not crash when `monitoring.snapshot_max_age_days` is garbage."""
@@ -127,6 +216,46 @@ class PulseSurvivesBadStaleAfterConfigTest(unittest.TestCase):
                 proc = self._run_pulse(ok)
                 self.assertNotIn("Traceback (most recent call last)", proc.stderr)
                 self.assertNotIn("WARNING: bad integer config value", proc.stderr)
+
+
+class PulseSurvivesBadDropAlertConfigTest(unittest.TestCase):
+    """T-063: `scripts/pulse.py:234`, `pulse.drop_alert_pct` — the float
+    twin of `pulse.stale_after_days` above, found by the T-053 reviewer
+    (of T-063's predecessor ticket) sweeping the tree for BOTH `int(` and
+    `float(` conversions of config values, not just the integer half."""
+
+    def _run_pulse(self, drop_alert_value: str) -> subprocess.CompletedProcess:
+        import shutil
+        import tempfile
+
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="coerce-float-pulse-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        (tmp / "seo-cycle.yaml").write_text(
+            "project: {name: X, domain: x.test}\n"
+            "region_profile: ru\n"
+            "pulse:\n"
+            "  days: 14\n"
+            f"  drop_alert_pct: {drop_alert_value}\n",
+            encoding="utf-8",
+        )
+        return subprocess.run(
+            [sys.executable, str(SCRIPTS / "pulse.py"), str(tmp / "seo-cycle.yaml"), "--skip-fetch"],
+            cwd=tmp, text=True, capture_output=True, check=False,
+        )
+
+    def test_garbage_values_do_not_raise(self) -> None:
+        for bad in ("not-a-number", '"soon"', "[1]", "{a: 1}"):
+            with self.subTest(value=bad):
+                proc = self._run_pulse(bad)
+                self.assertNotIn("Traceback (most recent call last)", proc.stderr)
+                self.assertIn("WARNING: bad numeric config value (pulse.drop_alert_pct)", proc.stderr)
+
+    def test_valid_looking_values_pass_through(self) -> None:
+        for ok in ("7.5", '" 12 "'):
+            with self.subTest(value=ok):
+                proc = self._run_pulse(ok)
+                self.assertNotIn("Traceback (most recent call last)", proc.stderr)
+                self.assertNotIn("WARNING: bad numeric config value", proc.stderr)
 
 
 if __name__ == "__main__":

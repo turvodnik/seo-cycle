@@ -26,7 +26,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, numeric, project_root_for
+from seo_cycle_core.config import coerce_float, coerce_int, find_config, load_yaml, nested_get, numeric, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
 
@@ -91,7 +91,12 @@ def ppc_lots(ads: dict[str, Any], *, ppc_step: float, conversion: float,
                     "cost": ppc_step,
                     "expected_monthly_clicks": round(leads / conversion, 1) if conversion else 0,
                     "expected_monthly_leads": round(leads, 2),
-                    "leads_per_1000": round(leads / ppc_step * 1000, 3),
+                    # T-063 gate round 2: `kpi.budget.ppc_step: 0` is a
+                    # plausible human config value (the sibling
+                    # `cost_per_article` already guards the same way two
+                    # lines above `seo_lots()`) — division by zero crashed
+                    # here without it.
+                    "leads_per_1000": round(leads / ppc_step * 1000, 3) if ppc_step else 0,
                     "note": f"step {step_number}: efficiency {round(efficiency, 2)},"
                             f" effective CPA {effective_cpa} (base {cpa})",
                 }
@@ -103,8 +108,8 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any], monthly_budget
     strategy = project_root / "seo" / "strategy"
     forecast = load_json(strategy / "seo-forecast.json")
     ads = load_json(project_root / "seo" / "ads" / "ads-analytics.json")
-    conversion = float(nested_get(cfg, "kpi.lead_conversion_rate", 0.02) or 0.02)
-    months = max(1, int(nested_get(cfg, "kpi.months_to_target", 6) or 6))
+    conversion = coerce_float(nested_get(cfg, "kpi.lead_conversion_rate", 0.02), 0.02, name="kpi.lead_conversion_rate")
+    months = max(1, coerce_int(nested_get(cfg, "kpi.months_to_target", 6), 6, name="kpi.months_to_target"))
     cost_per_article = float(numeric(nested_get(cfg, "kpi.budget.cost_per_article"), DEFAULT_COST_PER_ARTICLE))
     ppc_step = float(numeric(nested_get(cfg, "kpi.budget.ppc_step"), DEFAULT_PPC_STEP))
     diminishing = float(numeric(nested_get(cfg, "kpi.budget.ppc_diminishing_factor"), 0.85))

@@ -10,7 +10,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for, rel_path
+from seo_cycle_core.config import coerce_int, find_config, load_yaml, policy_path, project_root_for, rel_path
 from seo_cycle_core.reports import write_report_bundle
 
 
@@ -23,9 +23,16 @@ def token_policy(cfg: dict[str, Any]) -> dict[str, Any]:
     policy = governance.get("token_policy", {}) if isinstance(governance.get("token_policy"), dict) else {}
     return {
         "raw_data_in_context": bool(policy.get("raw_data_in_context", False)),
-        "distillate_max_lines": int(policy.get("distillate_max_lines", 220) or 220),
-        "max_output_tokens_per_artifact": int(policy.get("max_output_tokens_per_artifact", 7000) or 7000),
-        "max_raw_rows_loaded": int(policy.get("max_raw_rows_loaded", 200) or 200),
+        "distillate_max_lines": coerce_int(
+            policy.get("distillate_max_lines", 220), 220, name="governance.token_policy.distillate_max_lines"
+        ),
+        "max_output_tokens_per_artifact": coerce_int(
+            policy.get("max_output_tokens_per_artifact", 7000), 7000,
+            name="governance.token_policy.max_output_tokens_per_artifact",
+        ),
+        "max_raw_rows_loaded": coerce_int(
+            policy.get("max_raw_rows_loaded", 200), 200, name="governance.token_policy.max_raw_rows_loaded"
+        ),
     }
 
 

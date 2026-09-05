@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse, os, pathlib, sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from seo_cycle_core.config import numeric  # noqa: E402
 from seo_cycle_core.engines import engine_names  # noqa: E402
 
 try:
@@ -241,13 +242,6 @@ def rel_project_path(project_root: pathlib.Path, raw_path: str) -> pathlib.Path:
     if not path.is_absolute():
         path = project_root / path
     return path
-
-
-def numeric_value(value, default: float = 0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def check_project_policies(cfg: dict, env: dict, project_root: pathlib.Path, checklist: list, warnings: list):
@@ -473,11 +467,11 @@ def check_governance(cfg: dict, project_root: pathlib.Path, checklist: list, war
         warnings.append("governance.token_policy.progressive_disclosure=false — скилл будет читать лишний контекст")
     if token_policy.get("cache_first") is False:
         warnings.append("governance.token_policy.cache_first=false — дорогие источники могут запускаться повторно")
-    if numeric_value(token_policy.get("max_context_input_tokens_per_phase")) > 90000:
+    if numeric(token_policy.get("max_context_input_tokens_per_phase")) > 90000:
         warnings.append("max_context_input_tokens_per_phase > 90000 — проверь, действительно ли нужен такой большой контекст")
 
     budget_policy = gov.get("budget_policy", {}) if isinstance(gov.get("budget_policy"), dict) else {}
-    paid_api_cap = numeric_value(budget_policy.get("monthly_paid_api_usd_cap"))
+    paid_api_cap = numeric(budget_policy.get("monthly_paid_api_usd_cap"))
     paid_default = budget_policy.get("paid_tools_default", "approval_only")
     sources = cfg.get("sources", {}) if isinstance(cfg.get("sources", {}), dict) else {}
     paid_source_names = {
@@ -507,7 +501,7 @@ def check_governance(cfg: dict, project_root: pathlib.Path, checklist: list, war
     ]
     if active_paid and paid_api_cap <= 0 and paid_default != "enabled_with_caps":
         checklist.append(f"Утвердить budget_policy.monthly_paid_api_usd_cap для активных paid/quota sources: {', '.join(active_paid)}")
-    if budget_policy.get("ads_spend_enabled") and numeric_value(budget_policy.get("monthly_total_usd_cap")) <= 0:
+    if budget_policy.get("ads_spend_enabled") and numeric(budget_policy.get("monthly_total_usd_cap")) <= 0:
         warnings.append("ads_spend_enabled=true, но monthly_total_usd_cap=0")
 
     ads = cfg.get("ads", {}) if isinstance(cfg.get("ads"), dict) else {}
@@ -518,10 +512,10 @@ def check_governance(cfg: dict, project_root: pathlib.Path, checklist: list, war
                         if isinstance(ads.get(name), dict) and ads[name].get("enabled")]
         if not platforms_on:
             warnings.append("ads.enabled=true, но ни одна платформа не включена (ads.yandex_direct/google_ads.enabled)")
-        if numeric_value(budget_policy.get("monthly_ads_usd_cap")) <= 0:
+        if numeric(budget_policy.get("monthly_ads_usd_cap")) <= 0:
             checklist.append("Задать governance.budget_policy.monthly_ads_usd_cap перед live ads fetch/apply")
         apply_cfg = ads.get("apply", {}) if isinstance(ads.get("apply"), dict) else {}
-        if numeric_value(apply_cfg.get("max_changes_per_run", 20)) > 200:
+        if numeric(apply_cfg.get("max_changes_per_run", 20)) > 200:
             warnings.append("ads.apply.max_changes_per_run > 200 — слишком широкий разовый apply")
 
     automation = gov.get("automation_policy", {}) if isinstance(gov.get("automation_policy"), dict) else {}

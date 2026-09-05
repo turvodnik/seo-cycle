@@ -19,6 +19,8 @@ import pathlib
 import sys
 from typing import Any
 
+from seo_cycle_core.config import coerce_float
+
 try:
     import yaml
 except ImportError:
@@ -366,7 +368,9 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
     budget_required = ["budget.token_policy", "budget.monthly_paid_api_usd_cap", "budget.subscriptions", "budget.spend_guard"]
     if token.get("raw_data_in_context") is True or token.get("cache_first") is False:
         add_gap(gaps, "budget.token_policy", "Верни cache-first/raw-on-disk политику или явно зафиксируй исключение.", "budget", "high")
-    if float(budget.get("monthly_paid_api_usd_cap") or 0) <= 0 and tool_decisions(tool_stack, "approval_required"):
+    if coerce_float(
+        budget.get("monthly_paid_api_usd_cap", 0), 0, name="governance.budget_policy.monthly_paid_api_usd_cap"
+    ) <= 0 and tool_decisions(tool_stack, "approval_required"):
         add_gap(gaps, "budget.monthly_paid_api_usd_cap", "Укажи месячный paid API/LLM бюджет или оставь paid инструменты только approval-only.", "budget", "medium")
     if not subscriptions:
         add_gap(gaps, "budget.subscriptions", "Заполни подписки и остатки: NeuronWriter, Keys.so, Serpstat, SpyFu, DataForSEO, XMLRiver.", "budget", "medium")
