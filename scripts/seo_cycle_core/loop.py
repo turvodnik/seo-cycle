@@ -165,11 +165,16 @@ def target_config(cfg: dict[str, Any], target: str) -> dict[str, Any]:
                 name=f"governance.loop.targets.{spec['config_key']}.max_attempts",
             ),
         ),
+        # falsy_to_default=False: original had no `or default` here either.
+        # The outer max(2, ...) already floors any value (including 0) to
+        # 2, so this makes no observable difference today — kept for
+        # consistency with the other 8 sites and so it stays correct if
+        # DEFAULT_NO_PROGRESS_AFTER ever changes (T-063 review).
         "no_progress_after": max(
             2,
             coerce_int(
                 loop_cfg.get("no_progress_after", DEFAULT_NO_PROGRESS_AFTER), DEFAULT_NO_PROGRESS_AFTER,
-                name="governance.loop.no_progress_after",
+                name="governance.loop.no_progress_after", falsy_to_default=False,
             ),
         ),
         "escalate": bool(loop_cfg.get("escalate", True)),

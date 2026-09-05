@@ -3,8 +3,7 @@
 every remaining site found by a fresh, sweeping search of the tree (T-052
 and T-053 fixed two, then a third; T-053's own reviewer found five more and
 rolled them back as out-of-scope; this ticket re-finds and fixes all of
-them, plus a dobified twin the T-063 reviewer of the previous ticket found
-at `scripts/pulse.py:234`).
+them, plus a float twin the T-053 reviewer found at `scripts/pulse.py:234`).
 
 One test per fixed site, each calling the REAL function that contains the
 fix with a garbage value for the exact config key that site reads. Per the
@@ -247,6 +246,17 @@ class LoopTargetConfigTest(unittest.TestCase):
         self.assertGreaterEqual(limits["no_progress_after"], 2)
         self.assertIn("governance.loop.no_progress_after", stderr.getvalue())
 
+    # NOTE (T-063 review): `governance.loop.no_progress_after`'s call site
+    # also passes `falsy_to_default=False` (original had no `or default`),
+    # but the outer `max(2, ...)` floor happens to equal
+    # `DEFAULT_NO_PROGRESS_AFTER` (both 2), so an explicit `0` produces the
+    # same final `2` under either flag value — there is no black-box
+    # assertion on `target_config()`'s return value that distinguishes
+    # them. The flag's own semantics are proven directly in
+    # `CoerceIntFalsyToDefaultFlagTest` (tests/test_coerce_int.py); the
+    # wiring at this specific call site is confirmed by code review and by
+    # `mutate.py`'s mutation-kill run (see the ticket's «Результат»).
+
 
 class TokenWasteAuditPolicyTest(unittest.TestCase):
     """scripts/token-waste-audit.py:26-28 — the three
@@ -359,6 +369,23 @@ class ContextPackTokenContractTest(unittest.TestCase):
         self.assertEqual(contract["browser_pages_per_phase_cap"], 20)
         self.assertIn("governance.token_policy.browser_pages_per_phase_cap", err)
 
+    def test_explicit_zero_survives_at_every_key(self) -> None:
+        """T-063 review: the ORIGINAL `int(a.get(k, b.get(k, c.get(k, d))))`
+        chain had no `or default` anywhere — an explicit `0` (e.g.
+        `max_raw_rows_loaded: 0` = "load nothing") was already a legitimate
+        value distinct from the default and must keep surviving as `0`,
+        not get silently replaced by `coerce_int()`'s historical
+        `value or default` idiom. Covers all 5 keys in one pass."""
+        keys = (
+            "max_context_input_tokens_per_phase", "max_raw_rows_loaded", "distillate_max_lines",
+            "browser_session_budget_minutes", "browser_pages_per_phase_cap",
+        )
+        for key in keys:
+            with self.subTest(key=key):
+                contract, err = self._contract(key, 0)
+                self.assertEqual(contract[key], 0)
+                self.assertNotIn("WARNING", err)
+
 
 class AdsCacheTtlHoursTest(unittest.TestCase):
     """scripts/yandex-direct-fetch.py:272,285 and scripts/google-ads-fetch.py:220
@@ -370,8 +397,11 @@ class AdsCacheTtlHoursTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tmp_dir()
         self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self._write_cfg('"garbage"')
+
+    def _write_cfg(self, ttl_value: str) -> None:
         (self.tmp / "seo-cycle.yaml").write_text(
-            "project: {name: cache-ttl-test}\nads:\n  cache_ttl_hours: \"garbage\"\n", encoding="utf-8"
+            f"project: {{name: cache-ttl-test}}\nads:\n  cache_ttl_hours: {ttl_value}\n", encoding="utf-8"
         )
 
     def _seed_raw(self, platform: str, report: str, payload: dict) -> None:
@@ -397,9 +427,27 @@ class AdsCacheTtlHoursTest(unittest.TestCase):
         self.assertNotIn("Traceback (most recent call last)", proc.stderr)
         self.assertIn("ads.cache_ttl_hours", proc.stderr)
 
+    def test_explicit_zero_ttl_is_not_silently_replaced_by_default(self) -> None:
+        """T-063 review: `float(ads.get("cache_ttl_hours", 24))` had no
+        `or default` — `cache_ttl_hours: 0` legitimately means "never trust
+        the cache" and must NOT become the 24h default. Proven behaviorally
+        (not just via the no-warning signal): with ttl=0, a cache file
+        written moments ago is already older than the (zero) TTL, so
+        yandex-direct-fetch.py must report "no fresh cache" instead of
+        silently accepting it as if TTL were the 24h default."""
+        self._write_cfg("0")
+        self._seed_raw("yandex_direct", "stats", {"rows": []})
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "yandex-direct-fetch.py"), "--report", "stats", "--format", "json"],
+            cwd=self.tmp, text=True, capture_output=True, check=False,
+        )
+        self.assertNotIn("Traceback (most recent call last)", proc.stderr)
+        self.assertNotIn("WARNING", proc.stderr)
+        self.assertIn("No fresh cache", proc.stderr)
+
 
 class CoerceFloatUnitTest(unittest.TestCase):
-    """`coerce_float()` itself — the dial-in twin of `coerce_int()`,
+    """`coerce_float()` itself — the float twin of `coerce_int()`,
     same negative-control shape as `CoerceIntUnitTest` in
     tests/test_coerce_int.py."""
 

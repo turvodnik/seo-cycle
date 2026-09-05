@@ -219,7 +219,7 @@ def main() -> int:
     else:
         cached = load_latest_raw(
             project_root, PLATFORM, args.report,
-            ttl_hours=coerce_float(ads.get("cache_ttl_hours", 24), 24, name="ads.cache_ttl_hours"),
+            ttl_hours=coerce_float(ads.get("cache_ttl_hours", 24), 24, name="ads.cache_ttl_hours", falsy_to_default=False),
         )
         if cached is None:
             print(

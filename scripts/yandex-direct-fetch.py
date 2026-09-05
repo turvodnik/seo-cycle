@@ -269,7 +269,7 @@ def main() -> int:
     else:
         cached = load_latest_raw(
             project_root, PLATFORM, args.report,
-            ttl_hours=coerce_float(ads.get("cache_ttl_hours", 24), 24, name="ads.cache_ttl_hours"),
+            ttl_hours=coerce_float(ads.get("cache_ttl_hours", 24), 24, name="ads.cache_ttl_hours", falsy_to_default=False),
         )
         if cached is None:
             print(
@@ -282,7 +282,10 @@ def main() -> int:
 
     if payload is not None and args.write and (args.input_file or args.live):
         save_raw(project_root, PLATFORM, args.report, payload)
-    summary = summarize(project_root, coerce_float(ads.get("cache_ttl_hours", 24), 24, name="ads.cache_ttl_hours"))
+    summary = summarize(
+        project_root,
+        coerce_float(ads.get("cache_ttl_hours", 24), 24, name="ads.cache_ttl_hours", falsy_to_default=False),
+    )
     if args.write:
         write_report_bundle(summary_paths(cfg, project_root, PLATFORM), render_markdown(summary), summary)
     if args.format == "json":

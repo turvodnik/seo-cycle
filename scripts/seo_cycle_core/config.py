@@ -92,33 +92,48 @@ def numeric(value: Any, default: float = 0) -> float:
         return float(default)
 
 
-def coerce_int(value: Any, default: int, *, name: str = "") -> int:
+def coerce_int(value: Any, default: int, *, name: str = "", falsy_to_default: bool = True) -> int:
     """Like `numeric()`, but for config values that gate integer arithmetic
-    (day counts, thresholds). Preserves the existing `int(value or default)`
-    falsy-fallback semantics (0/""/None all mean "use default"), but a
-    garbage non-numeric value must not crash the tool with a traceback —
-    warn once and fall back instead (T-052 review: unguarded `int(...)` on
-    an unvalidated config value at seo_cycle_cli.py:170 and pulse.py:307)."""
+    (day counts, thresholds). A garbage non-numeric value must not crash the
+    tool with a traceback — warn once (naming the config key) and fall back
+    instead (T-052 review: unguarded `int(...)` on an unvalidated config
+    value at seo_cycle_cli.py:170 and pulse.py:307).
+
+    `falsy_to_default=True` (default) preserves the pre-existing
+    `int(value or default)` idiom found at MOST of the call sites this
+    replaces (0/""/None all mean "use default" there, and always did —
+    changing that would be its own, separate behavior change this ticket
+    does not make). Pass `falsy_to_default=False` at the handful of sites
+    whose ORIGINAL code had no `or default` — there `0` was already a
+    legitimate, meaningfully different-from-default value (e.g.
+    `cache_ttl_hours: 0` = "never trust the cache", `max_raw_rows_loaded: 0`
+    = "load nothing") that must keep surviving as `0`, not silently become
+    the default (T-063 review: reusing the `... or default` idiom
+    everywhere would have quietly changed accepted-input behavior at those
+    sites, which the ticket's own «Ограничения» forbids)."""
     try:
-        return int(value or default)
+        candidate = (value or default) if falsy_to_default else (default if value is None else value)
+        return int(candidate)
     except (TypeError, ValueError):
         label = f" ({name})" if name else ""
         print(f"WARNING: bad integer config value{label}: {value!r} — using default {default}", file=sys.stderr)
         return default
 
 
-def coerce_float(value: Any, default: float, *, name: str = "") -> float:
+def coerce_float(value: Any, default: float, *, name: str = "", falsy_to_default: bool = True) -> float:
     """Like `coerce_int()`, but for config values that gate float arithmetic
-    (percentages, budgets, thresholds). Preserves the pre-existing
-    `float(value or default)` falsy-fallback idiom found at every call site
-    this replaces (0/""/None all mean "use default"), but a garbage
-    non-numeric value must not crash the tool with a traceback — warn once
-    (naming the config key) and fall back instead. T-063: the dial-in twin
-    of `coerce_int()` for the `float(nested_get(...))` occurrences of the
-    same unguarded-conversion class (found sweeping the tree for
-    `scripts/pulse.py:234`, `pulse.drop_alert_pct`, and several others)."""
+    (percentages, budgets, thresholds) — same `falsy_to_default` contract
+    (see `coerce_int()`'s docstring): True preserves the pre-existing
+    `float(value or default)` idiom, False preserves an original call site
+    that never had `or default` and where `0` is a legitimate value. Never
+    crashes the tool on a garbage value — warns once (naming the key) and
+    falls back instead. T-063: the float twin of `coerce_int()` for the
+    `float(nested_get(...))` occurrences of the same unguarded-conversion
+    class (found sweeping the tree for `scripts/pulse.py:234`,
+    `pulse.drop_alert_pct`, and several others)."""
     try:
-        return float(value or default)
+        candidate = (value or default) if falsy_to_default else (default if value is None else value)
+        return float(candidate)
     except (TypeError, ValueError):
         label = f" ({name})" if name else ""
         print(f"WARNING: bad numeric config value{label}: {value!r} — using default {default}", file=sys.stderr)

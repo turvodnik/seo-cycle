@@ -68,6 +68,33 @@ class CoerceIntUnitTest(unittest.TestCase):
         self.assertIn("monitoring.snapshot_max_age_days", stderr.getvalue())
 
 
+class CoerceIntFalsyToDefaultFlagTest(unittest.TestCase):
+    """T-063 review: `int(value or default)` is only correct where the
+    ORIGINAL call site also had `or default` — 9 of the 19 T-063 sites
+    didn't, and there an explicit `0` was already a legitimate,
+    meaningfully-different-from-default value (e.g. `max_raw_rows_loaded: 0`
+    = "load nothing") that must keep surviving as `0`. `falsy_to_default`
+    is the switch: default `True` keeps the historical coerce_int()
+    behavior (this class's sibling test above), `False` preserves the
+    no-`or` original."""
+
+    def test_default_true_still_treats_zero_as_unset(self) -> None:
+        self.assertEqual(coerce_int(0, 14), 14)
+
+    def test_false_preserves_explicit_zero(self) -> None:
+        self.assertEqual(coerce_int(0, 14, falsy_to_default=False), 0)
+
+    def test_false_still_falls_back_on_none(self) -> None:
+        self.assertEqual(coerce_int(None, 14, falsy_to_default=False), 14)
+
+    def test_false_still_warns_and_falls_back_on_garbage(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = coerce_int("garbage", 14, name="ads.cache_ttl_hours", falsy_to_default=False)
+        self.assertEqual(result, 14)
+        self.assertIn("ads.cache_ttl_hours", stderr.getvalue())
+
+
 class DoctorSurvivesBadMaxAgeConfigTest(unittest.TestCase):
     """End-to-end: `seo-cycle doctor` (via seo_cycle_cli.py status/doctor)
     must not crash when `monitoring.snapshot_max_age_days` is garbage."""
@@ -130,9 +157,9 @@ class PulseSurvivesBadStaleAfterConfigTest(unittest.TestCase):
 
 
 class PulseSurvivesBadDropAlertConfigTest(unittest.TestCase):
-    """T-063: `scripts/pulse.py:234`, `pulse.drop_alert_pct` — the dobified
-    (float) twin of `pulse.stale_after_days` above, found by the T-063
-    reviewer of the previous ticket sweeping the tree for BOTH `int(` and
+    """T-063: `scripts/pulse.py:234`, `pulse.drop_alert_pct` — the float
+    twin of `pulse.stale_after_days` above, found by the T-053 reviewer
+    (of T-063's predecessor ticket) sweeping the tree for BOTH `int(` and
     `float(` conversions of config values, not just the integer half."""
 
     def _run_pulse(self, drop_alert_value: str) -> subprocess.CompletedProcess:
