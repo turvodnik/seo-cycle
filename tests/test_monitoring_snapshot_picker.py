@@ -89,13 +89,22 @@ class FindLatestSnapshotTest(unittest.TestCase):
         return p
 
     def test_prefers_date_in_name_over_mtime_after_simulated_clone(self) -> None:
-        # R1: simulate `git clone` — every file gets (almost) the same mtime,
-        # regardless of which snapshot is actually newer by date.
+        # R1: fixture must actually DISCRIMINATE date-based ranking from
+        # mtime-based ranking, not just happen to agree with it. Equal mtimes
+        # (the original "simulated git clone" fixture) left both the deciding
+        # line (`key=(date, mtime)` -> `key=mtime`) and the date-extraction
+        # line (`date_key = ...` -> `""`) green: with a tie, `max()` returns
+        # the first candidate in iteration order, which happened to be the
+        # right file by luck of glob() ordering — the test passed by
+        # coincidence, not because it exercised the ranking (review, круг 3).
+        # Fix: give the OLDER-dated file the NEWER mtime and vice versa, so a
+        # date-blind (mtime-only) pick provably returns the WRONG file.
         now = time.time()
-        self.touch("webmaster-snapshot-2026-07-01.json", mtime=now)
-        newer = self.touch("webmaster-snapshot-2026-09-01.json", mtime=now)
+        older_by_date_but_newer_mtime = self.touch("webmaster-snapshot-2026-07-01.json", mtime=now)
+        newer = self.touch("webmaster-snapshot-2026-09-01.json", mtime=now - 100_000)
         found = find_latest_snapshot([self.tmp])
         self.assertEqual(found, newer)
+        self.assertNotEqual(found, older_by_date_but_newer_mtime)
 
     def test_mtime_is_only_a_tiebreak_for_equal_dates(self) -> None:
         now = time.time()
