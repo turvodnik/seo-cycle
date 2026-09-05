@@ -1,0 +1,14 @@
+usage: perplexity-health.py [-h] [--browser-available] [--app-path APP_PATH]
+                            [--write] [--format {md,json}]
+                            [config]
+
+positional arguments:
+  config               Path to seo-cycle.yaml
+
+options:
+  -h, --help           show this help message and exit
+  --browser-available  Mark an already logged-in browser/app session as
+                       usable.
+  --app-path APP_PATH  Additional Perplexity.app path to test.
+  --write              Write seo/setup/perplexity-health.* artifacts.
+  --format {md,json}

@@ -1,0 +1,11 @@
+{
+  "rc_json": 0,
+  "rc_md": 0,
+  "stderr_json": "",
+  "stderr_md": "",
+  "write_meta": {
+    "rc": 0,
+    "stderr": "",
+    "stdout": "# Google Business Profile Health\n\n- Generated: <TS>\n- Status: `needs_oauth_verification`\n- GBP URL: https://maps.google.com/test\n- OAuth env: `GBP_OAUTH_CLIENT_ID`, `GBP_OAUTH_CLIENT_SECRET`, `GBP_OAUTH_REFRESH_TOKEN`\n- ID env: `GOOGLE_BUSINESS_ACCOUNT_ID`, `GOOGLE_BUSINESS_LOCATION_ID` (missing: GBP_OAUTH_CLIENT_ID, GBP_OAUTH_CLIENT_SECRET, GBP_OAUTH_REFRESH_TOKEN)\n- Note: GBP API requires Google OAuth verification for the business.manage scope. Until approved, use the browser workflow (prompts/local/google-maps.md) and manual exports via gbp-fetch.py --input-file — this is the expected state, not an error.\n\n## Capabilities\n- locations list (name, address, phone, categories) via Business Information API\n- reviews with ratings/replies via My Business v4 reviews endpoint\n- offline ingestion of saved exports (--input-file) — works today without OAuth verification\n\n## Guardrails\n- No live HTTP/API call in health check.\n- gbp-fetch.py is read-only; posting/replies stay manual or browser-driven with human review.\n- For RF local presence, Yandex Business is the primary channel (see yandex-business-health.py).\n\n## Official Docs\n- https://developers.google.com/my-business/content/prereqs\n- https://developers.google.com/my-business/content/review-data\n- https://support.google.com/business/answer/7107242\n"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "rc_json": 0,
+  "rc_md": 0,
+  "stderr_json": "",
+  "stderr_md": "",
+  "write_meta": {
+    "rc": 0,
+    "stderr": "",
+    "stdout": "# Google Ads Provider Health\n\n- Generated: <TS>\n- Status: `region_limited`\n- Note: Google Ads is restricted for RF projects; this status is expected, not an error. Primary paid channel is yandex_direct; drafts export to Google Ads Editor CSV.\n- Ads layer enabled: False · platform enabled: False · apply enabled: False\n- Primary platform: `yandex_direct`\n- Env names: `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID` (missing: GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CLIENT_ID, GOOGLE_ADS_CLIENT_SECRET, GOOGLE_ADS_REFRESH_TOKEN, GOOGLE_ADS_CUSTOMER_ID)\n- API default: `read_only_gaql_behind_live_flag`\n\n## Capabilities\n- campaigns/ad groups/keywords/search terms/metrics via REST GAQL search\n- recommendations API (read-only)\n- OAuth refresh-token flow via urllib (no SDK dependency)\n- draft campaigns as JSON + Google Ads Editor CSV export\n\n## Guardrails\n- No live HTTP/API call in health check.\n- google-ads-fetch.py defaults to cache/--input-file; --live requires usage-ledger preflight.\n- API writes stay disabled unless ads.google_ads.apply_enabled is set after review.\n- region_profile: ru → region_limited is the expected status.\n\n## Official Docs\n- https://developers.google.com/google-ads/api/docs/start\n- https://developers.google.com/google-ads/api/docs/rest/overview\n- https://developers.google.com/google-ads/api/docs/best-practices/quotas\n"
+  }
+}

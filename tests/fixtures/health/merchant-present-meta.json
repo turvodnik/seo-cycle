@@ -1,0 +1,11 @@
+{
+  "rc_json": 0,
+  "rc_md": 0,
+  "stderr_json": "",
+  "stderr_md": "",
+  "write_meta": {
+    "rc": 0,
+    "stderr": "",
+    "stdout": "# Google Merchant Provider Health\n\n- Generated: <TS>\n- Status: `available`\n- Env names: `GOOGLE_MERCHANT_ACCOUNT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`\n\n## Capabilities\n- account-level issues via Content API accountstatuses\n- product disapprovals with reasons via productstatuses\n- offline mode: ingest a saved statuses export via --input-file\n\n## Guardrails\n- No live HTTP/API call in health check.\n- merchant-fetch.py defaults to --input-file/cache; --live is read-only statuses.\n- Feed writes/uploads are out of scope: fix the source feed, not the API.\n\n## Official Docs\n- https://developers.google.com/shopping-content/guides/quickstart\n- https://support.google.com/merchants/answer/6363310\n"
+  }
+}

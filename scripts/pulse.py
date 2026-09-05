@@ -36,7 +36,7 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import coerce_int, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.engines import engine_names
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
@@ -230,7 +230,7 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
         except (OSError, json.JSONDecodeError):
             progress = {}
     latest_date = str(((progress.get("latest") or {}).get("date")) or "")
-    stale_after = int(nested_get(cfg, "pulse.stale_after_days", 3) or 3)
+    stale_after = coerce_int(nested_get(cfg, "pulse.stale_after_days", 3), 3, name="pulse.stale_after_days")
     findings.extend(freshness_findings(latest_date, today, stale_after))
     drop = drop_finding(progress, float(nested_get(cfg, "pulse.drop_alert_pct", 5) or 5))
     if drop:
@@ -307,7 +307,7 @@ def pulse_project(cfg_path: pathlib.Path, args) -> tuple[dict, int]:
     log = setup_logging("pulse", root, cfg)
     env = env_chain(root)
 
-    days = args.days or int(nested_get(cfg, "pulse.days", 14) or 14)
+    days = args.days or coerce_int(nested_get(cfg, "pulse.days", 14), 14, name="pulse.days")
     report = build_pulse(root, cfg, env, days, args.skip_fetch)
 
     write_scorecard(

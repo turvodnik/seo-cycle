@@ -1,0 +1,11 @@
+{
+  "rc_json": 0,
+  "rc_md": 0,
+  "stderr_json": "",
+  "stderr_md": "",
+  "write_meta": {
+    "rc": 0,
+    "stderr": "",
+    "stdout": "# Yandex Business Health\n\n- Generated: <TS>\n- Status: `partner_limited` — Публичного API управления карточкой Яндекс.Бизнес нет (Справочник — партнёрский). Это ожидаемое состояние, не ошибка конфигурации.\n- Business ID env present: False (YANDEX_MERCHANT_BUSINESS_ID)\n- Card links: {\"yandex_business\": \"https://yandex.ru/business/test\", \"gbp\": \"https://maps.google.com/test\"}\n\n## Working paths\n- Браузерный workflow: prompts/local/yandex-maps.md (Chrome MCP) — карточка, рубрики, фото, посты, ответы на отзывы с human review.\n- Отзывы: ручная выгрузка/копия из кабинета → анализ в review-velocity.py.\n- Товары/цены на картах: фид Яндекс.Товаров — валидируй yml-feed-audit.py.\n- Трафик-сигналы: metrika-fetch.py / metrika-logs-fetch.py (переходы с Карт видны как источник).\n- 2ГИС: партнёрский API — та же браузерная механика, отдельного скрипта нет намеренно.\n\n## Guardrails\n- Никаких live-вызовов в health check.\n- Любые изменения карточки — только вручную/браузером с явным подтверждением человека.\n- Не хранить пароли; браузерный профиль живёт вне репозитория проекта.\n\n## Official Docs\n- https://yandex.ru/support/business/\n- https://yandex.ru/dev/sprav/\n- https://dev.2gis.ru/\n"
+  }
+}
