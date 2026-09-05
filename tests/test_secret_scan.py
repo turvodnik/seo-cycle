@@ -245,12 +245,12 @@ class FalsePositiveLedgerTest(unittest.TestCase):
         "src/**/*.py": "src/a/b.py",
         ".github/workflows/*.yml": ".github/workflows/ci.yml",
         "scripts/seo-*.py": "scripts/seo-run.py",
-        "Проекты ai/gsse.ru/**": "Проекты ai/gsse.ru/prod/.env",
+        "Проекты ai/example.ru/**": "Проекты ai/example.ru/prod/.env",
         "прод/**": "прод/.env",
         "Makefile": "Makefile",
         "build/Dockerfile": "build/Dockerfile",
         # якорь не должен отсечь законное (круг 4)
-        "seo/**": "seo/research/raw/report.json",   # маска из демо-реестра gsse
+        "seo/**": "seo/research/raw/report.json",   # маска из демо-проекта
         "my.dir/**": "my.dir/x.txt",                # точка в имени каталога
         "a b/**": "a b/x.txt",                      # пробел в первом сегменте
         "v1.2/**": "v1.2/x.txt",                    # точки и цифры
