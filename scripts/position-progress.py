@@ -15,7 +15,7 @@ Usage:
   python3 scripts/position-progress.py                     # markdown to stdout
   python3 scripts/position-progress.py --write --html      # seo/reports/position-progress.{md,json,html}
   python3 scripts/position-progress.py --engine yandex --limit-movers 15
-  python3 scripts/position-progress.py --global            # portfolio over config/projects-registry.yaml
+  python3 scripts/position-progress.py --global            # portfolio over the machine-local projects registry
   python3 scripts/position-progress.py --format json
 """
 
@@ -31,10 +31,11 @@ from typing import Any
 from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, write_text
 from seo_cycle_core.html_report import bar, html_page, markdown_to_html_body
 from seo_cycle_core.logging_setup import setup_logging
+from seo_cycle_core.registry import registry_path
 
 log = setup_logging("position-progress")
 
-DEFAULT_REGISTRY = pathlib.Path(__file__).resolve().parents[1] / "config" / "projects-registry.yaml"
+DEFAULT_REGISTRY = registry_path(pathlib.Path(__file__).resolve().parents[1])
 GLOBAL_REPORTS_DIR = pathlib.Path.home() / ".seo-cycle" / "reports"
 
 
@@ -348,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--engine", help="Filter one engine (yandex|google|...)")
     parser.add_argument("--limit-movers", type=int, default=10)
     parser.add_argument("--global", dest="portfolio", action="store_true",
-                        help="Aggregate all active projects from projects-registry.yaml")
+                        help="Aggregate all active projects from the machine-local projects registry")
     parser.add_argument("--registry", help="Registry path override (with --global)")
     parser.add_argument("--write", action="store_true", help="Write seo/reports/position-progress.{md,json}")
     parser.add_argument("--html", action="store_true", help="Also write .html (with --write)")

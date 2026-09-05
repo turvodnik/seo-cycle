@@ -2,7 +2,8 @@
 """Local agency dashboard: the visual web UI over the seo-cycle toolchain.
 
 One stdlib HTTP server + one self-contained page. What you get in the browser:
-project switcher (from config/projects-registry.yaml), agency portfolio
+project switcher (from the machine-local projects registry, see
+seo_cycle_core/registry.py), agency portfolio
 overview, per-project view (journey stage, ranking progress with deltas,
 self-assessment scorecards), approvals with one-click approve/reject, a
 command panel (whitelisted safe tools only — nothing paid, nothing --live),
@@ -40,12 +41,13 @@ from typing import Any
 from seo_cycle_core.config import find_config, load_yaml, project_root_for
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
+from seo_cycle_core.registry import registry_path
 
 log = setup_logging("webapp")
 
 SCRIPTS_DIR = pathlib.Path(__file__).resolve().parent
 SKILL_ROOT = SCRIPTS_DIR.parent
-REGISTRY = SKILL_ROOT / "config" / "projects-registry.yaml"
+REGISTRY = registry_path(SKILL_ROOT)
 
 FILE_EXTENSIONS = {".md", ".html", ".pdf", ".json", ".csv", ".txt"}
 STDOUT_LIMIT = 120_000

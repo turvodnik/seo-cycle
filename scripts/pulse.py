@@ -41,6 +41,7 @@ from seo_cycle_core.engines import engine_names
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.monitoring import monitoring_dir
+from seo_cycle_core.registry import registry_path
 from seo_cycle_core.scorecard import score_from_findings, write_scorecard
 
 log = setup_logging("pulse")
@@ -348,7 +349,7 @@ def main() -> int:
     parser.add_argument("--global", dest="global_run", action="store_true",
                         help="Пульс всех active-проектов реестра (портфельный daily-джоб)")
     parser.add_argument("--registry", type=pathlib.Path,
-                        default=SCRIPTS_DIR.parent / "config" / "projects-registry.yaml")
+                        default=registry_path(SCRIPTS_DIR.parent))
     parser.add_argument("--format", choices=("md", "json"), default="md")
     args = parser.parse_args()
 

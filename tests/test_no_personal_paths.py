@@ -9,8 +9,20 @@ mirror ships, regardless of what sits untracked or gitignored in a working
 tree) for:
 
 - an absolute ``/Users/NAME/...`` path where ``NAME`` is not a generic
-  placeholder (``you``, ``username``, ``user``, ``name``);
+  placeholder (``you``, ``username``, ``user``, ``name``) — ``NAME`` is any
+  non-slash, non-whitespace run, Unicode included, so a Cyrillic (or other
+  non-ASCII) account name is caught, not just `[A-Za-z0-9]` ones (gate
+  review, T-061 fix-up: the first version of this test used an ASCII-only
+  character class and missed exactly that case);
 - an absolute ``/home/NAME/...`` path under the same rule.
+
+Files are read UTF-8 first, then latin-1 as a fallback that never raises
+(gate review, T-061 fix-up: the first version silently skipped any file
+that failed UTF-8 decoding, which is a blind spot for a real leak sitting
+in a non-UTF-8 text file, not just for genuinely binary ones) — a short
+extension skip-list still short-circuits the obviously-binary files for
+speed, but that list is a performance optimisation, not the correctness
+mechanism.
 
 Generic docs placeholders like ``/Users/<you>/...`` or ``/Users/username/...``
 are the sanctioned way to show an example path and are explicitly allowed,
@@ -52,11 +64,33 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
+# This file's own docstring/comments discuss "/Users/..." and "/home/..."
+# shapes in prose (including grep syntax and markdown backticks around
+# them), which is not itself a personal-path leak — exclude it from the
+# scan rather than contort the regex or the prose around a self-reference.
+SELF = "tests/test_no_personal_paths.py"
+
 # Generic placeholders that are fine in a "/Users/NAME/..." docs path,
 # plus the one example service-account name used by docs/vps-deployment.md.
 PLACEHOLDER_NAMES = {"you", "username", "user", "name", "<you>", "seo"}
 
-HOME_PATH_RE = re.compile(r"/(?:Users|home)/([A-Za-z0-9_.<>-]+)")
+# A macOS/Linux account name is not restricted to ASCII (a Cyrillic or other
+# Unicode login name is valid and this machine's owner could plausibly have
+# one) — the character class has to be "anything that isn't a path separator
+# or whitespace", not "[A-Za-z0-9...]", or a non-ASCII username sails through
+# unmatched. ``\S`` already excludes newlines, so this only ever inspects one
+# line at a time regardless.
+HOME_PATH_RE = re.compile(r"/(?:Users|home)/([^\s/]+)")
+
+# Extensions that are never personal-path-shaped text, skipped for speed —
+# NOT for correctness: unlike secret-scan.py, we still fall back to a
+# byte-preserving decode (see below) for anything not on this list, so an
+# actual text file in a non-UTF-8 encoding (Windows-1251 Cyrillic docs, for
+# instance) is still scanned rather than silently skipped.
+_SKIP_SUFFIXES = {
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".zip", ".gz",
+    ".woff", ".woff2", ".mp4", ".mov", ".db", ".sqlite", ".sqlite3",
+}
 
 
 def _tracked_files() -> list[str]:
@@ -66,19 +100,41 @@ def _tracked_files() -> list[str]:
     return [line for line in out.stdout.splitlines() if line]
 
 
+def _read_text_best_effort(path: pathlib.Path) -> str | None:
+    """UTF-8 first; a non-UTF-8 text file (legacy Windows-1251 doc, say)
+    must still be scanned, not skipped — decode as latin-1 instead, which
+    never raises (every byte 0-255 has a code point) and preserves the
+    ASCII byte values a "/Users/NAME" leak is made of either way. Only a
+    genuine read failure (permissions, dangling symlink) is skipped."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        try:
+            return path.read_text(encoding="latin-1")
+        except OSError:
+            return None
+    except OSError:
+        return None
+
+
 def _iter_findings():
     for rel in _tracked_files():
-        path = ROOT / rel
-        if not path.is_file():
+        if rel == SELF:
             continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue  # binary or unreadable — not a text leak vector
+        path = ROOT / rel
+        if not path.is_file() or path.suffix.lower() in _SKIP_SUFFIXES:
+            continue
+        text = _read_text_best_effort(path)
+        if text is None:
+            continue
         for lineno, line in enumerate(text.splitlines(), start=1):
             for m in HOME_PATH_RE.finditer(line):
                 name = m.group(1)
-                if name.lower().strip("<>") not in PLACEHOLDER_NAMES:
+                # Strip trailing prose punctuation a "/Users/<you>," style
+                # sentence leaves stuck to the captured name (the char
+                # class has no better way to know a path ended).
+                normalized = name.lower().strip("<>.,;:)\"'")
+                if normalized not in PLACEHOLDER_NAMES:
                     yield rel, lineno, m.group(0)
 
 

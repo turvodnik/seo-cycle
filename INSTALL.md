@@ -605,8 +605,8 @@ sources:
 ├── config/
 │   ├── project.template.yaml            # шаблон конфига проекта
 │   ├── region-profiles/{ru,eu,us,global}.yaml   # пресеты источников по региону
-│   ├── projects-registry.example.yaml   # шаблон реестра; реальный projects-registry.yaml — локальный,
-│   │                                    #   в .gitignore, создаётся init-project.sh (для monthly-runner --all)
+│   ├── projects-registry.example.yaml   # шаблон реестра; реальный реестр живёт вне дерева
+│   │                                    #   инструмента, см. Troubleshooting ниже
 │   └── triggers.yaml                    # правила Phase 10
 ├── prompts/                             # универсальные промпты
 ├── scripts/                             # переносимые скрипты (resolve-sources, db-sync,
@@ -617,21 +617,18 @@ sources:
 
 ## Troubleshooting
 
-**Обновляешь уже существующий clone/vendor-store, где реестр проектов
-(config/projects-registry.yaml, машинно-локальный файл — не часть репозитория, в
-`.gitignore` начиная с T-061) раньше отслеживался git'ом (версия до T-061)?** Начиная с этой версии файл убран из
-трекинга (личные пути/домены не должны попадать в тег — T-061), а `git checkout`/
-`git pull` на коммит ≥ этой версии удалит его из рабочего дерева, если он не изменён
-локально (обычный переход tracked → untracked в git). Порядок безопасного апгрейда:
-1. `cp config/projects-registry.yaml ~/.seo-cycle/projects-registry.yaml` (резервная копия
-   вне git-дерева — если у тебя ещё не настроен `~/.seo-cycle/`, `mkdir -p ~/.seo-cycle`
-   сначала).
-2. Выполни апгрейд (`git pull` / `install.sh --update` / `--upgrade-all`) как обычно.
-3. `cp ~/.seo-cycle/projects-registry.yaml config/projects-registry.yaml` — восстановить
-   реальный реестр (файл теперь в `.gitignore`, коммитить его не нужно и не даст смысла).
-Если реестра раньше не было или он не менялся руками — `init-project.sh` создаст пустой
-из `config/projects-registry.example.yaml` при следующем подключении проекта сам, ничего
-делать не нужно.
+**Где живёт реестр проектов (`seo-cycle run monthly --all`, `pulse --global`,
+`rag index --global`, дашборд-переключатель проектов)?** По умолчанию —
+`~/.seo-cycle/projects-registry.yaml`, вне дерева инструмента: это реальные абсолютные
+пути и домены проектов машины, такие же машинно-локальные данные, как
+`~/.seo-cycle/env.global` для ключей (T-061 — раньше файл лежал внутри дерева
+репозитория (config/projects-registry.yaml), что и утекало в публичный тег, и
+ломалось на read-only version-снапшотах, T-049). Переопределить путь целиком —
+переменная `SEO_CYCLE_REGISTRY`. Если на этой машине реестр уже есть в старом месте
+(config/projects-registry.yaml внутри clone/vendor-store, версия до этого фикса) — он
+подхватывается автоматически при первом обращении (копируется в новое место, старый файл
+не трогается и не удаляется); при отсутствии реестра нигде `init-project.sh` создаёт
+пустой из `config/projects-registry.example.yaml` сам, ручных действий не требуется.
 
 **«Конфиг не найден»** — скилл искал в 4 локациях, всех нет. Проверь имя файла и место (см. начало этого документа).
 

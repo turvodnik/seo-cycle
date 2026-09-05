@@ -5,7 +5,8 @@
 #   ~/Desktop/SEO Cycle.app      — AppleScript applet: opens Terminal → seo-cycle menu
 #   ~/Desktop/SEO Cycle.command  — plain fallback (works even if osacompile is unavailable)
 #
-# The menu lets a non-terminal user pick a project from config/projects-registry.yaml
+# The menu lets a non-terminal user pick a project from the machine-local
+# projects registry (~/.seo-cycle/projects-registry.yaml by default)
 # and run journey / progress / dashboard / approvals / doctor without typing commands.
 #
 # Usage: bash scripts/install-desktop-app.sh [--desktop-dir <dir>]

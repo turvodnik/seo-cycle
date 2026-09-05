@@ -32,7 +32,7 @@ mkdir -p ~/.seo-cycle && touch ~/.seo-cycle/env.global && chmod 600 ~/.seo-cycle
 # заполнить: ./.codex/skills/seo-cycle/scripts/auth-assistant.py set YANDEX_OAUTH_TOKEN --global
 # клиентские ключи проекта — в .env проекта (auth-assistant.py set ... без --global)
 
-# 4. Реестр проектов (реальный файл — локальный, не в git, создаётся из шаблона)
+# 4. Реестр проектов (машинно-локальный путь по умолчанию; SEO_CYCLE_REGISTRY переопределяет)
 cp ./.codex/skills/seo-cycle/config/projects-registry.example.yaml ~/.seo-cycle/projects-registry.yaml  # и правьте пути
 ```
 
