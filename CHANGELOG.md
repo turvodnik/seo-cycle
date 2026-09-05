@@ -90,16 +90,26 @@
   `seo_cycle_core/context.py`, `context-pack.py`, `yandex-direct-fetch.py`,
   `google-ads-fetch.py`.
 - Новый `coerce_float()` в `seo_cycle_core/config.py` — дробный аналог
-  `coerce_int()` (T-053): та же семантика (0/""/None → дефолт, мусор → warning
-  на stderr с именем ключа + дефолт, никогда не роняет процесс).
+  `coerce_int()` (T-053): та же семантика (мусор → warning на stderr с
+  именем ключа + дефолт, никогда не роняет процесс).
   Каждое из 19 мест закрыто через `coerce_int()`/`coerce_float()` с ИМЕНЕМ
   испорченного ключа в сообщении (`governance.token_policy.*`,
   `ads.apply.*`, `kpi.*`, `rag.*` и т.д.) — человек видит, какой ключ
   испорчен и каким значением, без трассировки стека.
+- Оба хелпера получили `falsy_to_default: bool = True` (гейт-ревью T-063):
+  у 9 из 19 мест исходный код НЕ имел `... or default` — там явный `0` уже
+  был легитимным, отличным от дефолта значением (`cache_ttl_hours: 0` =
+  «не доверять кэшу», `max_raw_rows_loaded: 0` = «не грузить ничего»), и
+  наивное повторное использование идиомы `value or default` везде тихо
+  сломало бы принятое поведение на здоровом конфиге. На этих 9 местах
+  (`context-pack.py` ×5, `yandex-direct-fetch.py` ×2,
+  `google-ads-fetch.py` ×1, `loop.py` ×1) передаётся
+  `falsy_to_default=False` — явный `0` теперь гарантированно выживает.
 - Каждое место закрыто СВОИМ тестом с негативным контролем (мутация «вернуть
-  голый `int()`/`float()` в этом месте» валит именно этот тест, не общий) —
-  `tests/test_coerce_config_sites.py` (32 теста) +
-  `tests/test_coerce_int.py` (дробный твин `pulse.drop_alert_pct`).
+  голый `int()`/`float()` в этом месте» или «убрать `falsy_to_default=False`»
+  валит именно этот тест, не общий) — `tests/test_coerce_config_sites.py`
+  (36 тестов) + `tests/test_coerce_int.py` (дробный твин `pulse.drop_alert_pct`
+  + юнит-тесты на сам флаг `falsy_to_default`).
 - Осознанно НЕ тронуто (см. docstring `test_coerce_config_sites.py`):
   конверсии значений из ОТВЕТОВ API (`nested_get(row, "metrics...")` в
   `ads-analytics.py`/`google-ads-fetch.py` — другой, уже отслеженный класс
