@@ -656,5 +656,355 @@ class NoSilentDefaultPinsTest(unittest.TestCase):
         )
 
 
+class UpgradeAllOfflineRefusesTest(InstallerFixture):
+    """T-064: --upgrade-all is the exact command T-055 uses to re-pin four
+    live sites onto a published tag. With origin completely unreachable it
+    used to fall back to a local-only tag, rewrite every registered
+    project's lock and exit 0 — an outage indistinguishable from a real
+    successful re-pin. Reproduces the gate T-060 finding (offline.sh) with
+    the fixture pattern already used in this file."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_offline_upgrade_all_refuses_and_leaves_lock_untouched(self) -> None:
+        import hashlib
+        md5_before = hashlib.md5(self.lock_path().read_bytes()).hexdigest()
+
+        offline = self.origin.with_name(self.origin.name + ".OFFLINE")
+        self.origin.rename(offline)
+        try:
+            proc = self.run_install("--upgrade-all", "--pin", "v1.0.0")
+        finally:
+            offline.rename(self.origin)
+
+        self.assertNotEqual(
+            proc.returncode, 0,
+            "--upgrade-all с недоступным origin обязан отказать, а не рапортовать "
+            f"успех — {proc.stdout + proc.stderr!r}",
+        )
+        combined = proc.stdout + proc.stderr
+        self.assertIn(
+            "origin недоступен", combined,
+            f"сообщение должно называть причину отказа — {combined!r}",
+        )
+        md5_after = hashlib.md5(self.lock_path().read_bytes()).hexdigest()
+        self.assertEqual(
+            md5_before, md5_after,
+            "лок не должен быть переписан ни одним байтом при недоступном origin",
+        )
+
+    def test_reverting_the_offline_guard_reintroduces_the_silent_success(self) -> None:
+        """Genuine mutation: strip the T-064 offline-refusal `return 1` out
+        of ensure_worktree() and re-run the exact same offline scenario. The
+        original incident (exit 0, lock rewritten from an unverified local
+        tag) must come back — proving this guard, not something else, is
+        what stops it."""
+        source = INSTALL.read_text(encoding="utf-8")
+        old = (
+            '            # T-064: this second ls-remote also failing means origin is\n'
+            '            # unreachable, not just missing this tag. NETWORK_ALLOWED=1\n'
+            '            # means the caller (a real --sync sets it to 0 and returns\n'
+            '            # before this block) wants a network-verified pin — silently\n'
+            '            # trusting the local tag here let --upgrade-all re-pin all\n'
+            '            # registered projects onto an unverified tag with exit code 0\n'
+            '            # whenever the connection dropped mid-run (the incident this\n'
+            '            # SPEC exists to fix). Refuse instead of guessing.\n'
+            '            warn "origin недоступен, проверить тег $tag невозможно — перепин отменён (T-064)"\n'
+            '            return 1\n'
+        )
+        assert old in source, "мутация не нашла T-064 offline-guard в ensure_worktree()"
+        mutated = source.replace(old, "", 1)
+        mutated_path = self.tmp / "install.mutated.sh"
+        mutated_path.write_text(mutated, encoding="utf-8")
+
+        import hashlib
+        md5_before = hashlib.md5(self.lock_path().read_bytes()).hexdigest()
+
+        offline = self.origin.with_name(self.origin.name + ".OFFLINE")
+        self.origin.rename(offline)
+        try:
+            full_env = {
+                **os.environ, "HOME": str(self.home),
+                "SEO_CYCLE_SHARED_DIR": str(self.shared),
+                "SEO_CYCLE_CORE": str(self.core),
+                "SEO_CYCLE_REPO": str(self.origin),
+            }
+            proc = subprocess.run(
+                ["bash", str(mutated_path), "--upgrade-all", "--pin", "v1.0.0"],
+                env=full_env, capture_output=True, text=True,
+            )
+        finally:
+            offline.rename(self.origin)
+
+        self.assertEqual(
+            proc.returncode, 0,
+            "без guard'а --upgrade-all с недоступным origin должен был снова "
+            f"'успешно' завершиться — {proc.stdout + proc.stderr!r}",
+        )
+        md5_after = hashlib.md5(self.lock_path().read_bytes()).hexdigest()
+        self.assertNotEqual(
+            md5_before, md5_after,
+            "без guard'а лок обязан был быть переписан — иначе мутация ничего не проверяет",
+        )
+
+
+class UpgradeAllPartialFailureReportedTest(InstallerFixture):
+    """T-064 (defect 2, 🟡 partial re-pin): attach_project() fails via a hard
+    `exit`, not `return` — without isolation, one project failing mid-registry
+    used to kill --upgrade-all's whole loop, leaving no summary and an
+    undiscoverable mixed portfolio state (reviewer's live 3-project run:
+    first re-pinned, second failed, third never touched, no report at all).
+    Chosen fix: isolate each project's attach in a subshell and print an
+    explicit 'перепинено / не тронуто / упало' report with a non-zero exit —
+    preferred over two-phase atomicity because it needs no extra network
+    round-trip and cannot itself have a distinct failure mode."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.project_b = self.tmp / "project-b"
+        self.project_b.mkdir()
+        for proj in (self.project, self.project_b):
+            proc = self.run_install(
+                "--project", str(proj), "--pin", "v1.0.0",
+                "--skip-init", "--no-migrate-old-global",
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def _break_project_b(self) -> None:
+        # Force attach_project()'s `mkdir -p ".../external"` to fail for
+        # project_b only, deterministically and with zero network — this
+        # tests the reporting mechanism itself, independent of the
+        # offline-refusal fix above.
+        ext = self.project_b / ".agents" / "external"
+        if ext.exists():
+            shutil.rmtree(ext)
+        (self.project_b / ".agents").chmod(0o500)
+        self.addCleanup(lambda: (self.project_b / ".agents").chmod(0o700))
+
+    def test_one_project_failing_is_reported_not_silently_swallowed(self) -> None:
+        self._break_project_b()
+        proc = self.run_install("--upgrade-all", "--pin", "v1.0.0")
+        self.assertNotEqual(
+            proc.returncode, 0,
+            f"падение одного проекта из реестра обязано дать ненулевой код — {proc.stdout + proc.stderr!r}",
+        )
+        combined = proc.stdout + proc.stderr
+        self.assertIn(str(self.project), combined, "успешный проект должен быть назван в отчёте")
+        self.assertIn(str(self.project_b), combined, "упавший проект должен быть назван в отчёте")
+        self.assertIn(
+            "СМЕШАННОМ", combined,
+            f"должен быть явный отчёт о смешанном состоянии портфеля — {combined!r}",
+        )
+
+    def test_reverting_the_subshell_isolation_kills_the_whole_run_silently(self) -> None:
+        """Genuine mutation: without the per-project subshell, project_b's
+        `exit` inside attach_project() ends upgrade_all()'s ENTIRE loop — no
+        summary is printed at all, and the first (successful) project is
+        never reported either."""
+        source = INSTALL.read_text(encoding="utf-8")
+        old = (
+            '            rc=0\n'
+            '            ( set -e; PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p" ) || rc=$?\n'
+        )
+        new = (
+            '            PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p"\n'
+            '            rc=0\n'
+        )
+        assert old in source, "мутация не нашла subshell-изоляцию в upgrade_all()"
+        mutated = source.replace(old, new, 1)
+        mutated_path = self.tmp / "install.mutated.sh"
+        mutated_path.write_text(mutated, encoding="utf-8")
+
+        self._break_project_b()
+        full_env = {
+            **os.environ, "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+        }
+        proc = subprocess.run(
+            ["bash", str(mutated_path), "--upgrade-all", "--pin", "v1.0.0"],
+            env=full_env, capture_output=True, text=True,
+        )
+        combined = proc.stdout + proc.stderr
+        self.assertNotIn(
+            "Итог --upgrade-all", combined,
+            f"без subshell-изоляции итоговый отчёт вообще не должен успеть напечататься — {combined!r}",
+        )
+
+    def test_reverting_just_the_inner_set_e_reports_a_false_success(self) -> None:
+        """Second negative control, isolating the OTHER half of the fix: the
+        outer `( … )` subshell alone is not what makes isolation honest — a
+        bare `if ( cmd ); then` would silently disable errexit for every
+        plain command inside attach_project() (a documented bash quirk: the
+        errexit exemption of an if/&&/||-tested command propagates into
+        functions and subshells it calls). Strip only the inner `set -e;`
+        AND the explicit mkdir guard added alongside it, keeping the outer
+        subshell isolation intact: project_b's mkdir now fails silently, the
+        function reaches write_lock_entry() anyway, and the subshell exits
+        0 — proving `set -e` restoration (not just 'having a subshell') is
+        what makes the isolation trustworthy."""
+        source = INSTALL.read_text(encoding="utf-8")
+        old_wrapper = '( set -e; PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p" ) || rc=$?'
+        new_wrapper = '( PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p" ) || rc=$?'
+        old_guard = (
+            'mkdir -p "$project_dir/.agents/external" || '
+            '{ warn "$project_dir: не удалось создать .agents/external — перепин прерван"; exit 1; }'
+        )
+        new_guard = 'mkdir -p "$project_dir/.agents/external"'
+        assert old_wrapper in source, "мутация не нашла inner set -e в upgrade_all()"
+        assert old_guard in source, "мутация не нашла mkdir guard в attach_project()"
+        mutated = source.replace(old_wrapper, new_wrapper, 1).replace(old_guard, new_guard, 1)
+        mutated_path = self.tmp / "install.mutated.sh"
+        mutated_path.write_text(mutated, encoding="utf-8")
+
+        self._break_project_b()
+        full_env = {
+            **os.environ, "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+        }
+        proc = subprocess.run(
+            ["bash", str(mutated_path), "--upgrade-all", "--pin", "v1.0.0"],
+            env=full_env, capture_output=True, text=True,
+        )
+        combined = proc.stdout + proc.stderr
+        self.assertEqual(
+            proc.returncode, 0,
+            f"без inner set -e project_b обязан был быть ошибочно засчитан как успех — {combined!r}",
+        )
+        self.assertIn(
+            str(self.project_b), combined,
+            f"project_b должен быть где-то в отчёте (ложно, в 'перепинено') — {combined!r}",
+        )
+        self.assertNotIn(
+            "упало", combined,
+            f"без inner set -e падение project_b не должно быть даже замечено — {combined!r}",
+        )
+
+
+class OrphanedWorktreeRefusesTest(unittest.TestCase):
+    """T-064 (defect 3, 🟡 orphaned worktree): the O3 detector
+    (is_git_worktree_checkout) required `git rev-parse --is-inside-work-tree`
+    to succeed — but that call fails once the worktree's MAIN repo has been
+    deleted, so an orphaned worktree slipped through undetected and the
+    installer backed it up and cloned fresh over it, one step removed from
+    the original O3 incident (main repo gone instead of merely a worktree)."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-cycle-orphan-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+
+        self.origin = self.tmp / "origin.git"
+        _git(self.tmp, "init", "--bare", "-q", str(self.origin))
+        self.seed = self.tmp / "seed"
+        _git(self.tmp, "clone", "-q", str(self.origin), str(self.seed))
+        (self.seed / "README.md").write_text("seed\n", encoding="utf-8")
+        _git(self.seed, "checkout", "-q", "-B", "main")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "seed")
+        _git(self.seed, "push", "-q", "origin", "main")
+        _git(self.origin, "symbolic-ref", "HEAD", "refs/heads/main")
+
+        self.home = self.tmp / "home"
+        self.home.mkdir()
+        self.shared = self.home / ".codex" / "vendor"
+        self.shared.mkdir(parents=True)
+        self.core = self.shared / "seo-cycle"
+        _git(self.seed, "worktree", "add", "-q", "-b", "feature/orphan", str(self.core))
+        (self.core / "WORK_IN_PROGRESS.txt").write_text("не закоммичено\n", encoding="utf-8")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "uncommitted branch work")
+
+        self.local_bin = self.home / ".local" / "bin"
+        self.local_bin.mkdir(parents=True)
+        self.shim = self.local_bin / "seo-cycle"
+        self.shim_target = self.tmp / "previous-shim-target"
+        self.shim_target.write_text("previous version marker\n", encoding="utf-8")
+        self.shim.symlink_to(self.shim_target)
+
+        # Orphan the worktree: delete its main repo entirely. The linked
+        # worktree's .git FILE (with the gitdir: pointer) is untouched, but
+        # any git command run *inside* the worktree now fails because the
+        # pointer's target is gone — exactly the shape that broke the old
+        # O3 detector's `rev-parse --is-inside-work-tree` check.
+        shutil.rmtree(self.seed)
+
+    def test_installer_refuses_instead_of_cloning_over_the_orphan(self) -> None:
+        git_file_before = (self.core / ".git").read_text(encoding="utf-8")
+        files_before = sorted(p.name for p in self.core.iterdir())
+        shim_target_before = os.readlink(self.shim)
+
+        proc = subprocess.run(
+            ["bash", str(INSTALL)],
+            env={
+                **os.environ, "HOME": str(self.home),
+                "SEO_CYCLE_SHARED_DIR": str(self.shared),
+                "SEO_CYCLE_CORE": str(self.core),
+                "SEO_CYCLE_REPO": str(self.origin),
+            },
+            capture_output=True, text=True,
+        )
+
+        self.assertNotEqual(
+            proc.returncode, 0,
+            f"установщик обязан отказать на осиротевшем worktree — {proc.stdout + proc.stderr!r}",
+        )
+        self.assertTrue(self.core.is_dir(), "каталог worktree должен остаться на месте")
+        self.assertEqual(
+            (self.core / ".git").read_text(encoding="utf-8"), git_file_before,
+            "gitdir-указатель worktree не должен измениться",
+        )
+        self.assertEqual(
+            sorted(p.name for p in self.core.iterdir()), files_before,
+            "содержимое каталога worktree не должно измениться",
+        )
+        backups = list(self.shared.glob("seo-cycle.backup.*"))
+        self.assertEqual(backups, [], f"резервная копия не должна создаваться — {backups}")
+        self.assertEqual(
+            os.readlink(self.shim), shim_target_before,
+            "шим ~/.local/bin/seo-cycle не должен быть перевешен",
+        )
+
+    def test_reverting_the_gitdir_check_reintroduces_the_orphan_incident(self) -> None:
+        """Genuine mutation: restore the old rev-parse-based detector (which
+        requires the worktree's main repo to still exist) and re-run against
+        the exact same orphaned worktree. The original incident (backup +
+        fresh clone over it) must come back."""
+        source = INSTALL.read_text(encoding="utf-8")
+        old = '[ -f "$1/.git" ] && grep -q \'^gitdir:\' "$1/.git" 2>/dev/null'
+        new = '[ -f "$1/.git" ] && git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1'
+        assert old in source, "мутация не нашла T-064 gitdir-детектор в is_git_worktree_checkout()"
+        mutated = source.replace(old, new, 1)
+        mutated_path = self.tmp / "install.mutated.sh"
+        mutated_path.write_text(mutated, encoding="utf-8")
+
+        proc = subprocess.run(
+            ["bash", str(mutated_path)],
+            env={
+                **os.environ, "HOME": str(self.home),
+                "SEO_CYCLE_SHARED_DIR": str(self.shared),
+                "SEO_CYCLE_CORE": str(self.core),
+                "SEO_CYCLE_REPO": str(self.origin),
+            },
+            capture_output=True, text=True,
+        )
+        self.assertEqual(
+            proc.returncode, 0,
+            f"без фикса установщик снова 'успешно' клонирует поверх осиротевшего worktree — {proc.stdout + proc.stderr!r}",
+        )
+        self.assertIn(
+            "клонирую", proc.stdout + proc.stderr,
+            "без фикса должен воспроизвестись исходный инцидент — backup + git clone поверх",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
