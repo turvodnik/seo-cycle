@@ -1,0 +1,11 @@
+{
+  "rc_json": 0,
+  "rc_md": 0,
+  "stderr_json": "",
+  "stderr_md": "",
+  "write_meta": {
+    "rc": 0,
+    "stderr": "",
+    "stdout": "Wrote /private/tmp/health-golden-fixture-cwd/ru/seo/setup/notebooklm-health.md\n"
+  }
+}

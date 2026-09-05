@@ -1,0 +1,43 @@
+{
+  "api_default": "read_only_fetch_behind_live_flag",
+  "capabilities": [
+    "locations list (name, address, phone, categories) via Business Information API",
+    "reviews with ratings/replies via My Business v4 reviews endpoint",
+    "offline ingestion of saved exports (--input-file) — works today without OAuth verification"
+  ],
+  "credentials_present": false,
+  "gbp_url": "https://maps.google.com/test",
+  "generated_at": "<TS>",
+  "guardrails": [
+    "No live HTTP/API call in health check.",
+    "gbp-fetch.py is read-only; posting/replies stay manual or browser-driven with human review.",
+    "For RF local presence, Yandex Business is the primary channel (see yandex-business-health.py)."
+  ],
+  "id_env": [
+    "GOOGLE_BUSINESS_ACCOUNT_ID",
+    "GOOGLE_BUSINESS_LOCATION_ID"
+  ],
+  "missing_env": [
+    "GOOGLE_BUSINESS_ACCOUNT_ID",
+    "GOOGLE_BUSINESS_LOCATION_ID"
+  ],
+  "oauth_env": [
+    "GBP_OAUTH_CLIENT_ID",
+    "GBP_OAUTH_CLIENT_SECRET",
+    "GBP_OAUTH_REFRESH_TOKEN"
+  ],
+  "official_docs": [
+    "https://developers.google.com/my-business/content/prereqs",
+    "https://developers.google.com/my-business/content/review-data",
+    "https://support.google.com/business/answer/7107242"
+  ],
+  "project": {
+    "domain": "provider.test",
+    "name": "Provider Test"
+  },
+  "provider": "google_business_profile",
+  "status": "needs_credentials",
+  "stores_password": false,
+  "verification_note": "GBP API requires Google OAuth verification for the business.manage scope. Until approved, use the browser workflow (prompts/local/google-maps.md) and manual exports via gbp-fetch.py --input-file — this is the expected state, not an error.",
+  "writes_to_platform": false
+}

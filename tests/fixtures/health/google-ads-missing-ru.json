@@ -1,0 +1,54 @@
+{
+  "ads_enabled": false,
+  "api_default": "read_only_gaql_behind_live_flag",
+  "apply_enabled": false,
+  "capabilities": [
+    "campaigns/ad groups/keywords/search terms/metrics via REST GAQL search",
+    "recommendations API (read-only)",
+    "OAuth refresh-token flow via urllib (no SDK dependency)",
+    "draft campaigns as JSON + Google Ads Editor CSV export"
+  ],
+  "credentials_present": false,
+  "env_names": [
+    "GOOGLE_ADS_DEVELOPER_TOKEN",
+    "GOOGLE_ADS_CLIENT_ID",
+    "GOOGLE_ADS_CLIENT_SECRET",
+    "GOOGLE_ADS_REFRESH_TOKEN",
+    "GOOGLE_ADS_CUSTOMER_ID"
+  ],
+  "generated_at": "<TS>",
+  "guardrails": [
+    "No live HTTP/API call in health check.",
+    "google-ads-fetch.py defaults to cache/--input-file; --live requires usage-ledger preflight.",
+    "API writes stay disabled unless ads.google_ads.apply_enabled is set after review.",
+    "region_profile: ru → region_limited is the expected status."
+  ],
+  "missing_env": [
+    "GOOGLE_ADS_DEVELOPER_TOKEN",
+    "GOOGLE_ADS_CLIENT_ID",
+    "GOOGLE_ADS_CLIENT_SECRET",
+    "GOOGLE_ADS_REFRESH_TOKEN",
+    "GOOGLE_ADS_CUSTOMER_ID"
+  ],
+  "official_docs": [
+    "https://developers.google.com/google-ads/api/docs/start",
+    "https://developers.google.com/google-ads/api/docs/rest/overview",
+    "https://developers.google.com/google-ads/api/docs/best-practices/quotas"
+  ],
+  "optional_env_names": [
+    "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
+    "GOOGLE_ADS_API_VERSION"
+  ],
+  "platform_enabled": false,
+  "primary_platform": "yandex_direct",
+  "project": {
+    "domain": "provider.test",
+    "name": "Provider Test"
+  },
+  "provider": "google_ads",
+  "region_limited": true,
+  "region_note": "Google Ads is restricted for RF projects; this status is expected, not an error. Primary paid channel is yandex_direct; drafts export to Google Ads Editor CSV.",
+  "status": "region_limited",
+  "stores_password": false,
+  "writes_to_platform": "disabled by default (ads.google_ads.apply_enabled: false); CSV export instead"
+}

@@ -1,0 +1,44 @@
+{
+  "provider": "perplexity",
+  "generated_at": "<TS>",
+  "project": {
+    "name": "Provider Test",
+    "domain": "provider.test"
+  },
+  "status": "degraded_source",
+  "health": {
+    "provider": "perplexity",
+    "status": "degraded",
+    "app_detected": false,
+    "browser_available": false,
+    "api_optional": false,
+    "preferred_mode": "manual_browser",
+    "fallback_mode": "manual_browser",
+    "modes": [
+      "manual_browser"
+    ],
+    "stores_password": false
+  },
+  "cache_policy": {
+    "enabled": true,
+    "key_parts": [
+      "topic",
+      "region",
+      "prompt_version",
+      "mode"
+    ],
+    "raw_path": "seo/research/raw/perplexity/<cache_key>.json",
+    "distillate_path": "seo/research/distillates/perplexity/<cache_key>.md",
+    "downstream_context": "distillate_with_citations_only"
+  },
+  "writes_to_site": false,
+  "stores_password": false,
+  "api_default": "disabled",
+  "fallback": "Codex/Antigravity/NotebookLM/manual browser export",
+  "paths": {
+    "markdown": "seo/setup/perplexity-health.md",
+    "json": "seo/setup/perplexity-health.json",
+    "latest_markdown": "seo/setup/latest-perplexity-health.md",
+    "latest_json": "seo/setup/latest-perplexity-health.json"
+  }
+}

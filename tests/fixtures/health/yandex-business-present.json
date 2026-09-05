@@ -1,0 +1,35 @@
+{
+  "business_id_present": true,
+  "env_names": [
+    "YANDEX_MERCHANT_BUSINESS_ID"
+  ],
+  "generated_at": "<TS>",
+  "guardrails": [
+    "Никаких live-вызовов в health check.",
+    "Любые изменения карточки — только вручную/браузером с явным подтверждением человека.",
+    "Не хранить пароли; браузерный профиль живёт вне репозитория проекта."
+  ],
+  "official_docs": [
+    "https://yandex.ru/support/business/",
+    "https://yandex.ru/dev/sprav/",
+    "https://dev.2gis.ru/"
+  ],
+  "profile_links": {
+    "gbp": "https://maps.google.com/test",
+    "yandex_business": "https://yandex.ru/business/test"
+  },
+  "project": {
+    "domain": "provider.test",
+    "name": "Provider Test"
+  },
+  "provider": "yandex_business",
+  "status": "partner_limited",
+  "status_note": "Публичного API управления карточкой Яндекс.Бизнес нет (Справочник — партнёрский). Это ожидаемое состояние, не ошибка конфигурации.",
+  "working_paths": [
+    "Браузерный workflow: prompts/local/yandex-maps.md (Chrome MCP) — карточка, рубрики, фото, посты, ответы на отзывы с human review.",
+    "Отзывы: ручная выгрузка/копия из кабинета → анализ в review-velocity.py.",
+    "Товары/цены на картах: фид Яндекс.Товаров — валидируй yml-feed-audit.py.",
+    "Трафик-сигналы: metrika-fetch.py / metrika-logs-fetch.py (переходы с Карт видны как источник).",
+    "2ГИС: партнёрский API — та же браузерная механика, отдельного скрипта нет намеренно."
+  ]
+}

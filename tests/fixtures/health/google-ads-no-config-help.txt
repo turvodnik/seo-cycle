@@ -1,0 +1,14 @@
+usage: google-ads-health.py [-h] [--write] [--format {md,json}] [config]
+
+Report Google Ads readiness without making API calls. For `region_profile: ru`
+projects a missing Google Ads setup is reported as `region_limited` — an
+expected state, not an error: Yandex Direct is the primary paid channel and
+Google Ads campaign drafts can still be exported as Google Ads Editor CSV.
+
+positional arguments:
+  config              Path to seo-cycle.yaml
+
+options:
+  -h, --help          show this help message and exit
+  --write             Write seo/setup/google-ads-health.* artifacts.
+  --format {md,json}

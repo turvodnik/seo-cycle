@@ -1,0 +1,18 @@
+usage: notebooklm-health.py [-h] [--codex-config CODEX_CONFIG]
+                            [--tools-exposed] [--notebook-url NOTEBOOK_URL]
+                            [--write] [--format {md,json}]
+                            [config]
+
+positional arguments:
+  config                Path to seo-cycle.yaml
+
+options:
+  -h, --help            show this help message and exit
+  --codex-config CODEX_CONFIG
+                        Codex TOML config to inspect for NotebookLM MCP.
+  --tools-exposed       Mark NotebookLM MCP tools as visible in the current
+                        session.
+  --notebook-url NOTEBOOK_URL
+                        NotebookLM SEO notebook URL.
+  --write               Write seo/setup/notebooklm-health.* artifacts.
+  --format {md,json}

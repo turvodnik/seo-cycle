@@ -1,0 +1,35 @@
+{
+  "provider": "notebooklm",
+  "generated_at": "<TS>",
+  "project": {
+    "name": "Provider Test",
+    "domain": "provider.test"
+  },
+  "status": "unavailable",
+  "health": {
+    "provider": "notebooklm",
+    "configured": false,
+    "tools_exposed": false,
+    "status": "unavailable",
+    "access_mode": "manual_export",
+    "disabled_tools": [],
+    "notebook_url": "https://notebooklm.google.com/notebook/test",
+    "ranking_signal": false,
+    "allowed_use": "curated expert evidence with citations/source excerpts"
+  },
+  "source_role": "curated expert evidence only",
+  "not_ranking_signal": true,
+  "fallback_order": [
+    "mcp",
+    "browser_export",
+    "manual_export",
+    "source_pack_ingestion"
+  ],
+  "writes_to_site": false,
+  "paths": {
+    "markdown": "seo/setup/notebooklm-health.md",
+    "json": "seo/setup/notebooklm-health.json",
+    "latest_markdown": "seo/setup/latest-notebooklm-health.md",
+    "latest_json": "seo/setup/latest-notebooklm-health.json"
+  }
+}

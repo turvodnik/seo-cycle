@@ -1,0 +1,41 @@
+{
+  "ads_enabled": false,
+  "api_default": "read_only_fetch_behind_live_flag",
+  "capabilities": [
+    "campaigns/adgroups/keywords via Direct API v5 (JSON)",
+    "performance stats and search queries via Reports API (TSV, offline mode)",
+    "sandbox host support for safe apply rehearsal",
+    "draft campaigns from the semantic core via ads-draft-builder.py"
+  ],
+  "credentials_present": true,
+  "env_names": [
+    "YANDEX_DIRECT_TOKEN"
+  ],
+  "generated_at": "<TS>",
+  "guardrails": [
+    "No live HTTP/API call in health check.",
+    "yandex-direct-fetch.py defaults to cache/--input-file; --live requires usage-ledger preflight.",
+    "ads-apply.py requires an approved ads ticket, --live --allow-write, and per-run change caps.",
+    "Budgets are frozen unless ads.apply.max_daily_budget > 0."
+  ],
+  "missing_env": [],
+  "official_docs": [
+    "https://yandex.ru/dev/direct/doc/dg/concepts/about.html",
+    "https://yandex.ru/dev/direct/doc/reports/reports.html",
+    "https://yandex.ru/dev/direct/doc/dg/concepts/sandbox.html"
+  ],
+  "optional_env_names": [
+    "YANDEX_DIRECT_CLIENT_LOGIN"
+  ],
+  "platform_enabled": false,
+  "primary_platform": "yandex_direct",
+  "project": {
+    "domain": "provider.test",
+    "name": "Provider Test"
+  },
+  "provider": "yandex_direct",
+  "sandbox": false,
+  "status": "available",
+  "stores_password": false,
+  "writes_to_platform": "only via ads-apply.py with approved ticket + --live --allow-write"
+}
