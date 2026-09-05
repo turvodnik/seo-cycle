@@ -129,5 +129,45 @@ class PulseSurvivesBadStaleAfterConfigTest(unittest.TestCase):
                 self.assertNotIn("WARNING: bad integer config value", proc.stderr)
 
 
+class PulseSurvivesBadDropAlertConfigTest(unittest.TestCase):
+    """T-063: `scripts/pulse.py:234`, `pulse.drop_alert_pct` — the dobified
+    (float) twin of `pulse.stale_after_days` above, found by the T-063
+    reviewer of the previous ticket sweeping the tree for BOTH `int(` and
+    `float(` conversions of config values, not just the integer half."""
+
+    def _run_pulse(self, drop_alert_value: str) -> subprocess.CompletedProcess:
+        import shutil
+        import tempfile
+
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="coerce-float-pulse-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        (tmp / "seo-cycle.yaml").write_text(
+            "project: {name: X, domain: x.test}\n"
+            "region_profile: ru\n"
+            "pulse:\n"
+            "  days: 14\n"
+            f"  drop_alert_pct: {drop_alert_value}\n",
+            encoding="utf-8",
+        )
+        return subprocess.run(
+            [sys.executable, str(SCRIPTS / "pulse.py"), str(tmp / "seo-cycle.yaml"), "--skip-fetch"],
+            cwd=tmp, text=True, capture_output=True, check=False,
+        )
+
+    def test_garbage_values_do_not_raise(self) -> None:
+        for bad in ("not-a-number", '"soon"', "[1]", "{a: 1}"):
+            with self.subTest(value=bad):
+                proc = self._run_pulse(bad)
+                self.assertNotIn("Traceback (most recent call last)", proc.stderr)
+                self.assertIn("WARNING: bad numeric config value (pulse.drop_alert_pct)", proc.stderr)
+
+    def test_valid_looking_values_pass_through(self) -> None:
+        for ok in ("7.5", '" 12 "'):
+            with self.subTest(value=ok):
+                proc = self._run_pulse(ok)
+                self.assertNotIn("Traceback (most recent call last)", proc.stderr)
+                self.assertNotIn("WARNING: bad numeric config value", proc.stderr)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

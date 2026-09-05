@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .config import coerce_int
+
 
 RAW_PATTERNS = (
     "raw API JSON",
@@ -41,10 +43,20 @@ def build_context_manifest(
         "source_caps": {
             "raw_data_in_context": bool(caps.get("raw_data_in_context", False)),
             "cache_first": bool(caps.get("cache_first", True)),
-            "max_raw_rows_loaded": int(caps.get("max_raw_rows_loaded", 200) or 200),
-            "distillate_max_lines": int(caps.get("distillate_max_lines", 220) or 220),
-            "browser_session_budget_minutes": int(caps.get("browser_session_budget_minutes", 20) or 20),
-            "browser_pages_per_phase_cap": int(caps.get("browser_pages_per_phase_cap", 20) or 20),
+            "max_raw_rows_loaded": coerce_int(
+                caps.get("max_raw_rows_loaded", 200), 200, name="context_contract.caps.max_raw_rows_loaded"
+            ),
+            "distillate_max_lines": coerce_int(
+                caps.get("distillate_max_lines", 220), 220, name="context_contract.caps.distillate_max_lines"
+            ),
+            "browser_session_budget_minutes": coerce_int(
+                caps.get("browser_session_budget_minutes", 20), 20,
+                name="context_contract.caps.browser_session_budget_minutes",
+            ),
+            "browser_pages_per_phase_cap": coerce_int(
+                caps.get("browser_pages_per_phase_cap", 20), 20,
+                name="context_contract.caps.browser_pages_per_phase_cap",
+            ),
         },
         "sources": sources or [],
         "outputs": outputs,

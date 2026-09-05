@@ -22,7 +22,7 @@ import json
 import pathlib
 from typing import Any
 
-from .config import nested_get
+from .config import coerce_int, nested_get
 
 DEFAULT_MAX_ATTEMPTS = 5
 DEFAULT_NO_PROGRESS_AFTER = 2
@@ -158,8 +158,20 @@ def target_config(cfg: dict[str, Any], target: str) -> dict[str, Any]:
     max_attempts = per_target.get("max_attempts", loop_cfg.get("max_attempts", spec["default_max_attempts"]))
     return {
         "enabled": bool(loop_cfg.get("enabled", True)),
-        "max_attempts": max(1, int(max_attempts or spec["default_max_attempts"])),
-        "no_progress_after": max(2, int(loop_cfg.get("no_progress_after", DEFAULT_NO_PROGRESS_AFTER))),
+        "max_attempts": max(
+            1,
+            coerce_int(
+                max_attempts, spec["default_max_attempts"],
+                name=f"governance.loop.targets.{spec['config_key']}.max_attempts",
+            ),
+        ),
+        "no_progress_after": max(
+            2,
+            coerce_int(
+                loop_cfg.get("no_progress_after", DEFAULT_NO_PROGRESS_AFTER), DEFAULT_NO_PROGRESS_AFTER,
+                name="governance.loop.no_progress_after",
+            ),
+        ),
         "escalate": bool(loop_cfg.get("escalate", True)),
     }
 

@@ -34,7 +34,7 @@ from seo_cycle_core.ads import (
     ledger_record,
     require_enabled,
 )
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import coerce_float, coerce_int, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("ads-apply")
@@ -206,8 +206,12 @@ def main() -> int:
         print("ERROR: ads.policy is report_only — apply is blocked by project policy", file=sys.stderr)
         return 2
 
-    max_changes = int(nested_get(ads, "apply.max_changes_per_run", 20) or 20)
-    max_daily_budget = float(nested_get(ads, "apply.max_daily_budget", 0) or 0)
+    max_changes = coerce_int(
+        nested_get(ads, "apply.max_changes_per_run", 20), 20, name="ads.apply.max_changes_per_run"
+    )
+    max_daily_budget = coerce_float(
+        nested_get(ads, "apply.max_daily_budget", 0), 0, name="ads.apply.max_daily_budget"
+    )
     operations = build_operations(draft, max_daily_budget)
 
     if len(operations) > max_changes:

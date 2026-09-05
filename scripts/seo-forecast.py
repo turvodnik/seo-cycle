@@ -26,7 +26,7 @@ import sqlite3
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, numeric, project_root_for
+from seo_cycle_core.config import coerce_float, coerce_int, find_config, load_yaml, nested_get, numeric, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
 from seo_cycle_core.textmatch import build_query_index, match_position
@@ -171,8 +171,8 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
     core = load_core(project_root)
     tracked = load_positions(project_root, cfg)
     positions, match_stats = resolve_positions(core, tracked)
-    conversion = float(nested_get(cfg, "kpi.lead_conversion_rate", 0.02) or 0.02)
-    months = max(1, int(nested_get(cfg, "kpi.months_to_target", 6) or 6))
+    conversion = coerce_float(nested_get(cfg, "kpi.lead_conversion_rate", 0.02), 0.02, name="kpi.lead_conversion_rate")
+    months = max(1, coerce_int(nested_get(cfg, "kpi.months_to_target", 6), 6, name="kpi.months_to_target"))
 
     scenarios: dict[str, Any] = {}
     cluster_upside: list[dict[str, Any]] = []

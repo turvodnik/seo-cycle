@@ -107,6 +107,24 @@ def coerce_int(value: Any, default: int, *, name: str = "") -> int:
         return default
 
 
+def coerce_float(value: Any, default: float, *, name: str = "") -> float:
+    """Like `coerce_int()`, but for config values that gate float arithmetic
+    (percentages, budgets, thresholds). Preserves the pre-existing
+    `float(value or default)` falsy-fallback idiom found at every call site
+    this replaces (0/""/None all mean "use default"), but a garbage
+    non-numeric value must not crash the tool with a traceback — warn once
+    (naming the config key) and fall back instead. T-063: the dial-in twin
+    of `coerce_int()` for the `float(nested_get(...))` occurrences of the
+    same unguarded-conversion class (found sweeping the tree for
+    `scripts/pulse.py:234`, `pulse.drop_alert_pct`, and several others)."""
+    try:
+        return float(value or default)
+    except (TypeError, ValueError):
+        label = f" ({name})" if name else ""
+        print(f"WARNING: bad numeric config value{label}: {value!r} — using default {default}", file=sys.stderr)
+        return default
+
+
 def nested_get(data: dict[str, Any], dotted: str, default: Any = None) -> Any:
     cur: Any = data
     for part in dotted.split("."):
