@@ -617,6 +617,22 @@ sources:
 
 ## Troubleshooting
 
+**Обновляешь уже существующий clone/vendor-store, где реестр проектов
+(config/projects-registry.yaml, машинно-локальный файл — не часть репозитория, в
+`.gitignore` начиная с T-061) раньше отслеживался git'ом (версия до T-061)?** Начиная с этой версии файл убран из
+трекинга (личные пути/домены не должны попадать в тег — T-061), а `git checkout`/
+`git pull` на коммит ≥ этой версии удалит его из рабочего дерева, если он не изменён
+локально (обычный переход tracked → untracked в git). Порядок безопасного апгрейда:
+1. `cp config/projects-registry.yaml ~/.seo-cycle/projects-registry.yaml` (резервная копия
+   вне git-дерева — если у тебя ещё не настроен `~/.seo-cycle/`, `mkdir -p ~/.seo-cycle`
+   сначала).
+2. Выполни апгрейд (`git pull` / `install.sh --update` / `--upgrade-all`) как обычно.
+3. `cp ~/.seo-cycle/projects-registry.yaml config/projects-registry.yaml` — восстановить
+   реальный реестр (файл теперь в `.gitignore`, коммитить его не нужно и не даст смысла).
+Если реестра раньше не было или он не менялся руками — `init-project.sh` создаст пустой
+из `config/projects-registry.example.yaml` при следующем подключении проекта сам, ничего
+делать не нужно.
+
 **«Конфиг не найден»** — скилл искал в 4 локациях, всех нет. Проверь имя файла и место (см. начало этого документа).
 
 **«Source X enabled but env-var Y not set»** — зарегистрируй ключ через `ai-secret set <project-scope> <ИМЯ>` (см. Шаг 4); или временно отключи источник.
