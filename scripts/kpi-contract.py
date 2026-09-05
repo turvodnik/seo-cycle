@@ -30,7 +30,7 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, numeric, project_root_for
+from seo_cycle_core.config import coerce_float, find_config, load_yaml, nested_get, numeric, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
 
@@ -178,8 +178,21 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
     today = dt.date.today().replace(day=1)
     start = parse_month(kpi.get("start"), today)
     deadline = parse_month(kpi.get("deadline"), today.replace(year=today.year + 1))
-    tolerance = float(numeric(kpi.get("tolerance_pct"), 20)) / 100
-    conversion = float(numeric(kpi.get("lead_conversion_rate"), 0.02))
+    # coerce_float(), not the bare `numeric()` this replaced (T-063 gate
+    # round 2): `tolerance` feeds a later bare `round(tolerance * 100)`
+    # (no ndigits) when building the report contract below, which raises
+    # `OverflowError` on `inf`/`ValueError` on `nan` — `numeric()` alone
+    # never raises, so the crash surfaced downstream, not here.
+    # falsy_to_default=False: `numeric(value, default)`'s bare `float(value)`
+    # (no `or default`) already preserved an explicit `0` — `coerce_float()`'s
+    # default `value or default` idiom would silently turn that `0` into
+    # the default, a behavior change on a healthy config this ticket forbids.
+    tolerance = coerce_float(
+        kpi.get("tolerance_pct"), 20, name="kpi.tolerance_pct", falsy_to_default=False
+    ) / 100
+    conversion = coerce_float(
+        kpi.get("lead_conversion_rate"), 0.02, name="kpi.lead_conversion_rate", falsy_to_default=False
+    )
     goals = kpi.get("goals") if isinstance(kpi.get("goals"), dict) else {}
     baseline = kpi.get("baseline") if isinstance(kpi.get("baseline"), dict) else {}
 

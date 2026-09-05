@@ -19,6 +19,8 @@ import subprocess
 import sys
 from typing import Any
 
+from seo_cycle_core.config import coerce_int
+
 try:
     import yaml
 except ImportError:
@@ -116,7 +118,7 @@ def boolish(value: Any) -> bool:
 def numeric(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -257,13 +259,36 @@ def token_contract(cfg: dict[str, Any]) -> dict[str, Any]:
         "raw_data_in_context": boolish(token.get("raw_data_in_context", False)),
         "progressive_disclosure": boolish(token.get("progressive_disclosure", True)),
         "require_distillate_before_synthesis": boolish(token.get("require_distillate_before_synthesis", True)),
-        "max_context_input_tokens_per_phase": int(numeric(token.get("max_context_input_tokens_per_phase", 45000), 45000)),
-        "max_output_tokens_per_artifact": int(numeric(token.get("max_output_tokens_per_artifact", 7000), 7000)),
-        "max_raw_rows_loaded": int(numeric(token.get("max_raw_rows_loaded", 200), 200)),
-        "distillate_max_lines": int(numeric(token.get("distillate_max_lines", 220), 220)),
+        # falsy_to_default=False: original had no `or default` here (nor
+        # does `numeric()`'s bare `float(value)`) — an explicit 0 is a
+        # legitimate value and must keep surviving as 0 (T-063 gate round 2:
+        # same governance.token_policy.* keys as context-pack.py/spend-guard.py,
+        # closed the same way there).
+        "max_context_input_tokens_per_phase": coerce_int(
+            token.get("max_context_input_tokens_per_phase", 45000), 45000,
+            name="governance.token_policy.max_context_input_tokens_per_phase", falsy_to_default=False,
+        ),
+        "max_output_tokens_per_artifact": coerce_int(
+            token.get("max_output_tokens_per_artifact", 7000), 7000,
+            name="governance.token_policy.max_output_tokens_per_artifact", falsy_to_default=False,
+        ),
+        "max_raw_rows_loaded": coerce_int(
+            token.get("max_raw_rows_loaded", 200), 200,
+            name="governance.token_policy.max_raw_rows_loaded", falsy_to_default=False,
+        ),
+        "distillate_max_lines": coerce_int(
+            token.get("distillate_max_lines", 220), 220,
+            name="governance.token_policy.distillate_max_lines", falsy_to_default=False,
+        ),
         "cache_first": boolish(token.get("cache_first", True)),
-        "browser_session_budget_minutes": int(numeric(token.get("browser_session_budget_minutes", 20), 20)),
-        "browser_pages_per_phase_cap": int(numeric(token.get("browser_pages_per_phase_cap", 20), 20)),
+        "browser_session_budget_minutes": coerce_int(
+            token.get("browser_session_budget_minutes", 20), 20,
+            name="governance.token_policy.browser_session_budget_minutes", falsy_to_default=False,
+        ),
+        "browser_pages_per_phase_cap": coerce_int(
+            token.get("browser_pages_per_phase_cap", 20), 20,
+            name="governance.token_policy.browser_pages_per_phase_cap", falsy_to_default=False,
+        ),
     }
 
 

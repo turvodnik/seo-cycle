@@ -25,7 +25,7 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
-from seo_cycle_core.config import nested_get, package_project_root, write_text
+from seo_cycle_core.config import coerce_int, nested_get, package_project_root, write_text
 from research_package_repair_core import repeated_phrase_clean
 
 
@@ -232,7 +232,10 @@ def check_required_research_sources(project_root: pathlib.Path, cfg: dict[str, A
     required = normalize_required_sources(nested_get(cfg, "quality_gates.required_research_sources", []))
     for source in required:
         source_id = str(source.get("id") or "unnamed_source")
-        min_bytes = int(source.get("min_bytes") or 100)
+        min_bytes = coerce_int(
+            source.get("min_bytes", 100), 100,
+            name=f"quality_gates.required_research_sources[{source_id}].min_bytes",
+        )
         mode = str(source.get("mode") or "all").lower()
         required_status = source.get("required_status")
         status_field = source.get("status_field")

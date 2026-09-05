@@ -68,6 +68,68 @@ class CoerceIntUnitTest(unittest.TestCase):
         self.assertIn("monitoring.snapshot_max_age_days", stderr.getvalue())
 
 
+class CoerceIntOverflowTest(unittest.TestCase):
+    """T-063 gate round 2: `int(float("inf"))` raises `OverflowError`, NOT
+    `TypeError`/`ValueError` — the two exceptions the original `coerce_int()`
+    caught. YAML parses a bare `.inf`/`-.inf` config value straight into the
+    Python float `inf` (no string involved), so this crash reached every
+    site `coerce_int()` protects, defeating the whole ticket at once.
+    Reviewer's own reproduction: `pulse.stale_after_days: .inf` -> rc=1
+    with a traceback, even through the "fixed" `coerce_int()`."""
+
+    def test_positive_infinity_does_not_raise(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = coerce_int(float("inf"), 3, name="pulse.stale_after_days")
+        self.assertEqual(result, 3)
+        self.assertIn("pulse.stale_after_days", stderr.getvalue())
+        self.assertIn("inf", stderr.getvalue())
+
+    def test_negative_infinity_does_not_raise(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = coerce_int(float("-inf"), 3, name="pulse.stale_after_days")
+        self.assertEqual(result, 3)
+
+    def test_infinity_does_not_raise_with_falsy_to_default_false(self) -> None:
+        # `inf` is truthy either way, so this exercises the OTHER branch of
+        # the falsy_to_default switch through the same OverflowError path.
+        result = coerce_int(float("inf"), 3, falsy_to_default=False)
+        self.assertEqual(result, 3)
+
+
+class PulseSurvivesInfiniteStaleAfterConfigTest(unittest.TestCase):
+    """End-to-end reproduction of the gate's own finding: a bare `.inf` in
+    `pulse.stale_after_days` (YAML parses it directly into the float `inf`,
+    no string coercion involved) must not crash `pulse.py`."""
+
+    def _run_pulse(self, stale_after_value: str) -> subprocess.CompletedProcess:
+        import shutil
+        import tempfile
+
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="coerce-int-inf-pulse-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        (tmp / "seo-cycle.yaml").write_text(
+            "project: {name: X, domain: x.test}\n"
+            "region_profile: ru\n"
+            "pulse:\n"
+            "  days: 14\n"
+            f"  stale_after_days: {stale_after_value}\n",
+            encoding="utf-8",
+        )
+        return subprocess.run(
+            [sys.executable, str(SCRIPTS / "pulse.py"), str(tmp / "seo-cycle.yaml"), "--skip-fetch"],
+            cwd=tmp, text=True, capture_output=True, check=False,
+        )
+
+    def test_positive_and_negative_infinity_do_not_raise(self) -> None:
+        for bad in (".inf", "-.inf"):
+            with self.subTest(value=bad):
+                proc = self._run_pulse(bad)
+                self.assertNotIn("Traceback (most recent call last)", proc.stderr)
+                self.assertIn("WARNING: bad integer config value (pulse.stale_after_days)", proc.stderr)
+
+
 class CoerceIntFalsyToDefaultFlagTest(unittest.TestCase):
     """T-063 review: `int(value or default)` is only correct where the
     ORIGINAL call site also had `or default` — 9 of the 19 T-063 sites

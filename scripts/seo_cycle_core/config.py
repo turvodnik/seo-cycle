@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import pathlib
 import sys
 from typing import Any
@@ -88,7 +89,7 @@ def boolish(value: Any, default: bool = False) -> bool:
 def numeric(value: Any, default: float = 0) -> float:
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return float(default)
 
 
@@ -110,11 +111,20 @@ def coerce_int(value: Any, default: int, *, name: str = "", falsy_to_default: bo
     = "load nothing") that must keep surviving as `0`, not silently become
     the default (T-063 review: reusing the `... or default` idiom
     everywhere would have quietly changed accepted-input behavior at those
-    sites, which the ticket's own «Ограничения» forbids)."""
+    sites, which the ticket's own «Ограничения» forbids).
+
+    Catches `OverflowError` too, not just `TypeError`/`ValueError` (T-063
+    gate round 2): YAML parses a bare `.inf`/`-.inf` config value straight
+    into the Python float `inf` (no string involved, so `int(value)` never
+    raises `ValueError`) — `int(float("inf"))` raises `OverflowError`
+    instead, which the original two-exception catch let straight through
+    with a traceback. This is the same crash class the whole ticket exists
+    to close; missing this one exception type would have re-opened it at
+    EVERY site that now calls `coerce_int()`."""
     try:
         candidate = (value or default) if falsy_to_default else (default if value is None else value)
         return int(candidate)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         label = f" ({name})" if name else ""
         print(f"WARNING: bad integer config value{label}: {value!r} — using default {default}", file=sys.stderr)
         return default
@@ -130,11 +140,33 @@ def coerce_float(value: Any, default: float, *, name: str = "", falsy_to_default
     falls back instead. T-063: the float twin of `coerce_int()` for the
     `float(nested_get(...))` occurrences of the same unguarded-conversion
     class (found sweeping the tree for `scripts/pulse.py:234`,
-    `pulse.drop_alert_pct`, and several others)."""
+    `pulse.drop_alert_pct`, and several others).
+
+    Rejects non-finite results (`inf`, `-inf`, `nan`) as garbage too, not
+    just non-numeric values (T-063 gate round 2): `float("inf")` itself
+    never raises, but YAML parses a bare `.inf`/`.nan` config value
+    straight into that Python float with no string involved — a downstream
+    caller doing further arithmetic and THEN a bare `round(...)`/`int(...)`
+    on the result (e.g. `round(coerce_float(...) * 100)` in
+    `kpi-contract.py`) still crashes with `OverflowError`/`ValueError`,
+    arbitrarily far from this coercion point where the actual garbage
+    entered. `coerce_float()` accepting `.inf` as "valid" was itself part
+    of the crash class this ticket exists to close, not a feature to
+    preserve — no call site in the tree ever worked with an infinite
+    config value before this fix (it always crashed somewhere downstream),
+    so rejecting it here is not a behavior change on any config that used
+    to be accepted."""
     try:
         candidate = (value or default) if falsy_to_default else (default if value is None else value)
-        return float(candidate)
-    except (TypeError, ValueError):
+        result = float(candidate)
+        if not math.isfinite(result):
+            raise ValueError(f"non-finite result: {result!r}")
+        return result
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: a Python `int` too large to represent as `float`
+        # (e.g. a huge literal in the config) — `float("inf")` itself never
+        # raises, but this keeps the two coercers' exception sets identical
+        # so neither one is the "safe" one only by accident.
         label = f" ({name})" if name else ""
         print(f"WARNING: bad numeric config value{label}: {value!r} — using default {default}", file=sys.stderr)
         return default

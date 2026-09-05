@@ -20,6 +20,7 @@ import argparse
 import csv
 import datetime as dt
 import json
+import math
 import pathlib
 import random
 import sqlite3
@@ -57,14 +58,28 @@ def ctr_for(position: float, curve: dict[int, float]) -> float:
 
 
 def load_ctr_curve(cfg: dict[str, Any]) -> dict[int, float]:
+    """T-063 gate round 2: a garbage/non-finite `kpi.ctr_curve` override
+    entry must not poison downstream arithmetic — `curve[int(key)] =
+    float(value)` alone never raised on `.inf` (YAML parses it straight
+    into the Python float `inf`), but the resulting `inf`/`nan` CTR then
+    propagates through `scenario_clicks()`'s running total and crashes a
+    LATER bare `round(total)` in `build_report()` with `OverflowError`/
+    `ValueError` — nowhere near this function. Skip (not substitute a
+    default for) a malformed override entry, matching the pre-existing
+    "can't parse it -> ignore this one entry" semantics; `math.isfinite()`
+    catches inf/nan that `float()` itself lets through silently."""
     curve = dict(DEFAULT_CTR_CURVE)
     override = nested_get(cfg, "kpi.ctr_curve", {}) or {}
     if isinstance(override, dict):
         for key, value in override.items():
             try:
-                curve[int(key)] = float(value)
-            except (TypeError, ValueError):
+                bucket = int(key)
+                ctr = float(value)
+            except (TypeError, ValueError, OverflowError):
                 continue
+            if not math.isfinite(ctr):
+                continue
+            curve[bucket] = ctr
     return curve
 
 

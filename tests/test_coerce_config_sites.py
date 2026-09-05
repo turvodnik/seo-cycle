@@ -33,6 +33,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import math
 import pathlib
 import shutil
 import subprocess
@@ -63,6 +64,11 @@ seo_forecast = load_hyphenated("seo-forecast")
 budget_mix_planner = load_hyphenated("budget-mix-planner")
 token_waste_audit = load_hyphenated("token-waste-audit")
 context_pack = load_hyphenated("context-pack")
+setup_gap_audit = load_hyphenated("setup-gap-audit")
+research_package_quality = load_hyphenated("research-package-quality")
+spend_guard = load_hyphenated("spend-guard")
+launch_plan = load_hyphenated("launch-plan")
+kpi_contract = load_hyphenated("kpi-contract")
 
 
 def tmp_dir() -> pathlib.Path:
@@ -490,6 +496,263 @@ class CoerceFloatUnitTest(unittest.TestCase):
             result = coerce_float({"nested": "dict"}, 7, name="kpi.lead_conversion_rate")
         self.assertEqual(result, 7)
         self.assertIn("kpi.lead_conversion_rate", stderr.getvalue())
+
+
+class SetupGapAuditBudgetCapTest(unittest.TestCase):
+    """scripts/setup-gap-audit.py:369 — `governance.budget_policy.
+    monthly_paid_api_usd_cap`. T-063 gate round 2 finding; `build_report()`
+    reads straight from a config path (missing tool-stack/spend-guard/etc.
+    reports all gracefully degrade to {})."""
+
+    def test_garbage_monthly_paid_api_usd_cap_does_not_raise(self) -> None:
+        root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        cfg_path = root / "seo-cycle.yaml"
+        cfg_path.write_text(
+            "project: {name: gap-audit-test}\n"
+            "governance:\n"
+            "  budget_policy:\n"
+            "    monthly_paid_api_usd_cap: not-a-number\n",
+            encoding="utf-8",
+        )
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            report = setup_gap_audit.build_report(cfg_path)
+        self.assertIsInstance(report, dict)
+        self.assertIn("governance.budget_policy.monthly_paid_api_usd_cap", stderr.getvalue())
+
+
+class ResearchPackageQualityMinBytesTest(unittest.TestCase):
+    """scripts/research-package-quality.py:235 —
+    `quality_gates.required_research_sources[*].min_bytes`. T-063 gate
+    round 2 finding; reviewer's own repro used a LIST value (TypeError, not
+    ValueError) — covered here alongside a plain garbage string."""
+
+    def test_list_value_does_not_raise(self) -> None:
+        root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        cfg = {"quality_gates": {"required_research_sources": [
+            {"id": "serp", "min_bytes": [1, 2, 3], "path": "does-not-exist.json"},
+        ]}}
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            missing = research_package_quality.check_required_research_sources(root, cfg)
+        self.assertIsInstance(missing, list)
+        self.assertIn("quality_gates.required_research_sources[serp].min_bytes", stderr.getvalue())
+
+    def test_garbage_string_does_not_raise(self) -> None:
+        root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        cfg = {"quality_gates": {"required_research_sources": [
+            {"id": "serp", "min_bytes": "lots", "path": "does-not-exist.json"},
+        ]}}
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            research_package_quality.check_required_research_sources(root, cfg)
+        self.assertIn("quality_gates.required_research_sources[serp].min_bytes", stderr.getvalue())
+
+
+class SpendGuardLaunchPlanTokenContractTest(unittest.TestCase):
+    """scripts/spend-guard.py:200-206 and scripts/launch-plan.py:260-266 —
+    T-063 gate round 2 finding: BOTH files carry their own private copy of
+    `numeric()` (never imported from `seo_cycle_core.config`), and BOTH
+    wrapped its result in a bare `int(...)` for the same six
+    `governance.token_policy.*` keys already closed in `context-pack.py`.
+    `numeric()` itself never raises (T-052/T-053 already-fixed contract),
+    so the crash was invisible to any test exercising `numeric()` alone —
+    only the outer, unprotected `int(...)` truncation could raise, and only
+    on the read that never happened in the original suite: `.inf`."""
+
+    KEYS = (
+        "max_context_input_tokens_per_phase", "max_output_tokens_per_artifact", "max_raw_rows_loaded",
+        "distillate_max_lines", "browser_session_budget_minutes", "browser_pages_per_phase_cap",
+    )
+
+    def _cfg(self, key: str, value: object) -> dict:
+        return {"governance": {"token_policy": {key: value}}}
+
+    def test_spend_guard_garbage_and_infinite_values_do_not_raise(self) -> None:
+        for key in self.KEYS:
+            with self.subTest(module="spend-guard", key=key, value="garbage"):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    contract = spend_guard.token_contract(self._cfg(key, "garbage"))
+                self.assertIn("governance.token_policy." + key, stderr.getvalue())
+                self.assertIsInstance(contract[key], int)
+            with self.subTest(module="spend-guard", key=key, value="inf"):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    spend_guard.token_contract(self._cfg(key, float("inf")))
+                self.assertIn("governance.token_policy." + key, stderr.getvalue())
+
+    def test_launch_plan_garbage_and_infinite_values_do_not_raise(self) -> None:
+        for key in self.KEYS:
+            with self.subTest(module="launch-plan", key=key, value="garbage"):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    contract = launch_plan.token_contract(self._cfg(key, "garbage"))
+                self.assertIn("governance.token_policy." + key, stderr.getvalue())
+                self.assertIsInstance(contract[key], int)
+            with self.subTest(module="launch-plan", key=key, value="inf"):
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    launch_plan.token_contract(self._cfg(key, float("inf")))
+                self.assertIn("governance.token_policy." + key, stderr.getvalue())
+
+    def test_explicit_zero_survives_at_every_key_both_modules(self) -> None:
+        for module in (spend_guard, launch_plan):
+            for key in self.KEYS:
+                with self.subTest(module=module.__name__, key=key):
+                    stderr = io.StringIO()
+                    with redirect_stderr(stderr):
+                        contract = module.token_contract(self._cfg(key, 0))
+                    self.assertEqual(contract[key], 0)
+                    self.assertNotIn("WARNING", stderr.getvalue())
+
+
+class SeoForecastCtrCurveTest(unittest.TestCase):
+    """scripts/seo-forecast.py::load_ctr_curve() — `kpi.ctr_curve` override
+    entries. T-063 gate round 2: `curve[int(key)] = float(value)` alone
+    never raised on `.inf` (YAML parses it straight into the Python float
+    `inf`, no string involved) — the poisoned CTR then propagates through
+    `scenario_clicks()`'s running total and crashes a LATER bare
+    `round(total)` in `build_report()`, nowhere near this function. Found
+    by tracing data flow (not grepping for the literal call), per the
+    gate's own direction."""
+
+    def test_infinite_override_value_is_skipped_not_stored(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            curve = seo_forecast.load_ctr_curve({"kpi": {"ctr_curve": {1: float("inf")}}})
+        # Malformed entries are SKIPPED (pre-existing "can't parse -> ignore
+        # this one entry" semantics), not substituted with a default value —
+        # the default curve's own bucket-1 CTR must survive untouched.
+        self.assertTrue(math.isfinite(curve[1]))
+        self.assertEqual(curve[1], seo_forecast.DEFAULT_CTR_CURVE[1])
+
+    def test_nan_override_value_is_skipped(self) -> None:
+        curve = seo_forecast.load_ctr_curve({"kpi": {"ctr_curve": {1: float("nan")}}})
+        self.assertTrue(math.isfinite(curve[1]))
+
+    def test_garbage_override_value_is_skipped(self) -> None:
+        curve = seo_forecast.load_ctr_curve({"kpi": {"ctr_curve": {1: "garbage"}}})
+        self.assertTrue(math.isfinite(curve[1]))
+
+    def test_infinite_ctr_curve_does_not_crash_build_report(self) -> None:
+        """End-to-end: the reviewer's own reproduction shape — a poisoned
+        CTR curve entry must not crash `build_report()`'s later
+        `round(total)` calls."""
+        root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        package = root / "seo" / "research-package"
+        package.mkdir(parents=True)
+        (package / "semantic-core.csv").write_text(
+            "keyword,frequency,cluster_id\nкупить вагонку,1000,vagonka\n", encoding="utf-8",
+        )
+        cfg = {"kpi": {"ctr_curve": {1: float("inf")}}}
+        report = seo_forecast.build_report(root, cfg)
+        self.assertIsInstance(report["scenarios"]["current"]["monthly_clicks"], (int, float))
+        self.assertTrue(math.isfinite(report["scenarios"]["current"]["monthly_clicks"]))
+
+
+class KpiContractToleranceTest(unittest.TestCase):
+    """scripts/kpi-contract.py:181-182 — `kpi.tolerance_pct` and
+    `kpi.lead_conversion_rate`. T-063 gate round 2, 15th/5th-file finding:
+    `numeric()` alone never raises, but `tolerance` feeds a later BARE
+    `round(tolerance * 100)` (no ndigits) when building the report
+    `contract` — that raises `OverflowError` on `.inf` (parsed by YAML
+    straight into the Python float `inf`, no string involved) and
+    `ValueError` on `.nan`, arbitrarily far downstream from where the
+    garbage config value entered. Closed by switching to `coerce_float()`,
+    which (as of this same gate round) rejects non-finite RESULTS too, not
+    just non-numeric inputs — see `CoerceFloatNonFiniteTest` below."""
+
+    def test_infinite_tolerance_pct_does_not_raise(self) -> None:
+        root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        cfg = {"kpi": {"tolerance_pct": float("inf")}}
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            report = kpi_contract.build_report(root, cfg)
+        self.assertEqual(report["contract"]["tolerance_pct"], 20)
+        self.assertIn("kpi.tolerance_pct", stderr.getvalue())
+
+    def test_nan_tolerance_pct_does_not_raise(self) -> None:
+        root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        cfg = {"kpi": {"tolerance_pct": float("nan")}}
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            report = kpi_contract.build_report(root, cfg)
+        self.assertEqual(report["contract"]["tolerance_pct"], 20)
+        self.assertIn("kpi.tolerance_pct", stderr.getvalue())
+
+    def test_garbage_string_tolerance_pct_does_not_raise(self) -> None:
+        root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        cfg = {"kpi": {"tolerance_pct": "loose"}}
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            report = kpi_contract.build_report(root, cfg)
+        self.assertEqual(report["contract"]["tolerance_pct"], 20)
+        self.assertIn("kpi.tolerance_pct", stderr.getvalue())
+
+    def test_garbage_lead_conversion_rate_does_not_raise(self) -> None:
+        root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        cfg = {"kpi": {"lead_conversion_rate": "garbage"}}
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            report = kpi_contract.build_report(root, cfg)
+        self.assertEqual(report["contract"]["lead_conversion_rate"], 0.02)
+        self.assertIn("kpi.lead_conversion_rate", stderr.getvalue())
+
+    def test_explicit_zero_survives_at_both_keys(self) -> None:
+        """`numeric(value, default)`'s bare `float(value)` (no `or default`)
+        already preserved an explicit `0` — must still, via
+        `falsy_to_default=False`."""
+        root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        cfg = {"kpi": {"tolerance_pct": 0, "lead_conversion_rate": 0}}
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            report = kpi_contract.build_report(root, cfg)
+        self.assertEqual(report["contract"]["tolerance_pct"], 0)
+        self.assertEqual(report["contract"]["lead_conversion_rate"], 0)
+        self.assertNotIn("WARNING", stderr.getvalue())
+
+
+class CoerceFloatNonFiniteTest(unittest.TestCase):
+    """T-063 gate round 2: `coerce_float()` must reject `inf`/`-inf`/`nan`
+    RESULTS as garbage too, not just non-numeric inputs — `float("inf")`
+    itself never raises, but a caller doing further arithmetic and then a
+    bare `round(...)`/`int(...)` (not going through `coerce_int()`) on the
+    result crashes anyway, arbitrarily far from this coercion point
+    (`kpi-contract.py`'s `round(tolerance * 100)` is the reviewer's own
+    reproduction — see `KpiContractToleranceTest` above)."""
+
+    def test_positive_infinity_is_rejected(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = coerce_float(float("inf"), 5, name="kpi.tolerance_pct")
+        self.assertEqual(result, 5)
+        self.assertIn("kpi.tolerance_pct", stderr.getvalue())
+
+    def test_negative_infinity_is_rejected(self) -> None:
+        result = coerce_float(float("-inf"), 5)
+        self.assertEqual(result, 5)
+
+    def test_nan_is_rejected(self) -> None:
+        result = coerce_float(float("nan"), 5)
+        self.assertEqual(result, 5)
+
+    def test_infinity_is_rejected_with_falsy_to_default_false(self) -> None:
+        result = coerce_float(float("inf"), 5, falsy_to_default=False)
+        self.assertEqual(result, 5)
+
+    def test_finite_values_still_pass_through(self) -> None:
+        self.assertEqual(coerce_float(3.5, 5), 3.5)
+        self.assertEqual(coerce_float(0, 5, falsy_to_default=False), 0)
 
 
 if __name__ == "__main__":
