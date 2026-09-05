@@ -1,6 +1,6 @@
 # seo-cycle
 
-**Версия 1.62.0** · универсальный SEO/контент-цикл-оркестратор для Codex CLI и Claude Code.
+Универсальный SEO/контент-цикл-оркестратор для Codex CLI и Claude Code. Версия, которую ставит `install.sh` — последний опубликованный git-тег (установщик резолвит его сам, см. INSTALL.md); файл [`VERSION`](VERSION) в корне репозитория отражает версию разрабатываемого HEAD и может на время опережать последний тег до релиза — не дублируем номер в тексте README, он быстро расходится с любым из двух.
 
 Полный цикл продвижения сайта — от стратегии и сбора семантики до публикации, fact-check, мониторинга и итераций — управляемый через декларативный конфиг `seo-cycle.yaml`. Адаптируется под любой проект: язык, регион, поисковики, тип сайта, CMS, набор источников.
 
@@ -8,32 +8,44 @@
 
 ## TL;DR
 
+Канонический способ установки — единый установщик `install.sh` (общий код живёт в версионированном хранилище `~/.codex/vendor/seo-cycle`, в проект попадают только локальные entrypoints):
+
 ```bash
-# Codex-first: запусти из корня нового проекта
+# 0. Хранилище (один раз на машину): клон + версии-worktree + CLI `seo-cycle`
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install.sh | bash
+
+# 1. Подключить проект (attach): .agents/, поверхности .claude/.codex, AGENTS.md, wizard конфига
+cd <project-root>
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install.sh | bash -s -- --project "$(pwd)"
+```
+
+Полное описание модели дистрибуции, обновлений (`--update`, `--pin`, `--upgrade-all`, `--detach`) и подключения ключей — в [INSTALL.md](INSTALL.md).
+
+Быстрый старт для нового проекта одной командой (внутри — тот же `install.sh` с wizard'ом; удобно, когда ещё не клонировал хранилище руками):
+
+```bash
+# Codex-first
 curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash
 
+# Claude Code variant
+curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-claude.sh | bash
+```
+
+```bash
 # Optional local AI toolchain for Codex/spec/research work:
 bash ~/.codex/vendor/seo-cycle/scripts/install-ai-toolchain.sh --codex
 
 # Optional NotebookLM bridge for a curated expert knowledge base:
 bash ~/.codex/vendor/seo-cycle/scripts/install-ai-toolchain.sh --codex --notebooklm
 
-# Claude Code variant:
-curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-claude.sh | bash
-
-# Existing project: update shared core and refresh the local setup surface
-curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/bootstrap-codex.sh | bash -s -- --skip-init
-python3 ./.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py --write
-python3 ./.codex/skills/seo-cycle/scripts/setup-control-plane.py --write
-
 # Knowledge Hub для проекта: wiki + Obsidian + Graphify/zvec distillates
 bash ./.codex/skills/seo-cycle/scripts/knowledge/wiki-refresh-all.sh
 bash ./.codex/skills/seo-cycle/scripts/knowledge/graphify-refresh.sh
 ```
 
-Codex — canonical runtime. Project bootstrap теперь **local-entrypoint + shared-core**: общий код обновляется в `~/.codex/vendor/seo-cycle`, а в конкретном проекте создаются только локальные entrypoints `./.codex/skills/seo-cycle`, `./.agents/skills/seo-cycle`, `./.claude/skills/seo-cycle` как symlink на shared core. Если проект не bootstrap'или, seo-cycle skills в нём не появляются и не читаются. Legacy global skill links доступны только через явный `--global-skill`. Bootstrap запускает wizard, создаёт `seo-cycle.yaml`, `.env.example`, `.env`, `AGENTS.md`, policy-файлы, setup blueprint/matrix, upgrade assistant, access-key assistant, context pack, spend guard, onboarding, roadmap и automation recommendations. Секреты не заполняются автоматически.
+Codex — canonical runtime. Общий код живёт в хранилище `~/.codex/vendor/seo-cycle`; в конкретном проекте — только локальные entrypoints `./.codex/skills/seo-cycle`, `./.agents/skills/seo-cycle`, `./.claude/skills/seo-cycle` как symlink на shared core. Если проект не подключали (attach/bootstrap), seo-cycle skills в нём не появляются и не читаются. Legacy global skill links доступны только через явный `--global-skill`. Установка запускает wizard, создаёт `seo-cycle.yaml`, `.env.example` (только имена ключей), `AGENTS.md`, policy-файлы, setup blueprint/matrix, upgrade assistant, access-key assistant, context pack, spend guard, onboarding, roadmap и automation recommendations. Значения ключей не заполняются автоматически — они регистрируются в Keychain через `ai-secret` (см. [INSTALL.md](INSTALL.md), Шаг 4); `.env` с реальными значениями политикой запрещён.
 
-WordPress/Novomira MCP тоже строго project-local и не создаётся bootstrap'ом по умолчанию. Включай его только в проектах, где он нужен: `python3 ./.codex/skills/seo-cycle/scripts/project-mcp-config.py --write` или `bootstrap-codex.sh --with-wordpress-mcp`. URL/user/password живут только в локальном `.env` или client-specific `.codex/config.toml` конкретного проекта.
+WordPress/Novomira MCP тоже строго project-local и не создаётся bootstrap'ом по умолчанию. Включай его только в проектах, где он нужен: `python3 ./.codex/skills/seo-cycle/scripts/project-mcp-config.py --write` или `bootstrap-codex.sh --with-wordpress-mcp`. URL/user/password регистрируются в Keychain через `ai-secret` (project-scope) или живут в client-specific `.codex/config.toml` конкретного проекта.
 
 WordPress-публикация и администрирование по умолчанию идут через обычный WordPress REST API + Application Password (`WP_BASE_URL`, `WP_USER`, `WP_APP_PASSWORD`): создание/обновление постов, страниц, товаров, мета, media и базовая работа с плагинами. Novomira MCP — не основной канал, а ручной project-local fallback для задач, где нужны его abilities, например Bricks-структуры или специальные plugin actions.
 
@@ -214,6 +226,6 @@ seo-cycle/
 
 ## Шаринг
 
-Каталог самодостаточен, секретов нет (ключи — только в `.env` проектов). Git / zip / Claude-plugin — см. [INSTALL.md](INSTALL.md) → «Как поделиться скиллом».
+Каталог самодостаточен, секретов нет (значения ключей — только в Keychain проектов, `.env.example` содержит лишь имена). Git / zip / Claude-plugin — см. [INSTALL.md](INSTALL.md) → «Как поделиться скиллом».
 
 Лицензия: PolyForm Noncommercial 1.0.0 — см. [LICENSE](LICENSE).

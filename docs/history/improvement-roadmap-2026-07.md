@@ -1,3 +1,5 @@
+> **Исторический документ.** Данные на 2026-07 (проект emwoody, до переезда на Mac Studio). Статусы шагов ниже больше не обновляются и могут не отражать текущее состояние проекта — документ сохранён как срез решений того периода, не как актуальный план.
+
 # Пошаговый план улучшений — данные Эмвуди, 2026-07-05 (ревизия 2026-07-10)
 
 Каждый шаг: **что → команда → ожидаемый эффект (из аналитики) → метрика контроля**.
@@ -10,7 +12,7 @@
 > топ-10 419→381 — кластер «затирка/расход клея» сполз на 12–17 места (сигнал
 > на refresh, топ-30 стабилен), топ-3 24→29. Upside-очередь пересчиталась:
 > **plywood +9.0k → membranes +8.5k → osp +7.7k**. Один ручной шаг: `bash
-> scripts/install-schedule.sh --project /Users/turvodnik/AI/emwoody` —
+> scripts/install-schedule.sh --project <путь-проекта-до-миграции-на-Mac-Studio>` —
 > перевести daily-джоб на pulse.
 >
 > **Ревизия 11.07 (v1.90.1–v1.91)**: расписание перевыпущено — daily-джоб
@@ -72,7 +74,7 @@ XMLRiver-экспорт топ-10 по ядру → `serp-validation-import --wr
 Метрика: findings critical/error = 0 в `seo/crawl/site-crawl.md`.
 
 **7. GBP + GEO-табло** *(человек 40 мин + машина)*
-Подача verification по [gbp-verification-submission.md](gbp-verification-submission.md); до одобрения — Testing-режим. Параллельно старт журнала цитируемости: `seo-cycle geo-log --record …` после каждой AI-проверки бренда.
+Подача verification по [gbp-verification-submission.md](../gbp-verification-submission.md); до одобрения — Testing-режим. Параллельно старт журнала цитируемости: `seo-cycle geo-log --record …` после каждой AI-проверки бренда.
 Метрика: gbp-health `available`; тренд в `seo-cycle geo-log` ≥1 замер/мес на движок.
 
 **8. Портфель: включить остальные проекты** *(по 20 мин на проект)*

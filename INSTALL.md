@@ -263,7 +263,7 @@ sources:
 ```yaml
   neuronwriter:
     enabled: true
-    api_key_env: NEURON_API_KEY        # ключ в .env
+    api_key_env: NEURON_API_KEY        # имя env-переменной (значение — в Keychain через ai-secret)
     project_id: "<твой ID из NW>"
 
   answerthepublic:
@@ -319,41 +319,39 @@ python3 ./.codex/skills/seo-cycle/scripts/validate-config.py <project-root>/seo-
 
 ---
 
-## Шаг 4. Подключить API-ключи в .env
+## Шаг 4. Подключить API-ключи через Keychain (`ai-secret`)
 
-По чек-листу из валидатора. Типичные ключи:
+**`.env` с реальными значениями запрещён политикой (§5 глобальных правил).** Значения ключей живут в macOS Keychain, доступ к ним — только через инструмент `ai-secret`; `.env.example` в проекте — каталог ИМЁН без значений (см. `docs/oauth-setup.md` — как получить каждый ключ).
+
+По чек-листу из валидатора зарегистрируй нужные проекту ключи в Keychain (человек вводит значение скрытым вводом, агент значений не видит):
 
 ```bash
-# .env проекта (НЕ коммитить!)
+# scope — слаг проекта (например emwoody) или global
+ai-secret set <project-scope> NEURON_API_KEY
+ai-secret set <project-scope> TOKEN_ANSWERTHEPUBLIC
+ai-secret set <project-scope> WP_BASE_URL
+ai-secret set <project-scope> WP_USER
+ai-secret set <project-scope> WP_APP_PASSWORD
+ai-secret set <project-scope> WOO_REST_API_KEY
+ai-secret set <project-scope> WOO_REST_API_SECRET
+ai-secret set <project-scope> DATAFORSEO_LOGIN
+ai-secret set <project-scope> DATAFORSEO_PASSWORD
+# полный список имён — .env.example проекта
+```
 
-# NeuronWriter
-NEURON_API_KEY=your_key_here
-NEURON_LIMITS_FILE=seo/neuronwriter-limits.yaml
-# Optional, only when your NeuronWriter account/API docs expose a different plagiarism endpoint path:
-# NW_PLAGIARISM_PATH=/check-plagiarism
+Не заполняющиеся ключи (опции, которые не используешь) просто не регистрируй — валидатор считает отсутствующий необязательный ключ нормой.
 
-# Google Cloud Natural Language (только после budget + local guards)
-GOOGLE_NLP_ENABLED=0
-GOOGLE_NLP_POLICY_FILE=seo/entities/google-nlp-policy.yaml
+Скрипты и агент получают значения только в окружении дочернего процесса, не читая их сами:
 
-# AnswerThePublic
-TOKEN_ANSWERTHEPUBLIC=atp_pk_live_...
+```bash
+ai-secret run <project-scope> -- seo-cycle <команда>
+```
 
-# WordPress REST API — основной канал, если publishing.cms = wordpress
-WP_BASE_URL=https://example.com
-WP_USER=admin
-WP_APP_PASSWORD=xxxx xxxx xxxx xxxx
-WOO_REST_API_KEY=ck_...
-WOO_REST_API_SECRET=cs_...
+Если в проекте уже есть legacy `.env` со значениями — перенеси разово и удали файл:
 
-# WordPress MCP / Novomira — optional fallback, only when explicitly installed
-WP_API_URL=https://example.com/wp-json/mcp/novamira
-WP_API_USERNAME=...
-WP_API_PASSWORD=...
-
-# DataForSEO (опционально)
-DATAFORSEO_LOGIN=...
-DATAFORSEO_PASSWORD=...
+```bash
+ai-secret import <project-scope> .env
+rm .env
 ```
 
 ---
@@ -399,7 +397,10 @@ seo/project-intake.yaml
 .codex/skills/seo-cycle -> ~/.codex/vendor/seo-cycle
 .agents/skills/seo-cycle -> .codex/skills/seo-cycle
 .claude/skills/seo-cycle -> .codex/skills/seo-cycle
-.codex/config.toml        # project-local MCP wrapper, secrets read from .env
+.codex/config.toml        # project-local MCP wrapper (известное исключение: этот
+                           # конкретный интеграционный путь пока читает секреты из
+                           # .env при MCP-старте, а не через ai-secret — легаси
+                           # project-mcp-config.py, чинится отдельно, не Шагом 4)
 AGENTS.md                 # project-local wrapper, if project did not have one
 ```
 
@@ -440,7 +441,7 @@ python3 ./.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-d
 
 `project-upgrade-assistant.py` — review-only помощник для существующих проектов. Сравнивает проект с текущим template/control-plane surface, пишет `seo/setup/upgrade-assistant.md/json`, latest copies и `seo/setup/upgrade-questionnaire.csv` с yes/no/defer вопросами. `seo-cycle.yaml` не меняет.
 
-`access-key-assistant.py` — project-specific помощник по ключам/токенам. Читает tool-stack decision report и `.env`, пишет `seo/setup/access-key-assistant.md/json/csv` только с нужными провайдерами, env names, ссылками и шагами. Secret values не печатает и не сохраняет.
+`access-key-assistant.py` — project-specific помощник по ключам/токенам. Читает tool-stack decision report, пишет `seo/setup/access-key-assistant.md/json/csv` только с нужными провайдерами, env names, ссылками и шагами. Secret values не печатает и не сохраняет; известное исключение — сгенерированные шаги-подсказки этого конкретного помощника пока советуют «скопировать в `.env`» вместо `ai-secret set` (легаси текст самого скрипта, чинится отдельно, не Шагом 4).
 
 `setup-gap-audit.py` — детальный first-run readiness audit. Пишет `seo/setup/setup-gap-audit.md/json`, `seo/setup/setup-questionnaire.md/csv/json` и latest copies: score, missing fields, owner questions, target files, follow-up commands и project-type-aware проверки local/ecommerce/budget/tools без вывода секретов.
 
@@ -583,7 +584,7 @@ sources:
 <project-root>/
 ├── seo-cycle.yaml                       # КОНФИГ проекта
 ├── CLAUDE.md                            # правила проекта (опционально)
-├── .env                                 # API ключи (gitignore!)
+├── .env.example                         # только имена ключей (значения — в Keychain через ai-secret)
 ├── seo/
 │   ├── cycles/<topic>-<quarter>/        # снапшоты циклов (создаётся скиллом)
 │   ├── entities/entities.yaml           # реестр сущностей
@@ -617,11 +618,11 @@ sources:
 
 **«Конфиг не найден»** — скилл искал в 4 локациях, всех нет. Проверь имя файла и место (см. начало этого документа).
 
-**«Source X enabled but env-var Y not set»** — открой .env, добавь ключ; или временно отключи источник.
+**«Source X enabled but env-var Y not set»** — зарегистрируй ключ через `ai-secret set <project-scope> <ИМЯ>` (см. Шаг 4); или временно отключи источник.
 
 **«delegate.* refers to skill that doesn't exist»** — либо установи нужный project-local skill/agent в `.agents/skills/` или `.claude/skills/`, либо удали поле из `delegate.*` — используется fallback.
 
-**«NW evaluate fails»** — проверь project_id в конфиге; запусти `./.codex/skills/seo-cycle/scripts/test-neuronwriter.py` для диагностики.
+**«NW evaluate fails»** — проверь project_id в конфиге; запусти `ai-secret run <project-scope> -- ./.codex/skills/seo-cycle/scripts/nw-cli.sh projects` для диагностики (список проектов подтверждает, что ключ и доступ рабочие).
 
 См. `docs/troubleshooting.md` для полного списка.
 
@@ -629,9 +630,9 @@ sources:
 
 ## Как поделиться скиллом
 
-Скилл самодостаточен: вся общая логика — в `~/.codex/vendor/seo-cycle/` (код, конфиг-шаблон, профили, промпты, доки). В проекте лежат только локальные entrypoints/symlinks, конфиг, правила и ключи (`.env`, `seo-cycle.yaml`, `seo/project-rules.md`, контент).
+Скилл самодостаточен: вся общая логика — в `~/.codex/vendor/seo-cycle/` (код, конфиг-шаблон, профили, промпты, доки). В проекте лежат только локальные entrypoints/symlinks, конфиг, правила и `.env.example` (`seo-cycle.yaml`, `seo/project-rules.md`, контент) — значения ключей в проекте не хранятся, они в Keychain через `ai-secret`.
 
-**Что шарить:** GitHub repo `turvodnik/seo-cycle`. Секретов в нём нет — ключи только в `.env` проектов.
+**Что шарить:** GitHub repo `turvodnik/seo-cycle`. Секретов в нём нет — значения ключей живут в Keychain каждой машины, в проектах — только имена (`.env.example`).
 
 **Способы:**
 1. **Git-репозиторий (рекомендуется).**
@@ -648,7 +649,8 @@ sources:
 pip3 install pyyaml requests pillow beautifulsoup4 google-auth
 cd <свой-проект>
 ./.codex/skills/seo-cycle/scripts/init-project.sh   # wizard → seo-cycle.yaml
-# заполнить .env своими ключами (см. .env.example)
+# зарегистрировать ключи в Keychain по .env.example (см. Шаг 4)
+ai-secret set <project-scope> <ИМЯ_КЛЮЧА>
 python3 ./.codex/skills/seo-cycle/scripts/validate-config.py
 ```
 Дальше — в Claude Code или Codex: «запусти SEO-цикл для категории X».
