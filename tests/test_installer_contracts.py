@@ -760,10 +760,21 @@ class UpgradeAllPartialFailureReportedTest(InstallerFixture):
     used to kill --upgrade-all's whole loop, leaving no summary and an
     undiscoverable mixed portfolio state (reviewer's live 3-project run:
     first re-pinned, second failed, third never touched, no report at all).
-    Chosen fix: isolate each project's attach in a subshell and print an
-    explicit 'перепинено / не тронуто / упало' report with a non-zero exit —
-    preferred over two-phase atomicity because it needs no extra network
-    round-trip and cannot itself have a distinct failure mode."""
+    Chosen fix: isolate each project's attach — `set +e` / bare subshell with
+    `set -e` restored INSIDE it / `rc=$?` / `set -e` restored here — and
+    print an explicit 'перепинено / не тронуто / упало' report with a
+    non-zero exit, preferred over two-phase atomicity because it needs no
+    extra network round-trip and cannot itself have a distinct failure mode.
+
+    A first version wrote `( set -e; attach_project "$p" ) || rc=$?` — the
+    subshell is the LEFT operand of `||`, so bash's errexit-exemption for a
+    command tested by if/&&/|| applies to it (and propagates into everything
+    it calls): the inner `set -e` was inert on the gate's own system bash
+    (3.2.57), and a project that failed on an unguarded command (e.g. `ln -s`
+    inside replace_with_symlink) was silently counted as a success with its
+    lock rewritten and its symlink left on the old version. The three tests
+    below isolate the two independent things that fix depends on — one
+    mutation, one behavioural difference, one test each."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -776,19 +787,34 @@ class UpgradeAllPartialFailureReportedTest(InstallerFixture):
             )
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
-    def _break_project_b(self) -> None:
-        # Force attach_project()'s `mkdir -p ".../external"` to fail for
-        # project_b only, deterministically and with zero network — this
-        # tests the reporting mechanism itself, independent of the
-        # offline-refusal fix above.
+    def _break_project_b_mkdir(self) -> None:
+        # Force attach_project()'s guarded `mkdir -p ".../external"` to fail
+        # for project_b only, deterministically and with zero network —
+        # the directory is removed first so mkdir must actually try (and
+        # fail) to create it. This failure is caught by an explicit
+        # `|| exit 1` guard, independent of whether `set -e` is live.
         ext = self.project_b / ".agents" / "external"
         if ext.exists():
             shutil.rmtree(ext)
         (self.project_b / ".agents").chmod(0o500)
         self.addCleanup(lambda: (self.project_b / ".agents").chmod(0o700))
 
+    def _break_project_b_symlink_only(self) -> None:
+        # Chmod the "external" dir AFTER it already exists (from setUp's
+        # successful attach): `mkdir -p` on an EXISTING directory only needs
+        # to stat it, not write to it, so the guarded mkdir call SUCCEEDS
+        # here — the mkdir guard never fires. Only the unguarded `rm`/`ln -s`
+        # inside replace_with_symlink() need write access to the directory
+        # to replace the existing symlink, and THOSE fail — a failure with
+        # no explicit guard at all, caught only by `set -e` being genuinely
+        # live. This isolates the inner `set -e` from the mkdir guard.
+        ext = self.project_b / ".agents" / "external"
+        assert (ext / "seo-cycle").is_symlink(), "setUp должен был создать симлинк до порчи прав"
+        ext.chmod(0o500)
+        self.addCleanup(lambda: ext.chmod(0o700))
+
     def test_one_project_failing_is_reported_not_silently_swallowed(self) -> None:
-        self._break_project_b()
+        self._break_project_b_mkdir()
         proc = self.run_install("--upgrade-all", "--pin", "v1.0.0")
         self.assertNotEqual(
             proc.returncode, 0,
@@ -802,91 +828,196 @@ class UpgradeAllPartialFailureReportedTest(InstallerFixture):
             f"должен быть явный отчёт о смешанном состоянии портфеля — {combined!r}",
         )
 
-    def test_reverting_the_subshell_isolation_kills_the_whole_run_silently(self) -> None:
-        """Genuine mutation: without the per-project subshell, project_b's
-        `exit` inside attach_project() ends upgrade_all()'s ENTIRE loop — no
-        summary is printed at all, and the first (successful) project is
-        never reported either."""
+    def _run_mutated(self, mutated_source: str, *args: str) -> subprocess.CompletedProcess:
+        mutated_path = self.tmp / "install.mutated.sh"
+        mutated_path.write_text(mutated_source, encoding="utf-8")
+        full_env = {
+            **os.environ, "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+        }
+        return subprocess.run(
+            ["bash", str(mutated_path), *args],
+            env=full_env, capture_output=True, text=True,
+        )
+
+    def test_reverting_all_isolation_kills_the_whole_run_silently(self) -> None:
+        """Mutation #1, isolating ONE thing: remove the isolation wrapper
+        entirely (no subshell, no set +e/-e at all) — attach_project() runs
+        directly in upgrade_all()'s own shell. project_b's guarded mkdir
+        failure calls `exit 1` unconditionally, which now kills the WHOLE
+        script (not just project_b's turn): no summary is printed, and even
+        the first (successful) project is never reported."""
         source = INSTALL.read_text(encoding="utf-8")
         old = (
-            '            rc=0\n'
-            '            ( set -e; PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p" ) || rc=$?\n'
+            '            set +e\n'
+            '            ( set -e; PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p" )\n'
+            '            rc=$?\n'
+            '            set -e\n'
         )
         new = (
             '            PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p"\n'
-            '            rc=0\n'
+            '            rc=$?\n'
         )
-        assert old in source, "мутация не нашла subshell-изоляцию в upgrade_all()"
+        assert old in source, "мутация не нашла isolation-обёртку в upgrade_all()"
         mutated = source.replace(old, new, 1)
-        mutated_path = self.tmp / "install.mutated.sh"
-        mutated_path.write_text(mutated, encoding="utf-8")
 
-        self._break_project_b()
-        full_env = {
-            **os.environ, "HOME": str(self.home),
-            "SEO_CYCLE_SHARED_DIR": str(self.shared),
-            "SEO_CYCLE_CORE": str(self.core),
-            "SEO_CYCLE_REPO": str(self.origin),
-        }
-        proc = subprocess.run(
-            ["bash", str(mutated_path), "--upgrade-all", "--pin", "v1.0.0"],
-            env=full_env, capture_output=True, text=True,
-        )
+        self._break_project_b_mkdir()
+        proc = self._run_mutated(mutated, "--upgrade-all", "--pin", "v1.0.0")
         combined = proc.stdout + proc.stderr
         self.assertNotIn(
             "Итог --upgrade-all", combined,
-            f"без subshell-изоляции итоговый отчёт вообще не должен успеть напечататься — {combined!r}",
+            f"без изоляции итоговый отчёт вообще не должен успеть напечататься — {combined!r}",
         )
 
     def test_reverting_just_the_inner_set_e_reports_a_false_success(self) -> None:
-        """Second negative control, isolating the OTHER half of the fix: the
-        outer `( … )` subshell alone is not what makes isolation honest — a
-        bare `if ( cmd ); then` would silently disable errexit for every
-        plain command inside attach_project() (a documented bash quirk: the
-        errexit exemption of an if/&&/||-tested command propagates into
-        functions and subshells it calls). Strip only the inner `set -e;`
-        AND the explicit mkdir guard added alongside it, keeping the outer
-        subshell isolation intact: project_b's mkdir now fails silently, the
-        function reaches write_lock_entry() anyway, and the subshell exits
-        0 — proving `set -e` restoration (not just 'having a subshell') is
-        what makes the isolation trustworthy."""
+        """Mutation #2, isolating the OTHER thing: keep the exact `set +e` /
+        subshell / `rc=$?` / `set -e` shape, strip ONLY the inner `set -e;`
+        inside the subshell. Break project_b via the symlink-only path (the
+        guarded mkdir succeeds — the directory already exists — so this
+        exercises solely the unguarded `rm`/`ln -s` inside
+        replace_with_symlink()). Without `set -e` genuinely live inside the
+        subshell, that failure is swallowed, attach_project() reaches
+        write_lock_entry() anyway, and the subshell's own exit status is 0
+        — project_b is wrongly counted as 'перепинено' with its lock
+        rewritten and its symlink left on the old version (the exact defect
+        the gate found live on bash 3.2.57)."""
         source = INSTALL.read_text(encoding="utf-8")
-        old_wrapper = '( set -e; PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p" ) || rc=$?'
-        new_wrapper = '( PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p" ) || rc=$?'
-        old_guard = (
-            'mkdir -p "$project_dir/.agents/external" || '
-            '{ warn "$project_dir: не удалось создать .agents/external — перепин прерван"; exit 1; }'
-        )
-        new_guard = 'mkdir -p "$project_dir/.agents/external"'
-        assert old_wrapper in source, "мутация не нашла inner set -e в upgrade_all()"
-        assert old_guard in source, "мутация не нашла mkdir guard в attach_project()"
-        mutated = source.replace(old_wrapper, new_wrapper, 1).replace(old_guard, new_guard, 1)
-        mutated_path = self.tmp / "install.mutated.sh"
-        mutated_path.write_text(mutated, encoding="utf-8")
+        old = '( set -e; PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p" )'
+        new = '( PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p" )'
+        assert old in source, "мутация не нашла inner set -e в upgrade_all()"
+        mutated = source.replace(old, new, 1)
 
-        self._break_project_b()
-        full_env = {
-            **os.environ, "HOME": str(self.home),
-            "SEO_CYCLE_SHARED_DIR": str(self.shared),
-            "SEO_CYCLE_CORE": str(self.core),
-            "SEO_CYCLE_REPO": str(self.origin),
-        }
-        proc = subprocess.run(
-            ["bash", str(mutated_path), "--upgrade-all", "--pin", "v1.0.0"],
-            env=full_env, capture_output=True, text=True,
-        )
+        self._break_project_b_symlink_only()
+        old_symlink_target = os.readlink(self.project_b / ".agents" / "external" / "seo-cycle")
+        proc = self._run_mutated(mutated, "--upgrade-all", "--pin", "v1.0.0")
         combined = proc.stdout + proc.stderr
+
         self.assertEqual(
             proc.returncode, 0,
-            f"без inner set -e project_b обязан был быть ошибочно засчитан как успех — {combined!r}",
+            f"без inner set -e весь прогон обязан был ложно завершиться успехом — {combined!r}",
         )
         self.assertIn(
             str(self.project_b), combined,
-            f"project_b должен быть где-то в отчёте (ложно, в 'перепинено') — {combined!r}",
+            f"project_b должен быть в отчёте — ложно, в 'перепинено' — {combined!r}",
         )
         self.assertNotIn(
             "упало", combined,
             f"без inner set -e падение project_b не должно быть даже замечено — {combined!r}",
+        )
+        new_symlink_target = os.readlink(self.project_b / ".agents" / "external" / "seo-cycle")
+        self.assertEqual(
+            old_symlink_target, new_symlink_target,
+            "симлинк должен остаться на СТАРОЙ версии несмотря на 'успешный' лок — "
+            "это и есть расхождение лока и ссылки, которое ловит этот тест",
+        )
+
+
+class OptionalKeywordsOutageDoesNotBlockSeoCycleTest(InstallerFixture):
+    """T-064 (defect 3, 🟡 sузилось): seo-keywords is documented as an
+    OPTIONAL sibling (R4/D5, attach_project()'s own comment) — its origin
+    being unreachable must not block the MANDATORY seo-cycle pin. The
+    base install.sh degraded gracefully here (latest_tag() always returned
+    0 with the ORIGINAL, pre-T-064 fallback). Fixing the mandatory path's
+    honesty (latest_tag() now returns 1 when origin is unreachable) turned a
+    bare `kw_pin="$(latest_tag "$KW_CORE")"` assignment into a hard abort
+    of the WHOLE attach — under `set -e`, a failing command substitution
+    inside a bare variable assignment DOES trip errexit (unlike the same
+    substitution used as a plain argument), so seo-keywords' own outage
+    started refusing seo-cycle too (caught live: gate064's kwint.sh).
+
+    This class wires its OWN local seo-keywords origin (InstallerFixture
+    does not — a real seo-keywords is cloned from GitHub in those tests,
+    which cannot be made "unreachable" from a unit test)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.kw_origin = self.tmp / "kw-origin.git"
+        _git(self.tmp, "init", "--bare", "-q", str(self.kw_origin))
+        kw_seed = self.tmp / "kw-seed"
+        _git(self.tmp, "clone", "-q", str(self.kw_origin), str(kw_seed))
+        (kw_seed / "SKILL.md").write_text("# fake seo-keywords\n", encoding="utf-8")
+        _git(kw_seed, "checkout", "-q", "-B", "main")
+        _git(kw_seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(kw_seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "seed")
+        _git(kw_seed, "tag", "v1.3.0")
+        _git(kw_seed, "push", "-q", "origin", "main", "--tags")
+        _git(self.kw_origin, "symbolic-ref", "HEAD", "refs/heads/main")
+        self.kw_core = self.shared / "seo-keywords"
+
+    def run_install_with_kw(self, *args: str) -> subprocess.CompletedProcess:
+        return self.run_install(*args, env={"SEO_KEYWORDS_REPO": str(self.kw_origin)})
+
+    def test_seo_keywords_origin_down_does_not_block_seo_cycle(self) -> None:
+        proc = self.run_install_with_kw(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertTrue(self.kw_core.is_dir(), "seo-keywords должен был клонироваться локально")
+
+        kw_offline = self.kw_origin.with_name(self.kw_origin.name + ".OFFLINE")
+        self.kw_origin.rename(kw_offline)
+        try:
+            proc2 = self.run_install_with_kw("--upgrade-all", "--pin", "v1.0.0")
+        finally:
+            kw_offline.rename(self.kw_origin)
+
+        combined = proc2.stdout + proc2.stderr
+        self.assertEqual(
+            proc2.returncode, 0,
+            f"недоступность НЕОБЯЗАТЕЛЬНОГО seo-keywords не должна блокировать "
+            f"обязательный seo-cycle — {combined!r}",
+        )
+        self.assertIn(
+            "перепинено (1)", combined,
+            f"seo-cycle обязан быть перепинен несмотря на недоступный seo-keywords — {combined!r}",
+        )
+        lock = self.read_lock()
+        self.assertEqual(lock["external"]["seo-cycle"]["version"], "v1.0.0")
+
+    def test_reverting_the_kw_pin_fallback_blocks_seo_cycle_too(self) -> None:
+        """Genuine mutation: strip the `|| kw_pin=""` fallback and re-run the
+        exact same seo-keywords-outage scenario. Without it, latest_tag()'s
+        honest refusal (T-064's OTHER fix, both needed together) propagates
+        through the bare assignment and kills the whole attach — seo-cycle,
+        which had nothing wrong with it, gets refused too."""
+        source = INSTALL.read_text(encoding="utf-8")
+        old = 'kw_pin="$(latest_tag "$KW_CORE")" || kw_pin=""'
+        new = 'kw_pin="$(latest_tag "$KW_CORE")"'
+        assert old in source, "мутация не нашла kw_pin fallback в attach_project()"
+        mutated = source.replace(old, new, 1)
+        mutated_path = self.tmp / "install.mutated.sh"
+        mutated_path.write_text(mutated, encoding="utf-8")
+
+        proc = self.run_install_with_kw(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+        kw_offline = self.kw_origin.with_name(self.kw_origin.name + ".OFFLINE")
+        self.kw_origin.rename(kw_offline)
+        try:
+            full_env = {
+                **os.environ, "HOME": str(self.home),
+                "SEO_CYCLE_SHARED_DIR": str(self.shared),
+                "SEO_CYCLE_CORE": str(self.core),
+                "SEO_CYCLE_REPO": str(self.origin),
+                "SEO_KEYWORDS_REPO": str(self.kw_origin),
+            }
+            proc2 = subprocess.run(
+                ["bash", str(mutated_path), "--upgrade-all", "--pin", "v1.0.0"],
+                env=full_env, capture_output=True, text=True,
+            )
+        finally:
+            kw_offline.rename(self.kw_origin)
+
+        self.assertNotEqual(
+            proc2.returncode, 0,
+            "без fallback'а seo-keywords outage обязан был снова заблокировать "
+            f"seo-cycle — {proc2.stdout + proc2.stderr!r}",
         )
 
 

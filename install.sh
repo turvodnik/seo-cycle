@@ -740,7 +740,18 @@ PYEOF
         if [ "$NETWORK_ALLOWED" != "1" ]; then
             kw_pin="$(read_lock_version "$project_dir" "seo-keywords")"
         else
-            kw_pin="$(latest_tag "$KW_CORE")"
+            # T-064: seo-keywords is OPTIONAL — its own origin being
+            # unreachable must not abort the whole attach. latest_tag() now
+            # returns 1 (not just empty) when NETWORK_ALLOWED=1 and origin
+            # is down; a bare `kw_pin="$(latest_tag ...)"` is a plain
+            # assignment, and under `set -e` a failing command substitution
+            # in a bare assignment DOES abort the shell (unlike one used as
+            # a plain argument) — without the `|| kw_pin=""` fallback here,
+            # seo-keywords' own outage would kill attach_project() entirely,
+            # refusing the MANDATORY, independently-healthy seo-cycle pin
+            # too (caught live: gate064's kwint.sh — seo-cycle origin up,
+            # seo-keywords origin down, whole --upgrade-all still failed).
+            kw_pin="$(latest_tag "$KW_CORE")" || kw_pin=""
         fi
         if [ -n "$kw_pin" ]; then
             kw_target="$(ensure_worktree "$KW_CORE" "seo-keywords" "$kw_pin")" || kw_target=""
@@ -755,16 +766,11 @@ PYEOF
         fi
     fi
 
-    # T-064: this mkdir used to have no failure check — set -e does NOT stop
-    # a function for a plain command failure when that function was called
-    # from an `if`/`||`/`&&` condition (a documented bash quirk: the
-    # exemption from errexit propagates into called functions and
-    # subshells), which is exactly how --upgrade-all now invokes
-    # attach_project() (subshell-isolated per project, see upgrade_all()).
-    # Silently continuing past a failed mkdir here let the function reach
-    # write_lock_entry() and print "✓ lock" even though the symlink below
-    # was never created — a per-project silent lie, not just a portfolio-
-    # wide one. Fail loudly instead.
+    # T-064: this mkdir used to have no failure check at all — with `set -e`
+    # active and correctly propagating (see upgrade_all()'s subshell
+    # isolation), a bare failure here already stops the function; this
+    # explicit guard exists only to print a specific, honest message instead
+    # of leaving nothing but git/mkdir's own raw stderr line.
     mkdir -p "$project_dir/.agents/external" || { warn "$project_dir: не удалось создать .agents/external — перепин прерван"; exit 1; }
     replace_with_symlink "$target" "$project_dir/.agents/external/seo-cycle"
     if [ "$have_kw" = "1" ]; then
@@ -846,24 +852,30 @@ PYEOF
     # simpler, cannot itself have a distinct failure mode, and needs no extra
     # network round-trip per project.
     #
-    # `( set -e; … )` — NOT `if ( … ); then`: bash's errexit has a
-    # documented quirk where a command's failure does not trigger -e when
-    # that command is itself the thing being tested by an if/&&/||, and this
-    # exemption propagates into every function and subshell called from
-    # there. Putting the subshell directly in `if ( … ); then` would have
-    # silently disabled -e for EVERY plain command inside attach_project
-    # (mkdir, ln -s, mv, rm) — exactly the commands T-055 runs against live
-    # sites — turning a failed `ln -s` into an unnoticed "✓ lock" and a
-    # false "перепинено". Running the subshell as a plain statement first
-    # (its exit status captured via $?, checked by a separate `if` after the
-    # fact) keeps `set -e` live inside it.
+    # bash's errexit has a documented quirk: a command's failure does not
+    # trigger -e when that command is itself the thing being tested by an
+    # if/&&/||, and this exemption propagates into every function and
+    # subshell called from there. A first version of this fix wrote
+    # `( set -e; attach_project "$p" ) || rc=$?` — the subshell is the LEFT
+    # operand of `||`, so it is exactly such a tested command: the inner
+    # `set -e` was inert, EVERY plain command inside attach_project (mkdir,
+    # ln -s, mv, rm — exactly what T-055 runs against live sites) could fail
+    # silently, and a failed `ln -s` produced an unnoticed "✓ lock" and a
+    # false "перепинено" (caught live: gate064, bash 3.2.57, the shell this
+    # machine actually runs). The subshell must NOT be the tested command of
+    # any conditional — disable -e in THIS shell first (`set +e`), run the
+    # subshell as a bare, untested statement (its own `set -e` then genuinely
+    # governs everything inside it), capture $? only afterward, then restore
+    # `set -e` here.
     local updated=() failed=() missing=()
     local p rc
     while IFS= read -r p; do
         [ -n "$p" ] || continue
         if [ -d "$p" ]; then
-            rc=0
-            ( set -e; PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p" ) || rc=$?
+            set +e
+            ( set -e; PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p" )
+            rc=$?
+            set -e
             if [ "$rc" -eq 0 ]; then
                 updated+=("$p")
             else
