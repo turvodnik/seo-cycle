@@ -47,8 +47,10 @@ import datetime
 import fcntl
 import hashlib
 import json
+import math
 import os
 import pathlib
+import re
 import sys
 import tempfile
 import time
@@ -95,14 +97,29 @@ class UsageLedgerError(RuntimeError):
     платный вызов (T-059: ровно так и происходило до этого фикса)."""
 
 
+MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
+
+
 def usage_file(out_dir: pathlib.Path) -> pathlib.Path:
     return out_dir / "_usage.json"
 
 
+def _finite_nonneg(x: object) -> bool:
+    """Пригодно для денежной/счётной арифметики: число, не NaN/Infinity, не
+    отрицательное. `isinstance(x, (int, float))` одной этой проверки НЕДОСТАТОЧНО —
+    `json.loads` штатно парсит литералы `NaN`/`Infinity`/`-Infinity` в float, и они
+    проходят проверку типа, но `NaN >= budget` всегда ложно, а `NaN + cost` снова
+    NaN: бюджетный стоп молча отключается навсегда (T-059, находка ревью)."""
+    return (isinstance(x, (int, float)) and not isinstance(x, bool)
+            and math.isfinite(x) and x >= 0)
+
+
 def load_usage(out_dir: pathlib.Path) -> dict:
-    """Месячный учёт трат. Нечитаемый/повреждённый файл поднимает UsageLedgerError,
-    а не тихо возвращает «потрачено 0» — вызывающая сторона (fetch()) решает, что
-    делать: по умолчанию отказ, --force осознанно считает месяц заново."""
+    """Месячный учёт трат. Нечитаемый/повреждённый файл (включая NaN/Infinity/
+    отрицательный spent_usd, нечисловой calls, испорченный month) поднимает
+    UsageLedgerError, а не тихо возвращает «потрачено 0» — вызывающая сторона
+    (fetch()) решает, что делать: по умолчанию отказ, --force осознанно считает
+    месяц заново."""
     f = usage_file(out_dir)
     month = datetime.date.today().strftime("%Y-%m")
     if not f.exists():
@@ -111,22 +128,35 @@ def load_usage(out_dir: pathlib.Path) -> dict:
         u = json.loads(f.read_text(encoding="utf-8"))
     except (ValueError, OSError) as e:
         raise UsageLedgerError(f"{f}: {e}") from e
-    spent = u.get("spent_usd") if isinstance(u, dict) else None
-    if not isinstance(spent, (int, float)) or isinstance(spent, bool):
-        raise UsageLedgerError(f"{f}: нет числового поля spent_usd (испорченная схема)")
-    if u.get("month") != month:
+    if not isinstance(u, dict):
+        raise UsageLedgerError(f"{f}: ожидался JSON-объект, получено {type(u).__name__}")
+    spent = u.get("spent_usd")
+    if not _finite_nonneg(spent):
+        raise UsageLedgerError(f"{f}: spent_usd непригоден для денежной арифметики ({spent!r})")
+    if "calls" in u and not _finite_nonneg(u["calls"]):
+        raise UsageLedgerError(f"{f}: calls непригоден ({u['calls']!r})")
+    stored_month = u.get("month")
+    if not isinstance(stored_month, str) or not MONTH_RE.match(stored_month):
+        raise UsageLedgerError(f"{f}: поле month испорчено ({stored_month!r})")
+    if stored_month != month:
         return {"month": month, "spent_usd": 0.0, "calls": 0}
     return u
 
 
 def save_usage(out_dir: pathlib.Path, u: dict) -> None:
     """Атомарная запись: временный файл в той же папке + os.replace — читатель
-    никогда не увидит полузаписанный _usage.json при обрыве процесса (T-059)."""
+    никогда не увидит полузаписанный _usage.json при обрыве процесса (T-059).
+    Временный файл удаляется, если запись не дошла до replace (диск, сериализация)."""
     path = usage_file(out_dir)
     fd, tmp_name = tempfile.mkstemp(dir=out_dir, prefix=".usage-", suffix=".json.tmp")
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(u, f, indent=2, ensure_ascii=False)
-    os.replace(tmp_name, path)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(u, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_name, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
 
 
 @contextlib.contextmanager
@@ -145,17 +175,31 @@ def usage_lock(out_dir: pathlib.Path):
 
 def effective_budget(args) -> float:
     """--budget, ограниченный сверху governance.subscriptions.dataforseo.monthly_usd_cap
-    проекта, если конфиг найден и поле задано числом (T-059). Тот же путь читают
-    scripts/spend-guard.py и scripts/usage-ledger.py для всех платных подписок
-    проекта — это установленная конвенция схемы, а не новая. Конфиг без секции —
-    поведение как раньше (только --budget)."""
+    проекта, если конфиг найден и поле задано пригодным для арифметики числом
+    (T-059). Тот же путь читают scripts/spend-guard.py и scripts/usage-ledger.py
+    для всех платных подписок проекта — это установленная конвенция схемы, а не
+    новая. Конфиг без секции/файла — поведение как раньше (только --budget).
+    Битый YAML или мусор в самом значении cap — честный отказ (sys.exit), а не
+    молчаливый откат на --budget: иначе опечатка в конфиге тихо снимает лимит,
+    который человек специально понижал (ревью T-059, красный №1/№2 — тот же класс
+    «тип прошёл проверку, значение непригодно для денег»)."""
     cfg_path = find_config(pathlib.Path.cwd())
     if cfg_path is None:
         return args.budget
-    cap = nested_get(load_yaml(cfg_path), "governance.subscriptions.dataforseo.monthly_usd_cap")
-    if isinstance(cap, (int, float)) and not isinstance(cap, bool):
-        return min(args.budget, float(cap))
-    return args.budget
+    try:
+        cfg = load_yaml(cfg_path)
+    except Exception as e:
+        sys.exit(f"ERROR: {cfg_path} не парсится как YAML ({e}). Почини конфиг или "
+                 f"убери секцию governance.subscriptions.dataforseo, чтобы работать "
+                 f"только по --budget.")
+    cap = nested_get(cfg, "governance.subscriptions.dataforseo.monthly_usd_cap")
+    if cap is None:
+        return args.budget
+    if not _finite_nonneg(cap):
+        sys.exit(f"ERROR: governance.subscriptions.dataforseo.monthly_usd_cap в "
+                 f"{cfg_path} непригоден для денежной арифметики ({cap!r}). Почини "
+                 f"значение или убери ключ, чтобы работать только по --budget.")
+    return min(args.budget, float(cap))
 
 
 # ---------- транспорт ----------

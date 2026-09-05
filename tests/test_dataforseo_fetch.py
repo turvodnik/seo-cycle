@@ -196,6 +196,97 @@ class LedgerCorruptionTest(unittest.TestCase):
         self.assertAlmostEqual(usage["spent_usd"], 0.02, msg="--force считает месяц заново, "
                                                               "а не наследует битые данные")
 
+    def test_nan_spent_usd_is_treated_as_corrupt(self) -> None:
+        """Гейт T-059 (красный №1): json.loads штатно парсит литерал NaN в
+        float('nan'), который проходит isinstance(x, (int, float)) — тип один,
+        пригодность для арифметики другая. NaN >= budget всегда ложно, NaN + cost
+        снова NaN — бюджетный стоп молча отключается навсегда."""
+        (self.tmp / "_usage.json").write_text(
+            '{"month": "2099-01", "spent_usd": NaN, "calls": 0}', encoding="utf-8")
+        with self.assertRaises(dfs.UsageLedgerError):
+            dfs.load_usage(self.tmp)
+
+    def test_infinity_spent_usd_is_treated_as_corrupt(self) -> None:
+        (self.tmp / "_usage.json").write_text(
+            '{"month": "2099-01", "spent_usd": Infinity, "calls": 0}', encoding="utf-8")
+        with self.assertRaises(dfs.UsageLedgerError):
+            dfs.load_usage(self.tmp)
+
+    def test_negative_spent_usd_is_treated_as_corrupt(self) -> None:
+        (self.tmp / "_usage.json").write_text(
+            json.dumps({"month": "2099-01", "spent_usd": -5.0, "calls": 0}), encoding="utf-8")
+        with self.assertRaises(dfs.UsageLedgerError):
+            dfs.load_usage(self.tmp)
+
+    def test_non_numeric_calls_is_treated_as_corrupt(self) -> None:
+        """Гейт T-059 (красный №2): раньше платный вызов уходил, потом на
+        `u.get("calls", 0) + 1` падал TypeError, и save_usage() не успевал
+        выполниться — деньги потрачены и не учтены, причём при каждом запуске.
+        Проверка теперь идёт вместе с spent_usd, до платного вызова."""
+        (self.tmp / "_usage.json").write_text(
+            json.dumps({"month": "2099-01", "spent_usd": 1.0, "calls": "много"}), encoding="utf-8")
+        with self.assertRaises(dfs.UsageLedgerError):
+            dfs.load_usage(self.tmp)
+
+    def test_corrupted_month_type_is_treated_as_corrupt(self) -> None:
+        """Жёлтый T-059: раньше любое не-строковое/неформатное значение month
+        просто не совпадало с текущим месяцем по `!=` и тихо трактовалось как
+        легитимная смена месяца — то есть снова «потрачено 0» под видом нормы."""
+        (self.tmp / "_usage.json").write_text(
+            json.dumps({"month": 12345, "spent_usd": 1.0, "calls": 0}), encoding="utf-8")
+        with self.assertRaises(dfs.UsageLedgerError):
+            dfs.load_usage(self.tmp)
+
+    def test_nan_spent_usd_blocks_paid_call_without_force(self) -> None:
+        (self.tmp / "_usage.json").write_text(
+            '{"month": "2099-01", "spent_usd": NaN, "calls": 0}', encoding="utf-8")
+        with mock.patch.object(dfs, "call") as called:
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "some/path", {"k": 1}, self.args)
+            called.assert_not_called()
+
+    def test_non_numeric_calls_blocks_paid_call_without_force(self) -> None:
+        (self.tmp / "_usage.json").write_text(
+            json.dumps({"month": "2099-01", "spent_usd": 1.0, "calls": "много"}), encoding="utf-8")
+        with mock.patch.object(dfs, "call") as called:
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "some/path", {"k": 1}, self.args)
+            called.assert_not_called()
+
+
+class SaveUsageAtomicityTest(unittest.TestCase):
+    """T-059: атомарность (temp-файл + os.replace) не была покрыта ни одним тестом —
+    единственная из мутаций ревью, которая ничего не уронила. Проверяем поведение,
+    а не реализацию: настоящий файл не портится и не остаётся мусора, если запись
+    оборвалась на середине."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-atomic-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+
+    def test_real_file_untouched_if_write_fails_midway(self) -> None:
+        good = {"month": "2000-01", "spent_usd": 1.23, "calls": 4}
+        dfs.usage_file(self.tmp).write_text(json.dumps(good), encoding="utf-8")
+        with mock.patch.object(dfs.json, "dump", side_effect=RuntimeError("диск кончился")):
+            with self.assertRaises(RuntimeError):
+                dfs.save_usage(self.tmp, {"month": "2099-01", "spent_usd": 999.0, "calls": 1})
+        on_disk = json.loads(dfs.usage_file(self.tmp).read_text(encoding="utf-8"))
+        self.assertEqual(on_disk, good, "os.replace не должен был выполниться — "
+                                         "старые данные обязаны остаться нетронутыми")
+
+    def test_no_leftover_temp_file_after_write_failure(self) -> None:
+        with mock.patch.object(dfs.json, "dump", side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                dfs.save_usage(self.tmp, {"month": "2099-01", "spent_usd": 1.0, "calls": 1})
+        leftovers = list(self.tmp.glob(".usage-*"))
+        self.assertEqual(leftovers, [], f"временный файл должен удаляться при сбое: {leftovers}")
+
+    def test_successful_write_leaves_no_temp_file_either(self) -> None:
+        dfs.save_usage(self.tmp, {"month": "2099-01", "spent_usd": 1.0, "calls": 1})
+        leftovers = list(self.tmp.glob(".usage-*"))
+        self.assertEqual(leftovers, [])
+        self.assertTrue(dfs.usage_file(self.tmp).exists())
+
 
 class ConfigBudgetTest(unittest.TestCase):
     """T-059: governance.subscriptions.dataforseo.monthly_usd_cap проекта берётся
@@ -271,6 +362,43 @@ class ConfigBudgetTest(unittest.TestCase):
             with mock.patch.object(dfs, "call", return_value=volume_response(0.01)) as called:
                 dfs.fetch("b64", "some/path", {"k": 1}, self.args)
                 called.assert_called_once()
+
+    def test_non_numeric_cap_is_honest_failure_not_silent_fallback(self) -> None:
+        """Гейт T-059 (жёлтый): раньше мусор в monthly_usd_cap молча откатывался на
+        --budget — опечатка в конфиге («unlimited» вместо числа) тихо снимала лимит,
+        который человек специально понижал. Теперь — честный sys.exit."""
+        with mock.patch.object(dfs, "find_config", return_value=self.fake_cfg_path), \
+             mock.patch.object(dfs, "load_yaml",
+                               return_value={"governance": {"subscriptions":
+                                             {"dataforseo": {"monthly_usd_cap": "unlimited"}}}}):
+            with self.assertRaises(SystemExit) as ctx:
+                dfs.effective_budget(self.args)
+        self.assertTrue(ctx.exception.code)
+
+    def test_negative_cap_is_honest_failure(self) -> None:
+        with mock.patch.object(dfs, "find_config", return_value=self.fake_cfg_path), \
+             mock.patch.object(dfs, "load_yaml",
+                               return_value={"governance": {"subscriptions":
+                                             {"dataforseo": {"monthly_usd_cap": -1}}}}):
+            with self.assertRaises(SystemExit):
+                dfs.effective_budget(self.args)
+
+    def test_nan_cap_is_honest_failure(self) -> None:
+        with mock.patch.object(dfs, "find_config", return_value=self.fake_cfg_path), \
+             mock.patch.object(dfs, "load_yaml",
+                               return_value={"governance": {"subscriptions":
+                                             {"dataforseo": {"monthly_usd_cap": float("nan")}}}}):
+            with self.assertRaises(SystemExit):
+                dfs.effective_budget(self.args)
+
+    def test_malformed_yaml_gives_clean_exit_not_traceback(self) -> None:
+        """Жёлтый T-059: битый YAML раньше давал необработанный yaml.YAMLError."""
+        self.fake_cfg_path.write_text("governance:\n  subscriptions: [это не словарь\n",
+                                       encoding="utf-8")
+        with mock.patch.object(dfs, "find_config", return_value=self.fake_cfg_path):
+            with self.assertRaises(SystemExit) as ctx:
+                dfs.effective_budget(self.args)
+        self.assertTrue(ctx.exception.code)
 
 
 class ConcurrencyTest(unittest.TestCase):
