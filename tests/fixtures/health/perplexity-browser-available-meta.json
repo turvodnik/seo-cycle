@@ -6,6 +6,6 @@
   "write_meta": {
     "rc": 0,
     "stderr": "",
-    "stdout": "Wrote /private/tmp/health-golden-fixture-cwd/ru/seo/setup/perplexity-health.md\n"
+    "stdout": "Wrote <CWD-ROOT>/ru/seo/setup/perplexity-health.md\n"
   }
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pathlib
+import sys
 from typing import Any
 
 try:
@@ -101,8 +102,6 @@ def coerce_int(value: Any, default: int, *, name: str = "") -> int:
     try:
         return int(value or default)
     except (TypeError, ValueError):
-        import sys
-
         label = f" ({name})" if name else ""
         print(f"WARNING: bad integer config value{label}: {value!r} — using default {default}", file=sys.stderr)
         return default
