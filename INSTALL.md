@@ -319,41 +319,39 @@ python3 ./.codex/skills/seo-cycle/scripts/validate-config.py <project-root>/seo-
 
 ---
 
-## Шаг 4. Подключить API-ключи в .env
+## Шаг 4. Подключить API-ключи через Keychain (`ai-secret`)
 
-По чек-листу из валидатора. Типичные ключи:
+**`.env` с реальными значениями запрещён политикой (§5 глобальных правил).** Значения ключей живут в macOS Keychain, доступ к ним — только через инструмент `ai-secret`; `.env.example` в проекте — каталог ИМЁН без значений (см. `docs/oauth-setup.md` — как получить каждый ключ).
+
+По чек-листу из валидатора зарегистрируй нужные проекту ключи в Keychain (человек вводит значение скрытым вводом, агент значений не видит):
 
 ```bash
-# .env проекта (НЕ коммитить!)
+# scope — слаг проекта (например emwoody) или global
+ai-secret set <project-scope> NEURON_API_KEY
+ai-secret set <project-scope> TOKEN_ANSWERTHEPUBLIC
+ai-secret set <project-scope> WP_BASE_URL
+ai-secret set <project-scope> WP_USER
+ai-secret set <project-scope> WP_APP_PASSWORD
+ai-secret set <project-scope> WOO_REST_API_KEY
+ai-secret set <project-scope> WOO_REST_API_SECRET
+ai-secret set <project-scope> DATAFORSEO_LOGIN
+ai-secret set <project-scope> DATAFORSEO_PASSWORD
+# полный список имён — .env.example проекта
+```
 
-# NeuronWriter
-NEURON_API_KEY=your_key_here
-NEURON_LIMITS_FILE=seo/neuronwriter-limits.yaml
-# Optional, only when your NeuronWriter account/API docs expose a different plagiarism endpoint path:
-# NW_PLAGIARISM_PATH=/check-plagiarism
+Не заполняющиеся ключи (опции, которые не используешь) просто не регистрируй — валидатор считает отсутствующий необязательный ключ нормой.
 
-# Google Cloud Natural Language (только после budget + local guards)
-GOOGLE_NLP_ENABLED=0
-GOOGLE_NLP_POLICY_FILE=seo/entities/google-nlp-policy.yaml
+Скрипты и агент получают значения только в окружении дочернего процесса, не читая их сами:
 
-# AnswerThePublic
-TOKEN_ANSWERTHEPUBLIC=atp_pk_live_...
+```bash
+ai-secret run <project-scope> -- seo-cycle <команда>
+```
 
-# WordPress REST API — основной канал, если publishing.cms = wordpress
-WP_BASE_URL=https://example.com
-WP_USER=admin
-WP_APP_PASSWORD=xxxx xxxx xxxx xxxx
-WOO_REST_API_KEY=ck_...
-WOO_REST_API_SECRET=cs_...
+Если в проекте уже есть legacy `.env` со значениями — перенеси разово и удали файл:
 
-# WordPress MCP / Novomira — optional fallback, only when explicitly installed
-WP_API_URL=https://example.com/wp-json/mcp/novamira
-WP_API_USERNAME=...
-WP_API_PASSWORD=...
-
-# DataForSEO (опционально)
-DATAFORSEO_LOGIN=...
-DATAFORSEO_PASSWORD=...
+```bash
+ai-secret import <project-scope> .env
+rm .env
 ```
 
 ---
@@ -621,7 +619,7 @@ sources:
 
 **«delegate.* refers to skill that doesn't exist»** — либо установи нужный project-local skill/agent в `.agents/skills/` или `.claude/skills/`, либо удали поле из `delegate.*` — используется fallback.
 
-**«NW evaluate fails»** — проверь project_id в конфиге; запусти `./.codex/skills/seo-cycle/scripts/test-neuronwriter.py` для диагностики.
+**«NW evaluate fails»** — проверь project_id в конфиге; запусти `ai-secret run <project-scope> -- ./.codex/skills/seo-cycle/scripts/nw-cli.sh projects` для диагностики (список проектов подтверждает, что ключ и доступ рабочие).
 
 См. `docs/troubleshooting.md` для полного списка.
 
