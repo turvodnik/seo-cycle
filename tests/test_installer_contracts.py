@@ -272,6 +272,205 @@ class UpgradeAllHonestyTest(InstallerFixture):
         )
 
 
+class UpgradeAllRejectsSyncTest(InstallerFixture):
+    """O1: `--upgrade-all --sync` is undocumented and silently bypassed the
+    origin/SHA check (NETWORK_ALLOWED stays 0 from the user's --sync and is
+    never reset by upgrade_all()'s internal SYNC_ONLY=1 reuse of
+    attach_project()). Must be refused outright — a diverged tag must not
+    get written to the lock with exit code 0 (the scenario the T-049 review
+    accepted with a SINGLE-REVIEWER caveat)."""
+
+    def test_upgrade_all_with_sync_and_diverged_tag_is_rejected_and_lock_untouched(self) -> None:
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+        lock_before = self.lock_path().read_bytes()
+        import hashlib
+        md5_before = hashlib.md5(lock_before).hexdigest()
+
+        # Diverge CORE's v1.0.0 locally without ever pushing (same setup as
+        # UpgradeAllHonestyTest) — a --sync run must not silently accept it.
+        (self.core / "VERSION").write_text("1.0.0-upgrade-all-sync-drift\n", encoding="utf-8")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local drift")
+        _git(self.core, "tag", "-f", "v1.0.0")
+
+        proc2 = self.run_install("--upgrade-all", "--sync", "--pin", "v1.0.0")
+        self.assertNotEqual(
+            proc2.returncode, 0,
+            f"--upgrade-all --sync обязан отказать, а не молча переписать лок — {proc2.stdout + proc2.stderr!r}",
+        )
+        md5_after = hashlib.md5(self.lock_path().read_bytes()).hexdigest()
+        self.assertEqual(md5_before, md5_after, "лок не должен быть переписан")
+
+    def test_mutation_without_the_guard_would_accept_the_combo(self) -> None:
+        """Negative control: without the O1 guard, this exact combination
+        used to exit 0 and rewrite the lock — reverting the guard must
+        redden this test (proves the test exercises the fix, not something
+        else)."""
+        source = INSTALL.read_text(encoding="utf-8")
+        self.assertIn(
+            'if [ "$MODE" = "upgrade-all" ] && [ "$SYNC_ONLY" = "1" ]; then',
+            source,
+            "O1 guard against --upgrade-all --sync отсутствует в install.sh",
+        )
+
+
+class SyncNoLockNoNetworkTest(InstallerFixture):
+    """O2: latest_tag() must not make network calls under --sync even when
+    a project has no lock entry yet and falls back to it for a pin."""
+
+    def test_sync_on_unpinned_project_makes_zero_network_calls(self) -> None:
+        real_git = shutil.which("git")
+        spy_dir = self.tmp / "git-spy-o2"
+        spy_dir.mkdir()
+        spy_log = self.tmp / "git-spy-o2.log"
+        (spy_dir / "git").write_text(
+            "#!/usr/bin/env bash\n"
+            f'echo "$*" >> "{spy_log}"\n'
+            f'exec "{real_git}" "$@"\n',
+            encoding="utf-8",
+        )
+        (spy_dir / "git").chmod(0o755)
+
+        # No prior --project run: this project has no lock entry at all, so
+        # attach_project() falls back to latest_tag("$CORE") to pick a pin.
+        proc = self.run_install(
+            "--project", str(self.project), "--sync", "--skip-init", "--no-migrate-old-global",
+            env={"PATH": f"{spy_dir}:{os.environ['PATH']}"},
+        )
+        log_text = spy_log.read_text(encoding="utf-8") if spy_log.exists() else ""
+        network_calls = [line for line in log_text.splitlines() if "ls-remote" in line or " fetch" in line]
+        self.assertEqual(
+            network_calls, [],
+            f"--sync без лока сделал сетевые вызовы git: {network_calls!r} (stdout/stderr: {proc.stdout + proc.stderr!r})",
+        )
+        self.assertIn(
+            "seo-cycle", self.read_lock().get("external", {}),
+            f"--sync должен был подключить проект по локальному тегу — stdout/stderr: {proc.stdout + proc.stderr!r}",
+        )
+
+    def test_mutation_without_the_gate_would_call_ls_remote(self) -> None:
+        """Negative control mirroring O1's: the NETWORK_ALLOWED gate must
+        actually live inside latest_tag(), not somewhere latest_tag() never
+        reaches."""
+        source = INSTALL.read_text(encoding="utf-8")
+        latest_tag_body = source.split("latest_tag() {", 1)[1].split("\nensure_worktree()", 1)[0]
+        self.assertIn(
+            'NETWORK_ALLOWED', latest_tag_body,
+            "O2 guard: latest_tag() должен гейтиться на NETWORK_ALLOWED",
+        )
+
+
+class WorktreeNotClonedOverTest(unittest.TestCase):
+    """O3: install.sh must not mistake a git worktree (linked working tree,
+    `.git` is a FILE) for "not a git repo" and clone fresh over it — the
+    live incident during a T-051 run that destroyed uncommitted work and,
+    as a side effect, re-pointed ~/.local/bin/seo-cycle."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-cycle-o3-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+
+        self.origin = self.tmp / "origin.git"
+        _git(self.tmp, "init", "--bare", "-q", str(self.origin))
+        self.seed = self.tmp / "seed"
+        _git(self.tmp, "clone", "-q", str(self.origin), str(self.seed))
+        (self.seed / "README.md").write_text("seed\n", encoding="utf-8")
+        _git(self.seed, "checkout", "-q", "-B", "main")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "seed")
+        _git(self.seed, "push", "-q", "origin", "main")
+        _git(self.origin, "symbolic-ref", "HEAD", "refs/heads/main")
+
+        # The would-be CORE path is a real git *worktree* off the seed clone
+        # — .git there is a file, not a directory — with an uncommitted
+        # change and a branch never pushed anywhere, exactly the shape of
+        # the T-051 incident.
+        self.home = self.tmp / "home"
+        self.home.mkdir()
+        self.shared = self.home / ".codex" / "vendor"
+        self.shared.mkdir(parents=True)
+        self.core = self.shared / "seo-cycle"
+        _git(self.seed, "worktree", "add", "-q", "-b", "feature/uncommitted-work", str(self.core))
+        (self.core / "WORK_IN_PROGRESS.txt").write_text("не закоммичено\n", encoding="utf-8")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "uncommitted branch work")
+
+        self.local_bin = self.home / ".local" / "bin"
+        self.local_bin.mkdir(parents=True)
+        self.shim = self.local_bin / "seo-cycle"
+        self.shim_target = self.tmp / "previous-shim-target"
+        self.shim_target.write_text("previous version marker\n", encoding="utf-8")
+        self.shim.symlink_to(self.shim_target)
+
+    def _git_log(self, cwd: pathlib.Path) -> str:
+        return subprocess.run(
+            ["git", "-C", str(cwd), "log", "--oneline"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+
+    def test_installer_refuses_instead_of_cloning_over_the_worktree(self) -> None:
+        log_before = self._git_log(self.core)
+        branch_before = subprocess.run(
+            ["git", "-C", str(self.core), "branch", "--show-current"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        status_before = subprocess.run(
+            ["git", "-C", str(self.core), "status", "--porcelain"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        shim_target_before = os.readlink(self.shim)
+
+        proc = subprocess.run(
+            ["bash", str(INSTALL)],
+            env={
+                **os.environ,
+                "HOME": str(self.home),
+                "SEO_CYCLE_SHARED_DIR": str(self.shared),
+                "SEO_CYCLE_CORE": str(self.core),
+                "SEO_CYCLE_REPO": str(self.origin),
+            },
+            capture_output=True, text=True,
+        )
+
+        self.assertNotEqual(
+            proc.returncode, 0,
+            f"установщик обязан отказать на worktree, а не клонировать поверх — {proc.stdout + proc.stderr!r}",
+        )
+        self.assertEqual(log_before, self._git_log(self.core), "git log в worktree не должен измениться")
+        self.assertEqual(
+            branch_before,
+            subprocess.run(
+                ["git", "-C", str(self.core), "branch", "--show-current"],
+                capture_output=True, text=True, check=True,
+            ).stdout,
+            "ветка worktree должна остаться той же",
+        )
+        self.assertEqual(
+            status_before,
+            subprocess.run(
+                ["git", "-C", str(self.core), "status", "--porcelain"],
+                capture_output=True, text=True, check=True,
+            ).stdout,
+            "git status в worktree не должен измениться",
+        )
+        self.assertTrue(self.core.is_dir(), "каталог worktree должен остаться на месте")
+        self.assertTrue((self.core / "WORK_IN_PROGRESS.txt").exists(), "несохранённая работа должна остаться нетронутой")
+        self.assertEqual(os.readlink(self.shim), shim_target_before, "шим ~/.local/bin/seo-cycle не должен быть переписан")
+
+    def test_mutation_without_the_guard_would_clone_over_it(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        self.assertIn(
+            "is_git_worktree_checkout",
+            source,
+            "O3 guard (обнаружение git worktree через git rev-parse) отсутствует в install.sh",
+        )
+
+
 class ShimPinSelectionTest(unittest.TestCase):
     """Exercises bin/seo-cycle's own upward-search redirect (D7) directly,
     independent of install.sh — two fake SKILL_ROOTs, one is the project pin."""
