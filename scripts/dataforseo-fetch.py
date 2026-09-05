@@ -232,11 +232,24 @@ def call(b64: str, path: str, payload: dict | None) -> dict:
 
 
 def response_cost(resp: dict) -> float:
-    """Реальная стоимость вызова из ответа API (в USD)."""
-    try:
-        return float(resp.get("cost") or 0.0)
-    except (TypeError, ValueError):
+    """Реальная стоимость вызова из ответа API (в USD). Отсутствие поля — 0
+    (бесплатные методы вроде balance его не возвращают). Присутствие с
+    непригодным для арифметики значением (не число, NaN, Infinity, отрицательное)
+    — sys.exit, а не тихий 0: заниженный/испорченный учёт из ответа API — тот же
+    риск, что «потрачено 0» при битом файле учёта (T-059, второй круг после
+    гейта — response_cost() не был затронут первым проходом)."""
+    raw = resp.get("cost")
+    if raw is None:
         return 0.0
+    try:
+        cost = float(raw)
+    except (TypeError, ValueError):
+        sys.exit(f"ERROR DataForSEO: поле cost в ответе непригодно для денежной "
+                 f"арифметики ({raw!r}).")
+    if not _finite_nonneg(cost):
+        sys.exit(f"ERROR DataForSEO: поле cost в ответе непригодно для денежной "
+                 f"арифметики ({raw!r}).")
+    return cost
 
 
 def first_result(resp: dict) -> list:

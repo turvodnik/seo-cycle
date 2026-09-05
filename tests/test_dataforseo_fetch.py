@@ -515,6 +515,49 @@ class NetworkErrorTest(unittest.TestCase):
         self.assertTrue(ctx.exception.code)
 
 
+class ResponseCostTest(unittest.TestCase):
+    """T-059 (доп. находка после второго круга гейта): `response_cost()` не была
+    затронута первым проходом value-level hardening — поле `cost` из ответа API
+    подвержено ровно тому же классу риска (NaN/Infinity/отрицательное проходит
+    isinstance-эквивалент `float(...)` без ошибки и портит spent_usd) до того,
+    как что-либо попадёт в load_usage()/save_usage()."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-cost-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.args = dfs.build_parser().parse_args(["--out", str(self.tmp), "volume", "vata"])
+
+    def test_missing_cost_field_is_free(self) -> None:
+        self.assertEqual(dfs.response_cost({"status_code": 20000}), 0.0)
+
+    def test_normal_cost_passes_through(self) -> None:
+        self.assertEqual(dfs.response_cost({"cost": 0.05}), 0.05)
+
+    def test_nan_cost_is_honest_failure_not_silent_zero(self) -> None:
+        with self.assertRaises(SystemExit) as ctx:
+            dfs.response_cost({"cost": float("nan")})
+        self.assertTrue(ctx.exception.code)
+
+    def test_negative_cost_is_honest_failure(self) -> None:
+        with self.assertRaises(SystemExit):
+            dfs.response_cost({"cost": -1.0})
+
+    def test_non_numeric_cost_is_honest_failure(self) -> None:
+        with self.assertRaises(SystemExit):
+            dfs.response_cost({"cost": "много"})
+
+    def test_poisoned_api_cost_blocks_before_ledger_is_corrupted(self) -> None:
+        """Сквозной сценарий: DataForSEO вернула валидный конверт с NaN в cost —
+        fetch() обязан упасть ДО save_usage(), а не записать NaN в _usage.json."""
+        bad = {"status_code": 20000, "cost": float("nan"),
+               "tasks": [{"status_code": 20000, "result": [{"keyword": "x"}]}]}
+        with mock.patch.object(dfs, "call", return_value=bad):
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "some/path", {"k": 1}, self.args)
+        self.assertFalse((self.tmp / "_usage.json").exists(),
+                          "леджер не должен появиться с испорченным cost внутри")
+
+
 class DistillTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-md-"))
