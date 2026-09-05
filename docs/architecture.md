@@ -59,7 +59,9 @@ seo-cycle/
 │                                #   на переехавшие в skills/* файлы (совместимость, удаление в v3)
 ├── scripts/                     # общий движок: ~180 CLI-скриптов + пакет seo_cycle_core/
 ├── bin/seo-cycle                # единый CLI (scripts/seo_cycle_cli.py)
-├── config/                      # project.template.yaml, triggers.yaml, region-profiles/, projects-registry.yaml
+├── config/                      # project.template.yaml, triggers.yaml, region-profiles/,
+│                                #   projects-registry.example.yaml (реальный реестр —
+│                                #   ~/.seo-cycle/projects-registry.yaml, seo_cycle_core/registry.py)
 ├── tests/                       # unittest-набор (обязателен зелёным до push)
 ├── install.sh                   # ЕДИНЫЙ установщик: хранилище + версии + attach/detach/upgrade
 ├── install-codex.sh, bootstrap-*.sh   # legacy-обёртки над install.sh (стабильные curl-URL)

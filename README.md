@@ -158,7 +158,7 @@ seo-cycle --help                                # полный список ко
 | **Слой данных** | `db-sync.py` → `seo.db` (SQLite) из всех CSV/JSON. Фундамент дашбордов. |
 | **Уведомления** | `notify.py` — Telegram без n8n, graceful no-op без токена. |
 | **Автоматизация** | `monthly-runner.sh` (cron, auto-detect по дате) + `approval-gate.py` + `keyword-queue.py`. `monthly-runner.sh all` — по всем проектам реестра. |
-| **Масштаб** | `projects-registry.yaml` + `init-project.sh` — новый проект одной командой. |
+| **Масштаб** | `~/.seo-cycle/projects-registry.yaml` (машинно-локальный, `SEO_CYCLE_REGISTRY` переопределяет) + `init-project.sh` — новый проект одной командой. |
 | **Публикация** | CMS-aware (WordPress/Woo через REST в emwoody-примере). |
 
 ---
@@ -214,7 +214,7 @@ seo-cycle/
 ├── config/
 │   ├── project.template.yaml
 │   ├── region-profiles/{ru,eu,us,global}.yaml
-│   ├── projects-registry.yaml
+│   ├── projects-registry.example.yaml   # шаблон; реальный реестр — ~/.seo-cycle/projects-registry.yaml
 │   └── triggers.yaml
 ├── scripts/            # все переносимые скрипты
 ├── prompts/            # промпты (Perplexity и др.)

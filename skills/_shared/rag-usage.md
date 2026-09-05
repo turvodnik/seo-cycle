@@ -8,4 +8,4 @@ seo-cycle rag query "<сущность>" --global          # пересечен�
 seo-cycle run script page-outline-v3 <pkg> --all-mvp --rag --write   # брифы с related_passages
 ```
 
-Индекс обновляй `seo-cycle rag index --write` после новых distillates/drafts (инкрементально, дёшево). Кросс-проектный: `rag index --global` по projects-registry.
+Индекс обновляй `seo-cycle rag index --write` после новых distillates/drafts (инкрементально, дёшево). Кросс-проектный: `rag index --global` по машинному реестру проектов.

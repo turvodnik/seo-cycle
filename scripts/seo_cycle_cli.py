@@ -23,6 +23,7 @@ from seo_cycle_core.config import coerce_int, find_config, load_yaml, nested_get
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.monitoring import find_latest_snapshot, monitoring_dir
+from seo_cycle_core.registry import registry_path
 
 DEFAULT_SNAPSHOT_MAX_AGE_DAYS = 7
 
@@ -277,7 +278,7 @@ MENU_ACTIONS: tuple[tuple[str, str, list[str]], ...] = (
 
 
 def load_registry_projects() -> list[dict[str, Any]]:
-    registry = SKILL_ROOT / "config" / "projects-registry.yaml"
+    registry = registry_path(SKILL_ROOT)
     if not registry.exists():
         return []
     projects = (load_yaml(registry).get("projects") or [])

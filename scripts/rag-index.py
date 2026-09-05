@@ -10,8 +10,9 @@ Embeddings are optional: with EMBEDDING_API_URL/KEY/MODEL set (OpenAI-compatible
 /embeddings), chunks are embedded for hybrid search; otherwise the index is
 BM25-only and fully offline. Live embedding calls run a usage-ledger preflight.
 
---global mode walks config/projects-registry.yaml (active projects) and builds
-the cross-project index in ~/.seo-cycle/rag/global.db.
+--global mode walks the machine-local projects registry (active projects,
+see seo_cycle_core/registry.py) and builds the cross-project index in
+~/.seo-cycle/rag/global.db.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from seo_cycle_core.ads import ledger_preflight, ledger_record  # generic ledger
 from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, skill_root
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.rag import GLOBAL_DB, embedding_env, index_project, index_stats, open_db, rag_db_path
+from seo_cycle_core.registry import registry_path
 from seo_cycle_core.reports import write_report_bundle
 
 log = setup_logging("rag-index")
@@ -43,7 +45,7 @@ def output_paths(project_root: pathlib.Path) -> dict[str, pathlib.Path]:
 
 
 def registry_projects() -> list[dict[str, Any]]:
-    registry = load_yaml(skill_root(__file__) / "config" / "projects-registry.yaml")
+    registry = load_yaml(registry_path(skill_root(__file__)))
     rows = registry.get("projects") if isinstance(registry, dict) else None
     projects = []
     for row in rows or []:
@@ -91,7 +93,7 @@ def main() -> int:
     if args.global_mode:
         projects = registry_projects()
         if not projects:
-            print("ERROR: no active projects in config/projects-registry.yaml", file=sys.stderr)
+            print(f"ERROR: no active projects in registry ({registry_path(skill_root(__file__))})", file=sys.stderr)
             return 2
         db_path = GLOBAL_DB
         report_root = None

@@ -71,7 +71,7 @@ cp ./.codex/skills/seo-cycle/templates/keyword-queue.template.csv \
 crontab -e
 
 # Добавь (пути замени на свои)
-PROJECT=/Users/turvodnik/AI/emwoody
+PROJECT=/Users/<you>/AI/emwoody
 0 9 * * 1   cd $PROJECT && seo-cycle run script monthly-runner.sh content >> $PROJECT/seo/cron.log 2>&1
 0 14 * * 3  cd $PROJECT && seo-cycle run script monthly-runner.sh >> $PROJECT/seo/cron.log 2>&1
 0 16 * * 5  cd $PROJECT && seo-cycle run script monthly-runner.sh >> $PROJECT/seo/cron.log 2>&1

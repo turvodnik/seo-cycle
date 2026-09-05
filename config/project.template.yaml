@@ -1237,7 +1237,8 @@ data_store:
 # Локальный RAG: FTS5/BM25 из коробки (без ключей), embeddings опционально
 # через OpenAI-совместимый endpoint (env EMBEDDING_API_URL/KEY/MODEL → hybrid).
 # Индексация: rag-index.py --write (инкрементально); кросс-проектный индекс:
-# rag-index.py --global (по config/projects-registry.yaml → ~/.seo-cycle/rag/global.db).
+# rag-index.py --global (по машинному реестру проектов, ~/.seo-cycle/projects-registry.yaml
+# по умолчанию — → ~/.seo-cycle/rag/global.db).
 rag:
   chunk_chars: 1200
   chunk_overlap: 150

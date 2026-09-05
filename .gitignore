@@ -11,3 +11,10 @@ graphify-out/
 *.egg-info/
 build/
 dist/
+
+# Реестр проектов машины (пути/домены владельца) по умолчанию живёт вне
+# дерева репозитория (~/.seo-cycle/projects-registry.yaml, T-061,
+# seo_cycle_core/registry.py) — эта запись только страхует legacy-путь и
+# явный SEO_CYCLE_REGISTRY-override внутрь дерева. Шаблон —
+# config/projects-registry.example.yaml.
+config/projects-registry.yaml

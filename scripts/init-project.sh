@@ -14,6 +14,38 @@
 set -e
 
 SKILL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# T-061: реестр проектов — машинно-локальные данные (реальные пути/домены),
+# не часть инструмента. Живёт вне дерева репозитория/снапшота по умолчанию
+# (та же логика, что seo_cycle_core/registry.py и env_profile.py для
+# credentials; здесь продублирована — общего sourced bash-lib в проекте нет).
+# SEO_CYCLE_REGISTRY переопределяет путь целиком. Раньше запись всегда шла в
+# "$SKILL_ROOT/config/projects-registry.yaml" — на проекте, подключённом к
+# read-only version-снапшоту (T-049), запись туда падала с отказом в доступе
+# и обрывала весь мастер (`set -e`).
+resolve_registry_path() {
+    local target="${SEO_CYCLE_REGISTRY:-$HOME/.seo-cycle/projects-registry.yaml}"
+    local legacy="$SKILL_ROOT/config/projects-registry.yaml"
+    # Миграция: реестр из версии до этого фикса лежал в дереве инструмента.
+    # Копируем (не переносим — legacy может быть read-only), только читаем
+    # оттуда, никогда не пишем.
+    if [ ! -f "$target" ] && [ -f "$legacy" ]; then
+        mkdir -p "$(dirname "$target")"
+        cp "$legacy" "$target" 2>/dev/null || true
+        # cp сохраняет права источника — снапшот версии (T-049) поставляется
+        # read-only, иначе только что созданный файл тоже окажется read-only и
+        # следующая же запись (дозапись проекта) упадёт так же, как мигрируем.
+        # 0600, не просто "добавить владельцу право на запись": файл содержит
+        # реальные пути и домены машины, та же чувствительность, что у
+        # env_profile.py (0600 для credentials) — гейт-ревью T-061, круг 3:
+        # прежний `chmod u+w` только добавлял бит, оставляя биты group/other
+        # от источника нетронутыми, если они там были.
+        chmod 600 "$target" 2>/dev/null || true
+        echo "реестр перенесён: $legacy → $target" >&2
+    fi
+    echo "$target"
+}
+
 TEMPLATE="$SKILL_ROOT/config/project.template.yaml"
 ENV_TEMPLATE="$SKILL_ROOT/.env.example"
 POLICY_TEMPLATE_DIR="$SKILL_ROOT/templates/project-policies"
@@ -377,11 +409,24 @@ if [ "${SEO_CYCLE_WITH_WORDPRESS_MCP:-0}" = "1" ]; then
 fi
 
 # Дозапись проекта в общий реестр (идемпотентно — по path)
-REGISTRY="$SKILL_ROOT/config/projects-registry.yaml"
+REGISTRY_EXAMPLE="$SKILL_ROOT/config/projects-registry.example.yaml"
 PROJECT_PATH="$(pwd)"
 if [ "${SEO_CYCLE_SKIP_REGISTRY:-0}" = "1" ]; then
     echo "ℹ Реестр проектов пропущен (SEO_CYCLE_SKIP_REGISTRY=1)"
-elif [ -f "$REGISTRY" ]; then
+else
+    REGISTRY="$(resolve_registry_path)"
+    if [ ! -f "$REGISTRY" ] && [ -f "$REGISTRY_EXAMPLE" ]; then
+        # Ни машинного реестра (~/.seo-cycle/...), ни легаси-файла в дереве
+        # инструмента (resolve_registry_path уже проверил оба) — совсем
+        # свежая машина. Берём только шапку с комментариями из шаблона (до
+        # строки "projects:"), без примерной записи-заглушки — она бы
+        # засоряла реальный реестр.
+        mkdir -p "$(dirname "$REGISTRY")"
+        sed '/^projects:/q' "$REGISTRY_EXAMPLE" > "$REGISTRY"
+        echo "✓ Локальный реестр создан (пуст, из шаблона): $REGISTRY"
+    fi
+fi
+if [ "${SEO_CYCLE_SKIP_REGISTRY:-0}" != "1" ] && [ -f "$REGISTRY" ]; then
     if grep -q "path: \"$PROJECT_PATH\"" "$REGISTRY" 2>/dev/null; then
         echo "ℹ Проект уже в реестре ($REGISTRY) — пропускаю"
     else

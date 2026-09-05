@@ -26,7 +26,9 @@
 #   --runtime R     all|claude|codex   surfaces to generate (default all)
 #   --sync          only regenerate links/surfaces from the existing lock
 #   --skip-init     do not run the project wizard for new projects
-#   --register     allow init-project.sh to add the project to config/projects-registry.yaml
+#   --register     allow init-project.sh to add the project to the machine-local
+#                  projects registry (default ~/.seo-cycle/projects-registry.yaml,
+#                  override via SEO_CYCLE_REGISTRY — see seo_cycle_core/registry.py)
 #   --with-wordpress-mcp   also create project-local WordPress MCP config
 # Legacy (kept for compatibility):
 #   --global-skill        expose seo-cycle in global skill roots (visible everywhere — avoid)

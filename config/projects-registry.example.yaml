@@ -1,0 +1,29 @@
+# =============================================================================
+# projects-registry.yaml — реестр проектов под seo-cycle (машинно-локальный)
+# =============================================================================
+# Содержит абсолютные пути и домены проектов этой машины — никогда не часть
+# репозитория/тега/снапшота. Живёт по умолчанию в ~/.seo-cycle/projects-registry.yaml
+# (переопределяется переменной SEO_CYCLE_REGISTRY); резолвер и логика миграции
+# легаси-пути — scripts/seo_cycle_core/registry.py. monthly-runner.sh --all и
+# другие --global команды итерируют по этому файлу.
+#
+# Эта шапка (без записей ниже) — то, что init-project.sh копирует в реальный
+# файл при его первом создании (см. scripts/init-project.sh). Сам этот файл в
+# репозитории — config/projects-registry.example.yaml, обезличенный образец;
+# заводить реестр заранее вручную не нужно — init-project.sh делает это сам.
+#
+# Поля проекта:
+#   name           — человеческое имя
+#   path           — абсолютный путь к корню проекта (где лежит seo-cycle.yaml)
+#   region_profile — ru | eu | us | global
+#   cms            — wordpress | shopify | nextjs | static | ...
+#   status         — active | paused | archived
+#   monthly_automation — true/false (участвует ли в monthly-runner --all)
+
+projects:
+  - name: "Example Project"
+    path: "/path/to/your/project"
+    region_profile: ru
+    cms: wordpress
+    status: active
+    monthly_automation: true

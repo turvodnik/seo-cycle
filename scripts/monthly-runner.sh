@@ -29,6 +29,34 @@ set -euo pipefail
 SKILL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT_ROOT="$(pwd)"
 
+# T-061: реестр проектов — машинно-локальные данные (реальные пути/домены),
+# не часть инструмента. Живёт вне дерева репозитория/снапшота по умолчанию
+# (та же логика, что seo_cycle_core/registry.py и env_profile.py для
+# credentials; здесь продублирована — общего sourced bash-lib в проекте нет).
+# SEO_CYCLE_REGISTRY переопределяет путь целиком.
+resolve_registry_path() {
+    local target="${SEO_CYCLE_REGISTRY:-$HOME/.seo-cycle/projects-registry.yaml}"
+    local legacy="$SKILL_ROOT/config/projects-registry.yaml"
+    # Миграция: реестр из версии до этого фикса лежал в дереве инструмента.
+    # Копируем (не переносим — legacy может быть read-only version-снапшот,
+    # T-049), только читаем оттуда, никогда не пишем.
+    if [ ! -f "$target" ] && [ -f "$legacy" ]; then
+        mkdir -p "$(dirname "$target")"
+        cp "$legacy" "$target" 2>/dev/null || true
+        # cp сохраняет права источника — снапшот версии (T-049) поставляется
+        # read-only, иначе только что созданный файл тоже окажется read-only и
+        # следующая же запись (дозапись проекта) упадёт так же, как мигрируем.
+        # 0600, не просто "добавить владельцу право на запись": файл содержит
+        # реальные пути и домены машины, та же чувствительность, что у
+        # env_profile.py (0600 для credentials) — гейт-ревью T-061, круг 3:
+        # прежний `chmod u+w` только добавлял бит, оставляя биты group/other
+        # от источника нетронутыми, если они там были.
+        chmod 600 "$target" 2>/dev/null || true
+        echo "реестр перенесён: $legacy → $target" >&2
+    fi
+    echo "$target"
+}
+
 # Расписание (cron-style). Defaults — переопределяются из seo-cycle.yaml
 # секция monthly_automation.schedule (если файл доступен и python3+yaml).
 SCHEDULE_CONTENT_DOW=1          # Monday
@@ -126,7 +154,7 @@ done
 # Команда после all (если есть) прокидывается каждому проекту: `all content`,
 # `all audit` и т.д. Без неё — auto-detect по дате в каждом проекте.
 if [[ $ALL_MODE -eq 1 ]]; then
-    REGISTRY="$SKILL_ROOT/config/projects-registry.yaml"
+    REGISTRY="$(resolve_registry_path)"
     [[ -f "$REGISTRY" ]] || { echo "Реестр не найден: $REGISTRY" >&2; exit 2; }
     FLAGS=""
     [[ $DRY_RUN -eq 1 ]] && FLAGS="$FLAGS --dry-run"
