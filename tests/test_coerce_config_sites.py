@@ -46,7 +46,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from seo_cycle_core.config import coerce_float, coerce_int  # noqa: E402
+from seo_cycle_core.config import coerce_float  # noqa: E402
 from seo_cycle_core.context import build_context_manifest  # noqa: E402
 from seo_cycle_core.loop import target_config  # noqa: E402
 from seo_cycle_core.rag import iter_project_documents  # noqa: E402

@@ -78,6 +78,37 @@
   проходить молча — иначе непонятно, какая из нескольких найденных легаси-
   копий выиграла и что старые копии остаются на диске нетронутыми.
 
+### Fix: закрыт класс «битое значение конфига роняет инструмент трассировкой» целиком (T-063)
+
+- Сплошной поиск по всему дереву (не по списку из предыдущих отчётов — файлы
+  менялись слиянием PR #8/#9) нашёл 19 незащищённых мест конверсии значения
+  из конфига проекта в `int`/`float`, помимо трёх, закрытых в T-052/T-053:
+  `pulse.py` (дробный близнец `pulse.drop_alert_pct` — та же болезнь, что и
+  `pulse.stale_after_days`, но `float(...)`, не `int(...)`), `ads-analytics.py`,
+  `seo-forecast.py`, `ads-apply.py`, `budget-mix-planner.py`,
+  `seo_cycle_core/rag.py`, `seo_cycle_core/loop.py`, `token-waste-audit.py`,
+  `seo_cycle_core/context.py`, `context-pack.py`, `yandex-direct-fetch.py`,
+  `google-ads-fetch.py`.
+- Новый `coerce_float()` в `seo_cycle_core/config.py` — дробный аналог
+  `coerce_int()` (T-053): та же семантика (0/""/None → дефолт, мусор → warning
+  на stderr с именем ключа + дефолт, никогда не роняет процесс).
+  Каждое из 19 мест закрыто через `coerce_int()`/`coerce_float()` с ИМЕНЕМ
+  испорченного ключа в сообщении (`governance.token_policy.*`,
+  `ads.apply.*`, `kpi.*`, `rag.*` и т.д.) — человек видит, какой ключ
+  испорчен и каким значением, без трассировки стека.
+- Каждое место закрыто СВОИМ тестом с негативным контролем (мутация «вернуть
+  голый `int()`/`float()` в этом месте» валит именно этот тест, не общий) —
+  `tests/test_coerce_config_sites.py` (32 теста) +
+  `tests/test_coerce_int.py` (дробный твин `pulse.drop_alert_pct`).
+- Осознанно НЕ тронуто (см. docstring `test_coerce_config_sites.py`):
+  конверсии значений из ОТВЕТОВ API (`nested_get(row, "metrics...")` в
+  `ads-analytics.py`/`google-ads-fetch.py` — другой, уже отслеженный класс
+  риска, см. T-059); `google-nlp-audit.py::env_int()` — уже защищён
+  собственным `try/except ValueError`, никогда не падал; loop-state JSON
+  (`seo_cycle_core/loop.py::no_progress()`/`decide_next()`) — наше
+  собственное сгенерированное состояние, уже санитизированное при записи,
+  не пользовательский конфиг.
+
 ### Refactor: общее ядро для семи `*-health.py` вместо ручных копий (T-053)
 
 - Внутренний рефакторинг, поведение и форматы отчётов не изменились:
