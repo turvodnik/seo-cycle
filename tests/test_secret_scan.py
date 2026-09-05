@@ -55,7 +55,7 @@ class SecretScanTest(unittest.TestCase):
 
     def test_private_key_block_detected(self) -> None:
         (self.tmp / "id_rsa_copy.txt").write_text(
-            "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA...\n", encoding="utf-8")
+            "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA...\n", encoding="utf-8")  # secret-scan: allow — тестовая фикстура, пишется во временный каталог, не реальный ключ
         self.assertTrue(any(f["rule"] == "private_key" for f in self.scan()))
 
 

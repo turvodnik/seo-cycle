@@ -85,6 +85,37 @@
 - **`tests/test_no_legacy_paths.py`** — сторож конвенции (легаси-путь по дереву,
   литералы в скриптах, форма команд в фазовых SKILL.md).
 
+### Feature: pyproject.toml, CI-гейт secret-scan, LICENSE (T-047)
+
+- **`pyproject.toml`** — единый источник зависимостей вместо разрозненных
+  `pip install` в CI и памяти того, кто их ставил (прецедент I-037): base
+  `dependencies=["pyyaml"]` + `optional-dependencies` по доменам (google,
+  knowledge, ads, dataforseo, export, media, dev, all). `knowledge` тянет
+  реальное имя пакета Graphify на PyPI — `graphifyy` (сверено с
+  `scripts/install-ai-toolchain.sh` и PyPI; импортируется как `graphify`).
+  `ads` — пустая группа: ads-скрипты сегодня используют только stdlib/urllib.
+  `tests/test_pyproject.py` держит два инварианта: версия pyproject == VERSION,
+  и каждый сторонний top-level импорт из `scripts/**` объявлен хотя бы в одной
+  группе (собрано через `ast`, включая импорты внутри функций).
+- **CI**: новый job `secret-scan` (`python scripts/secret-scan.py . --format
+  json`, без сети, без единого pip install — базовый режим работает на голом
+  Python, проверено на venv без единого установленного пакета); jobs
+  ruff/typecheck-core/coverage-core/unittest переведены на единый
+  `pip install -e ".[dev]"` вместо ad hoc установок каждого. Попутно —
+  инлайн-прагма `secret-scan: allow` на предсуществующей тестовой фикстуре
+  `tests/test_secret_scan.py:58` (паттерн приватного ключа как строка теста,
+  писавшаяся во временный каталог; без прагмы новый job падал бы на каждом
+  прогоне на собственном тесте secret-scan).
+- **LICENSE = PolyForm Noncommercial 1.0.0** (решение Vladimir 04.09),
+  текст verbatim из canonical `polyformproject/polyform-licenses@1.0.0`
+  (сверено diff'ом, побайтно идентичен); строка лицензии в README
+  согласована. GitHub license detector (licensee/choosealicense.com) семейство
+  PolyForm не знает (проверено на двух публичных PolyForm-репозиториях) —
+  `licenseInfo`/`license.spdx_id` останется `null`/`NOASSERTION` даже после
+  мержа в main; это ограничение платформы, а не дефект LICENSE-файла.
+- `.gitignore`: `*.egg-info/`, `build/`, `dist/` — побочный продукт
+  `pip install -e .`.
+
 ## [2.1.0] — 2026-08-02
 
 ### Feature: DataForSEO — реальная интеграция вместо заглушки
