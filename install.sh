@@ -194,14 +194,16 @@ latest_tag() {
     # zero network calls (CHANGELOG) was false whenever a caller resolved a
     # pin through latest_tag() (e.g. attach_project() falling back to it when
     # a project has no lock entry yet). Gate on NETWORK_ALLOWED like every
-    # other network call in this script (R7) — take the newest local tag
-    # as-is; ensure_worktree()'s own NETWORK_ALLOWED-gated origin/SHA check
-    # still catches a stale/diverged tag before anything is written.
+    # other network call in this script (R7) — but do NOT fall back to "the
+    # newest local tag" here: that tag is unverified against origin, and
+    # ensure_worktree()'s own origin/SHA check is ALSO gated on
+    # NETWORK_ALLOWED (deliberately — see its comment), so it would NOT
+    # catch a stale/renamed local tag on this path either. The ticket's own
+    # two options are "take it from the lock, or refuse" — this function has
+    # no lock to read, so it refuses (returns empty) and lets the caller's
+    # existing "could not resolve a version" path handle it honestly.
     if [ "$NETWORK_ALLOWED" != "1" ]; then
-        local t
-        t="$(printf "%s\n" "$local_tags" | head -1)"
-        [ -n "$t" ] && warn "--sync: офлайн-режим, беру локальный тег $t без сетевой сверки" >&2
-        printf "%s\n" "$t"
+        warn "--sync: сеть отключена — версию беру только из лока/--pin, локальные теги без сверки с origin не использую (O2)" >&2
         return 0
     fi
     remote_tags="$(git -C "$repo_dir" ls-remote --tags origin 'refs/tags/v*' 2>/dev/null \
@@ -680,7 +682,12 @@ PYEOF
     fi
     [ -n "$pin" ] || pin="$(latest_tag "$CORE")"
     if [ -z "$pin" ]; then
-        warn "в store нет тегов; укажи --pin main явно (трекинг HEAD) или запусти install.sh --update"
+        # O2: latest_tag() now returns empty both when store has no tags at
+        # all AND when NETWORK_ALLOWED=0 and there is no lock to read a pin
+        # from (it refuses to guess an origin-unverified local tag) — this
+        # message must stay honest for both causes, not claim "no tags"
+        # when tags exist but --sync just won't trust them unverified.
+        warn "не удалось определить версию: либо в store нет тегов (запусти install.sh --update), либо сеть отключена (--sync) и в проекте ещё нет лока с пином. Укажи --pin явно, либо запусти без --sync для сетевой проверки."
         exit 1
     fi
 
