@@ -25,6 +25,9 @@ from __future__ import annotations
 import argparse, csv, json, pathlib, re, sys
 from datetime import date, timedelta
 
+from seo_cycle_core.monitoring import find_latest_snapshot as _find_latest_snapshot_file
+from seo_cycle_core.monitoring import monitoring_dir
+
 try:
     import yaml
 except ImportError:
@@ -70,21 +73,15 @@ def load_approvals(path: pathlib.Path) -> list[dict]:
     return tickets
 
 
-SNAPSHOT_GLOB = "*snapshot*.json"
-
-
 def find_latest_snapshot_file(search_dirs: list[pathlib.Path]) -> pathlib.Path | None:
     """Newest snapshot across every candidate dir (v2 `seo/monitoring/`, v1
     fallback `seo/09-monitoring/`). Раскладка v2 кладёт дату ПОСЛЕ слова
     snapshot (`webmaster-snapshot-2026-09-01.json`) — маска `*-snapshot.json`
-    её не находит (I-060), поэтому маска расширена на `*snapshot*.json`."""
-    candidates: list[pathlib.Path] = []
-    for d in search_dirs:
-        if d.exists():
-            candidates.extend(d.glob(SNAPSHOT_GLOB))
-    if not candidates:
-        return None
-    return max(candidates, key=lambda p: p.stat().st_mtime)
+    её не находит (I-060). Ранжирование по дате-в-имени (не mtime — T-052 R1)
+    и валидация имени файла (T-052, mask hardening: посторонний файл вроде
+    `triggers-snapshot-<дата>.json` не проходит) — в `seo_cycle_core.monitoring`,
+    общем для pulse.py (пишет) и doctor/status (тоже читают этот же список)."""
+    return _find_latest_snapshot_file(search_dirs)
 
 
 def load_latest_snapshot(search_dirs: list[pathlib.Path]) -> dict | None:
@@ -352,13 +349,15 @@ def main():
         cfg = yaml.safe_load(args.config.read_text(encoding="utf-8")) or {}
         project_name = cfg.get("project", {}).get("name", project_name)
 
-    # Путь мониторинга — из конфига (monitoring.path), дефолт v2 seo/monitoring;
-    # v1-раскладка seo/09-monitoring/ остаётся fallback-кандидатом всегда, чтобы
-    # старые проекты (без monitoring.path в конфиге) продолжали находить срезы.
-    monitoring_cfg = (cfg.get("monitoring") or {}) if isinstance(cfg.get("monitoring"), dict) else {}
-    configured_dir = pathlib.Path(str(monitoring_cfg.get("path") or "seo/monitoring"))
+    # Путь мониторинга — из конфига (monitoring.path, T-052 R3: тот же ключ,
+    # тем же способом, что pulse.py и doctor/status — seo_cycle_core.monitoring),
+    # дефолт v2 seo/monitoring; v1-раскладка seo/09-monitoring/ остаётся
+    # fallback-кандидатом всегда, чтобы старые проекты без monitoring.path
+    # продолжали находить срезы.
+    cwd = pathlib.Path.cwd()
+    configured_dir = monitoring_dir(cfg, cwd)
     search_dirs = [configured_dir]
-    for fallback in (pathlib.Path("seo/monitoring"), pathlib.Path("seo/09-monitoring"), pathlib.Path("09-monitoring")):
+    for fallback in (cwd / "seo" / "monitoring", cwd / "seo" / "09-monitoring", cwd / "09-monitoring"):
         if fallback not in search_dirs:
             search_dirs.append(fallback)
 

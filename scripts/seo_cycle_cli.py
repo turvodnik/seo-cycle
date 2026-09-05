@@ -22,6 +22,7 @@ from typing import Any
 from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
+from seo_cycle_core.monitoring import find_latest_snapshot, monitoring_dir
 
 DEFAULT_SNAPSHOT_MAX_AGE_DAYS = 7
 
@@ -133,15 +134,24 @@ def run_script(script: str, args: list[str], project: pathlib.Path) -> int:
     return proc.returncode
 
 
-def newest_snapshot(project: pathlib.Path) -> tuple[pathlib.Path | None, int | None]:
-    """Newest monitoring snapshot and its age in days (searches seo/**/*snapshot*.json)."""
-    candidates: list[pathlib.Path] = []
-    for pattern in ("seo/monitoring/**/*snapshot*.json", "seo/cycles/**/09-monitoring/*snapshot*.json"):
-        candidates.extend(project.glob(pattern))
-    candidates = [p for p in candidates if "quarantine" not in p.parts and "invalid" not in p.parts]
-    if not candidates:
+def newest_snapshot(project: pathlib.Path, cfg: dict[str, Any] | None = None) -> tuple[pathlib.Path | None, int | None]:
+    """Newest monitoring snapshot and its age in days.
+
+    Same resolution (`monitoring.path` config key, T-052 R3) and same
+    validated pick (date-in-filename first, mtime tie-break; unrelated files
+    that merely contain "snapshot" in the name are rejected — T-052 R1 / mask
+    hardening) as pulse.py (writer) and the dashboard (reader) — see
+    `seo_cycle_core.monitoring`.
+    """
+    search_dirs = [
+        monitoring_dir(cfg or {}, project),
+        project / "seo" / "09-monitoring",  # v1 top-level fallback
+    ]
+    # v1 nested per-cycle layout (historical projects)
+    search_dirs.extend(project.glob("seo/cycles/*/09-monitoring"))
+    latest = find_latest_snapshot(search_dirs)
+    if latest is None:
         return None, None
-    latest = max(candidates, key=lambda p: p.stat().st_mtime)
     age_days = int((time.time() - latest.stat().st_mtime) // 86400)
     return latest, age_days
 
@@ -190,7 +200,7 @@ def cmd_doctor(args: list[str], project: pathlib.Path) -> int:
         if tail:
             print(f"    ↳ {tail}")
         worst = 1
-    snap, age = newest_snapshot(project)
+    snap, age = newest_snapshot(project, cfg)
     if snap is None:
         print(f"- snapshot-freshness: нет снапшотов мониторинга (порог {max_age} дн.; запусти `seo-cycle pulse`)")
     elif age is not None and age >= max_age:
@@ -224,9 +234,10 @@ def cmd_status(args: list[str], project: pathlib.Path) -> int:
         # реальное состояние, а не как «конфига вообще нет».
         print(f"ERROR: seo-cycle.yaml not found in {project}", file=sys.stderr)
         return 2
-    name = (load_yaml(cfg_path).get("project") or {}).get("name")
+    cfg = load_yaml(cfg_path)
+    name = (cfg.get("project") or {}).get("name")
     print(f"# seo-cycle status · {name or project.name}\n")
-    snap, age = newest_snapshot(project)
+    snap, age = newest_snapshot(project, cfg)
     if snap is None:
         print("- снапшот: нет (запусти `seo-cycle pulse`)")
     else:

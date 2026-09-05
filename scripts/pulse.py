@@ -40,6 +40,7 @@ from seo_cycle_core.config import find_config, load_yaml, nested_get, project_ro
 from seo_cycle_core.engines import engine_names
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
+from seo_cycle_core.monitoring import monitoring_dir
 from seo_cycle_core.scorecard import score_from_findings, write_scorecard
 
 log = setup_logging("pulse")
@@ -170,13 +171,14 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
         domain = str(nested_get(cfg, "project.domain", "") or "")
         sources = configured_sources(env, domain, days, engine_names(cfg))
         sources_total = len(sources)
+        mon_dir = monitoring_dir(cfg, root)  # T-052 R3: тот же ключ, что читают doctor/status/dashboard
         if not sources:
             note("fetch", False,
                  "источник не настроен (auth login yandex | google-sa + GSC_SITE_URL)")
             findings.append({"id": "fetch_not_configured", "severity": "warning",
                              "message": "источник позиций не настроен — свежие срезы не снимаются"})
         for source, script, fetch_args in sources:
-            raw_path = root / "seo" / "monitoring" / "raw" / f"{source}-raw-{today.isoformat()}.json"
+            raw_path = mon_dir / "raw" / f"{source}-raw-{today.isoformat()}.json"
             raw_path.parent.mkdir(parents=True, exist_ok=True)
             rc, _, stderr = run_step(script, [*fetch_args, "--output", str(raw_path)], root, env)
             step = "fetch" if len(sources) == 1 else f"fetch:{source}"
@@ -187,7 +189,7 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
                 failed_sources.append(source)
                 continue
             note(step, True, f"raw → {raw_path.relative_to(root)}")
-            snapshot_path = root / "seo" / "monitoring" / f"{source}-snapshot-{today.isoformat()}.json"
+            snapshot_path = mon_dir / f"{source}-snapshot-{today.isoformat()}.json"
             rc, _, stderr = run_step("snapshot-build.py",
                                      ["--source", source, "--input", str(raw_path),
                                       "--output", str(snapshot_path)], root, env, timeout=60)
