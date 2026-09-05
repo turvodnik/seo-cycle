@@ -38,6 +38,7 @@ except ImportError:
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
+from seo_cycle_core.config import numeric  # noqa: E402
 from seo_cycle_core.ctr import expected_ctr  # noqa: E402
 
 
@@ -118,12 +119,22 @@ def _eval_predicate(item: dict, pred: str) -> bool:
     except (TypeError, ValueError):
         actual_n, expected_n = actual, expected
 
-    if op == "<":  return actual_n < expected_n
-    if op == "<=": return actual_n <= expected_n
-    if op == ">":  return actual_n > expected_n
-    if op == ">=": return actual_n >= expected_n
-    if op == "==": return actual_n == expected_n
-    if op == "!=": return actual_n != expected_n
+    try:
+        # T-063 gate round 2: a non-numeric threshold in the trigger config
+        # (config/triggers.yaml or a project's seo-triggers.yaml, keyed by
+        # monitoring.triggers_file) leaves `expected_n` a raw string while
+        # `actual_n` is a number — comparing them raises TypeError, which
+        # crashed the whole triggers-eval run. A predicate that can't be
+        # compared numerically just doesn't fire (False), same failure
+        # shape as a field that resolves to None a few lines above.
+        if op == "<":  return actual_n < expected_n
+        if op == "<=": return actual_n <= expected_n
+        if op == ">":  return actual_n > expected_n
+        if op == ">=": return actual_n >= expected_n
+        if op == "==": return actual_n == expected_n
+        if op == "!=": return actual_n != expected_n
+    except TypeError:
+        return False
     return False
 
 
@@ -134,13 +145,6 @@ def eval_condition(item: dict, condition: str) -> bool:
 
 
 # ----- Обогащение снапшота вычисляемыми полями ---------------------------
-
-def _num(value, default=0.0) -> float:
-    try:
-        return float(value if value is not None else default)
-    except (TypeError, ValueError):
-        return default
-
 
 def enrich_queries(snapshot: dict) -> None:
     """Добавляет в queries[] вычисляемые поля (существующие значения не трогает):
@@ -160,9 +164,9 @@ def enrich_queries(snapshot: dict) -> None:
     for it in queries:
         if not isinstance(it, dict):
             continue
-        pos = _num(it.get("position"))
-        impressions = _num(it.get("impressions"))
-        ctr = _num(it.get("ctr"))
+        pos = numeric(it.get("position"))
+        impressions = numeric(it.get("impressions"))
+        ctr = numeric(it.get("ctr"))
         exp = expected_ctr(pos)
         gap = max(0.0, exp - ctr)
         it.setdefault("expected_ctr", round(exp, 4))
@@ -177,7 +181,7 @@ _PRIORITY_RANK = {"P0": 0, "P1": 1, "P2": 2}
 
 
 def _match_sort_key(item: dict) -> tuple:
-    return (_num(item.get("potential")), _num(item.get("impressions")), _num(item.get("clicks")))
+    return (numeric(item.get("potential")), numeric(item.get("impressions")), numeric(item.get("clicks")))
 
 
 def _dedup_key(scope: str, item: dict):
@@ -252,7 +256,7 @@ def render_markdown(snapshot: dict, results: dict, top: int) -> str:
         by_priority.setdefault(p, []).append((tid, data))
 
     def _rule_potential(data: dict) -> float:
-        return sum(_num(it.get("potential")) for it in data["matches"])
+        return sum(numeric(it.get("potential")) for it in data["matches"])
 
     out.append("## Резюме")
     out.append("")
@@ -286,13 +290,13 @@ def render_markdown(snapshot: dict, results: dict, top: int) -> str:
             scope = rule.get("scope", "queries")
             for item in data["matches"]:
                 if scope == "queries":
-                    pot = _num(item.get("potential"))
+                    pot = numeric(item.get("potential"))
                     pot_note = f" potential=+{pot:.0f}" if pot else ""
                     cann = item.get("urls_for_query") or 0
                     cann_note = f" urls={cann}" if cann and cann > 1 else ""
                     out.append(f"- `{item.get('query','?')}` — "
                                f"impr={item.get('impressions','?')} clicks={item.get('clicks','?')} "
-                               f"pos={_num(item.get('position')):.1f} ctr={_num(item.get('ctr')):.2%}"
+                               f"pos={numeric(item.get('position')):.1f} ctr={numeric(item.get('ctr')):.2%}"
                                f"{pot_note}{cann_note} · {item.get('url','')}")
                 elif scope == "pages":
                     behav = item.get("behavior", {})

@@ -20,14 +20,22 @@ import argparse
 import csv
 import datetime as dt
 import json
-import math
 import pathlib
 import random
 import sqlite3
 import sys
 from typing import Any
 
-from seo_cycle_core.config import coerce_float, coerce_int, find_config, load_yaml, nested_get, numeric, project_root_for
+from seo_cycle_core.config import (
+    coerce_float,
+    coerce_int,
+    find_config,
+    load_yaml,
+    nested_get,
+    numeric,
+    project_root_for,
+    safe_round,
+)
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
 from seo_cycle_core.textmatch import build_query_index, match_position
@@ -58,28 +66,29 @@ def ctr_for(position: float, curve: dict[int, float]) -> float:
 
 
 def load_ctr_curve(cfg: dict[str, Any]) -> dict[int, float]:
-    """T-063 gate round 2: a garbage/non-finite `kpi.ctr_curve` override
-    entry must not poison downstream arithmetic — `curve[int(key)] =
-    float(value)` alone never raised on `.inf` (YAML parses it straight
-    into the Python float `inf`), but the resulting `inf`/`nan` CTR then
-    propagates through `scenario_clicks()`'s running total and crashes a
-    LATER bare `round(total)` in `build_report()` with `OverflowError`/
-    `ValueError` — nowhere near this function. Skip (not substitute a
-    default for) a malformed override entry, matching the pre-existing
-    "can't parse it -> ignore this one entry" semantics; `math.isfinite()`
-    catches inf/nan that `float()` itself lets through silently."""
+    """A garbage `kpi.ctr_curve` override entry (bad TYPE, e.g. a list or
+    a dict key/value that can't parse at all) is skipped, matching the
+    pre-existing "can't parse it -> ignore this one entry" semantics.
+    `.inf`/`.nan` is NOT rejected here (T-063 gate round 2, reverted after
+    the same round's gate found rejecting non-finite values elsewhere was
+    itself a regression) — an infinite CTR override is a legitimate,
+    if extreme, value that `origin/main` already accepted without raising
+    AT THIS POINT. Where it later poisons `scenario_clicks()`'s running
+    total, `build_report()` guards its own bare `round(...)` calls with
+    `safe_round()` instead of this function refusing the value.
+    `OverflowError` IS caught here (added T-063 gate round 2, kept): an
+    override KEY of `.inf` (an unusual but valid YAML mapping key) makes
+    `int(key)` raise `OverflowError` on `origin/main` too — that crash
+    happens right here, not downstream, so it's fine/expected to guard it
+    at the source."""
     curve = dict(DEFAULT_CTR_CURVE)
     override = nested_get(cfg, "kpi.ctr_curve", {}) or {}
     if isinstance(override, dict):
         for key, value in override.items():
             try:
-                bucket = int(key)
-                ctr = float(value)
+                curve[int(key)] = float(value)
             except (TypeError, ValueError, OverflowError):
                 continue
-            if not math.isfinite(ctr):
-                continue
-            curve[bucket] = ctr
     return curve
 
 
@@ -176,7 +185,7 @@ def confidence_interval(core: list[dict[str, Any]], positions: dict[str, float],
     samples.sort()
 
     def pct(share: float) -> int:
-        return round(samples[min(len(samples) - 1, int(share * len(samples)))])
+        return safe_round(samples[min(len(samples) - 1, int(share * len(samples)))])
 
     return {"p10": pct(0.10), "p50": pct(0.50), "p90": pct(0.90)}
 
@@ -196,8 +205,8 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
         total, clusters = scenario_clicks(core, positions, curve, scenario)
         interval = confidence_interval(core, positions, curve, scenario)
         scenarios[scenario] = {
-            "monthly_clicks": round(total),
-            "monthly_clicks_range": [round(total * BOUNDS[0]), round(total * BOUNDS[1])],
+            "monthly_clicks": safe_round(total),
+            "monthly_clicks_range": [safe_round(total * BOUNDS[0]), safe_round(total * BOUNDS[1])],
             "confidence": interval,
             "monthly_leads": round(total * conversion, 1),
             "monthly_leads_confidence": {key: round(value * conversion, 1)
@@ -222,7 +231,7 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
         year = start.year + (start.month - 1 + month_index) // 12
         share = month_index / months
         ramp.append({"month": f"{year:04d}-{month:02d}",
-                     "planned_clicks": round(current_total + (target_total - current_total) * share)})
+                     "planned_clicks": safe_round(current_total + (target_total - current_total) * share)})
 
     ranked = sum(1 for row in core if row["keyword"] in positions)
     return {

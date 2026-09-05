@@ -91,7 +91,12 @@ def ppc_lots(ads: dict[str, Any], *, ppc_step: float, conversion: float,
                     "cost": ppc_step,
                     "expected_monthly_clicks": round(leads / conversion, 1) if conversion else 0,
                     "expected_monthly_leads": round(leads, 2),
-                    "leads_per_1000": round(leads / ppc_step * 1000, 3),
+                    # T-063 gate round 2: `kpi.budget.ppc_step: 0` is a
+                    # plausible human config value (the sibling
+                    # `cost_per_article` already guards the same way two
+                    # lines above `seo_lots()`) — division by zero crashed
+                    # here without it.
+                    "leads_per_1000": round(leads / ppc_step * 1000, 3) if ppc_step else 0,
                     "note": f"step {step_number}: efficiency {round(efficiency, 2)},"
                             f" effective CPA {effective_cpa} (base {cpa})",
                 }

@@ -204,30 +204,39 @@ def token_contract(cfg: dict[str, Any]) -> dict[str, Any]:
         # legitimate value and must keep surviving as 0 (T-063 gate round 2:
         # same governance.token_policy.* keys as context-pack.py, closed the
         # same way there).
+        # via_float=True (T-063 gate round 2, second finding): the ORIGINAL
+        # code here was `int(numeric(value, default))`, not a bare
+        # `int(value)` — `numeric()` parses through `float()` first, so a
+        # quoted `"2.5"`/`"1e3"` worked on `origin/main` (became `2`/`1000`).
+        # Replacing the whole expression with `coerce_int(value, default)`
+        # (no `via_float`) silently narrowed accepted input: that same
+        # `"2.5"` started becoming `default` instead of `2`, with rc=0 and
+        # no warning — a regression the ticket's own «Ограничения» forbid.
+        # `via_float=True` restores the float-first parse.
         "max_context_input_tokens_per_phase": coerce_int(
             token.get("max_context_input_tokens_per_phase", 45000), 45000,
-            name="governance.token_policy.max_context_input_tokens_per_phase", falsy_to_default=False,
+            name="governance.token_policy.max_context_input_tokens_per_phase", falsy_to_default=False, via_float=True,
         ),
         "max_output_tokens_per_artifact": coerce_int(
             token.get("max_output_tokens_per_artifact", 7000), 7000,
-            name="governance.token_policy.max_output_tokens_per_artifact", falsy_to_default=False,
+            name="governance.token_policy.max_output_tokens_per_artifact", falsy_to_default=False, via_float=True,
         ),
         "max_raw_rows_loaded": coerce_int(
             token.get("max_raw_rows_loaded", 200), 200,
-            name="governance.token_policy.max_raw_rows_loaded", falsy_to_default=False,
+            name="governance.token_policy.max_raw_rows_loaded", falsy_to_default=False, via_float=True,
         ),
         "distillate_max_lines": coerce_int(
             token.get("distillate_max_lines", 220), 220,
-            name="governance.token_policy.distillate_max_lines", falsy_to_default=False,
+            name="governance.token_policy.distillate_max_lines", falsy_to_default=False, via_float=True,
         ),
         "cache_first": boolish(token.get("cache_first", True)),
         "browser_session_budget_minutes": coerce_int(
             token.get("browser_session_budget_minutes", 20), 20,
-            name="governance.token_policy.browser_session_budget_minutes", falsy_to_default=False,
+            name="governance.token_policy.browser_session_budget_minutes", falsy_to_default=False, via_float=True,
         ),
         "browser_pages_per_phase_cap": coerce_int(
             token.get("browser_pages_per_phase_cap", 20), 20,
-            name="governance.token_policy.browser_pages_per_phase_cap", falsy_to_default=False,
+            name="governance.token_policy.browser_pages_per_phase_cap", falsy_to_default=False, via_float=True,
         ),
     }
 

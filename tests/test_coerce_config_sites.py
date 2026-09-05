@@ -30,12 +30,14 @@ Sites NOT touched here (recorded, not fixed, per ticket scope discipline):
 
 from __future__ import annotations
 
+import datetime as dt
 import importlib.util
 import io
 import json
 import math
 import pathlib
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -46,7 +48,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from seo_cycle_core.config import coerce_float  # noqa: E402
+from seo_cycle_core.config import coerce_float, numeric, safe_round  # noqa: E402
 from seo_cycle_core.context import build_context_manifest  # noqa: E402
 from seo_cycle_core.loop import target_config  # noqa: E402
 from seo_cycle_core.rag import iter_project_documents  # noqa: E402
@@ -69,6 +71,9 @@ research_package_quality = load_hyphenated("research-package-quality")
 spend_guard = load_hyphenated("spend-guard")
 launch_plan = load_hyphenated("launch-plan")
 kpi_contract = load_hyphenated("kpi-contract")
+validate_config = load_hyphenated("validate-config")
+growth_roadmap = load_hyphenated("growth-roadmap")
+triggers_eval = load_hyphenated("triggers-eval")
 
 
 def tmp_dir() -> pathlib.Path:
@@ -609,39 +614,84 @@ class SpendGuardLaunchPlanTokenContractTest(unittest.TestCase):
                     self.assertEqual(contract[key], 0)
                     self.assertNotIn("WARNING", stderr.getvalue())
 
+    def test_quoted_float_string_still_parses_via_float_first_both_modules(self) -> None:
+        """T-063 gate round 2 (🔴B): the ORIGINAL code here was
+        `int(numeric(value, default))` — `numeric()` parses through
+        `float()` first, so a quoted `"2.5"`/`"1e3"` worked on
+        `origin/main` (became `2`/`1000`). The first fix replaced the whole
+        expression with a bare `coerce_int(value, default)`, which parses
+        via `int()` directly — `int("2.5")` raises `ValueError`, so the
+        value silently became the DEFAULT instead, with rc=0 and no
+        warning. `via_float=True` restores the float-first parse."""
+        for module in (spend_guard, launch_plan):
+            for key in self.KEYS:
+                with self.subTest(module=module.__name__, key=key, value="'2.5'"):
+                    stderr = io.StringIO()
+                    with redirect_stderr(stderr):
+                        contract = module.token_contract(self._cfg(key, "2.5"))
+                    self.assertEqual(contract[key], 2)
+                    self.assertEqual(stderr.getvalue(), "")
+                with self.subTest(module=module.__name__, key=key, value="'1e3'"):
+                    stderr = io.StringIO()
+                    with redirect_stderr(stderr):
+                        contract = module.token_contract(self._cfg(key, "1e3"))
+                    self.assertEqual(contract[key], 1000)
+                    self.assertEqual(stderr.getvalue(), "")
+
 
 class SeoForecastCtrCurveTest(unittest.TestCase):
     """scripts/seo-forecast.py::load_ctr_curve() — `kpi.ctr_curve` override
-    entries. T-063 gate round 2: `curve[int(key)] = float(value)` alone
+    entries.
+
+    T-063 gate round 2 (1st pass): `curve[int(key)] = float(value)` alone
     never raised on `.inf` (YAML parses it straight into the Python float
     `inf`, no string involved) — the poisoned CTR then propagates through
     `scenario_clicks()`'s running total and crashes a LATER bare
-    `round(total)` in `build_report()`, nowhere near this function. Found
-    by tracing data flow (not grepping for the literal call), per the
-    gate's own direction."""
+    `round(total)` in `build_report()`, nowhere near this function.
 
-    def test_infinite_override_value_is_skipped_not_stored(self) -> None:
-        stderr = io.StringIO()
-        with redirect_stderr(stderr):
-            curve = seo_forecast.load_ctr_curve({"kpi": {"ctr_curve": {1: float("inf")}}})
-        # Malformed entries are SKIPPED (pre-existing "can't parse -> ignore
-        # this one entry" semantics), not substituted with a default value —
-        # the default curve's own bucket-1 CTR must survive untouched.
-        self.assertTrue(math.isfinite(curve[1]))
-        self.assertEqual(curve[1], seo_forecast.DEFAULT_CTR_CURVE[1])
+    T-063 gate round 2 (2nd pass, 🔴A): the FIRST fix for that (skip a
+    non-finite override value, same as a genuinely malformed one) was
+    itself a regression — `.inf`/`.nan` in `kpi.ctr_curve` was a legitimate
+    value on `origin/main` (accepted right here, `float()` never raises on
+    it), and skipping it silently narrowed accepted config. The actual fix
+    moved downstream: `build_report()` guards its own bare `round(...)`
+    calls with `safe_round()` instead of this function refusing the value
+    (see `SeoForecastSafeRoundTest` below). `load_ctr_curve()` itself now
+    matches `origin/main` again — `.inf`/`.nan` overrides are STORED, only
+    genuinely unparseable ones (bad TYPE, or a key that itself overflows
+    `int()`) are skipped."""
 
-    def test_nan_override_value_is_skipped(self) -> None:
+    def test_infinite_override_value_is_stored_not_skipped(self) -> None:
+        """Matches `origin/main`: `float(inf)` never raises, so the value
+        is stored as-is — NOT silently replaced by the default curve."""
+        curve = seo_forecast.load_ctr_curve({"kpi": {"ctr_curve": {1: float("inf")}}})
+        self.assertEqual(curve[1], float("inf"))
+
+    def test_nan_override_value_is_stored_not_skipped(self) -> None:
         curve = seo_forecast.load_ctr_curve({"kpi": {"ctr_curve": {1: float("nan")}}})
-        self.assertTrue(math.isfinite(curve[1]))
+        self.assertTrue(math.isnan(curve[1]))
 
     def test_garbage_override_value_is_skipped(self) -> None:
+        """A genuinely unparseable value (not a number at all) still can't
+        be stored — same "can't parse it -> ignore this one entry"
+        semantics `origin/main` already had."""
         curve = seo_forecast.load_ctr_curve({"kpi": {"ctr_curve": {1: "garbage"}}})
-        self.assertTrue(math.isfinite(curve[1]))
+        self.assertEqual(curve[1], seo_forecast.DEFAULT_CTR_CURVE[1])
+
+    def test_infinite_override_key_does_not_raise(self) -> None:
+        """`.inf` as the OVERRIDE KEY (not value) DOES crash `int(key)` on
+        `origin/main` (`OverflowError`) — that's a genuine crash-class site,
+        guarded right here since it never worked in the first place."""
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            curve = seo_forecast.load_ctr_curve({"kpi": {"ctr_curve": {float("inf"): 0.5}}})
+        self.assertEqual(curve, seo_forecast.DEFAULT_CTR_CURVE)
 
     def test_infinite_ctr_curve_does_not_crash_build_report(self) -> None:
         """End-to-end: the reviewer's own reproduction shape — a poisoned
         CTR curve entry must not crash `build_report()`'s later
-        `round(total)` calls."""
+        `round(total)` calls, and the value survives (not silently
+        replaced) when it actually gets used (position 1 tracked)."""
         root = tmp_dir()
         self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
         package = root / "seo" / "research-package"
@@ -649,43 +699,52 @@ class SeoForecastCtrCurveTest(unittest.TestCase):
         (package / "semantic-core.csv").write_text(
             "keyword,frequency,cluster_id\nкупить вагонку,1000,vagonka\n", encoding="utf-8",
         )
+        db = root / "seo" / "seo.db"
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE positions (snapshot_date TEXT, engine TEXT, query TEXT,"
+            " position REAL, clicks INTEGER, impressions INTEGER, url TEXT)"
+        )
+        conn.execute("INSERT INTO positions VALUES ('2026-09-01','yandex','купить вагонку',1.0,10,100,'/x')")
+        conn.commit()
+        conn.close()
         cfg = {"kpi": {"ctr_curve": {1: float("inf")}}}
         report = seo_forecast.build_report(root, cfg)
-        self.assertIsInstance(report["scenarios"]["current"]["monthly_clicks"], (int, float))
-        self.assertTrue(math.isfinite(report["scenarios"]["current"]["monthly_clicks"]))
+        self.assertEqual(report["scenarios"]["current"]["monthly_clicks"], float("inf"))
 
 
 class KpiContractToleranceTest(unittest.TestCase):
     """scripts/kpi-contract.py:181-182 — `kpi.tolerance_pct` and
-    `kpi.lead_conversion_rate`. T-063 gate round 2, 15th/5th-file finding:
-    `numeric()` alone never raises, but `tolerance` feeds a later BARE
-    `round(tolerance * 100)` (no ndigits) when building the report
-    `contract` — that raises `OverflowError` on `.inf` (parsed by YAML
-    straight into the Python float `inf`, no string involved) and
-    `ValueError` on `.nan`, arbitrarily far downstream from where the
-    garbage config value entered. Closed by switching to `coerce_float()`,
-    which (as of this same gate round) rejects non-finite RESULTS too, not
-    just non-numeric inputs — see `CoerceFloatNonFiniteTest` below."""
+    `kpi.lead_conversion_rate`.
 
-    def test_infinite_tolerance_pct_does_not_raise(self) -> None:
+    T-063 gate round 2 (1st pass): `numeric()` alone never raises, but
+    `tolerance` feeds a later BARE `round(tolerance * 100)` (no ndigits)
+    when building the report `contract` — that raises `OverflowError` on
+    `.inf` and `ValueError` on `.nan`, arbitrarily far downstream from
+    where the garbage config value entered.
+
+    T-063 gate round 2 (2nd pass, 🔴A): rejecting `.inf`/`.nan` AT
+    `coerce_float()` (the first fix) was itself a regression — `.inf` is a
+    legitimate value at other `coerce_float()` sites, and a blanket rule in
+    the shared helper silently narrowed accepted config everywhere. Fixed
+    at the actual crash point instead: `"tolerance_pct": safe_round(...)`
+    — `tolerance_pct` in the report now correctly SURVIVES as `inf`/`nan`
+    (matching what a value-preserving fix should do), it just doesn't
+    crash getting there."""
+
+    def test_infinite_tolerance_pct_survives_without_raising(self) -> None:
         root = tmp_dir()
         self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
         cfg = {"kpi": {"tolerance_pct": float("inf")}}
-        stderr = io.StringIO()
-        with redirect_stderr(stderr):
-            report = kpi_contract.build_report(root, cfg)
-        self.assertEqual(report["contract"]["tolerance_pct"], 20)
-        self.assertIn("kpi.tolerance_pct", stderr.getvalue())
+        report = kpi_contract.build_report(root, cfg)
+        self.assertEqual(report["contract"]["tolerance_pct"], float("inf"))
 
-    def test_nan_tolerance_pct_does_not_raise(self) -> None:
+    def test_nan_tolerance_pct_survives_without_raising(self) -> None:
         root = tmp_dir()
         self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
         cfg = {"kpi": {"tolerance_pct": float("nan")}}
-        stderr = io.StringIO()
-        with redirect_stderr(stderr):
-            report = kpi_contract.build_report(root, cfg)
-        self.assertEqual(report["contract"]["tolerance_pct"], 20)
-        self.assertIn("kpi.tolerance_pct", stderr.getvalue())
+        report = kpi_contract.build_report(root, cfg)
+        self.assertTrue(math.isnan(report["contract"]["tolerance_pct"]))
 
     def test_garbage_string_tolerance_pct_does_not_raise(self) -> None:
         root = tmp_dir()
@@ -722,37 +781,164 @@ class KpiContractToleranceTest(unittest.TestCase):
         self.assertNotIn("WARNING", stderr.getvalue())
 
 
-class CoerceFloatNonFiniteTest(unittest.TestCase):
-    """T-063 gate round 2: `coerce_float()` must reject `inf`/`-inf`/`nan`
-    RESULTS as garbage too, not just non-numeric inputs — `float("inf")`
-    itself never raises, but a caller doing further arithmetic and then a
-    bare `round(...)`/`int(...)` (not going through `coerce_int()`) on the
-    result crashes anyway, arbitrarily far from this coercion point
-    (`kpi-contract.py`'s `round(tolerance * 100)` is the reviewer's own
-    reproduction — see `KpiContractToleranceTest` above)."""
+class CoerceFloatAcceptsInfiniteResultTest(unittest.TestCase):
+    """T-063 gate round 2 (🔴A): `coerce_float()` must NOT reject
+    `inf`/`-inf`/`nan` as a result — an earlier version of this fix did,
+    and the gate proved it was a regression: `.inf` is a legitimate value
+    at 11 of the 13 `coerce_float()` call sites in the tree
+    (`ads.cache_ttl_hours` = "never expire the cache",
+    `ads.analytics.wasted_spend_min_cost` = "never alert", etc.) — all of
+    them accepted `.inf` on `origin/main` without raising. `coerce_float()`
+    only guards against genuinely non-numeric/type-mismatched input
+    (`TypeError`/`ValueError`/`OverflowError` from the `float()` call
+    itself), never against a value that parsed fine but happens to be
+    infinite."""
 
-    def test_positive_infinity_is_rejected(self) -> None:
+    def test_positive_infinity_passes_through(self) -> None:
         stderr = io.StringIO()
         with redirect_stderr(stderr):
-            result = coerce_float(float("inf"), 5, name="kpi.tolerance_pct")
-        self.assertEqual(result, 5)
-        self.assertIn("kpi.tolerance_pct", stderr.getvalue())
+            result = coerce_float(float("inf"), 5, name="ads.cache_ttl_hours")
+        self.assertEqual(result, float("inf"))
+        self.assertEqual(stderr.getvalue(), "")
 
-    def test_negative_infinity_is_rejected(self) -> None:
-        result = coerce_float(float("-inf"), 5)
-        self.assertEqual(result, 5)
+    def test_negative_infinity_passes_through(self) -> None:
+        self.assertEqual(coerce_float(float("-inf"), 5), float("-inf"))
 
-    def test_nan_is_rejected(self) -> None:
-        result = coerce_float(float("nan"), 5)
-        self.assertEqual(result, 5)
+    def test_nan_passes_through(self) -> None:
+        self.assertTrue(math.isnan(coerce_float(float("nan"), 5)))
 
-    def test_infinity_is_rejected_with_falsy_to_default_false(self) -> None:
-        result = coerce_float(float("inf"), 5, falsy_to_default=False)
-        self.assertEqual(result, 5)
+    def test_infinity_passes_through_with_falsy_to_default_false(self) -> None:
+        self.assertEqual(coerce_float(float("inf"), 5, falsy_to_default=False), float("inf"))
 
     def test_finite_values_still_pass_through(self) -> None:
         self.assertEqual(coerce_float(3.5, 5), 3.5)
         self.assertEqual(coerce_float(0, 5, falsy_to_default=False), 0)
+
+    def test_garbage_string_still_falls_back(self) -> None:
+        """Only genuinely unparseable input is garbage — `coerce_float()`'s
+        original job, unaffected by the inf/nan reversal."""
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = coerce_float("not-a-number", 5, name="ads.cache_ttl_hours")
+        self.assertEqual(result, 5)
+        self.assertIn("ads.cache_ttl_hours", stderr.getvalue())
+
+
+class SafeRoundTest(unittest.TestCase):
+    """`safe_round()` (T-063 gate round 2, 🔴A fix) — a bare `round(x)`/
+    `round(x, n)` that never raises on `inf`/`-inf`/`nan`, returning the
+    value unrounded instead. This is how the ticket now guards a
+    downstream truncation point WITHOUT rejecting an upstream value that
+    was never garbage (see `coerce_float()`'s docstring)."""
+
+    def test_finite_value_rounds_normally(self) -> None:
+        self.assertEqual(safe_round(3.7), 4)
+        self.assertEqual(safe_round(3.456, 2), 3.46)
+
+    def test_positive_infinity_returns_unrounded(self) -> None:
+        self.assertEqual(safe_round(float("inf")), float("inf"))
+
+    def test_negative_infinity_returns_unrounded(self) -> None:
+        self.assertEqual(safe_round(float("-inf")), float("-inf"))
+
+    def test_nan_returns_unrounded(self) -> None:
+        self.assertTrue(math.isnan(safe_round(float("nan"))))
+
+    def test_infinity_with_ndigits_returns_unrounded(self) -> None:
+        # round(inf, n) actually doesn't raise on its own — safe_round is a
+        # no-op passthrough for it either way, covered for completeness.
+        self.assertEqual(safe_round(float("inf"), 1), float("inf"))
+
+
+class ConsolidatedNumericOverflowTest(unittest.TestCase):
+    """T-063 gate round 2 (2nd pass, 🔴C): three files carried their own
+    private copy of `numeric()`/`numeric_value()`, none catching
+    `OverflowError` — `validate-config.py:249` (`numeric_value`),
+    `growth-roadmap.py:140` (`numeric`), `triggers-eval.py:141` (`_num`).
+    `10**400` (a Python int too large to represent as `float`) crashed all
+    three with a traceback, on `origin/main` and still after T-063's first
+    round (which only patched `coerce_int`/`coerce_float`/the shared
+    `numeric()`, not these three independent copies — "по адресам, а не по
+    классу", again). Fixed by DELETING the three copies and importing the
+    shared, already-`OverflowError`-safe `seo_cycle_core.config.numeric()`
+    instead — closes the class instead of patching a fourth copy."""
+
+    def test_validate_config_check_governance_survives_overflow(self) -> None:
+        cfg = {"governance": {"token_policy": {"max_context_input_tokens_per_phase": 10**400}}}
+        checklist: list = []
+        warnings: list = []
+        # Must not raise; the specific outcome (warned or not) isn't the point.
+        validate_config.check_governance(cfg, pathlib.Path("."), checklist, warnings)
+
+    def test_growth_roadmap_governance_caps_survives_overflow(self) -> None:
+        cfg = {"governance": {"budget_policy": {"monthly_paid_api_usd_cap": 10**400}}}
+        caps = growth_roadmap.governance_caps(cfg, {})
+        self.assertEqual(caps["monthly_paid_api_usd_cap"], 0)  # numeric()'s own default
+
+    def test_triggers_eval_no_longer_has_a_private_numeric_copy(self) -> None:
+        """Structural check for the consolidation itself, not just the
+        symptom: `numeric` in this module must BE the canonical one, not a
+        same-named local redefinition that happens to also work."""
+        self.assertIs(triggers_eval.numeric, numeric)
+
+    def test_triggers_eval_enrich_queries_survives_overflow(self) -> None:
+        snapshot = {"queries": [{"query": "q", "url": "/x", "position": 10**400, "impressions": 100, "ctr": 0.1}]}
+        triggers_eval.enrich_queries(snapshot)  # must not raise
+
+
+class TriggersEvalTypeMismatchTest(unittest.TestCase):
+    """scripts/triggers-eval.py — comparing a numeric `actual` against a
+    non-numeric `expected` threshold (T-063 gate round 2, 🔴C): a
+    non-numeric threshold in the trigger config (`config/triggers.yaml` or
+    a project's `seo-triggers.yaml`, via `monitoring.triggers_file`) left
+    `expected_n` a raw string while `actual_n` was a float — comparing them
+    with `<`/`>`/etc. raised `TypeError`, crashing the whole run."""
+
+    def test_numeric_actual_vs_non_numeric_threshold_does_not_raise(self) -> None:
+        # `!=` is excluded on purpose: Python's `!=` never raises TypeError
+        # for mismatched types (it falls back to "not equal" => True) — the
+        # crash this test targets is specific to ordering operators.
+        for op in ("<", "<=", ">", ">="):
+            with self.subTest(op=op):
+                result = triggers_eval.eval_condition({"clicks": 50}, f"clicks {op} unknown_value")
+                self.assertFalse(result)
+
+    def test_equality_still_works_normally(self) -> None:
+        self.assertTrue(triggers_eval.eval_condition({"clicks": 50}, "clicks == 50"))
+        self.assertFalse(triggers_eval.eval_condition({"clicks": 50}, "clicks == 51"))
+
+    def test_numeric_comparison_still_works_normally(self) -> None:
+        self.assertTrue(triggers_eval.eval_condition({"clicks": 50}, "clicks < 100"))
+        self.assertFalse(triggers_eval.eval_condition({"clicks": 50}, "clicks > 100"))
+
+
+class BudgetMixPlannerZeroStepTest(unittest.TestCase):
+    """scripts/budget-mix-planner.py:94 — `kpi.budget.ppc_step: 0` (a
+    plausible human config value; the sibling `cost_per_article` two lines
+    above already guards the same way) divided by zero building the PPC
+    lot table (T-063 gate round 2, 🔴C)."""
+
+    def test_zero_ppc_step_does_not_raise(self) -> None:
+        ads = {"campaigns": [{"campaign_id": "1", "name": "c1", "platform": "yandex", "cpa": 100}]}
+        lots = budget_mix_planner.ppc_lots(ads, ppc_step=0, conversion=0.02, diminishing_factor=0.85)
+        self.assertTrue(all(lot["leads_per_1000"] == 0 for lot in lots))
+
+
+class KpiContractHugeYearTest(unittest.TestCase):
+    """scripts/kpi-contract.py::parse_month() — `dt.date()` takes a C
+    `long` for the year; `int(year)` itself never raises on a huge literal
+    (Python ints are arbitrary precision), but `dt.date(huge, ...)` does
+    (T-063 gate round 2, 🔴C: `kpi.start: "99999999999999-01"`)."""
+
+    def test_huge_year_falls_back_to_default(self) -> None:
+        fallback = dt.date(2026, 1, 1)
+        result = kpi_contract.parse_month("99999999999999-01", fallback)
+        self.assertEqual(result, fallback)
+
+    def test_normal_month_still_parses(self) -> None:
+        fallback = dt.date(2026, 1, 1)
+        result = kpi_contract.parse_month("2027-03", fallback)
+        self.assertEqual(result, dt.date(2027, 3, 1))
 
 
 if __name__ == "__main__":

@@ -30,7 +30,15 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import coerce_float, find_config, load_yaml, nested_get, numeric, project_root_for
+from seo_cycle_core.config import (
+    coerce_float,
+    find_config,
+    load_yaml,
+    nested_get,
+    numeric,
+    project_root_for,
+    safe_round,
+)
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
 
@@ -48,7 +56,11 @@ def parse_month(raw: Any, fallback: dt.date) -> dt.date:
     try:
         year, month = str(raw).strip().split("-")[:2]
         return dt.date(int(year), int(month), 1)
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError, OverflowError):
+        # OverflowError (T-063 gate round 2): `dt.date()` takes a C `long`
+        # for the year — `int(year)` itself never raises on a huge literal
+        # (Python ints are arbitrary precision), but `dt.date(huge, ...)`
+        # does. Reproduced by the gate: `kpi.start: "99999999999999-01"`.
         return fallback
 
 
@@ -178,11 +190,14 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
     today = dt.date.today().replace(day=1)
     start = parse_month(kpi.get("start"), today)
     deadline = parse_month(kpi.get("deadline"), today.replace(year=today.year + 1))
-    # coerce_float(), not the bare `numeric()` this replaced (T-063 gate
-    # round 2): `tolerance` feeds a later bare `round(tolerance * 100)`
-    # (no ndigits) when building the report contract below, which raises
-    # `OverflowError` on `inf`/`ValueError` on `nan` — `numeric()` alone
-    # never raises, so the crash surfaced downstream, not here.
+    # coerce_float(), not the bare `numeric()` this replaced: a garbage
+    # STRING (e.g. "loose") must warn + fall back, same as everywhere else
+    # in this ticket. `coerce_float()` does NOT reject an infinite/NaN
+    # RESULT (T-063 gate round 2 reverted that — `.inf` is a legitimate
+    # value at several OTHER `coerce_float()` sites) — `tolerance` feeds a
+    # later bare `round(tolerance * 100)` (no ndigits), which the gate's
+    # own reproduction crashes on for `.inf`/`.nan`; guarded at that exact
+    # point with `safe_round()` below instead of rejecting the value here.
     # falsy_to_default=False: `numeric(value, default)`'s bare `float(value)`
     # (no `or default`) already preserved an explicit `0` — `coerce_float()`'s
     # default `value or default` idiom would silently turn that `0` into
@@ -225,7 +240,7 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
             "start": start.strftime("%Y-%m"),
             "deadline": deadline.strftime("%Y-%m"),
             "month": today.strftime("%Y-%m"),
-            "tolerance_pct": round(tolerance * 100),
+            "tolerance_pct": safe_round(tolerance * 100),
             "lead_conversion_rate": conversion,
         },
         "facts": facts,
