@@ -90,6 +90,19 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
+# O1: --upgrade-all --sync is an UNDOCUMENTED combination (usage lists only
+# --upgrade-all [--pin T]; --sync is a --project-mode flag) that silently
+# bypassed the origin/SHA check in ensure_worktree(): --sync sets
+# NETWORK_ALLOWED=0 globally, and upgrade_all()'s internal SYNC_ONLY=1 reuse
+# of attach_project() never resets it. That let a diverged tag get written
+# to the lock of all four live sites with exit code 0 (found in the T-049
+# review, O1). Refuse outright rather than silently ignoring --sync here —
+# the caller typed a flag that does something other than what they asked for.
+if [ "$MODE" = "upgrade-all" ] && [ "$SYNC_ONLY" = "1" ]; then
+    echo "ERROR: --upgrade-all не принимает --sync — эта комбинация обходит сверку origin/SHA (O1). Используй install.sh --upgrade-all [--pin T]." >&2
+    exit 2
+fi
+
 log()  { echo "$*"; }
 warn() { echo "⚠ $*" >&2; }
 
@@ -104,10 +117,31 @@ abs_path_create() {
 
 # ---------------------------------------------------------------- store layer
 
+# True when $1 is a git *worktree* checkout (a linked working tree whose
+# .git is a FILE pointing at the real repo's .git/worktrees/<name>, not a
+# normal clone's .git DIRECTORY). `test -d .git` cannot see this and
+# misreports a worktree as "not a git repo" (O3) — confirmed via
+# `git rev-parse --git-dir` per the ticket, not just the file/dir shape.
+is_git_worktree_checkout() {
+    [ -f "$1/.git" ] && git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
 install_or_update_repo() {
     local repo="$1" dest="$2" label="$3"
     mkdir -p "$(dirname "$dest")"
     if [ -L "$dest" ]; then rm "$dest"; fi
+    if is_git_worktree_checkout "$dest"; then
+        # O3 (live incident during a T-051 run): the old `test -d .git` check
+        # saw a worktree's gitfile-not-a-directory .git and treated the
+        # worktree as an empty/foreign directory, backing it up and cloning
+        # fresh over it — silently relocating someone's uncommitted branch
+        # and, as a side effect, re-pointing ~/.local/bin/seo-cycle at the
+        # freshly cloned store. Refuse instead of guessing: this is either a
+        # misconfigured SEO_CYCLE_CORE/SEO_KEYWORDS_CORE, or a real working
+        # copy that must not be touched by an installer.
+        echo "ERROR: $dest — это git worktree (рабочая копия с несохранённой работой), а не место для клона $label. Установщик отказывается клонировать/переносить его (O3). Укажи корректный путь для хранилища или убери этот worktree вручную." >&2
+        exit 1
+    fi
     if [ -d "$dest/.git" ]; then
         log "▶ обновляю $label..."
         git -C "$dest" fetch --tags --quiet 2>/dev/null || warn "$label: fetch не удался (offline?)"
@@ -156,6 +190,22 @@ latest_tag() {
     local local_tags remote_tags common
     local_tags="$(git -C "$repo_dir" tag --list 'v*' --sort=-v:refname 2>/dev/null)"
     [ -n "$local_tags" ] || return 0
+    # O2: this used to run ls-remote unconditionally, so --sync's promise of
+    # zero network calls (CHANGELOG) was false whenever a caller resolved a
+    # pin through latest_tag() (e.g. attach_project() falling back to it when
+    # a project has no lock entry yet). Gate on NETWORK_ALLOWED like every
+    # other network call in this script (R7) — but do NOT fall back to "the
+    # newest local tag" here: that tag is unverified against origin, and
+    # ensure_worktree()'s own origin/SHA check is ALSO gated on
+    # NETWORK_ALLOWED (deliberately — see its comment), so it would NOT
+    # catch a stale/renamed local tag on this path either. The ticket's own
+    # two options are "take it from the lock, or refuse" — this function has
+    # no lock to read, so it refuses (returns empty) and lets the caller's
+    # existing "could not resolve a version" path handle it honestly.
+    if [ "$NETWORK_ALLOWED" != "1" ]; then
+        warn "--sync: сеть отключена — версию беру только из лока/--pin, локальные теги без сверки с origin не использую (O2)" >&2
+        return 0
+    fi
     remote_tags="$(git -C "$repo_dir" ls-remote --tags origin 'refs/tags/v*' 2>/dev/null \
         | sed -E 's#.*refs/tags/(v[^\^]+)(\^\{\})?$#\1#' | sort -u)"
     if [ -z "$remote_tags" ]; then
@@ -632,7 +682,12 @@ PYEOF
     fi
     [ -n "$pin" ] || pin="$(latest_tag "$CORE")"
     if [ -z "$pin" ]; then
-        warn "в store нет тегов; укажи --pin main явно (трекинг HEAD) или запусти install.sh --update"
+        # O2: latest_tag() now returns empty both when store has no tags at
+        # all AND when NETWORK_ALLOWED=0 and there is no lock to read a pin
+        # from (it refuses to guess an origin-unverified local tag) — this
+        # message must stay honest for both causes, not claim "no tags"
+        # when tags exist but --sync just won't trust them unverified.
+        warn "не удалось определить версию: либо в store нет тегов (запусти install.sh --update), либо сеть отключена (--sync) и в проекте ещё нет лока с пином. Укажи --pin явно, либо запусти без --sync для сетевой проверки."
         exit 1
     fi
 
