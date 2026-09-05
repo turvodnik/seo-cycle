@@ -13,14 +13,17 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import shutil
 import subprocess
 import sys
 import time
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, project_root_for
+from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
+
+DEFAULT_SNAPSHOT_MAX_AGE_DAYS = 7
 
 SCRIPTS_DIR = pathlib.Path(__file__).resolve().parent
 SKILL_ROOT = SCRIPTS_DIR.parent
@@ -144,7 +147,18 @@ def newest_snapshot(project: pathlib.Path) -> tuple[pathlib.Path | None, int | N
 
 
 def cmd_doctor(args: list[str], project: pathlib.Path) -> int:
-    """Read-only aggregated health: config, journey, spend, ledger, providers, freshness."""
+    """Read-only aggregated health: config, journey, spend, ledger, providers, freshness.
+
+    Freshness threshold: `monitoring.snapshot_max_age_days` in seo-cycle.yaml
+    (default 7) — snapshot older than that is ПРОСРОЧЕН and fails (exit 1).
+    Also reports `agy` (Antigravity CLI) and Perplexity-key presence — both
+    are declared mandatory for Phase 2 by the phase skill, so doctor must be
+    able to say whether they are actually available (T-052).
+    """
+    cfg_path = find_config(project)
+    cfg = load_yaml(cfg_path) if cfg_path else {}
+    max_age = int(nested_get(cfg, "monitoring.snapshot_max_age_days", DEFAULT_SNAPSHOT_MAX_AGE_DAYS)
+                 or DEFAULT_SNAPSHOT_MAX_AGE_DAYS)
     results: list[tuple[str, int, str]] = []
     for label, script, prepend in DOCTOR_STEPS:
         path = SCRIPTS_DIR / script
@@ -178,19 +192,25 @@ def cmd_doctor(args: list[str], project: pathlib.Path) -> int:
         worst = 1
     snap, age = newest_snapshot(project)
     if snap is None:
-        print("- snapshot-freshness: нет снапшотов мониторинга (запусти `seo-cycle pulse`)")
-    elif age is not None and age >= 7:
-        print(f"- snapshot-freshness: ПРОСРОЧЕН — {age} дн. ({snap.name}); данные Phase 10 неактуальны")
+        print(f"- snapshot-freshness: нет снапшотов мониторинга (порог {max_age} дн.; запусти `seo-cycle pulse`)")
+    elif age is not None and age >= max_age:
+        print(f"- snapshot-freshness: ПРОСРОЧЕН — {age} дн., порог {max_age} ({snap.name}); данные Phase 10 неактуальны")
         worst = 1
     elif age is not None and age >= 3:
-        print(f"- snapshot-freshness: warn — {age} дн. ({snap.name})")
+        print(f"- snapshot-freshness: warn — {age} дн., порог {max_age} ({snap.name})")
     else:
-        print(f"- snapshot-freshness: ok ({snap.name}, {age} дн.)")
+        print(f"- snapshot-freshness: ok — {age} дн., порог {max_age} ({snap.name})")
     rag_db = project / "seo" / "rag.db"
     if rag_db.exists() and rag_db.stat().st_size > 0:
         print(f"- rag-index: ok ({rag_db.stat().st_size // 1024} KB)")
     else:
         print("- rag-index: отсутствует (info; создать: `seo-cycle rag index --write`)")
+    agy_path = shutil.which("agy")
+    print(f"- agy: {'found (' + agy_path + ')' if agy_path else 'missing'} "
+          "— обязателен для Phase 2 (Antigravity)")
+    perplexity_key = bool(env_chain(project).get("PERPLEXITY_API_KEY"))
+    print(f"- perplexity-key: {'present' if perplexity_key else 'missing'} "
+          "— обязателен для Phase 2 (значение не проверяется, только наличие)")
     print("\nDetails: rerun any step directly, e.g. `seo-cycle spend` or `seo-cycle journey`.")
     return worst
 
@@ -198,9 +218,13 @@ def cmd_doctor(args: list[str], project: pathlib.Path) -> int:
 def cmd_status(args: list[str], project: pathlib.Path) -> int:
     """Dashboard: project, snapshot age, loops/escalations, last triggers run — then journey."""
     cfg_path = find_config(project)
-    name = None
-    if cfg_path:
-        name = ((load_yaml(cfg_path) or {}).get("project") or {}).get("name")
+    if not cfg_path:
+        # Проверка ДО печати шапки (T-052): иначе выводится «снапшот: нет /
+        # triggers не строился» для несуществующего проекта — читается как
+        # реальное состояние, а не как «конфига вообще нет».
+        print(f"ERROR: seo-cycle.yaml not found in {project}", file=sys.stderr)
+        return 2
+    name = (load_yaml(cfg_path).get("project") or {}).get("name")
     print(f"# seo-cycle status · {name or project.name}\n")
     snap, age = newest_snapshot(project)
     if snap is None:
@@ -372,9 +396,12 @@ def command_overview() -> str:
             "  rag            Local RAG: rag index [--write|--global] | rag query \"<вопрос>\" [...]",
             "  sync           Site→local mirror via the publishing.cms adapter (wordpress|tilda|bitrix)",
             "  run            run monthly [...] | run script <name> [...] | run <task words>",
-            "  status         Dashboard: snapshot age, triggers, escalations + journey",
+            "  status         Dashboard: snapshot age, triggers, escalations + journey"
+            " (exit 2 if seo-cycle.yaml is missing — no header printed)",
             "  resume         Continue an interrupted quality loop (= loop ... --resume)",
-            "  doctor         Read-only aggregated health check (fails on missing checks & stale snapshots)",
+            "  doctor         Read-only aggregated health: providers, agy/perplexity-key presence,"
+            " snapshot freshness (threshold: monitoring.snapshot_max_age_days in seo-cycle.yaml,"
+            " default 7 days). Exit 1 on a missing check or a snapshot past the threshold.",
             "  menu           Interactive menu (double-click entrypoint; picks a project from the registry)",
             "  version        Print skill version",
             "",

@@ -1355,6 +1355,8 @@ monitoring:
   cadence: "2 weeks"                          # как часто делаем снапшоты
   snapshot_format: json                        # JSON по схеме snapshot-build.py
   retention_months: 12                         # сколько месяцев храним снапшоты
+  path: "seo/monitoring"                       # где искать *snapshot*.json (v1-раскладка: seo/09-monitoring)
+  snapshot_max_age_days: 7                     # doctor/pulse: старше — "ПРОСРОЧЕН", exit ненулевой
   # Кастомные триггеры проекта (опц.) — перезаписывают/расширяют дефолтные из
   # ./.codex/skills/seo-cycle/config/triggers.yaml. Merge by id.
   # triggers_file: "./seo-triggers.yaml"

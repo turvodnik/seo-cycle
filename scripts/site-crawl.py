@@ -129,6 +129,7 @@ def crawl(start: str, *, max_pages: int, max_depth: int, delay: float, timeout: 
     seen: set[str] = {start}
     pages: list[dict[str, Any]] = []
     edges = 0
+    parse_errors = 0
     while queue and len(pages) < max_pages:
         url, depth = queue.popleft()
         if not robots.can_fetch(USER_AGENT, url):
@@ -140,7 +141,10 @@ def crawl(start: str, *, max_pages: int, max_depth: int, delay: float, timeout: 
             try:
                 parser.feed(body)
             except Exception:  # noqa: BLE001 - malformed html must not kill the crawl
-                pass
+                # T-052: битый HTML раньше молча терял ссылки/title/h1 этой
+                # страницы без следа — теперь считаем и подробности идут в debug.
+                parse_errors += 1
+                log.debug("malformed html on %s", url, exc_info=True)
         internal: list[str] = []
         for href in parser.links:
             link = normalize_link(final_url, href)
@@ -169,7 +173,7 @@ def crawl(start: str, *, max_pages: int, max_depth: int, delay: float, timeout: 
         if delay:
             time.sleep(delay)
     return {"start": start, "host": host, "pages": pages, "edges": edges,
-            "truncated": bool(queue), "crawled": len(pages)}
+            "truncated": bool(queue), "crawled": len(pages), "parse_errors": parse_errors}
 
 
 def build_findings(data: dict[str, Any], max_depth: int) -> list[dict[str, Any]]:
@@ -225,7 +229,12 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines = [f"# Site crawl — {data.get('host', '?')}", "",
              f"- Обойдено страниц: {data.get('crawled')} (cap {'достигнут' if data.get('truncated') else 'не достигнут'})"
              f" · внутренних ссылок: {data.get('edges')}",
-             f"- Findings: {len(report['findings'])}", ""]
+             f"- Findings: {len(report['findings'])}"]
+    parse_errors = data.get("parse_errors") or 0
+    if parse_errors:
+        lines.append(f"- пропущено {parse_errors} страниц(ы) из-за ошибок разбора HTML,"
+                     " подробности в debug-логе")
+    lines.append("")
     for finding in report["findings"]:
         lines.append(f"## [{finding['severity']}] {finding['title']} — {finding['count']}")
         lines.extend(f"- {url}" for url in finding["urls"])

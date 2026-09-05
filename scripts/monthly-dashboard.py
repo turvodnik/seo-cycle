@@ -70,16 +70,31 @@ def load_approvals(path: pathlib.Path) -> list[dict]:
     return tickets
 
 
-def load_latest_snapshot(monitoring_dir: pathlib.Path) -> dict | None:
-    if not monitoring_dir.exists():
+SNAPSHOT_GLOB = "*snapshot*.json"
+
+
+def find_latest_snapshot_file(search_dirs: list[pathlib.Path]) -> pathlib.Path | None:
+    """Newest snapshot across every candidate dir (v2 `seo/monitoring/`, v1
+    fallback `seo/09-monitoring/`). Раскладка v2 кладёт дату ПОСЛЕ слова
+    snapshot (`webmaster-snapshot-2026-09-01.json`) — маска `*-snapshot.json`
+    её не находит (I-060), поэтому маска расширена на `*snapshot*.json`."""
+    candidates: list[pathlib.Path] = []
+    for d in search_dirs:
+        if d.exists():
+            candidates.extend(d.glob(SNAPSHOT_GLOB))
+    if not candidates:
         return None
-    snaps = sorted(monitoring_dir.glob("*-snapshot.json"))
-    if not snaps:
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+def load_latest_snapshot(search_dirs: list[pathlib.Path]) -> dict | None:
+    latest = find_latest_snapshot_file(search_dirs)
+    if latest is None:
         return None
-    latest = snaps[-1]
     try:
         return {"path": str(latest), "data": json.loads(latest.read_text(encoding="utf-8"))}
-    except Exception:
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"⚠ snapshot найден, но не разобран: {latest} ({exc})", file=sys.stderr)
         return None
 
 
@@ -250,7 +265,9 @@ def render_markdown(data: dict, project_name: str) -> str:
     lines.append("")
     snap = data["latest_snapshot"]
     if not snap:
-        lines.append("_Snapshot не найден — запусти Phase 9 (claude-seo:seo-google + yandex-seo-specialist)_ ⚠️")
+        searched = ", ".join(f"`{d}`" for d in data.get("monitoring_search_dirs", []))
+        lines.append(f"_Snapshot не найден (искали: {searched}) — запусти Phase 9"
+                     " (claude-seo:seo-google + yandex-seo-specialist)_ ⚠️")
     else:
         sd = snap["data"]
         period = sd.get("period", {})
@@ -330,14 +347,26 @@ def main():
     args = ap.parse_args()
 
     project_name = "Project"
+    cfg: dict = {}
     if yaml and args.config.exists():
         cfg = yaml.safe_load(args.config.read_text(encoding="utf-8")) or {}
         project_name = cfg.get("project", {}).get("name", project_name)
 
+    # Путь мониторинга — из конфига (monitoring.path), дефолт v2 seo/monitoring;
+    # v1-раскладка seo/09-monitoring/ остаётся fallback-кандидатом всегда, чтобы
+    # старые проекты (без monitoring.path в конфиге) продолжали находить срезы.
+    monitoring_cfg = (cfg.get("monitoring") or {}) if isinstance(cfg.get("monitoring"), dict) else {}
+    configured_dir = pathlib.Path(str(monitoring_cfg.get("path") or "seo/monitoring"))
+    search_dirs = [configured_dir]
+    for fallback in (pathlib.Path("seo/monitoring"), pathlib.Path("seo/09-monitoring"), pathlib.Path("09-monitoring")):
+        if fallback not in search_dirs:
+            search_dirs.append(fallback)
+
     data = {
         "queue": load_queue(pathlib.Path("seo/keyword-queue.csv")),
         "approvals": load_approvals(pathlib.Path("seo/pending-approvals.md")),
-        "latest_snapshot": load_latest_snapshot(pathlib.Path("09-monitoring")),
+        "latest_snapshot": load_latest_snapshot(search_dirs),
+        "monitoring_search_dirs": [str(d) for d in search_dirs],
         "audit": load_latest_audit(pathlib.Path("seo/cycles")),
         "refresh": load_latest_refresh(pathlib.Path("seo/cycles")),
         "deindex_cases": load_deindex_cases(pathlib.Path("seo/research/deindex")),
