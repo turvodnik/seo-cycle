@@ -186,4 +186,5 @@ def effective_budget(cli_budget: float, config_cap: object, *, cap_label: str = 
         return cli_budget
     if not finite_nonneg(config_cap):
         raise ValueError(f"{cap_label} непригоден для денежной арифметики ({config_cap!r})")
-    return min(cli_budget, float(config_cap))
+    cap_value: float = config_cap  # type: ignore[assignment]  # narrowed by finite_nonneg above
+    return min(cli_budget, cap_value)
