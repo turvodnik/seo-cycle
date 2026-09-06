@@ -42,6 +42,21 @@ MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 DEFAULT_LEDGER_NAME = "_usage.json"
 
 
+class ApiCallError(RuntimeError):
+    """A paid/quota-limited API call failed AFTER being sent: HTTP error,
+    network error, or a response body that isn't usable (not JSON, or valid
+    JSON of the wrong shape — `null`, a bare list, a number).
+
+    Every client's transport function should raise this instead of calling
+    `sys.exit()` itself. From a billing point of view the request may already
+    have been sent and even answered by the time parsing fails — the caller
+    (which holds the usage-ledger lock) decides what to record before it
+    decides whether to exit. Bypassing this (calling `sys.exit` inside the
+    transport function) is exactly how F-13 reopened in round 2 of T-066:
+    round-1 tests mocked the transport function itself, so the very layer
+    that exited early was invisible to them."""
+
+
 class UsageLedgerError(RuntimeError):
     """The usage-ledger file exists but cannot be trusted for money/quota
     arithmetic (corrupt JSON, wrong schema, garbled month, or a numeric field
@@ -149,25 +164,45 @@ def usage_lock(out_dir: pathlib.Path, *, name: str = DEFAULT_LEDGER_NAME) -> Ite
             fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
 
-def budget_arg(raw: str) -> float:
-    """`argparse(type=budget_arg)` for `--budget`.
+def nonneg_finite_arg(flag_name: str):
+    """Factory for an `argparse(type=...)` validator on any CLI number that
+    feeds money/quota arithmetic downstream — not just `--budget`.
 
-    Rejects, at PARSE time, anything that would silently disable the stop
-    downstream: non-numeric text, `nan`, `inf`, `-inf`, and negative numbers.
-    Stock `argparse` with `type=float` accepts all of those — `float("nan")`
-    and `float("inf")` are valid Python float literals — and `min(nan, cap)`
-    is `nan`, so `--budget nan` used to remove the stop completely (F-11).
+    R-3/R-4 (T-066, gate round 2): `--budget` was the only flag validated in
+    round 1; `--cpm` and `--ttl` were left as bare `type=float`, so `--cpm nan`
+    still poisoned `_usage.json` through `save_usage()` (the module built to
+    stop exactly that), and `--ttl nan` made the on-disk cache always miss
+    (`(now - mtime) / 86400 <= nan` is always False), turning every call
+    paid. Any CLI flag whose value reaches money/quota math should use this,
+    not a bare `type=float`.
+
+    Rejects, at PARSE time, anything that would silently disable a
+    downstream guard: non-numeric text, `nan`, `inf`, `-inf`, and negative
+    numbers. Stock `argparse` with `type=float` accepts all of those —
+    `float("nan")` and `float("inf")` are valid Python float literals.
     """
-    try:
-        value = float(raw)
-    except (TypeError, ValueError) as e:
-        raise argparse.ArgumentTypeError(f"--budget: {raw!r} не число") from e
-    if not finite_nonneg(value):
-        raise argparse.ArgumentTypeError(
-            f"--budget: {raw!r} непригоден для денежной арифметики "
-            f"(нужно конечное неотрицательное число)"
-        )
-    return value
+    def _validate(raw: str) -> float:
+        try:
+            value = float(raw)
+        except (TypeError, ValueError) as e:
+            raise argparse.ArgumentTypeError(f"{flag_name}: {raw!r} не число") from e
+        if not finite_nonneg(value):
+            raise argparse.ArgumentTypeError(
+                f"{flag_name}: {raw!r} непригоден для денежной/количественной "
+                f"арифметики (нужно конечное неотрицательное число)"
+            )
+        return value
+
+    _validate.__name__ = f"nonneg_finite_arg_{flag_name.strip('-').replace('-', '_')}"
+    return _validate
+
+
+def budget_arg(raw: str) -> float:
+    """`argparse(type=budget_arg)` for `--budget` specifically — kept as a
+    named function (not just `nonneg_finite_arg("--budget")`) because it is
+    imported and referenced directly by name in three clients and their
+    tests; behavior is `nonneg_finite_arg("--budget")` (F-11)."""
+    return nonneg_finite_arg("--budget")(raw)
 
 
 def effective_budget(cli_budget: float, config_cap: object, *, cap_label: str = "конфиг") -> float:

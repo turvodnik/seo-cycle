@@ -54,15 +54,22 @@ import urllib.request
 
 from seo_cycle_core.config import find_config, load_yaml, nested_get
 from seo_cycle_core.usage_ledger import (
+    ApiCallError,
     UsageLedgerError,
     budget_arg,
     effective_budget as _shared_effective_budget,
     finite_nonneg as _finite_nonneg,
     load_usage as _shared_load_usage,
+    nonneg_finite_arg,
     save_usage,
     usage_file as _shared_usage_file,
     usage_lock,
 )
+
+# R-4 (гейт круга 2): `--ttl` голым `type=float` даёт `--ttl nan`, и
+# `(now - mtime) / 86400 <= nan` всегда False — кэш становится вечным
+# промахом, каждый вызов платный. Отчёт F-11 называл `--ttl` прямо.
+ttl_arg = nonneg_finite_arg("--ttl")
 
 API_BASE = "https://api.dataforseo.com/v3"
 DEFAULT_OUT = "seo/research/dataforseo"
@@ -145,11 +152,16 @@ def effective_budget(args) -> float:
 
 
 # ---------- транспорт ----------
+#
+# `ApiCallError` (из общего модуля, F-13 круг 2) — call() поднимает его вместо
+# sys.exit на любой ошибке после отправки запроса; fetch() решает, что писать
+# в учёт, ДО того как решит, выходить ли.
 
 def call(b64: str, path: str, payload: dict | None) -> dict:
-    """POST (live-методы) либо GET (без payload). Ошибки API, сети и битого JSON
-    поднимаются как управляемый sys.exit с понятным сообщением, а не голый
-    traceback (T-059)."""
+    """POST (live-методы) либо GET (без payload). Любая ошибка — HTTP, сеть,
+    битый JSON, JSON не-объектной формы — поднимает ApiCallError, а не
+    sys.exit: с точки зрения биллинга запрос уже мог уйти и быть оплачен
+    независимо от того, разобрали мы ответ или нет (F-13)."""
     data = None
     if payload is not None:
         data = json.dumps([payload]).encode("utf-8")
@@ -164,33 +176,36 @@ def call(b64: str, path: str, payload: dict | None) -> dict:
             raw = r.read()
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")[:300]
-        sys.exit(f"ERROR DataForSEO HTTP {e.code}: {body}")
+        raise ApiCallError(f"HTTP {e.code}: {body}") from e
     except (urllib.error.URLError, TimeoutError) as e:
-        sys.exit(f"ERROR DataForSEO: сеть недоступна ({e}).")
+        raise ApiCallError(f"сеть недоступна ({e})") from e
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
     except ValueError as e:
-        sys.exit(f"ERROR DataForSEO: битый ответ, не JSON ({e}).")
+        raise ApiCallError(f"битый ответ, не JSON ({e})") from e
+    if not isinstance(parsed, dict):
+        raise ApiCallError(f"ответ не JSON-объект, получено {type(parsed).__name__}")
+    return parsed
 
 
 def response_cost(resp: dict) -> float:
-    """Реальная стоимость вызова из ответа API (в USD). Отсутствие поля — 0
-    (бесплатные методы вроде balance его не возвращают). Присутствие с
-    непригодным для арифметики значением (не число, NaN, Infinity, отрицательное)
-    — sys.exit, а не тихий 0: заниженный/испорченный учёт из ответа API — тот же
-    риск, что «потрачено 0» при битом файле учёта (T-059, второй круг после
-    гейта — response_cost() не был затронут первым проходом)."""
+    """Реальная стоимость вызова из ответа API (в USD). Эта функция вызывается
+    только для платных методов (через fetch()) — отсутствие `cost` там ТОЖЕ
+    непригодно, а не «бесплатно» (R-5, круг 2 гейта: `balance` — единственный
+    бесплатный метод — идёт через call() напрямую, минуя fetch()/response_cost()
+    вовсе, так что «нет поля — 0» здесь никогда не было легитимным путём, только
+    маскировкой сюрприза в контракте API). Непригодное для арифметики значение
+    (не число, NaN, Infinity, отрицательное) или отсутствие поля — ValueError,
+    не sys.exit: решение «что делать дальше» — за вызывающей стороной (F-13)."""
     raw = resp.get("cost")
     if raw is None:
-        return 0.0
+        raise ValueError("поле cost отсутствует в ответе платного метода")
     try:
         cost = float(raw)
-    except (TypeError, ValueError):
-        sys.exit(f"ERROR DataForSEO: поле cost в ответе непригодно для денежной "
-                 f"арифметики ({raw!r}).")
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"поле cost в ответе непригодно для денежной арифметики ({raw!r})") from e
     if not _finite_nonneg(cost):
-        sys.exit(f"ERROR DataForSEO: поле cost в ответе непригодно для денежной "
-                 f"арифметики ({raw!r}).")
+        raise ValueError(f"поле cost в ответе непригодно для денежной арифметики ({raw!r})")
     return cost
 
 
@@ -254,21 +269,35 @@ def fetch(b64: str, path: str, payload: dict | None, args) -> dict:
                      f"(${u['spent_usd']:.4f}/${budget}, месяц {u['month']}). "
                      f"--force чтобы продолжить или подними --budget.")
 
-        # F-13 (независимый прогон 2026-09-06): деньги списываются самим фактом
-        # платного вызова, а не фактом «ответ хороший». Раньше и плохой
-        # status_code, и непригодное поле cost (response_cost) уходили в
-        # sys.exit ДО save_usage() — вызов был реальный, платный, а учёт про
-        # него не знал ничего. Поэтому: вызов сначала, запись под тем же
-        # usage_lock — ВСЕГДА, любой из выходов ниже происходит только после неё.
-        resp = call(b64, path, payload)
-        u["calls"] = u.get("calls", 0) + 1
+        # F-13 (независимый прогон 2026-09-06, круг 2): деньги списываются
+        # самим фактом платного вызова, а не фактом «ответ хороший». Круг 1
+        # закрыл только две ветки, названные в отчёте по строкам (bad
+        # status_code, непригодный cost) — гейт нашёл ещё четыре: HTTP-ошибка,
+        # сетевая ошибка, битый JSON и валидный JSON не-объектной формы, все
+        # внутри call(), до того как fetch() успевал что-то записать. Теперь
+        # call() только поднимает ApiCallError (см. класс выше) — НИ ОДНО
+        # исключение между отправкой запроса и save_usage() не покидает этот
+        # try/except, не долетев до записи.
+        error_message: str | None = None
+        cost: float | None = None
+        cost_error: str | None = None
+        resp: dict = {}
         try:
-            cost = response_cost(resp)
-        except SystemExit as e:
-            cost = None
-            cost_error = str(e.code)
+            resp = call(b64, path, payload)
+        except ApiCallError as e:
+            error_message = str(e)
         else:
-            cost_error = None
+            # cost читается независимо от status_code конверта: DataForSEO
+            # выставляет реальную стоимость и на успешных, и на провалившихся
+            # задачах — окно F-13 про факт вызова, а не про факт успеха.
+            try:
+                cost = response_cost(resp)
+            except ValueError as e:
+                cost_error = str(e)
+            if resp.get("status_code") not in (20000, None):
+                error_message = f"{resp.get('status_code')} {resp.get('status_message')}"
+
+        u["calls"] = u.get("calls", 0) + 1
         if cost is not None:
             u["spent_usd"] = round(u.get("spent_usd", 0.0) + cost, 6)
         else:
@@ -278,14 +307,14 @@ def fetch(b64: str, path: str, payload: dict | None, args) -> dict:
             u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) + 1
         save_usage(out_dir, u)
 
-        if resp.get("status_code") not in (20000, None):
+        if error_message is not None:
             print(f"↑ запрос {path}: вызов #{u['calls']} зафиксирован в учёте, "
-                  f"ответ вернул ошибку конверта", file=sys.stderr)
-            sys.exit(f"ERROR DataForSEO: {resp.get('status_code')} {resp.get('status_message')}")
+                  f"ошибка вызова: {error_message}", file=sys.stderr)
+            sys.exit(f"ERROR DataForSEO: {error_message}")
         if cost_error is not None:
             print(f"↑ запрос {path}: вызов #{u['calls']} зафиксирован в учёте "
                   f"без суммы (cost непригоден)", file=sys.stderr)
-            sys.exit(f"ERROR DataForSEO: {cost_error} Расход по вызову #{u['calls']} "
+            sys.exit(f"ERROR DataForSEO: {cost_error}. Расход по вызову #{u['calls']} "
                      f"учтён без суммы — сверь {usage_file(out_dir)} вручную.")
 
         print(f"↑ запрос {path}: ${cost:.4f} · за месяц ${u['spent_usd']:.4f} "
@@ -434,7 +463,7 @@ def add_common(p: argparse.ArgumentParser, sub: bool) -> None:
     заданные до подкоманды (`--md volume X` и `volume X --md` работают одинаково)."""
     d = (lambda v: argparse.SUPPRESS) if sub else (lambda v: v)
     p.add_argument("--out", default=d(DEFAULT_OUT), help=f"папка кэша и учёта (умолч. {DEFAULT_OUT})")
-    p.add_argument("--ttl", type=float, default=d(DEFAULT_TTL_DAYS), help="возраст кэша в днях")
+    p.add_argument("--ttl", type=ttl_arg, default=d(DEFAULT_TTL_DAYS), help="возраст кэша в днях")
     p.add_argument("--budget", type=budget_arg, default=d(DEFAULT_BUDGET_USD),
                    help="месячный лимит трат, USD (итог — минимум с "
                         "governance.subscriptions.dataforseo.monthly_usd_cap проекта, если задан)")

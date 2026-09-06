@@ -30,6 +30,21 @@ keyso = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(keyso)
 
 
+class TtlArgTest(unittest.TestCase):
+    """R-4 (гейт круга 2): --ttl оставался голым type=float у всех трёх
+    клиентов, включая этот."""
+
+    def test_nan_is_rejected_at_parse_time(self) -> None:
+        with mock.patch.object(sys, "argv", ["keyso-fetch.py", "keyword-info", "x", "--ttl", "nan"]):
+            with self.assertRaises(SystemExit):
+                keyso.main()
+
+    def test_negative_is_rejected_at_parse_time(self) -> None:
+        with mock.patch.object(sys, "argv", ["keyso-fetch.py", "keyword-info", "x", "--ttl", "-1"]):
+            with self.assertRaises(SystemExit):
+                keyso.main()
+
+
 class BumpUsageTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-keyso-"))

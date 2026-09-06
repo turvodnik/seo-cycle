@@ -37,19 +37,28 @@ Auth: Basic base64(API_SpyFu_ID:API_SpyFu_secret_key) — собирается �
 """
 
 from __future__ import annotations
-import argparse, base64, hashlib, json, os, pathlib, sys, time, urllib.parse, urllib.request
+import argparse, base64, hashlib, json, os, pathlib, sys, time, urllib.error, urllib.parse, urllib.request
 
 from seo_cycle_core.config import find_config, load_yaml, nested_get
 from seo_cycle_core.usage_ledger import (
+    ApiCallError,
     UsageLedgerError,
     budget_arg,
     current_month,
     effective_budget as _shared_effective_budget,
     load_usage as _shared_load_usage,
+    nonneg_finite_arg,
     save_usage,
     usage_file as _shared_usage_file,
     usage_lock,
 )
+
+# R-3/R-4 (гейт круга 2): `--cpm` голым `type=float` пишет «не число» в
+# _usage.json через cost=rows/1000*cpm (F-13-класс наоборот — модуль,
+# созданный чтобы прекратить порчу файла, сам его травит); `--ttl` — тот же
+# «вечный промах кэша», что F-11 называл прямо.
+cpm_arg = nonneg_finite_arg("--cpm")
+ttl_arg = nonneg_finite_arg("--ttl")
 
 API_BASE = "https://api.spyfu.com/apis"
 USAGE_FIELDS = ("spent_usd", "rows")
@@ -125,12 +134,27 @@ def effective_budget(args) -> float:
 
 
 def call(b64: str, path: str, params: dict) -> dict:
+    """Любая ошибка после отправки запроса (HTTP, сеть, битый JSON) поднимает
+    ApiCallError вместо голого traceback/sys.exit — run() решает, что писать
+    в учёт, ДО того как решит, выходить ли (F-13, круг 2 независимого гейта:
+    раньше эти исключения улетали из-под usage_lock необработанными, и запись
+    расхода не происходила вовсе)."""
     time.sleep(RATE_DELAY)
     qs = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
     req = urllib.request.Request(f"{API_BASE}/{path}?{qs}",
                                  headers={"Authorization": f"Basic {b64}"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            raw = r.read()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")[:300]
+        raise ApiCallError(f"HTTP {e.code}: {body}") from e
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise ApiCallError(f"сеть недоступна ({e})") from e
+    try:
+        return json.loads(raw)
+    except ValueError as e:
+        raise ApiCallError(f"битый ответ, не JSON ({e})") from e
 
 
 def cache_path(out_dir, path, params):
@@ -170,22 +194,39 @@ def run(b64, path, cpm, params, args, distill):
             sys.exit(f"ERROR: месячный бюджет SpyFu исчерпан "
                      f"(${u['spent_usd']:.2f}/${budget}, месяц {u['month']}). --force чтобы продолжить.")
 
-        # F-13: расход пишется по факту платного вызова, а не по факту успеха.
-        # SpyFu считает стоимость от числа строк в ответе (rows/1000 * CPM), так
-        # что ошибочный ответ (status 400) естественно даёт rows=0/cost=0 — но
-        # запись всё равно идёт по единому пути ДО sys.exit, а не после него,
-        # так что будущий cost-по-факту-вызова не сможет повторить дыру F-13.
-        resp = call(b64, path, params)
-        is_error = isinstance(resp, dict) and resp.get("status") == 400
-        rows = 0 if is_error else (len(resp.get("results", [])) if isinstance(resp, dict) else 0)
-        cost = rows / 1000.0 * cpm
+        # F-13 (гейт круга 2): раньше call() сама пропускала HTTPError/URLError/
+        # битый JSON наружу необработанными — исключение улетало из-под
+        # usage_lock БЕЗ записи вообще (не только на status 400, который
+        # круг 1 уже закрывал). Теперь call() поднимает ApiCallError, и запись
+        # идёт по ЕДИНОМУ пути на любой ветке ДО sys.exit — включая ветку, где
+        # ответ вообще не получен (rows/cost неизвестны и честно равны нулю:
+        # SpyFu берёт деньги за фактически ВОЗВРАЩЁННЫЕ строки, ноль ответа —
+        # ноль строк — ноль cost по их же модели биллинга, но сам факт
+        # попытки обязан остаться в учёте, а не пропасть бесследно).
+        error_message: str | None = None
+        rows = 0
+        cost = 0.0
+        resp: dict = {}
+        try:
+            resp = call(b64, path, params)
+        except ApiCallError as e:
+            error_message = str(e)
+            u["failed_calls"] = u.get("failed_calls", 0) + 1
+        else:
+            is_error = isinstance(resp, dict) and resp.get("status") == 400
+            rows = 0 if is_error else (len(resp.get("results", [])) if isinstance(resp, dict) else 0)
+            cost = rows / 1000.0 * cpm
+            if is_error:
+                error_message = str(resp.get("errors", resp.get("title")))
+
         u["spent_usd"] = round(u.get("spent_usd", 0.0) + cost, 4)
         u["rows"] = u.get("rows", 0) + rows
         save_usage(out_dir, u)
 
-        if is_error:
-            print(f"↑ вызов SpyFu {path} зафиксирован в учёте (0 строк, $0.0000)", file=sys.stderr)
-            sys.exit(f"ERROR SpyFu: {resp.get('errors', resp.get('title'))}")
+        if error_message is not None:
+            print(f"↑ вызов SpyFu {path} зафиксирован в учёте ({rows} строк, ${cost:.4f})",
+                  file=sys.stderr)
+            sys.exit(f"ERROR SpyFu: {error_message}")
 
     cpath.write_text(json.dumps(resp, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"  ✓ {rows} строк, ~${cost:.4f} (CPM ${cpm}); месяц: ${u['spent_usd']:.2f}/${budget} → {cpath}",
@@ -211,9 +252,9 @@ def main() -> int:
     ap.add_argument("--all", action="store_true", help="domain-stats: вся история (дороже)")
     ap.add_argument("--cc", default="US", help="countryCode: US|GB|CA|DE|FR|AU... (НЕ RU)")
     ap.add_argument("--budget", type=budget_arg, default=40, help="месячный бюджет $ (Pro=$40)")
-    ap.add_argument("--ttl", type=float, default=30)
+    ap.add_argument("--ttl", type=ttl_arg, default=30)
     ap.add_argument("--force", action="store_true")
-    ap.add_argument("--cpm", type=float, default=0.50, help="для raw: CPM эндпоинта")
+    ap.add_argument("--cpm", type=cpm_arg, default=0.50, help="для raw: CPM эндпоинта")
     ap.add_argument("--param", action="append", default=[], help="для raw: k=v (повторяемо)")
     ap.add_argument("--out", default="./seo/research/spyfu")
     args = ap.parse_args()

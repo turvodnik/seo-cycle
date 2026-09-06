@@ -81,6 +81,28 @@ class BudgetArgTest(unittest.TestCase):
             ul.budget_arg("много")
 
 
+class NonnegFiniteArgTest(unittest.TestCase):
+    """R-3/R-4 (гейт круга 2): фабрика для любого CLI-флага, чьё значение
+    попадает в денежную/квотную арифметику, не только --budget."""
+
+    def test_ordinary_value_parses(self) -> None:
+        self.assertEqual(ul.nonneg_finite_arg("--cpm")("2.5"), 2.5)
+
+    def test_nan_is_rejected(self) -> None:
+        with self.assertRaises(argparse.ArgumentTypeError):
+            ul.nonneg_finite_arg("--ttl")("nan")
+
+    def test_message_names_the_flag(self) -> None:
+        with self.assertRaises(argparse.ArgumentTypeError) as ctx:
+            ul.nonneg_finite_arg("--cpm")("nan")
+        self.assertIn("--cpm", str(ctx.exception))
+
+    def test_budget_arg_is_the_same_validator_under_a_fixed_name(self) -> None:
+        self.assertEqual(ul.budget_arg("5"), ul.nonneg_finite_arg("--budget")("5"))
+        with self.assertRaises(argparse.ArgumentTypeError):
+            ul.budget_arg("nan")
+
+
 class EffectiveBudgetTest(unittest.TestCase):
     def test_no_cap_returns_cli_budget(self) -> None:
         self.assertEqual(ul.effective_budget(5.0, None), 5.0)

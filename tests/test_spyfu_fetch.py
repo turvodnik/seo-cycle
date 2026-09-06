@@ -75,6 +75,32 @@ class BudgetArgTest(unittest.TestCase):
                 spyfu.main()
 
 
+class CpmAndTtlArgTest(unittest.TestCase):
+    """R-3/R-4 (гейт круга 2): --cpm и --ttl оставались голым type=float —
+    --cpm nan травит _usage.json через cost=rows/1000*cpm, --ttl nan делает
+    кэш вечным промахом (F-11 называл --ttl прямо)."""
+
+    def test_cpm_nan_is_rejected_at_parse_time(self) -> None:
+        with mock.patch.object(sys, "argv", ["spyfu-fetch.py", "raw", "some/path", "--cpm", "nan"]):
+            with self.assertRaises(SystemExit):
+                spyfu.main()
+
+    def test_cpm_negative_is_rejected_at_parse_time(self) -> None:
+        with mock.patch.object(sys, "argv", ["spyfu-fetch.py", "raw", "some/path", "--cpm", "-1"]):
+            with self.assertRaises(SystemExit):
+                spyfu.main()
+
+    def test_ttl_nan_is_rejected_at_parse_time(self) -> None:
+        with mock.patch.object(sys, "argv", ["spyfu-fetch.py", "usage", "--ttl", "nan"]):
+            with self.assertRaises(SystemExit):
+                spyfu.main()
+
+    def test_ttl_inf_is_rejected_at_parse_time(self) -> None:
+        with mock.patch.object(sys, "argv", ["spyfu-fetch.py", "usage", "--ttl", "inf"]):
+            with self.assertRaises(SystemExit):
+                spyfu.main()
+
+
 class RunTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-spyfu-"))
@@ -125,6 +151,74 @@ class RunTest(unittest.TestCase):
                 spyfu.run("b64", "some/path", 0.50, {"domain": "z"}, self.args, lambda r: None)
         self.assertTrue((self.tmp / "_usage.json").exists(),
                          "запись должна произойти до sys.exit, а не после")
+
+
+def fake_response(body: bytes):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+        def read(self):
+            return body
+
+    return FakeResponse()
+
+
+class CallErrorTest(unittest.TestCase):
+    """F-13, гейт круга 2: call() раньше пропускала HTTPError/URLError/битый
+    JSON наружу необработанными — вызывающая сторона (run()) их не ловила
+    вовсе, запись расхода не происходила. Теперь call() поднимает
+    ApiCallError; здесь — прямые тесты транспортного слоя."""
+
+    def test_http_error_raises_api_call_error(self) -> None:
+        import io
+        err = spyfu.urllib.error.HTTPError("url", 500, "Internal Server Error", {}, io.BytesIO(b"boom"))
+        with mock.patch.object(spyfu.urllib.request, "urlopen", side_effect=err):
+            with self.assertRaises(spyfu.ApiCallError):
+                spyfu.call("b64", "some/path", {"domain": "x"})
+
+    def test_url_error_raises_api_call_error(self) -> None:
+        with mock.patch.object(spyfu.urllib.request, "urlopen",
+                               side_effect=spyfu.urllib.error.URLError("no route to host")):
+            with self.assertRaises(spyfu.ApiCallError):
+                spyfu.call("b64", "some/path", {"domain": "x"})
+
+    def test_malformed_json_raises_api_call_error(self) -> None:
+        with mock.patch.object(spyfu.urllib.request, "urlopen", return_value=fake_response(b"{not valid")):
+            with self.assertRaises(spyfu.ApiCallError):
+                spyfu.call("b64", "some/path", {"domain": "x"})
+
+
+class RunThroughRealCallTest(unittest.TestCase):
+    """Тот же принцип, что в test_dataforseo_fetch.FetchThroughRealCallTest:
+    мокается urlopen, а не spyfu.call — так видна ровно та ветка, которую
+    круг 1 не тестировал (call() сама пробрасывала исключение наружу)."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-spyfu-realcall-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.args = argparse_namespace(out=str(self.tmp), budget=40.0, ttl=30.0, force=False)
+
+    def _run_and_check_recorded(self, urlopen_kwargs) -> None:
+        with mock.patch.object(spyfu.urllib.request, "urlopen", **urlopen_kwargs):
+            with self.assertRaises(SystemExit):
+                spyfu.run("b64", "some/path", 0.50, {"domain": "x"}, self.args, lambda r: None)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage.get("failed_calls"), 1, "неуспешная попытка обязана остаться в учёте")
+
+    def test_http_error_records_before_exit(self) -> None:
+        import io
+        err = spyfu.urllib.error.HTTPError("url", 500, "Internal Server Error", {}, io.BytesIO(b"boom"))
+        self._run_and_check_recorded({"side_effect": err})
+
+    def test_url_error_records_before_exit(self) -> None:
+        self._run_and_check_recorded({"side_effect": spyfu.urllib.error.URLError("no route to host")})
+
+    def test_malformed_json_records_before_exit(self) -> None:
+        self._run_and_check_recorded({"return_value": fake_response(b"{not valid")})
 
 
 class LedgerCorruptionTest(unittest.TestCase):

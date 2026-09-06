@@ -36,9 +36,14 @@ from seo_cycle_core.usage_ledger import (
     UsageLedgerError,
     current_month,
     load_usage as _shared_load_usage,
+    nonneg_finite_arg,
     save_usage,
     usage_lock,
 )
+
+# R-4 (гейт круга 2, T-066): `--ttl` голым `type=float` — тот же «вечный
+# промах кэша» на nan/inf, что F-11 называл прямо для всех клиентов.
+ttl_arg = nonneg_finite_arg("--ttl")
 
 BASE_URL = "https://api.keys.so"
 _LAST = [0.0]
@@ -148,7 +153,7 @@ def main() -> int:
     ap.add_argument("arg", help="keyword или domain")
     ap.add_argument("--base", default="msk", help="региональная база Keys.so (msk=Яндекс Москва)")
     ap.add_argument("--per-page", type=int, default=50)
-    ap.add_argument("--ttl", type=float, default=60, help="кэш в днях (дефолт 60 — экономия лимита)")
+    ap.add_argument("--ttl", type=ttl_arg, default=60, help="кэш в днях (дефолт 60 — экономия лимита)")
     ap.add_argument("--out", default="./seo/research/keyso")
     ap.add_argument("--md", action="store_true")
     args = ap.parse_args()
