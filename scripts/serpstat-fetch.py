@@ -159,7 +159,12 @@ def d_raw(data):
     print(f"(получено {len(data)} строк; сырьё на диске)")
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Вынесено отдельно (R2-6, независимый гейт круг 3): тест
+    `test_serpstat_min_credits.py` раньше вызывал `nonneg_int_arg(...)`
+    напрямую — отцепление валидатора от флага (`type=int` вместо
+    `type=nonneg_int_arg`) оставляло сюиту зелёной, потому что тест не
+    проходил через реальный парсер вовсе."""
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["stats", "keywords-info", "related",
                                     "suggestions", "domain-keywords", "competitors"])
@@ -170,7 +175,11 @@ def main() -> int:
     ap.add_argument("--min-credits", type=nonneg_int_arg, default=50)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--out", default="./seo/research/serpstat")
-    args = ap.parse_args()
+    return ap
+
+
+def main() -> int:
+    args = build_parser().parse_args()
 
     token = load_token()
 
