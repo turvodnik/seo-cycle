@@ -18,7 +18,7 @@ import re
 import sys
 from typing import Any
 
-from seo_cycle_core.config import boolish, find_config, load_yaml, nested_get, policy_path, project_root_for, rel_path, write_text
+from seo_cycle_core.config import boolish, find_config, load_yaml, nested_get, policy_path, project_root_for, rel_path, require_config, write_text  # noqa: F401 -- load_yaml re-exported for ai-bot-access-check.py's `from vnext_audit_core import ...`
 
 
 SOURCES = [
@@ -489,7 +489,11 @@ def extra_findings(audit_id: str, evidence: dict[str, Any]) -> list[dict[str, An
 def build_report(audit_id: str, cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
     spec = AUDIT_SPECS[audit_id]
     project_root = project_root_for(cfg_path)
-    cfg = load_yaml(cfg_path)
+    # T-067 round 4 (third gate): shared by all vnext audit scripts
+    # (cannibalization/eeat-evidence/geo-kpi/technical-guardrails/... — one
+    # fix here covers all of them) — an empty/missing config used to write
+    # a full "report" over nothing instead of refusing.
+    cfg = require_config(cfg_path)
     paths = output_paths(spec, cfg, project_root)
     cfg_status = config_status(cfg, spec)
     evidence = specialized_evidence(audit_id, args)

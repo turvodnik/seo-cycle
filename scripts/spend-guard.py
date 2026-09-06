@@ -17,7 +17,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import coerce_int, config_section
+from seo_cycle_core.config import coerce_int, config_section, require_config
 
 try:
     import yaml
@@ -470,7 +470,13 @@ def preflight_command(service: str, category: str, limits: dict[str, dict[str, A
 
 def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
     project_root = project_root_for(cfg_path)
-    cfg = load_yaml(cfg_path)
+    # T-067 round 4 (third gate): the caller already guarantees cfg_path
+    # exists — require_config() (the core, safe loader) adds the one thing
+    # that check didn't cover: an existing-but-empty file writing a full
+    # report over nothing. Local `load_yaml()` above stays as-is for the
+    # OTHER paths it's used for (tool_budget, policy files) — out of this
+    # ticket's F-39 boundary.
+    cfg = require_config(cfg_path)
     tool_budget = load_yaml(policy_path(cfg, project_root, "tool_budget", "seo/tool-budget.yaml"))
     tool_stack = load_policy_json(cfg, project_root, "tool_stack_report", "seo/setup/tool-stack-report.json")
     month = current_month()

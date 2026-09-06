@@ -22,10 +22,10 @@ from seo_cycle_core.config import (
     coerce_int,
     config_section,
     find_config,
-    load_yaml,
     policy_path,
     project_root_for,
     rel_display,
+    require_config,
     skill_root,
 )
 from seo_cycle_core.context import build_context_manifest
@@ -280,7 +280,11 @@ def rag_posture(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, An
 
 
 def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route: bool) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    # T-067 round 4 (third gate, single-project CLI — no --all/registry mode
+    # here, so an empty/comment-only config has no legitimate reason to
+    # keep going): require_config() refuses (stderr + exit 2) instead of
+    # writing a report over nothing.
+    cfg = require_config(cfg_path)
     project_root = project_root_for(cfg_path)
     if task and refresh_route:
         run_task_router(cfg_path, project_root, task)

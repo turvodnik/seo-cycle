@@ -347,5 +347,68 @@ class MatrixSiteTest(unittest.TestCase):
         self.assert_no_traceback(["db"], self.project_with(obsidian=7))
 
 
+class EmptyConfigWritesNothingTest(unittest.TestCase):
+    """T-067 round 4 (third gate): `require_config()` was wired into only
+    2 of the (now known) 12 report-writing entrypoints — `context` and
+    `pulse` each still gave rc=0 and wrote files over an existing-but-empty
+    config, the exact class this whole sub-fix exists to close. One test
+    per newly-wired command, driving the real CLI with a genuinely empty
+    `seo-cycle.yaml` — not a re-check of `require_config()` itself (that's
+    `RequireConfigTest`), but proof each call site actually reaches it."""
+
+    def setUp(self) -> None:
+        self.root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(self.root, ignore_errors=True))
+        (self.root / "seo-cycle.yaml").write_text("", encoding="utf-8")
+
+    def _assert_refuses(self, args: list[str], report_glob: str) -> None:
+        proc = run_cli(args, cwd=self.root)
+        self.assertNotEqual(proc.returncode, 0, msg=f"{args}: {proc.stdout + proc.stderr}")
+        self.assertNotIn("Traceback", proc.stdout + proc.stderr)
+        self.assertFalse(list(self.root.glob(report_glob)), msg=f"{args} wrote a report over an empty config")
+
+    def test_context_refuses_on_empty_config(self) -> None:
+        self._assert_refuses(["context", "--write"], "seo/setup/context-pack*")
+
+    def test_pulse_refuses_on_empty_config(self) -> None:
+        # `pulse` writes scorecards and a position-progress report as part
+        # of its pipeline, not under a `*pulse*`-named path — check the
+        # files it ACTUALLY produces (verified by removing the fix: rc
+        # becomes 1, not 0, but the files still get written — a naive
+        # `rc != 0` check alone would have missed that).
+        proc = run_cli(["pulse"], cwd=self.root)
+        self.assertNotEqual(proc.returncode, 0, msg=proc.stdout + proc.stderr)
+        self.assertNotIn("Traceback", proc.stdout + proc.stderr)
+        self.assertFalse(list(self.root.glob("seo/reports/position-progress*")))
+        self.assertFalse(list(self.root.glob("seo/scorecards/*")))
+
+    def test_spend_refuses_on_empty_config(self) -> None:
+        self._assert_refuses(["spend", "--write"], "seo/setup/*spend*")
+
+    def test_journey_refuses_on_empty_config(self) -> None:
+        self._assert_refuses(["journey", "--write"], "seo/setup/*journey*")
+
+    def test_ledger_report_refuses_on_empty_config(self) -> None:
+        self._assert_refuses(["ledger", "report", "--write"], "seo/setup/*ledger*")
+
+    def test_client_report_refuses_on_empty_config(self) -> None:
+        self._assert_refuses(["report", "--write"], "seo/reports/*")
+
+    def test_kpi_refuses_on_empty_config(self) -> None:
+        self._assert_refuses(["kpi", "--write"], "seo/strategy/kpi*")
+
+    def test_budget_refuses_on_empty_config(self) -> None:
+        self._assert_refuses(["budget", "--write"], "seo/strategy/budget*")
+
+    def test_forecast_refuses_on_empty_config(self) -> None:
+        self._assert_refuses(["forecast", "--write"], "seo/strategy/*forecast*")
+
+    def test_progress_refuses_on_empty_config(self) -> None:
+        self._assert_refuses(["progress", "--write"], "seo/reports/position-progress*")
+
+    def test_cannibalization_refuses_on_empty_config(self) -> None:
+        self._assert_refuses(["cannibalization", "--write"], "seo/vnext/*")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -36,7 +36,7 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import coerce_float, coerce_int, find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import coerce_float, coerce_int, find_config, load_yaml, nested_get, project_root_for, require_config
 from seo_cycle_core.engines import engine_names
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
@@ -368,6 +368,15 @@ def main() -> int:
                 print(f"⚠ {entry.get('name') or entry['path']}: seo-cycle.yaml не найден — пропуск",
                       file=sys.stderr)
                 continue
+            # T-067 round 4 (third gate): an EXISTING but empty/comment-only
+            # config used to sail through as "{}" and write a full report
+            # over nothing — same class as the missing-file skip above, so
+            # the same skip-and-continue (not require_config's hard exit,
+            # which would abort the whole --all batch over one bad entry).
+            if not load_yaml(cfg_path):
+                print(f"⚠ {entry.get('name') or entry['path']}: seo-cycle.yaml пуст — пропуск",
+                      file=sys.stderr)
+                continue
             report, project_rc = pulse_project(cfg_path, args)
             rc = max(rc, project_rc)
             reports.append(report)
@@ -381,6 +390,12 @@ def main() -> int:
     if not cfg_path or not cfg_path.exists():
         print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
         return 2
+    # T-067 round 4 (third gate, single-project mode): require_config()
+    # refuses on an existing-but-empty config instead of writing snapshot/
+    # queue/scorecard files over nothing (pulse_project() itself keeps
+    # using load_yaml() — it is shared with the --all loop above, which
+    # skips a bad entry rather than aborting the whole batch).
+    require_config(cfg_path)
     report, rc = pulse_project(cfg_path, args)
     if args.format == "json":
         print(json.dumps(report, ensure_ascii=False, indent=2))
