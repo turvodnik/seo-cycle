@@ -253,6 +253,35 @@ class RunThroughRealCallTest(unittest.TestCase):
         self._run_read_raises_and_check_recorded(ssl.SSLError("decryption failed"))
 
 
+class WriteAheadSurvivesBaseExceptionTest(unittest.TestCase):
+    """R3-1 (независимый гейт, круг 4): те же основания, что в
+    test_dataforseo_fetch.WriteAheadSurvivesBaseExceptionTest — `except
+    Exception` не ловит KeyboardInterrupt/SystemExit (BaseException), и ни
+    один except не ловит SIGKILL. Write-ahead (`cost_unknown_calls`
+    инкрементируется и save_usage() вызывается ДО call()) переживает всё это.
+    Мутация: перенеси write-ahead после call() — тест обязан покраснеть."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-spyfu-baseexc-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.args = argparse_namespace(out=str(self.tmp), budget=40.0, ttl=30.0, force=False)
+
+    def test_keyboard_interrupt_after_request_sent_is_already_recorded(self) -> None:
+        with mock.patch.object(spyfu.urllib.request, "urlopen", side_effect=KeyboardInterrupt()):
+            with self.assertRaises(KeyboardInterrupt):
+                spyfu.run("b64", "some/path", 0.50, {"domain": "x"}, self.args, lambda r: None)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage.get("cost_unknown_calls"), 1, "запрос ушёл — обязан быть учтён на диске "
+                                                              "ДО того как KeyboardInterrupt долетит до caller")
+
+    def test_system_exit_after_request_sent_is_already_recorded(self) -> None:
+        with mock.patch.object(spyfu.urllib.request, "urlopen", side_effect=SystemExit(1)):
+            with self.assertRaises(SystemExit):
+                spyfu.run("b64", "some/path", 0.50, {"domain": "x"}, self.args, lambda r: None)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage.get("cost_unknown_calls"), 1)
+
+
 class LedgerCorruptionTest(unittest.TestCase):
     """F-12: голое чтение файла учёта без проверки значения — NaN/Infinity/
     отрицательный spend раньше проходили молча."""

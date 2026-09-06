@@ -296,6 +296,40 @@ class FetchThroughRealCallTest(unittest.TestCase):
         self._run_read_raises_and_check_recorded(MemoryError())
 
 
+class WriteAheadSurvivesBaseExceptionTest(unittest.TestCase):
+    """R3-1 (независимый гейт, круг 4): круг 3 закрыл потерю расхода через
+    `except Exception` в call() — но `except Exception` НЕ ловит
+    KeyboardInterrupt/SystemExit/GeneratorExit (все — BaseException), и ни
+    один except вообще не ловит SIGKILL. Правильный уровень — записать
+    намерение потратить (write-ahead) ДО отправки запроса, а не пытаться
+    перехватить после. Мутация: перенеси write-ahead (`u["calls"] += 1;
+    u["cost_unknown_calls"] += 1; save_usage(...)`) обратно ПОСЛЕ call() —
+    оба теста ниже обязаны покраснеть (usage.json не будет содержать запись,
+    потому что KeyboardInterrupt улетит до save_usage())."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-baseexc-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.args = dfs.build_parser().parse_args(["--out", str(self.tmp), "volume", "vata"])
+
+    def test_keyboard_interrupt_after_request_sent_is_already_recorded(self) -> None:
+        with mock.patch.object(dfs.urllib.request, "urlopen", side_effect=KeyboardInterrupt()):
+            with self.assertRaises(KeyboardInterrupt):
+                dfs.fetch("b64", "keywords_data/google_ads/search_volume/live", {"k": 1}, self.args)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1, "запрос ушёл — обязан быть учтён на диске ДО того как "
+                                             "KeyboardInterrupt долетит до вызывающего кода")
+        self.assertEqual(usage.get("cost_unknown_calls"), 1)
+
+    def test_system_exit_after_request_sent_is_already_recorded(self) -> None:
+        with mock.patch.object(dfs.urllib.request, "urlopen", side_effect=SystemExit(1)):
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "keywords_data/google_ads/search_volume/live", {"k": 1}, self.args)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1)
+        self.assertEqual(usage.get("cost_unknown_calls"), 1)
+
+
 class CostUnknownBlocksFurtherCallsTest(unittest.TestCase):
     """R2-3 (независимый гейт, круг 3): «сумма неизвестна» — не «сумма 0».
     Мутация: убери проверку `cost_unknown_calls` в fetch() — тест обязан

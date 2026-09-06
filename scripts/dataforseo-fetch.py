@@ -302,6 +302,24 @@ def fetch(b64: str, path: str, payload: dict | None, args) -> dict:
         # call() только поднимает ApiCallError (см. класс выше) — НИ ОДНО
         # исключение между отправкой запроса и save_usage() не покидает этот
         # try/except, не долетев до записи.
+        #
+        # R3-1 (независимый гейт, круг 4): круг 3 закрыл это через
+        # `except Exception` в call() — но `except Exception` НЕ ловит
+        # BaseException (Ctrl-C/KeyboardInterrupt, SystemExit, GeneratorExit),
+        # и никакой except вообще не ловит SIGKILL. Инверсия на уровне
+        # исключения снова была перечнем — просто более широким. Правильный
+        # уровень — до отправки запроса: пишем намерение потратить
+        # (write-ahead) на диск ДО call(), а не пытаемся перехватить после.
+        # Тогда Ctrl-C/SIGTERM/SIGKILL — все становятся одним и тем же
+        # случаем: pending-запись уже на диске, cost_unknown_calls > 0
+        # блокирует дальнейшие вызовы (R2-3), пока человек не разберётся.
+        # save_usage() обязана реально отработать: если она сама бросит
+        # исключение, оно обязано долететь до вызывающего кода НЕ пойманным —
+        # платный вызов не должен уйти в сеть при недоказанной записи (R3-3).
+        u["calls"] = u.get("calls", 0) + 1
+        u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) + 1
+        save_usage(out_dir, u)
+
         error_message: str | None = None
         cost: float | None = None
         cost_error: str | None = None
@@ -321,15 +339,18 @@ def fetch(b64: str, path: str, payload: dict | None, args) -> dict:
             if resp.get("status_code") not in (20000, None):
                 error_message = f"{resp.get('status_code')} {resp.get('status_message')}"
 
-        u["calls"] = u.get("calls", 0) + 1
         if cost is not None:
+            # Сумма известна — уточняем pending-запись: переносим вызов из
+            # «неизвестно» в «потрачено». Никакой отдельной «уточняющей
+            # записи» здесь не пишется (R3-4) — pending и есть финальная
+            # запись, она просто дополняется суммой на месте.
+            u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) - 1
             u["spent_usd"] = round(u.get("spent_usd", 0.0) + cost, 6)
-        else:
-            # Сумма неизвестна — списать нечего, но сам факт платного вызова
-            # обязан остаться в учёте (F-13): непригодность отражена отдельным
-            # счётчиком, а не потерей вызова из истории.
-            u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) + 1
-        save_usage(out_dir, u)
+            save_usage(out_dir, u)
+        # else: вызов не удался или сумма непригодна — write-ahead запись уже
+        # отражает и факт вызова, и cost_unknown_calls; дописывать нечего.
+        # На неудаче второй записи не будет никогда — это финальное решение
+        # (R3-4), а не временное упущение.
 
         if error_message is not None:
             print(f"↑ запрос {path}: вызов #{u['calls']} зафиксирован в учёте, "

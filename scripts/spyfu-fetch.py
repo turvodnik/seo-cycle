@@ -201,6 +201,17 @@ def run(b64, path, cpm, params, args, distill):
         if u["spent_usd"] >= budget and not args.force:
             sys.exit(f"ERROR: месячный бюджет SpyFu исчерпан "
                      f"(${u['spent_usd']:.2f}/${budget}, месяц {u['month']}). --force чтобы продолжить.")
+        # R3-1 (независимый гейт, круг 4), по аналогии с R2-3 в
+        # dataforseo-fetch.py: вызов, чья сумма осталась неизвестна (обрыв
+        # ДО получения ответа — Ctrl-C, SIGTERM, SIGKILL), обязан блокировать
+        # ДАЛЬНЕЙШИЕ платные вызовы, пока человек не разберётся — иначе
+        # write-ahead ниже просто пишет мусор, который никто не читает.
+        if u.get("cost_unknown_calls", 0) > 0 and not args.force:
+            sys.exit(f"ERROR: {u['cost_unknown_calls']} вызов(ов) SpyFu в этом "
+                     f"месяце учтены БЕЗ суммы (запрос прервался до ответа) — "
+                     f"дальнейшие платные вызовы заблокированы, реальный расход "
+                     f"неизвестен. Сверь {usage_file(out_dir)} вручную, либо "
+                     f"--force чтобы продолжить вслепую.")
 
         # F-13 (гейт круга 2): раньше call() сама пропускала HTTPError/URLError/
         # битый JSON наружу необработанными — исключение улетало из-под
@@ -211,6 +222,18 @@ def run(b64, path, cpm, params, args, distill):
         # SpyFu берёт деньги за фактически ВОЗВРАЩЁННЫЕ строки, ноль ответа —
         # ноль строк — ноль cost по их же модели биллинга, но сам факт
         # попытки обязан остаться в учёте, а не пропасть бесследно).
+        #
+        # R3-1 (независимый гейт, круг 4): круг 3 закрыл потерю расхода через
+        # `except Exception` в call() — но `except Exception` не ловит
+        # BaseException (Ctrl-C/KeyboardInterrupt, SystemExit, GeneratorExit),
+        # и ни один except не ловит SIGKILL. Правильный уровень — до отправки
+        # запроса: пишем намерение (write-ahead) ДО call(), не после. SpyFu
+        # не знает cost/rows до ответа — поэтому write-ahead помечает вызов
+        # как cost_unknown_calls, а после успешного ответа уточняет запись на
+        # месте (никакой отдельной «уточняющей» записи, R3-4).
+        u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) + 1
+        save_usage(out_dir, u)
+
         error_message: str | None = None
         rows = 0
         cost = 0.0
@@ -220,16 +243,19 @@ def run(b64, path, cpm, params, args, distill):
         except ApiCallError as e:
             error_message = str(e)
             u["failed_calls"] = u.get("failed_calls", 0) + 1
+            # Сумма так и остаётся неизвестной — write-ahead запись уже это
+            # отражает (cost_unknown_calls), второй записи не будет (R3-4).
+            save_usage(out_dir, u)
         else:
             is_error = isinstance(resp, dict) and resp.get("status") == 400
             rows = 0 if is_error else (len(resp.get("results", [])) if isinstance(resp, dict) else 0)
             cost = rows / 1000.0 * cpm
             if is_error:
                 error_message = str(resp.get("errors", resp.get("title")))
-
-        u["spent_usd"] = round(u.get("spent_usd", 0.0) + cost, 4)
-        u["rows"] = u.get("rows", 0) + rows
-        save_usage(out_dir, u)
+            u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) - 1
+            u["spent_usd"] = round(u.get("spent_usd", 0.0) + cost, 4)
+            u["rows"] = u.get("rows", 0) + rows
+            save_usage(out_dir, u)
 
         if error_message is not None:
             print(f"↑ вызов SpyFu {path} зафиксирован в учёте ({rows} строк, ${cost:.4f})",
