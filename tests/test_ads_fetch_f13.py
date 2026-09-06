@@ -121,7 +121,18 @@ class GoogleAdsF13Test(unittest.TestCase):
             rc = gads.main()
         self.assertEqual(rc, 1)
         self.assertTrue(recorded, "ledger_record() обязан быть вызван даже при провале gaql_search()")
-        self.assertIn("FAILED", recorded[0].get("note", ""))
+        self.assertIn("FAILED", recorded[-1].get("note", ""))
+        self.assertEqual(recorded[0].get("requests"), 1, "попытка обязана быть записана ДО gaql_search()")
+
+    def test_ledger_write_ahead_precedes_gaql_search_call(self) -> None:
+        order = []
+        with mock.patch.object(gads, "env_status", return_value={"present": True, "missing": []}), \
+             mock.patch.object(gads, "ledger_preflight", return_value=(True, "ok")), \
+             mock.patch.object(gads, "ledger_record", side_effect=lambda *a, **k: order.append("record")), \
+             mock.patch.object(gads, "gaql_search", side_effect=lambda *a, **k: order.append("gaql_search") or {"ok": True}), \
+             mock.patch.object(sys, "argv", ["google-ads-fetch.py", "--report", "campaigns", "--live"]):
+            gads.main()
+        self.assertEqual(order[0], "record", "запись в леджер обязана произойти ДО gaql_search()")
 
 
 if __name__ == "__main__":
