@@ -177,8 +177,20 @@ def call(b64: str, path: str, payload: dict | None) -> dict:
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")[:300]
         raise ApiCallError(f"HTTP {e.code}: {body}") from e
-    except (urllib.error.URLError, TimeoutError) as e:
+    except urllib.error.URLError as e:
         raise ApiCallError(f"сеть недоступна ({e})") from e
+    except ApiCallError:
+        raise
+    except Exception as e:
+        # R2-2 (независимый гейт, круг 3): перечень конкретных типов исключений
+        # (URLError/TimeoutError) проигрывает следующему заходу так же, как
+        # перечень СЦЕНАРИЕВ проиграл кругу 2 — тело ответа уже отправленного
+        # запроса может порваться множеством способов (IncompleteRead,
+        # ConnectionResetError, ssl.SSLError, MemoryError...), ни один из
+        # которых не является URLError/TimeoutError. Инверсия вместо перечня:
+        # ЛЮБОЕ исключение после отправки запроса становится ApiCallError и
+        # долетает до fetch(), которая пишет учёт ДО re-raise/exit (F-13).
+        raise ApiCallError(f"ошибка после отправки запроса ({type(e).__name__}: {e})") from e
     try:
         parsed = json.loads(raw)
     except ValueError as e:
@@ -268,6 +280,18 @@ def fetch(b64: str, path: str, payload: dict | None, args) -> dict:
             sys.exit(f"ERROR: месячный лимит DataForSEO исчерпан "
                      f"(${u['spent_usd']:.4f}/${budget}, месяц {u['month']}). "
                      f"--force чтобы продолжить или подними --budget.")
+        # R2-3 (независимый гейт, круг 3): «сумма неизвестна» — это не «сумма
+        # ноль». spent_usd сравнением с бюджетом не двигается, пока cost
+        # непригоден/отсутствует в ответе — при массовом сбое поля cost стоп
+        # не срабатывает ни разу, сколько бы вызовов ни прошло. Любой
+        # неучтённый по сумме вызов блокирует ДАЛЬНЕЙШИЕ платные вызовы, пока
+        # человек не разберётся (--force снимает осознанно).
+        if u.get("cost_unknown_calls", 0) > 0 and not args.force:
+            sys.exit(f"ERROR: {u['cost_unknown_calls']} вызов(ов) в этом месяце "
+                     f"учтены БЕЗ суммы (поле cost непригодно/отсутствовало) — "
+                     f"дальнейшие платные вызовы заблокированы, реальный расход "
+                     f"неизвестен. Сверь {usage_file(out_dir)} вручную, либо "
+                     f"--force чтобы продолжить вслепую.")
 
         # F-13 (независимый прогон 2026-09-06, круг 2): деньги списываются
         # самим фактом платного вызова, а не фактом «ответ хороший». Круг 1

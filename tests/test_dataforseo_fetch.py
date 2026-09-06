@@ -258,6 +258,84 @@ class FetchThroughRealCallTest(unittest.TestCase):
                             "tasks": [{"status_code": 20000, "result": []}]}).encode()
         self._run_and_check_recorded({"return_value": fake_response(body)})
 
+    # R2-2 (независимый гейт, круг 3): тело УЖЕ отправленного запроса может
+    # порваться множеством способов, ни один из которых — HTTPError/URLError/
+    # TimeoutError, которые круг 2 ловил перечнем. Каждый следующий тест — мок
+    # `.read()`, поднимающий ровно такое исключение (запрос считается ушедшим).
+    # Мутация: замени `except Exception as e:` обратно на перечень конкретных
+    # типов в call() — все четыре теста ниже обязаны покраснеть.
+    def _run_read_raises_and_check_recorded(self, exc: BaseException) -> None:
+        class RaisingReadResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                raise exc
+
+        with mock.patch.object(dfs.urllib.request, "urlopen", return_value=RaisingReadResponse()):
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "keywords_data/google_ads/search_volume/live", {"k": 1}, self.args)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1, "платный вызов обязан быть учтён даже при экзотическом обрыве чтения")
+
+    def test_incomplete_read_records_before_exit(self) -> None:
+        import http.client
+        self._run_read_raises_and_check_recorded(http.client.IncompleteRead(b""))
+
+    def test_connection_reset_records_before_exit(self) -> None:
+        self._run_read_raises_and_check_recorded(ConnectionResetError("connection reset by peer"))
+
+    def test_ssl_error_records_before_exit(self) -> None:
+        import ssl
+        self._run_read_raises_and_check_recorded(ssl.SSLError("decryption failed"))
+
+    def test_memory_error_records_before_exit(self) -> None:
+        self._run_read_raises_and_check_recorded(MemoryError())
+
+
+class CostUnknownBlocksFurtherCallsTest(unittest.TestCase):
+    """R2-3 (независимый гейт, круг 3): «сумма неизвестна» — не «сумма 0».
+    Мутация: убери проверку `cost_unknown_calls` в fetch() — тест обязан
+    показать, что 200 вызовов проходят при бюджете $1."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-costunknown-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.args = dfs.build_parser().parse_args(
+            ["--out", str(self.tmp), "--budget", "1.0", "volume", "vata"])
+
+    def test_first_cost_unknown_call_blocks_the_next(self) -> None:
+        no_cost = {"status_code": 20000, "tasks": [{"status_code": 20000, "result": []}]}
+        calls_made = 0
+        with mock.patch.object(dfs, "call", return_value=no_cost):
+            for _ in range(200):
+                self.args.__dict__.pop("_cache_bust", None)
+                payload = {"unique": calls_made}
+                try:
+                    dfs.fetch("b64", "keywords_data/google_ads/search_volume/live", payload, self.args)
+                except SystemExit:
+                    pass
+                calls_made += 1
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1,
+                          "после первого вызова с неизвестной суммой дальнейшие платные вызовы обязаны блокироваться")
+        self.assertEqual(usage.get("cost_unknown_calls"), 1)
+
+    def test_force_overrides_the_cost_unknown_block(self) -> None:
+        no_cost = {"status_code": 20000, "tasks": [{"status_code": 20000, "result": []}]}
+        self.args.force = True
+        with mock.patch.object(dfs, "call", return_value=no_cost):
+            for i in range(3):
+                try:
+                    dfs.fetch("b64", "keywords_data/google_ads/search_volume/live", {"unique": i}, self.args)
+                except SystemExit:
+                    pass
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 3, "--force обязан осознанно снимать этот стоп, как и денежный")
+
 
 class LedgerCorruptionTest(unittest.TestCase):
     """T-059: битый/нечитаемый _usage.json — это отказ, а не «потрачено 0»."""
