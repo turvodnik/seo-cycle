@@ -1212,5 +1212,235 @@ class OrphanedWorktreeRefusesTest(unittest.TestCase):
         )
 
 
+class UpdateStoreForceTagsTest(InstallerFixture):
+    """T-068 / F-10: --update must FORCE-rewrite a tag that moved on origin
+    (a plain `git fetch --tags` silently refuses to do that, exit code 0 —
+    the exact mechanism that let the phantom v2.1.0 tag stand undetected,
+    2026-09-03 audit) and PRUNE a tag deleted on origin, reporting both."""
+
+    def test_moved_tag_is_force_updated_and_reported(self) -> None:
+        old_commit = _git(self.core, "rev-parse", "refs/tags/v1.0.0").stdout.strip()
+
+        # Move the tag on origin via a second clone (self.seed already
+        # tracks the same origin) — a re-tagged release.
+        (self.seed / "VERSION").write_text("1.0.1\n", encoding="utf-8")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "retag")
+        _git(self.seed, "tag", "-f", "v1.0.0")
+        _git(self.seed, "push", "-q", "-f", "origin", "main", "--tags")
+        new_commit = _git(self.seed, "rev-parse", "refs/tags/v1.0.0").stdout.strip()
+        self.assertNotEqual(old_commit, new_commit)
+
+        # Sanity: a PLAIN `git fetch --tags` (this git's pre-fix behaviour,
+        # verified empirically — some git versions do this silently with
+        # exit 0, this one refuses loudly with a non-zero exit) really does
+        # NOT rewrite the local tag either way — proves the scenario
+        # actually exercises the class of bug this ticket fixes (a moved
+        # tag left stale), not a no-op.
+        plain = subprocess.run(
+            ["git", "-C", str(self.core), "fetch", "--tags", "--quiet"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(
+            subprocess.run(
+                ["git", "-C", str(self.core), "rev-parse", "--verify", "-q", "refs/tags/v1.0.0"],
+                capture_output=True, text=True,
+            ).stdout.strip(),
+            old_commit,
+            f"плоский fetch --tags не должен был переписать тег (rc={plain.returncode}) — "
+            "иначе сценарий не воспроизводит F-10",
+        )
+
+        proc = self.run_install("--update")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        combined = proc.stdout + proc.stderr
+        self.assertIn(old_commit[:8], combined, combined)
+        self.assertIn(new_commit[:8], combined, combined)
+        self.assertIn("переехал", combined, combined)
+
+        self.assertEqual(
+            _git(self.core, "rev-parse", "refs/tags/v1.0.0").stdout.strip(),
+            new_commit,
+            "локальный тег обязан указывать на новый коммит после --update",
+        )
+
+    def test_deleted_tag_is_pruned_locally(self) -> None:
+        self.assertTrue((self.core / ".git").exists())
+        _git(self.core, "rev-parse", "refs/tags/v1.0.0")  # exists before
+
+        _git(self.seed, "push", "-q", "origin", "--delete", "v1.0.0")
+
+        proc = self.run_install("--update")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("отсутствует на origin", proc.stdout + proc.stderr)
+
+        removed = subprocess.run(
+            ["git", "-C", str(self.core), "rev-parse", "refs/tags/v1.0.0"],
+            capture_output=True, text=True,
+        )
+        self.assertNotEqual(removed.returncode, 0, "тег, удалённый на origin, обязан исчезнуть локально")
+
+    def test_unreachable_origin_fails_loudly_not_silently(self) -> None:
+        """T-064 sibling scenario for --update specifically: origin dropping
+        mid-run must produce a non-zero exit, not a quiet 'success'."""
+        offline = self.origin.with_name(self.origin.name + ".OFFLINE")
+        self.origin.rename(offline)
+        try:
+            proc = self.run_install("--update")
+        finally:
+            offline.rename(self.origin)
+
+        self.assertNotEqual(
+            proc.returncode, 0,
+            f"--update с недоступным origin обязан отказать, а не рапортовать успех — {proc.stdout + proc.stderr!r}",
+        )
+        self.assertIn("не удался", proc.stdout + proc.stderr)
+
+    def test_reverting_the_force_flags_reintroduces_the_silent_stale_tag(self) -> None:
+        """Genuine mutation: strip --force --prune --prune-tags back to a
+        plain `fetch --tags` and re-run the exact moved-tag scenario. The
+        original F-10 incident — the local tag left stale and unreported —
+        must come back, whatever exit code this git version's plain fetch
+        happens to return (review found: some versions exit 0 silently,
+        this one exits 1 loudly; either way the tag itself stays stale
+        without these flags, which is the actual incident) — proving these
+        flags, not something else, are what fix it."""
+        old_commit = _git(self.core, "rev-parse", "refs/tags/v1.0.0").stdout.strip()
+        (self.seed / "VERSION").write_text("1.0.1\n", encoding="utf-8")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "retag")
+        _git(self.seed, "tag", "-f", "v1.0.0")
+        _git(self.seed, "push", "-q", "-f", "origin", "main", "--tags")
+
+        proc = self.run_install_without(
+            "--force --prune --prune-tags ", "--update",
+        )
+        # Whichever way this git's plain `fetch --tags` fails on a moved tag
+        # (some versions: silent exit 0; this one: loud exit 1), the tag
+        # itself must stay stale without --force — that stale, unnoticed
+        # local tag is the actual F-10 incident.
+        self.assertEqual(
+            subprocess.run(
+                ["git", "-C", str(self.core), "rev-parse", "--verify", "-q", "refs/tags/v1.0.0"],
+                capture_output=True, text=True,
+            ).stdout.strip(),
+            old_commit,
+            f"без --force тег обязан остаться устаревшим (rc={proc.returncode}) — "
+            f"воспроизводит исходный инцидент F-10: {proc.stdout + proc.stderr!r}",
+        )
+
+    def test_prune_reports_a_tag_outside_the_release_mask_too(self) -> None:
+        """Review finding: the before-snapshot used to be masked to `v*`
+        (release tags), so a local-only marker tag OUTSIDE that mask (e.g.
+        a scratch tag someone made by hand) got silently pruned by
+        --prune-tags with zero report. The snapshot must now cover every
+        local tag, not just release-shaped ones."""
+        _git(self.core, "tag", "local-marker")  # never pushed, not v*-shaped
+        proc = self.run_install("--update")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn(
+            "local-marker", proc.stdout + proc.stderr,
+            "тег вне маски v*, убранный --prune-tags, обязан быть в отчёте",
+        )
+        removed = subprocess.run(
+            ["git", "-C", str(self.core), "rev-parse", "--verify", "-q", "refs/tags/local-marker"],
+            capture_output=True, text=True,
+        )
+        self.assertNotEqual(removed.returncode, 0)
+
+    def test_local_only_tag_is_not_falsely_reported_as_removed_from_origin(self) -> None:
+        """Review finding: a tag that never existed on origin (local-only)
+        getting pruned must not claim a removal EVENT happened on origin —
+        this run only ever observes origin's current state (absent), never
+        its history, so the wording states the present-tense fact instead
+        of an unprovable past event."""
+        _git(self.core, "tag", "v9.9.9-local-only")  # never pushed
+        proc = self.run_install("--update")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        combined = proc.stdout + proc.stderr
+        self.assertIn("v9.9.9-local-only", combined)
+        self.assertNotIn(
+            "удалён на origin", combined,
+            f"это утверждение о событии на origin, которого установщик не наблюдал — {combined!r}",
+        )
+        self.assertIn("отсутствует на origin", combined)
+
+    def test_deleted_tag_then_sync_does_not_destroy_the_live_snapshot(self) -> None:
+        """Review finding (the actual 🟡): before this fix, `rev-parse`
+        without --verify on an unresolvable ref echoed the literal ref
+        string back on stdout instead of failing empty. That made
+        ensure_worktree()'s `[ -z "$tag_commit" ]` guard blind: a tag
+        --update just pruned (routine after this ticket) looked "found"
+        with garbage as its commit, and the reconciliation path deleted the
+        project's live read-only snapshot trying to rebuild it — then
+        failed to recreate it, leaving dangling symlinks in the project.
+        This test pins a project to v1.0.0, prunes the tag via --update
+        after it's deleted on origin, then re-syncs and asserts the live
+        snapshot survives untouched."""
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        snapshot = self.shared / "versions" / "seo-cycle" / "v1.0.0"
+        self.assertTrue((snapshot / "VERSION").exists())
+
+        _git(self.seed, "push", "-q", "origin", "--delete", "v1.0.0")
+        proc2 = self.run_install("--update")
+        self.assertEqual(proc2.returncode, 0, proc2.stdout + proc2.stderr)
+        self.assertFalse(
+            subprocess.run(
+                ["git", "-C", str(self.core), "rev-parse", "--verify", "-q", "refs/tags/v1.0.0"],
+                capture_output=True, text=True,
+            ).returncode == 0,
+        )
+
+        proc3 = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--sync", "--no-migrate-old-global",
+        )
+        combined3 = proc3.stdout + proc3.stderr
+        self.assertTrue(
+            (snapshot / "VERSION").exists(),
+            f"живой снапшот версии не должен исчезать из-за мусорного tag_commit — {combined3!r}",
+        )
+        self.assertIn("не найден", combined3, combined3)
+
+    def test_reverting_the_verify_guard_reintroduces_the_snapshot_destruction(self) -> None:
+        """Genuine mutation: strip `--verify -q` back out of ensure_worktree()
+        (the exact review-flagged line) and re-run the deleted-tag-then-sync
+        scenario above. The snapshot destruction must come back — proving
+        this guard, not something else, is what stops it."""
+        old_commit = _git(self.core, "rev-parse", "refs/tags/v1.0.0").stdout.strip()
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        snapshot = self.shared / "versions" / "seo-cycle" / "v1.0.0"
+        self.assertTrue((snapshot / "VERSION").exists())
+
+        _git(self.seed, "push", "-q", "origin", "--delete", "v1.0.0")
+        _git(self.core, "fetch", "origin", "--tags", "--force", "--prune", "--prune-tags", "--quiet")
+        self.assertNotEqual(
+            subprocess.run(
+                ["git", "-C", str(self.core), "rev-parse", "--verify", "-q", "refs/tags/v1.0.0"],
+                capture_output=True, text=True,
+            ).returncode,
+            0,
+        )
+
+        proc3 = self.run_install_without(
+            'rev-parse --verify -q "refs/tags/$tag^{commit}"',
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--sync", "--no-migrate-old-global",
+        )
+        self.assertFalse(
+            (snapshot / "VERSION").exists(),
+            f"без --verify -q снапшот должен быть разрушен (воспроизводит инцидент) — "
+            f"{proc3.stdout + proc3.stderr!r}, старый коммит был {old_commit[:8]}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -7,7 +7,7 @@ name = "seo-cycle"
 # Версия дублирует VERSION (не dynamic из файла — надёжнее для чистого
 # `pip install -e .` на разных версиях setuptools); совпадение проверяет
 # tests/test_pyproject.py.
-version = "2.1.0"
+version = "2.2.0"
 description = "SEO/контент-цикл-оркестратор для Codex CLI и Claude Code"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
