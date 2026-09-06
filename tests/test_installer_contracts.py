@@ -1272,7 +1272,7 @@ class UpdateStoreForceTagsTest(InstallerFixture):
 
         proc = self.run_install("--update")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("удалён на origin", proc.stdout + proc.stderr)
+        self.assertIn("отсутствует на origin", proc.stdout + proc.stderr)
 
         removed = subprocess.run(
             ["git", "-C", str(self.core), "rev-parse", "refs/tags/v1.0.0"],
@@ -1299,8 +1299,12 @@ class UpdateStoreForceTagsTest(InstallerFixture):
     def test_reverting_the_force_flags_reintroduces_the_silent_stale_tag(self) -> None:
         """Genuine mutation: strip --force --prune --prune-tags back to a
         plain `fetch --tags` and re-run the exact moved-tag scenario. The
-        original F-10 incident (exit 0, tag silently left stale) must come
-        back — proving these flags, not something else, are what fix it."""
+        original F-10 incident — the local tag left stale and unreported —
+        must come back, whatever exit code this git version's plain fetch
+        happens to return (review found: some versions exit 0 silently,
+        this one exits 1 loudly; either way the tag itself stays stale
+        without these flags, which is the actual incident) — proving these
+        flags, not something else, are what fix it."""
         old_commit = _git(self.core, "rev-parse", "refs/tags/v1.0.0").stdout.strip()
         (self.seed / "VERSION").write_text("1.0.1\n", encoding="utf-8")
         _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
@@ -1323,6 +1327,118 @@ class UpdateStoreForceTagsTest(InstallerFixture):
             old_commit,
             f"без --force тег обязан остаться устаревшим (rc={proc.returncode}) — "
             f"воспроизводит исходный инцидент F-10: {proc.stdout + proc.stderr!r}",
+        )
+
+    def test_prune_reports_a_tag_outside_the_release_mask_too(self) -> None:
+        """Review finding: the before-snapshot used to be masked to `v*`
+        (release tags), so a local-only marker tag OUTSIDE that mask (e.g.
+        a scratch tag someone made by hand) got silently pruned by
+        --prune-tags with zero report. The snapshot must now cover every
+        local tag, not just release-shaped ones."""
+        _git(self.core, "tag", "local-marker")  # never pushed, not v*-shaped
+        proc = self.run_install("--update")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn(
+            "local-marker", proc.stdout + proc.stderr,
+            "тег вне маски v*, убранный --prune-tags, обязан быть в отчёте",
+        )
+        removed = subprocess.run(
+            ["git", "-C", str(self.core), "rev-parse", "--verify", "-q", "refs/tags/local-marker"],
+            capture_output=True, text=True,
+        )
+        self.assertNotEqual(removed.returncode, 0)
+
+    def test_local_only_tag_is_not_falsely_reported_as_removed_from_origin(self) -> None:
+        """Review finding: a tag that never existed on origin (local-only)
+        getting pruned must not claim a removal EVENT happened on origin —
+        this run only ever observes origin's current state (absent), never
+        its history, so the wording states the present-tense fact instead
+        of an unprovable past event."""
+        _git(self.core, "tag", "v9.9.9-local-only")  # never pushed
+        proc = self.run_install("--update")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        combined = proc.stdout + proc.stderr
+        self.assertIn("v9.9.9-local-only", combined)
+        self.assertNotIn(
+            "удалён на origin", combined,
+            f"это утверждение о событии на origin, которого установщик не наблюдал — {combined!r}",
+        )
+        self.assertIn("отсутствует на origin", combined)
+
+    def test_deleted_tag_then_sync_does_not_destroy_the_live_snapshot(self) -> None:
+        """Review finding (the actual 🟡): before this fix, `rev-parse`
+        without --verify on an unresolvable ref echoed the literal ref
+        string back on stdout instead of failing empty. That made
+        ensure_worktree()'s `[ -z "$tag_commit" ]` guard blind: a tag
+        --update just pruned (routine after this ticket) looked "found"
+        with garbage as its commit, and the reconciliation path deleted the
+        project's live read-only snapshot trying to rebuild it — then
+        failed to recreate it, leaving dangling symlinks in the project.
+        This test pins a project to v1.0.0, prunes the tag via --update
+        after it's deleted on origin, then re-syncs and asserts the live
+        snapshot survives untouched."""
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        snapshot = self.shared / "versions" / "seo-cycle" / "v1.0.0"
+        self.assertTrue((snapshot / "VERSION").exists())
+
+        _git(self.seed, "push", "-q", "origin", "--delete", "v1.0.0")
+        proc2 = self.run_install("--update")
+        self.assertEqual(proc2.returncode, 0, proc2.stdout + proc2.stderr)
+        self.assertFalse(
+            subprocess.run(
+                ["git", "-C", str(self.core), "rev-parse", "--verify", "-q", "refs/tags/v1.0.0"],
+                capture_output=True, text=True,
+            ).returncode == 0,
+        )
+
+        proc3 = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--sync", "--no-migrate-old-global",
+        )
+        combined3 = proc3.stdout + proc3.stderr
+        self.assertTrue(
+            (snapshot / "VERSION").exists(),
+            f"живой снапшот версии не должен исчезать из-за мусорного tag_commit — {combined3!r}",
+        )
+        self.assertIn("не найден", combined3, combined3)
+
+    def test_reverting_the_verify_guard_reintroduces_the_snapshot_destruction(self) -> None:
+        """Genuine mutation: strip `--verify -q` back out of ensure_worktree()
+        (the exact review-flagged line) and re-run the deleted-tag-then-sync
+        scenario above. The snapshot destruction must come back — proving
+        this guard, not something else, is what stops it."""
+        old_commit = _git(self.core, "rev-parse", "refs/tags/v1.0.0").stdout.strip()
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        snapshot = self.shared / "versions" / "seo-cycle" / "v1.0.0"
+        self.assertTrue((snapshot / "VERSION").exists())
+
+        _git(self.seed, "push", "-q", "origin", "--delete", "v1.0.0")
+        _git(self.core, "fetch", "origin", "--tags", "--force", "--prune", "--prune-tags", "--quiet")
+        self.assertNotEqual(
+            subprocess.run(
+                ["git", "-C", str(self.core), "rev-parse", "--verify", "-q", "refs/tags/v1.0.0"],
+                capture_output=True, text=True,
+            ).returncode,
+            0,
+        )
+
+        proc3 = self.run_install_without(
+            'rev-parse --verify -q "refs/tags/$tag^{commit}"',
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--sync", "--no-migrate-old-global",
+        )
+        self.assertFalse(
+            (snapshot / "VERSION").exists(),
+            f"без --verify -q снапшот должен быть разрушен (воспроизводит инцидент) — "
+            f"{proc3.stdout + proc3.stderr!r}, старый коммит был {old_commit[:8]}",
         )
 
 

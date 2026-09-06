@@ -247,7 +247,16 @@ ensure_worktree() {
     local repo_dir="$1" tool="$2" tag="$3"
     local dest="$VERSIONS_DIR/$tool/$tag"
     local tag_commit
-    tag_commit="$(git -C "$repo_dir" rev-parse "refs/tags/$tag^{commit}" 2>/dev/null || true)"
+    # --verify -q (T-068 review): a bare `rev-parse` on an unresolvable ref
+    # echoes the argument itself back on stdout instead of printing nothing
+    # (git's own documented quirk) — the `[ -z "$tag_commit" ]` guard right
+    # below would then see a non-empty string and walk into the "found it"
+    # branch with garbage as the commit. --prune-tags (this ticket) made a
+    # locally-vanished tag routine, not exotic, so this path is reachable
+    # now: a project pinned to a tag --update just pruned would otherwise
+    # get "found" with a bogus commit, blow away its live snapshot trying
+    # to reconcile against it, and be left with dangling symlinks.
+    tag_commit="$(git -C "$repo_dir" rev-parse --verify -q "refs/tags/$tag^{commit}" 2>/dev/null || true)"
     if [ -z "$tag_commit" ]; then
         warn "тег $tag не найден в $repo_dir"
         return 1
@@ -292,7 +301,10 @@ ensure_worktree() {
     fi
     if [ -e "$dest/SKILL.md" ] || [ -e "$dest/VERSION" ]; then
         local snapshot_commit
-        snapshot_commit="$(git -C "$dest" rev-parse HEAD 2>/dev/null || true)"
+        # --verify -q (T-068 review, same class as above): an unborn/empty
+        # HEAD echoes the literal string "HEAD" back on stdout rather than
+        # printing nothing.
+        snapshot_commit="$(git -C "$dest" rev-parse --verify -q HEAD 2>/dev/null || true)"
         if [ "$snapshot_commit" = "$tag_commit" ]; then
             printf "%s\n" "$dest"
             return 0
@@ -408,16 +420,31 @@ update_store_only() {
         if [ -d "$local_dir/.git" ]; then
             local before_file t old_c new_c
             before_file="$(mktemp)"
-            git -C "$local_dir" tag --list 'v*' | while IFS= read -r t; do
+            # Review fix (T-068): `tag --list 'v*'` used to mask the
+            # snapshot to release tags only — a tag OUTSIDE that mask
+            # (e.g. a local-only marker tag) got pruned by --prune-tags
+            # below with zero report. Snapshot ALL local tags so nothing
+            # vanishes silently.
+            git -C "$local_dir" tag --list | while IFS= read -r t; do
                 [ -n "$t" ] || continue
                 printf '%s %s\n' "$t" "$(git -C "$local_dir" rev-parse --verify -q "refs/tags/$t" 2>/dev/null)"
             done > "$before_file"
-            if git -C "$local_dir" fetch --tags --force --prune --prune-tags --quiet; then
+            # Explicit `origin` (review fix): a bare `fetch --tags` follows
+            # whatever remote git picks by default, which is usually origin
+            # but is not guaranteed to be — --prune-tags on the wrong remote
+            # would prune release tags that are perfectly fine on origin.
+            if git -C "$local_dir" fetch origin --tags --force --prune --prune-tags --quiet; then
                 while IFS=' ' read -r t old_c; do
                     [ -n "$t" ] || continue
                     new_c="$(git -C "$local_dir" rev-parse --verify -q "refs/tags/$t" 2>/dev/null || true)"
                     if [ -z "$new_c" ]; then
-                        warn "$label: тег $t удалён на origin — убран локально"
+                        # Review fix: this run can only see origin's CURRENT
+                        # state, not whether the tag was ever there before —
+                        # so the wording states the fact this fetch actually
+                        # observed ("отсутствует на origin", present tense)
+                        # rather than claiming a removal event that a
+                        # local-only, never-pushed tag never had.
+                        warn "$label: тег $t отсутствует на origin — убран локально (--prune-tags)"
                     elif [ "$new_c" != "$old_c" ]; then
                         warn "$label: тег $t переехал: ${old_c:0:8} → ${new_c:0:8}"
                     fi
@@ -757,7 +784,10 @@ PYEOF
             exit 1
         }
     fi
-    commit="$(git -C "$target" rev-parse HEAD 2>/dev/null || echo unknown)"
+    # --verify -q (T-068 review): suppress the echo-back-argument quirk
+    # on an unborn HEAD so a real failure lands cleanly on the "unknown"
+    # fallback instead of getting "HEAD" glued in front of it.
+    commit="$(git -C "$target" rev-parse --verify -q HEAD 2>/dev/null || echo unknown)"
     log "▶ seo-cycle @ $pin ($commit)"
 
     # seo-keywords (optional sibling): pinned to a tag, same as seo-cycle —
@@ -787,7 +817,7 @@ PYEOF
         if [ -n "$kw_pin" ]; then
             kw_target="$(ensure_worktree "$KW_CORE" "seo-keywords" "$kw_pin")" || kw_target=""
             if [ -n "$kw_target" ]; then
-                kw_commit="$(git -C "$kw_target" rev-parse HEAD 2>/dev/null || echo unknown)"
+                kw_commit="$(git -C "$kw_target" rev-parse --verify -q HEAD 2>/dev/null || echo unknown)"
                 have_kw=1
             else
                 warn "seo-keywords: тег $kw_pin недоступен — пропускаю подключение"
