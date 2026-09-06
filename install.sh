@@ -123,7 +123,17 @@ abs_path_create() {
 # misreports a worktree as "not a git repo" (O3) — confirmed via
 # `git rev-parse --git-dir` per the ticket, not just the file/dir shape.
 is_git_worktree_checkout() {
-    [ -f "$1/.git" ] && git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1
+    # T-064: a linked worktree's ".git" is a FILE containing a "gitdir:"
+    # pointer at the main repo's internal worktree metadata. The old check
+    # also required `git rev-parse --is-inside-work-tree` to succeed — but
+    # that fails when the main repo the worktree points at has since been
+    # deleted (orphaned worktree), so an orphaned worktree was NOT detected
+    # here and fell straight into install_or_update_repo()'s "not a git dir"
+    # branch, which backs it up and clones fresh over it (reproducing the O3
+    # incident this guard exists to stop). The gitdir-pointer file itself is
+    # the worktree's signature regardless of whether its target still
+    # exists — check for that directly instead of asking git to prove it.
+    [ -f "$1/.git" ] && grep -q '^gitdir:' "$1/.git" 2>/dev/null
 }
 
 install_or_update_repo() {
@@ -182,9 +192,12 @@ ensure_python_deps() {
 }
 
 
-# Tags that exist on origin AND locally (sorted newest-first). Falls back to
-# local-only tags when origin is unreachable, with an explicit warning — the
-# resulting pin is then not guaranteed reproducible from GitHub (D3).
+# Tags that exist on origin AND locally (sorted newest-first). Empty (refuse)
+# when origin cannot be reached at all while NETWORK_ALLOWED=1 (T-064): a
+# caller that did not pass --sync explicitly wants a network-verified pin,
+# so a dropped connection here must not be papered over with the newest
+# local tag — that tag is unverified against origin and this is exactly the
+# path --upgrade-all uses to re-pin four live sites (D3).
 latest_tag() {
     local repo_dir="$1"
     local local_tags remote_tags common
@@ -209,11 +222,15 @@ latest_tag() {
     remote_tags="$(git -C "$repo_dir" ls-remote --tags origin 'refs/tags/v*' 2>/dev/null \
         | sed -E 's#.*refs/tags/(v[^\^]+)(\^\{\})?$#\1#' | sort -u)"
     if [ -z "$remote_tags" ]; then
-        local t
-        t="$(printf "%s\n" "$local_tags" | head -1)"
-        [ -n "$t" ] && warn "offline: беру локальный тег $t, воспроизводимость не гарантирована" >&2
-        printf "%s\n" "$t"
-        return 0
+        # T-064: an empty listing here means origin could not be reached at
+        # all (not "origin has no tags" — a real GitHub origin always has
+        # some once a release shipped). NETWORK_ALLOWED=1 means the caller
+        # wants a network-verified pin; silently falling back to "the newest
+        # local tag" let a single dropped connection during --upgrade-all
+        # re-pin four live sites onto an origin-unverified tag with exit
+        # code 0 — the incident this SPEC exists to fix. Refuse instead.
+        warn "origin недоступен — версию не определяю без сетевой проверки (T-064)" >&2
+        return 1
     fi
     common="$(printf "%s\n" "$local_tags" | while IFS= read -r t; do
         [ -n "$t" ] || continue
@@ -250,7 +267,16 @@ ensure_worktree() {
                 warn "тег $tag не найден на origin ($tool)"
                 return 1
             fi
-            warn "offline: не удалось проверить тег $tag на origin, беру локальный — воспроизводимость не гарантирована"
+            # T-064: this second ls-remote also failing means origin is
+            # unreachable, not just missing this tag. NETWORK_ALLOWED=1
+            # means the caller (a real --sync sets it to 0 and returns
+            # before this block) wants a network-verified pin — silently
+            # trusting the local tag here let --upgrade-all re-pin all
+            # registered projects onto an unverified tag with exit code 0
+            # whenever the connection dropped mid-run (the incident this
+            # SPEC exists to fix). Refuse instead of guessing.
+            warn "origin недоступен, проверить тег $tag невозможно — перепин отменён (T-064)"
+            return 1
         else
             # Compare commits, not just the tag name (R6/D3): a local tag can
             # share a name with origin's tag while pointing at a different
@@ -714,7 +740,18 @@ PYEOF
         if [ "$NETWORK_ALLOWED" != "1" ]; then
             kw_pin="$(read_lock_version "$project_dir" "seo-keywords")"
         else
-            kw_pin="$(latest_tag "$KW_CORE")"
+            # T-064: seo-keywords is OPTIONAL — its own origin being
+            # unreachable must not abort the whole attach. latest_tag() now
+            # returns 1 (not just empty) when NETWORK_ALLOWED=1 and origin
+            # is down; a bare `kw_pin="$(latest_tag ...)"` is a plain
+            # assignment, and under `set -e` a failing command substitution
+            # in a bare assignment DOES abort the shell (unlike one used as
+            # a plain argument) — without the `|| kw_pin=""` fallback here,
+            # seo-keywords' own outage would kill attach_project() entirely,
+            # refusing the MANDATORY, independently-healthy seo-cycle pin
+            # too (caught live: gate064's kwint.sh — seo-cycle origin up,
+            # seo-keywords origin down, whole --upgrade-all still failed).
+            kw_pin="$(latest_tag "$KW_CORE")" || kw_pin=""
         fi
         if [ -n "$kw_pin" ]; then
             kw_target="$(ensure_worktree "$KW_CORE" "seo-keywords" "$kw_pin")" || kw_target=""
@@ -729,7 +766,12 @@ PYEOF
         fi
     fi
 
-    mkdir -p "$project_dir/.agents/external"
+    # T-064: this mkdir used to have no failure check at all — with `set -e`
+    # active and correctly propagating (see upgrade_all()'s subshell
+    # isolation), a bare failure here already stops the function; this
+    # explicit guard exists only to print a specific, honest message instead
+    # of leaving nothing but git/mkdir's own raw stderr line.
+    mkdir -p "$project_dir/.agents/external" || { warn "$project_dir: не удалось создать .agents/external — перепин прерван"; exit 1; }
     replace_with_symlink "$target" "$project_dir/.agents/external/seo-cycle"
     if [ "$have_kw" = "1" ]; then
         replace_with_symlink "$kw_target" "$project_dir/.agents/external/seo-keywords"
@@ -797,15 +839,70 @@ for p in data.get("projects", []):
     print(p.get("path", ""))
 PYEOF
 )"
-    local p
+    # T-064: attach_project() calls `exit` (not `return`) on every failure
+    # path — without isolation here, one project failing mid-registry would
+    # kill this whole loop, leaving the rest of the portfolio in an
+    # UNREPORTED state (the reviewer's live 3-project run: first re-pinned,
+    # second failed, third never touched, no summary, exit code whatever the
+    # failure happened to produce). Run each project's attach in its own
+    # subshell so a failure there only ends that subshell — this function
+    # keeps control, tracks every outcome, and prints an explicit portfolio
+    # report instead of leaving a silent mixed state. Chosen over two-phase
+    # atomicity (verify-all-then-write-all): an explicit partial report is
+    # simpler, cannot itself have a distinct failure mode, and needs no extra
+    # network round-trip per project.
+    #
+    # bash's errexit has a documented quirk: a command's failure does not
+    # trigger -e when that command is itself the thing being tested by an
+    # if/&&/||, and this exemption propagates into every function and
+    # subshell called from there. A first version of this fix wrote
+    # `( set -e; attach_project "$p" ) || rc=$?` — the subshell is the LEFT
+    # operand of `||`, so it is exactly such a tested command: the inner
+    # `set -e` was inert, EVERY plain command inside attach_project (mkdir,
+    # ln -s, mv, rm — exactly what T-055 runs against live sites) could fail
+    # silently, and a failed `ln -s` produced an unnoticed "✓ lock" and a
+    # false "перепинено" (caught live: gate064, bash 3.2.57, the shell this
+    # machine actually runs). The subshell must NOT be the tested command of
+    # any conditional — disable -e in THIS shell first (`set +e`), run the
+    # subshell as a bare, untested statement (its own `set -e` then genuinely
+    # governs everything inside it), capture $? only afterward, then restore
+    # `set -e` here.
+    local updated=() failed=() missing=()
+    local p rc
     while IFS= read -r p; do
         [ -n "$p" ] || continue
         if [ -d "$p" ]; then
-            PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p"
+            set +e
+            ( set -e; PIN="$pin" SYNC_ONLY=1 RUN_INIT=0 DETACH=0 attach_project "$p" )
+            rc=$?
+            set -e
+            if [ "$rc" -eq 0 ]; then
+                updated+=("$p")
+            else
+                failed+=("$p")
+            fi
         else
             warn "проект из реестра не найден: $p"
+            missing+=("$p")
         fi
     done <<< "$projects"
+
+    log ""
+    log "Итог --upgrade-all → $pin:"
+    log "  перепинено (${#updated[@]}):"
+    [ "${#updated[@]}" -gt 0 ] && printf '    %s\n' "${updated[@]}"
+    log "  не тронуто/отсутствует (${#missing[@]}):"
+    [ "${#missing[@]}" -gt 0 ] && printf '    %s\n' "${missing[@]}"
+    if [ "${#failed[@]}" -gt 0 ]; then
+        warn "упало при перепине (${#failed[@]}):"
+        printf '    %s\n' "${failed[@]}" >&2
+        if [ "${#updated[@]}" -gt 0 ]; then
+            warn "портфель в СМЕШАННОМ состоянии — часть проектов перепинена на $pin, часть нет. Проверь каждый упавший вручную (см. лог выше) перед повторным запуском."
+        else
+            warn "ни один проект не перепинен на $pin — портфель остался на прежних версиях."
+        fi
+        exit 1
+    fi
 }
 
 # ------------------------------------------------------------------- main
