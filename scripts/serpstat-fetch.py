@@ -33,6 +33,22 @@ competitor analysis). Serpstat ценен тем, что даёт Google-дан�
 from __future__ import annotations
 import argparse, hashlib, json, os, pathlib, sys, time, urllib.request
 
+
+def nonneg_int_arg(raw: str) -> int:
+    """T-066 R-2 (полный обзор класса "тратит квоту внешнего сервиса + имеет
+    стоп"): --min-credits был голым type=int — --min-credits -1 делает
+    `left < min_credits` не срабатывающим НИКОГДА (left >= 0 у реального
+    API), то есть отключает стоп тем же способом, что F-11 отключал --budget
+    у денежных клиентов, только здесь стоп живой (запрос остатка кредитов), а
+    не файловый."""
+    try:
+        value = int(raw)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"--min-credits: {raw!r} не целое число") from e
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"--min-credits: {raw!r} должно быть неотрицательным")
+    return value
+
 ENDPOINT = "https://api.serpstat.com/v4"
 _LAST_CALL = [0.0]
 RATE_DELAY = 1.1   # сек между запросами (план: delayBetweenRequests=1)
@@ -151,7 +167,7 @@ def main() -> int:
     ap.add_argument("--se", default="g_ru", help="search engine code (g_ru, g_ua, g_us, g_uk, g_de...)")
     ap.add_argument("--size", type=int, default=100, help="макс. строк = кредитов (для списка)")
     ap.add_argument("--ttl", type=float, default=30, help="кэш в днях")
-    ap.add_argument("--min-credits", type=int, default=50)
+    ap.add_argument("--min-credits", type=nonneg_int_arg, default=50)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--out", default="./seo/research/serpstat")
     args = ap.parse_args()
