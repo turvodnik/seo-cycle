@@ -171,5 +171,80 @@ class AppendRecordLockTest(unittest.TestCase):
         self.assertEqual(record["metrics"]["usd"], 1.5)
 
 
+class LedgerLineValidationTest(unittest.TestCase):
+    """T-066 R2-1 (независимый гейт, круг 3): строки самого журнала
+    `usage-ledger.jsonl` не проверялись на пригодность значения — одна
+    отрицательная строка вычитала расход и снимала денежный стоп навсегда
+    (репро из отчёта: A/B/C). Мутация: откати построчную проверку в
+    `read_ledger_events()` до голого `if row.get("month") == month:
+    rows.append(row)` — B обязан покраснеть (расход снова 8.0, allowed=True).
+    """
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-ul-linevalid-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.project_root = self.tmp
+        (self.project_root / "seo" / "usage").mkdir(parents=True)
+        self.ledger_path = self.project_root / "seo" / "usage" / "usage-ledger.jsonl"
+        self.cfg_path = self.project_root / "seo-cycle.yaml"
+        self.cfg_path.write_text(
+            "governance:\n"
+            "  budget_policy:\n"
+            "    monthly_total_usd_cap: 500\n"
+            "    monthly_paid_api_usd_cap: 90\n",
+            encoding="utf-8",
+        )
+
+    def _write_ledger_lines(self, *rows: dict) -> None:
+        month = ul_script.current_month()
+        lines = []
+        for row in rows:
+            row = dict(row)
+            row.setdefault("month", month)
+            row.setdefault("service", "spyfu")
+            row.setdefault("category", "paid_api")
+            lines.append(json.dumps(row))
+        self.ledger_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _rc_and_status(self) -> tuple[bool, str, float]:
+        month = ul_script.current_month()
+        state = ul_script.load_state(self.cfg_path, month)
+        evaluation = ul_script.evaluate(state)
+        usd_used = state["totals"].get("overall", {}).get("usd", 0.0)
+        return evaluation["allowed"], evaluation["status"], usd_used
+
+    def test_a_single_98_blocks_against_90_cap(self) -> None:
+        self._write_ledger_lines({"metrics": {"usd": 98.0}})
+        allowed, status, used = self._rc_and_status()
+        self.assertFalse(allowed)
+        self.assertEqual(status, "blocked")
+        self.assertEqual(used, 98.0)
+
+    def test_b_negative_second_line_must_not_lift_the_stop(self) -> None:
+        self._write_ledger_lines({"metrics": {"usd": 98.0}}, {"metrics": {"usd": -90.0}})
+        allowed, status, used = self._rc_and_status()
+        self.assertFalse(allowed, "отрицательная строка не должна снимать денежный стоп")
+        self.assertEqual(status, "blocked")
+
+    def test_c_control_negative_month_field(self) -> None:
+        month = ul_script.current_month()
+        self.ledger_path.write_text(
+            json.dumps({"month": [month], "service": "spyfu", "metrics": {"usd": 98.0}}) + "\n",
+            encoding="utf-8",
+        )
+        events = ul_script.read_ledger_events(self.ledger_path, month)
+        self.assertTrue(any(e.get("_error") for e in events))
+
+    def test_bad_metrics_type_is_an_error_not_silently_dropped(self) -> None:
+        month = ul_script.current_month()
+        self.ledger_path.write_text(
+            json.dumps({"month": month, "service": "spyfu", "metrics": [1, 2]}) + "\n",
+            encoding="utf-8",
+        )
+        events = ul_script.read_ledger_events(self.ledger_path, month)
+        self.assertEqual(len(events), 1)
+        self.assertIn("_error", events[0])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -24,7 +24,7 @@ except ImportError:
     sys.exit(2)
 
 from seo_cycle_core.config import config_section, find_config, load_yaml, numeric, policy_path, project_root_for, rel_path, require_config
-from seo_cycle_core.usage_ledger import finite_nonneg, nonneg_finite_arg, usage_lock
+from seo_cycle_core.usage_ledger import MONTH_RE, finite_nonneg, nonneg_finite_arg, usage_lock
 
 
 COMMANDS = {"report", "check", "record"}
@@ -139,6 +139,16 @@ def add_metrics(target: dict[str, Any], service: str, category: str, metrics: di
 
 
 def read_ledger_events(path: pathlib.Path, month: str) -> list[dict[str, Any]]:
+    """T-066 R2-1 (независимый гейт, круг 3): раньше строки самого журнала
+    расходов (`usage-ledger.jsonl`) проходили в `summarize()` без единой
+    проверки значений — отдельная строка с отрицательным `usd` вычитала
+    расход и снимала денежный стоп навсегда, хотя легального канала
+    "возврат/коррекция" в этом файле нет. Теперь каждая строка проверяется
+    построчно: `metrics` обязан быть словарём, каждое его значение обязано
+    проходить `finite_nonneg`, `month` обязан соответствовать `MONTH_RE` —
+    иначе строка становится `_error` и не участвует в сумме (fail-closed,
+    без автомиграции: месяц с уже испорченной строкой блокируется до ручной
+    чистки журнала)."""
     if not path.exists():
         return []
     rows: list[dict[str, Any]] = []
@@ -151,8 +161,25 @@ def read_ledger_events(path: pathlib.Path, month: str) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             rows.append({"_error": f"invalid json line {line_no}"})
             continue
-        if row.get("month") == month:
-            rows.append(row)
+        if not isinstance(row, dict):
+            rows.append({"_error": f"{path}:{line_no}: строка не JSON-объект ({type(row).__name__})"})
+            continue
+        row_month = row.get("month")
+        if not isinstance(row_month, str) or not MONTH_RE.match(row_month):
+            rows.append({"_error": f"{path}:{line_no}: поле month испорчено ({row_month!r})"})
+            continue
+        if row_month != month:
+            continue
+        metrics = row.get("metrics")
+        if metrics is not None:
+            if not isinstance(metrics, dict):
+                rows.append({"_error": f"{path}:{line_no}: metrics не словарь ({type(metrics).__name__})"})
+                continue
+            bad = {k: v for k, v in metrics.items() if not finite_nonneg(v)}
+            if bad:
+                rows.append({"_error": f"{path}:{line_no}: metrics непригодны для арифметики ({bad!r})"})
+                continue
+        rows.append(row)
     return rows
 
 
