@@ -149,8 +149,16 @@ def call(b64: str, path: str, params: dict) -> dict:
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")[:300]
         raise ApiCallError(f"HTTP {e.code}: {body}") from e
-    except (urllib.error.URLError, TimeoutError) as e:
+    except urllib.error.URLError as e:
         raise ApiCallError(f"сеть недоступна ({e})") from e
+    except ApiCallError:
+        raise
+    except Exception as e:
+        # R2-2 (независимый гейт, круг 3): перечень типов (URLError/TimeoutError)
+        # не покрывает обрыв тела уже отправленного запроса (IncompleteRead,
+        # ConnectionResetError, ssl.SSLError, MemoryError...). Инверсия: любое
+        # исключение после отправки запроса становится ApiCallError.
+        raise ApiCallError(f"ошибка после отправки запроса ({type(e).__name__}: {e})") from e
     try:
         return json.loads(raw)
     except ValueError as e:

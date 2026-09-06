@@ -220,6 +220,38 @@ class RunThroughRealCallTest(unittest.TestCase):
     def test_malformed_json_records_before_exit(self) -> None:
         self._run_and_check_recorded({"return_value": fake_response(b"{not valid")})
 
+    # R2-2 (независимый гейт, круг 3): обрыв тела уже отправленного запроса
+    # экзотическим типом (не HTTPError/URLError/TimeoutError). Мутация: замени
+    # `except Exception as e:` в call() обратно на перечень типов — все три
+    # теста ниже обязаны покраснеть.
+    def _run_read_raises_and_check_recorded(self, exc: BaseException) -> None:
+        class RaisingReadResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                raise exc
+
+        with mock.patch.object(spyfu.urllib.request, "urlopen", return_value=RaisingReadResponse()):
+            with self.assertRaises(SystemExit):
+                spyfu.run("b64", "some/path", 0.50, {"domain": "x"}, self.args, lambda r: None)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage.get("failed_calls"), 1, "неуспешная попытка обязана остаться в учёте")
+
+    def test_incomplete_read_records_before_exit(self) -> None:
+        import http.client
+        self._run_read_raises_and_check_recorded(http.client.IncompleteRead(b""))
+
+    def test_connection_reset_records_before_exit(self) -> None:
+        self._run_read_raises_and_check_recorded(ConnectionResetError("connection reset by peer"))
+
+    def test_ssl_error_records_before_exit(self) -> None:
+        import ssl
+        self._run_read_raises_and_check_recorded(ssl.SSLError("decryption failed"))
+
 
 class LedgerCorruptionTest(unittest.TestCase):
     """F-12: голое чтение файла учёта без проверки значения — NaN/Infinity/
