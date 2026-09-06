@@ -17,6 +17,11 @@ Endpoint: https://api.keys.so · Auth: header X-Keyso-TOKEN (env KEYSO_API_TOKEN
 Опции: --base msk (региональная база) | --per-page 50 | --ttl 60 | --out DIR | --md
 Расход: кэш на диск (TTL 60д) + локальный счётчик запросов (_usage.json). Повторный
 запрос той же темы в пределах TTL = 0 обращений к API (экономия лимита Pro-тарифа).
+Keys.so — плоская подписка с лимитом запросов (не $-биллинг по вызову), поэтому
+здесь нет денежного стопа; счётчик — только видимость расхода лимита. Атомарность
+записи и блокировка на конкурентные запуски — общий модуль
+scripts/seo_cycle_core/usage_ledger.py (T-066: тот же класс порчи файла учёта,
+что и в dataforseo-fetch.py/spyfu-fetch.py, был и здесь).
 
 Пример:
   python3 keyso-fetch.py keyword-info "минеральная вата"
@@ -26,6 +31,14 @@ Endpoint: https://api.keys.so · Auth: header X-Keyso-TOKEN (env KEYSO_API_TOKEN
 
 from __future__ import annotations
 import argparse, hashlib, json, os, pathlib, sys, time, urllib.parse, urllib.request, urllib.error
+
+from seo_cycle_core.usage_ledger import (
+    UsageLedgerError,
+    current_month,
+    load_usage as _shared_load_usage,
+    save_usage,
+    usage_lock,
+)
 
 BASE_URL = "https://api.keys.so"
 _LAST = [0.0]
@@ -54,21 +67,25 @@ def load_token() -> str:
 
 
 def bump_usage(out_dir, n=1):
-    """Локальный счётчик реальных запросов Keys.so (месячный сброс) — визибилити расхода."""
-    import datetime
-    f = pathlib.Path(out_dir) / "_usage.json"
-    month = datetime.date.today().strftime("%Y-%m")
-    u = {"month": month, "requests": 0}
-    if f.exists():
+    """Локальный счётчик реальных запросов Keys.so (месячный сброс) — визибилити
+    расхода лимита Pro-тарифа, не денежный стоп (плоская подписка). Раньше файл
+    читался напрямую, без проверки значения, порченный файл тихо трактовался
+    как «0 запросов» (`except Exception: pass`), а запись шла прямым write_text
+    без atomic replace и без блокировки — та же дыра, что F-12 нашла в
+    spyfu-fetch.py. Порча здесь не блокирует работу (нет --force, нет стопа,
+    который можно было бы обойти), но и не должна проходить молча — печатаем
+    предупреждение и считаем месяц заново."""
+    out_dir = pathlib.Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with usage_lock(out_dir):
         try:
-            old = json.loads(f.read_text())
-            if old.get("month") == month:
-                u = old
-        except Exception:
-            pass
-    u["requests"] = u.get("requests", 0) + n
-    f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(json.dumps(u, ensure_ascii=False, indent=2), encoding="utf-8")
+            u = _shared_load_usage(out_dir, ("requests",))
+        except UsageLedgerError as e:
+            print(f"⚠ файл учёта запросов Keys.so повреждён, считаю месяц с нуля ({e})",
+                  file=sys.stderr)
+            u = {"month": current_month(), "requests": 0}
+        u["requests"] = u.get("requests", 0) + n
+        save_usage(out_dir, u)
     return u["requests"]
 
 
