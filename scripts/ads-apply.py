@@ -157,8 +157,17 @@ def apply_direct(operations: list[dict[str, Any]], sandbox: bool) -> list[dict[s
                                 "id": nested_get(data, "result.AddResults", [{}])[0].get("Id")})
             else:
                 results.append({**operation, "status": "skipped", "reason": "not in v1 apply scope"})
-        except (urllib.error.URLError, KeyError, json.JSONDecodeError) as exc:
-            results.append({**operation, "status": "failed", "error": str(exc)[:200]})
+        except Exception as exc:
+            # R2-2 (независимый гейт, круг 3): перечень типов (URLError/
+            # KeyError/JSONDecodeError) не покрывает ConnectionResetError/
+            # TimeoutError/ValueError и всё, что может прилететь при чтении
+            # тела уже отправленного запроса — раньше такое исключение
+            # уходило из apply_direct() ЦЕЛИКОМ (мимо ledger_record() на
+            # вызывающей стороне) голым traceback'ом, и операции ПОСЛЕ той,
+            # что упала, вообще не выполнялись и не попадали в results.
+            # Заявление предыдущего круга «ads-apply.py уже безопасен»
+            # проверкой этой ветки не подтвердилось (см. отчёт круга 2).
+            results.append({**operation, "status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:200]}"})
     return results
 
 
