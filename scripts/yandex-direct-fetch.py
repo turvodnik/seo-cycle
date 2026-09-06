@@ -260,18 +260,23 @@ def main() -> int:
         if not ok:
             print(f"ERROR: usage-ledger preflight blocked the run: {message}", file=sys.stderr)
             return 2
-        # F-13 (T-066, гейт круга 2): раньше исключение из live_fetch() уходило
-        # через `return 1` МИМО ledger_record() — квота API уже потрачена
-        # (запрос ушёл), а governance-учёт о попытке не узнавал вовсе. Запись
-        # теперь происходит на обеих ветках: успех и явная неудача вызова.
+        # R2-2 (независимый гейт, круг 3): круг 2 закрыл это по перечню типов
+        # (URLError/RuntimeError/JSONDecodeError) — ровно та конструкция,
+        # которую гейт называет прямо как проигрывающую следующему заходу.
+        # Write-ahead вместо перечня: запись в леджер уходит ДО live_fetch(),
+        # пессимистично (квота API считается уже потраченной фактом отправки
+        # запроса, а не фактом успешного ответа) — тогда ЛЮБОЕ исключение,
+        # любого типа, сигнал, обрыв процесса после этой строки уже не теряет
+        # факт попытки. При неудаче — вторая запись с requests=0, только для
+        # заметки в журнале (без двойного счёта).
+        ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report} (в процессе)")
         try:
             payload = live_fetch(args.report, cfg, args.days)
-        except (urllib.error.URLError, RuntimeError, json.JSONDecodeError) as exc:
-            ledger_record(project_root, PLATFORM, requests=1,
+        except Exception as exc:
+            ledger_record(project_root, PLATFORM, requests=0,
                           note=f"fetch {args.report} FAILED: {exc}")
             print(f"ERROR: Direct API call failed: {exc}", file=sys.stderr)
             return 1
-        ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report}")
     else:
         cached = load_latest_raw(
             project_root, PLATFORM, args.report,

@@ -67,7 +67,26 @@ class YandexDirectF13Test(unittest.TestCase):
             rc = yandex.main()
         self.assertEqual(rc, 1)
         self.assertTrue(recorded, "ledger_record() обязан быть вызван даже при провале live_fetch()")
-        self.assertIn("FAILED", recorded[0].get("note", ""))
+        # R2-2 (круг 3, write-ahead): recorded[0] — попытка ДО вызова
+        # (пишется независимо от исхода), recorded[-1] — уточнение при провале.
+        self.assertIn("FAILED", recorded[-1].get("note", ""))
+        self.assertEqual(recorded[0].get("requests"), 1, "попытка обязана быть записана ДО live_fetch()")
+
+    def test_ledger_write_ahead_precedes_live_fetch_call(self) -> None:
+        """R2-2 (круг 3): запись обязана произойти ДО live_fetch(), а не
+        только после провала — иначе SIGKILL/os._exit ровно между вызовом и
+        функцией fetch всё ещё теряет попытку. Мутация: перенеси
+        ledger_record() обратно в except-блок целиком — этот тест обязан
+        покраснеть (order будет ["live_fetch"] без предшествующего "record")."""
+        order = []
+        with mock.patch.object(yandex, "env_status", return_value={"present": True, "missing": []}), \
+             mock.patch.object(yandex, "ledger_preflight", return_value=(True, "ok")), \
+             mock.patch.object(yandex, "ledger_record", side_effect=lambda *a, **k: order.append("record")), \
+             mock.patch.object(yandex, "live_fetch", side_effect=lambda *a, **k: order.append("live_fetch") or {"ok": True}), \
+             mock.patch.object(yandex, "save_raw", return_value={"dated": self.tmp / "d.json", "latest": self.tmp / "l.json"}), \
+             mock.patch.object(sys, "argv", ["yandex-direct-fetch.py", "--report", "campaigns", "--live"]):
+            yandex.main()
+        self.assertEqual(order[0], "record", "запись в леджер обязана произойти ДО live_fetch()")
 
     def test_live_fetch_success_still_records_as_before(self) -> None:
         recorded = []
