@@ -32,6 +32,25 @@ def _git(cwd: pathlib.Path, *args: str, env: dict | None = None) -> subprocess.C
     )
 
 
+_REAL_HOME = pathlib.Path(os.path.expanduser("~")).resolve()
+
+
+def _assert_sandboxed_home(env: dict) -> None:
+    """Hard gate before every install.sh invocation in this file (T-064
+    incident, round 2): a sequencing mistake once ran the installer with an
+    unoverridden real HOME and rewrote all four live projects' locks. `env`
+    must carry a HOME that is (a) explicitly set, (b) not the real one, and
+    (c) actually inside this test's own tempdir — never trust "it's probably
+    fine", assert it every single time, mirroring the reviewer's lib.sh."""
+    home = env.get("HOME")
+    assert home, "install.sh invoked without an explicit HOME override"
+    home_path = pathlib.Path(home).resolve()
+    assert home_path != _REAL_HOME, f"REFUSING to run install.sh against the real HOME: {home_path}"
+    tmp_root = pathlib.Path(tempfile.gettempdir()).resolve()
+    assert str(home_path).startswith(str(tmp_root)), \
+        f"HOME does not look like a sandbox tempdir ({tmp_root}): {home_path}"
+
+
 class InstallerFixture(unittest.TestCase):
     """Builds an isolated origin+CORE pair and an isolated HOME per test."""
 
@@ -85,6 +104,7 @@ class InstallerFixture(unittest.TestCase):
             "SEO_CYCLE_REPO": str(self.origin),
             **(env or {}),
         }
+        _assert_sandboxed_home(full_env)
         return subprocess.run(
             ["bash", str(INSTALL), *args],
             env=full_env, capture_output=True, text=True,
@@ -119,6 +139,7 @@ class InstallerFixture(unittest.TestCase):
             "SEO_CYCLE_REPO": str(self.origin),
             **(env or {}),
         }
+        _assert_sandboxed_home(full_env)
         return subprocess.run(
             ["bash", str(mutated_path), *args],
             env=full_env, capture_output=True, text=True,
@@ -505,15 +526,17 @@ class WorktreeNotClonedOverTest(unittest.TestCase):
         ).stdout
         shim_target_before = os.readlink(self.shim)
 
+        env = {
+            **os.environ,
+            "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+        }
+        _assert_sandboxed_home(env)
         proc = subprocess.run(
             ["bash", str(INSTALL)],
-            env={
-                **os.environ,
-                "HOME": str(self.home),
-                "SEO_CYCLE_SHARED_DIR": str(self.shared),
-                "SEO_CYCLE_CORE": str(self.core),
-                "SEO_CYCLE_REPO": str(self.origin),
-            },
+            env=env,
             capture_output=True, text=True,
         )
 
@@ -568,15 +591,17 @@ class WorktreeNotClonedOverTest(unittest.TestCase):
         mutated_path.write_text(mutated, encoding="utf-8")
 
         log_before = self._git_log(self.core)
+        env = {
+            **os.environ,
+            "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+        }
+        _assert_sandboxed_home(env)
         proc = subprocess.run(
             ["bash", str(mutated_path)],
-            env={
-                **os.environ,
-                "HOME": str(self.home),
-                "SEO_CYCLE_SHARED_DIR": str(self.shared),
-                "SEO_CYCLE_CORE": str(self.core),
-                "SEO_CYCLE_REPO": str(self.origin),
-            },
+            env=env,
             capture_output=True, text=True,
         )
         self.assertEqual(
@@ -828,6 +853,51 @@ class UpgradeAllPartialFailureReportedTest(InstallerFixture):
             f"должен быть явный отчёт о смешанном состоянии портфеля — {combined!r}",
         )
 
+    def test_symlink_break_on_clean_installer_reports_failure_and_keeps_lock_link_consistent(self) -> None:
+        """Round-2 gate finding: the two mutation-revert tests below prove
+        their point by re-inserting a REMOVED source string and asserting
+        `assert old in source` — a textual anchor check, not a behavioural
+        one (confirmed live: mutation C, the exact round-1 regression form
+        `( set -e; … ) || rc=$?`, only trips the anchor in
+        `test_reverting_all_isolation_kills_the_whole_run_silently`, not
+        `test_reverting_just_the_inner_set_e_reports_a_false_success` — the
+        regression that cost a whole gate round was, in effect, guarded by
+        one string match and zero behavioural assertions).
+
+        This test runs the CLEAN, unmutated install.sh (no mutation at all)
+        and breaks project_b the same way — `_break_project_b_symlink_only()`
+        — then asserts observable behaviour: a failing exit code, "упало" in
+        the report, and — the actual point of the whole ticket — that the
+        REAL symlink and the LOCK's recorded version for project_b still
+        agree with each other. Under the round-1 regression (mutation C) or
+        the inner-`set -e`-only regression (mutation B), this specific
+        assertion is what fails: the lock gets silently rewritten to the new
+        pin while the symlink is left on the old one — divergence, not mere
+        'unchanged'."""
+        self._break_project_b_symlink_only()
+        proc = self.run_install("--upgrade-all", "--pin", "v1.0.0")
+
+        self.assertNotEqual(
+            proc.returncode, 0,
+            f"поломанный project_b обязан дать ненулевой код на чистом install.sh — {proc.stdout + proc.stderr!r}",
+        )
+        combined = proc.stdout + proc.stderr
+        self.assertIn(
+            "упало", combined,
+            f"поломанный project_b должен быть назван в разделе 'упало' — {combined!r}",
+        )
+
+        lock_path = self.project_b / ".agents" / "external-skills.lock.yaml"
+        lock = yaml.safe_load(lock_path.read_text(encoding="utf-8")) or {}
+        recorded_version = ((lock.get("external") or {}).get("seo-cycle") or {}).get("version")
+        symlink_path = self.project_b / ".agents" / "external" / "seo-cycle"
+        actual_target_version = pathlib.Path(os.readlink(symlink_path)).name
+        self.assertEqual(
+            recorded_version, actual_target_version,
+            f"лок ({recorded_version!r}) и реальная ссылка ({actual_target_version!r}) "
+            "обязаны совпадать — их расхождение и есть дефект, который стоил круга гейта",
+        )
+
     def _run_mutated(self, mutated_source: str, *args: str) -> subprocess.CompletedProcess:
         mutated_path = self.tmp / "install.mutated.sh"
         mutated_path.write_text(mutated_source, encoding="utf-8")
@@ -837,6 +907,7 @@ class UpgradeAllPartialFailureReportedTest(InstallerFixture):
             "SEO_CYCLE_CORE": str(self.core),
             "SEO_CYCLE_REPO": str(self.origin),
         }
+        _assert_sandboxed_home(full_env)
         return subprocess.run(
             ["bash", str(mutated_path), *args],
             env=full_env, capture_output=True, text=True,
@@ -1073,14 +1144,16 @@ class OrphanedWorktreeRefusesTest(unittest.TestCase):
         files_before = sorted(p.name for p in self.core.iterdir())
         shim_target_before = os.readlink(self.shim)
 
+        env = {
+            **os.environ, "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+        }
+        _assert_sandboxed_home(env)
         proc = subprocess.run(
             ["bash", str(INSTALL)],
-            env={
-                **os.environ, "HOME": str(self.home),
-                "SEO_CYCLE_SHARED_DIR": str(self.shared),
-                "SEO_CYCLE_CORE": str(self.core),
-                "SEO_CYCLE_REPO": str(self.origin),
-            },
+            env=env,
             capture_output=True, text=True,
         )
 
@@ -1117,14 +1190,16 @@ class OrphanedWorktreeRefusesTest(unittest.TestCase):
         mutated_path = self.tmp / "install.mutated.sh"
         mutated_path.write_text(mutated, encoding="utf-8")
 
+        env = {
+            **os.environ, "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+        }
+        _assert_sandboxed_home(env)
         proc = subprocess.run(
             ["bash", str(mutated_path)],
-            env={
-                **os.environ, "HOME": str(self.home),
-                "SEO_CYCLE_SHARED_DIR": str(self.shared),
-                "SEO_CYCLE_CORE": str(self.core),
-                "SEO_CYCLE_REPO": str(self.origin),
-            },
+            env=env,
             capture_output=True, text=True,
         )
         self.assertEqual(
