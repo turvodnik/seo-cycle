@@ -24,7 +24,7 @@ from __future__ import annotations
 import argparse, hashlib, json, os, pathlib, sys, time, urllib.parse, urllib.request, urllib.error
 from collections import defaultdict
 
-from seo_cycle_core.usage_ledger import nonneg_finite_arg
+from seo_cycle_core.usage_ledger import bump_counter, nonneg_finite_arg
 
 # R2-4 (независимый гейт, круг 3): --ttl голым type=float принимал nan/inf —
 # тот же класс, что R-4 закрывал у dataforseo/spyfu/keyso-fetch (условие
@@ -73,6 +73,10 @@ def fetch_top(token, keyword, base, ttl):
         with urllib.request.urlopen(req, timeout=60) as r:
             _LAST[0] = time.time()
             data = json.loads(r.read())
+            # R2-4 (независимый гейт, круг 3): этот клиент тратит ту же квоту
+            # api.keys.so, что keyso-fetch.py, мимо его счётчика — теперь
+            # считается тем же общим bump_counter() на тот же CACHE_DIR.
+            bump_counter(CACHE_DIR, field="requests")
     except urllib.error.HTTPError as e:
         _LAST[0] = time.time()
         if e.code == 429:

@@ -33,12 +33,9 @@ from __future__ import annotations
 import argparse, hashlib, json, os, pathlib, sys, time, urllib.parse, urllib.request, urllib.error
 
 from seo_cycle_core.usage_ledger import (
-    UsageLedgerError,
-    current_month,
-    load_usage as _shared_load_usage,
+    bump_counter,
+    current_month,  # noqa: F401 - re-exported for tests.test_keyso_fetch
     nonneg_finite_arg,
-    save_usage,
-    usage_lock,
 )
 
 # R-4 (гейт круга 2, T-066): `--ttl` голым `type=float` — тот же «вечный
@@ -73,25 +70,15 @@ def load_token() -> str:
 
 def bump_usage(out_dir, n=1):
     """Локальный счётчик реальных запросов Keys.so (месячный сброс) — визибилити
-    расхода лимита Pro-тарифа, не денежный стоп (плоская подписка). Раньше файл
-    читался напрямую, без проверки значения, порченный файл тихо трактовался
-    как «0 запросов» (`except Exception: pass`), а запись шла прямым write_text
-    без atomic replace и без блокировки — та же дыра, что F-12 нашла в
-    spyfu-fetch.py. Порча здесь не блокирует работу (нет --force, нет стопа,
-    который можно было бы обойти), но и не должна проходить молча — печатаем
-    предупреждение и считаем месяц заново."""
-    out_dir = pathlib.Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    with usage_lock(out_dir):
-        try:
-            u = _shared_load_usage(out_dir, ("requests",))
-        except UsageLedgerError as e:
-            print(f"⚠ файл учёта запросов Keys.so повреждён, считаю месяц с нуля ({e})",
-                  file=sys.stderr)
-            u = {"month": current_month(), "requests": 0}
-        u["requests"] = u.get("requests", 0) + n
-        save_usage(out_dir, u)
-    return u["requests"]
+    расхода лимита Pro-тарифа, не денежный стоп (плоская подписка).
+
+    R2-4 (независимый гейт, круг 3): счётчик считал только этот клиент, хотя
+    `competitor-discovery.py` и `keyso-save.py` ходят в тот же `api.keys.so` и
+    тратят ту же квоту мимо него — теперь общая примитив `bump_counter()`
+    (seo_cycle_core.usage_ledger), которую вызывают все три клиента с тем же
+    out_dir/полем, так что счётчик суммирует реальный расход, а не только
+    вызовы через этот файл."""
+    return bump_counter(out_dir, field="requests", n=n)
 
 
 def call(token: str, path: str, params: dict, _retry=True):

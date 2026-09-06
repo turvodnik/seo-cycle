@@ -29,6 +29,8 @@ spec = importlib.util.spec_from_file_location("keyso_fetch", SCRIPTS / "keyso-fe
 keyso = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(keyso)
 
+from seo_cycle_core import usage_ledger as _usage_ledger_module  # noqa: E402
+
 
 class TtlArgTest(unittest.TestCase):
     """R-4 (гейт круга 2): --ttl оставался голым type=float у всех трёх
@@ -104,9 +106,13 @@ class BumpUsageTest(unittest.TestCase):
         call_count = {"n": 0}
         count_lock = threading.Lock()
 
-        real_shared_load = keyso._shared_load_usage
+        # R2-4 (независимый гейт, круг 3): bump_usage() теперь делегирует в
+        # общий bump_counter() (seo_cycle_core.usage_ledger), который вызывает
+        # СВОЙ модульный load_usage — патч на keyso._shared_load_usage больше
+        # не перехватывает этот путь, патчим на уровне общего модуля.
+        real_shared_load = _usage_ledger_module.load_usage
 
-        def patched_load(out_dir, fields):
+        def patched_load(out_dir, fields, **kwargs):
             with count_lock:
                 call_count["n"] += 1
                 is_first = call_count["n"] == 1
@@ -115,7 +121,7 @@ class BumpUsageTest(unittest.TestCase):
             # второй поток успевает прочитать тот же старый файл и потерять
             # инкремент первого при перезаписи; с блокировкой второй поток
             # вообще не доходит до этого вызова, пока первый не завершит save.
-            result = real_shared_load(out_dir, fields)
+            result = real_shared_load(out_dir, fields, **kwargs)
             if is_first:
                 entered_first.set()
                 release_first.wait(timeout=2)
@@ -131,7 +137,7 @@ class BumpUsageTest(unittest.TestCase):
 
         # Оба потока используют один и тот же патч через замыкание — общий
         # call_count достаточно, чтобы первый вошедший держал flock() занятым.
-        with mock.patch.object(keyso, "_shared_load_usage", side_effect=patched_load):
+        with mock.patch.object(_usage_ledger_module, "load_usage", side_effect=patched_load):
             t1 = threading.Thread(target=worker)
             t2 = threading.Thread(target=worker)
             t1.start()

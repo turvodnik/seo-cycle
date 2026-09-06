@@ -34,6 +34,7 @@ import math
 import os
 import pathlib
 import re
+import sys
 import tempfile
 from typing import Any, Iterator
 
@@ -162,6 +163,35 @@ def usage_lock(out_dir: pathlib.Path, *, name: str = DEFAULT_LEDGER_NAME) -> Ite
             yield
         finally:
             fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
+def bump_counter(out_dir: pathlib.Path, field: str = "requests", n: int = 1, *, name: str = DEFAULT_LEDGER_NAME) -> int:
+    """Shared "count a request against a monthly quota" primitive, extracted
+    from `keyso-fetch.py`'s `bump_usage()` (T-066 R2-4, gate round 3): a
+    quota shared by several CLI entry points hitting the same billing model
+    was previously only counted by ONE of them
+    (`keyso-fetch.py`; `competitor-discovery.py` and `keyso-save.py` hit
+    `api.keys.so` too, mimicking the same quota, invisibly). A quota-visible
+    counter three clients don't all call is worse than no counter — it looks
+    complete and isn't. Callers that share a quota should call this with the
+    same `out_dir`/`name` rather than keep a private copy of this logic.
+
+    A corrupt file does not block the caller (there is no `--force`/stop to
+    bypass here, unlike money spend) but is not silently treated as "0"
+    either — a warning is printed and the month restarts from zero.
+    """
+    out_dir = pathlib.Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with usage_lock(out_dir, name=name):
+        try:
+            u = load_usage(out_dir, (field,), name=name)
+        except UsageLedgerError as e:
+            print(f"⚠ файл учёта запросов повреждён, считаю месяц с нуля ({e})",
+                  file=sys.stderr)
+            u = {"month": current_month(), field: 0}
+        u[field] = u.get(field, 0) + n
+        save_usage(out_dir, u, name=name)
+        return u[field]
 
 
 def nonneg_finite_arg(flag_name: str):
