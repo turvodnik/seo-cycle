@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse, csv, json, pathlib, re, sys
 from datetime import date, timedelta
 
+from seo_cycle_core.config import load_yaml
 from seo_cycle_core.monitoring import find_latest_snapshot as _find_latest_snapshot_file
 from seo_cycle_core.monitoring import monitoring_dir
 
@@ -343,11 +344,21 @@ def main():
     ap.add_argument("--config", type=pathlib.Path, default=pathlib.Path("seo-cycle.yaml"))
     args = ap.parse_args()
 
-    project_name = "Project"
-    cfg: dict = {}
-    if yaml and args.config.exists():
-        cfg = yaml.safe_load(args.config.read_text(encoding="utf-8")) or {}
-        project_name = cfg.get("project", {}).get("name", project_name)
+    # T-067 (F-37): a missing/unreadable config used to fall back to `{}`
+    # silently and still print a green "✓ Dashboard → ..." over a project
+    # that plainly doesn't have one — the tool's own health/status commands
+    # already refuse this (`seo_cycle_cli.cmd_status`), the dashboard just
+    # never learned the rule.
+    if not args.config.exists():
+        print(f"ERROR: {args.config} not found — nothing to build a dashboard from", file=sys.stderr)
+        sys.exit(2)
+    if yaml is None:
+        print("ERROR: PyYAML не установлен — установи: pip3 install pyyaml", file=sys.stderr)
+        sys.exit(2)
+    cfg = load_yaml(args.config)  # exits(2) itself on unparseable/non-dict content (F-35)
+    project = cfg.get("project")
+    project = project if isinstance(project, dict) else {}
+    project_name = project.get("name") or "Project"
 
     # Путь мониторинга — из конфига (monitoring.path, T-052 R3: тот же ключ,
     # тем же способом, что pulse.py и doctor/status — seo_cycle_core.monitoring),

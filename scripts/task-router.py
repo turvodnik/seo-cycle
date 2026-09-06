@@ -17,7 +17,7 @@ import re
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, policy_path, project_root_for, skill_root
+from seo_cycle_core.config import config_section, find_config, load_yaml, policy_path, project_root_for, skill_root
 from seo_cycle_core.context import build_context_manifest
 from seo_cycle_core.subprocesses import run_json
 
@@ -218,7 +218,7 @@ def source_enabled(cfg: dict[str, Any], intake: dict[str, Any], source: str, act
         return True
     if source in active:
         return True
-    node = (cfg.get("sources", {}) or {}).get(source)
+    node = config_section(cfg, "sources").get(source)
     return isinstance(node, dict) and bool(node.get("enabled"))
 
 

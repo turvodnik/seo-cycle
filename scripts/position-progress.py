@@ -28,7 +28,7 @@ import sqlite3
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, write_text
+from seo_cycle_core.config import config_section, find_config, load_yaml, nested_get, project_root_for, write_text
 from seo_cycle_core.html_report import bar, html_page, markdown_to_html_body
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.registry import registry_path
@@ -156,8 +156,8 @@ def collect_project(project_root: pathlib.Path, cfg: dict[str, Any], *, engine: 
                     limit_movers: int, include_queries: bool = False) -> dict[str, Any]:
     report: dict[str, Any] = {
         "audit_id": "position_progress",
-        "project": (cfg.get("project") or {}).get("name") or project_root.name,
-        "domain": (cfg.get("project") or {}).get("domain") or "",
+        "project": config_section(cfg, "project").get("name") or project_root.name,
+        "domain": config_section(cfg, "project").get("domain") or "",
         "engine": engine or "all",
         "snapshots": [],
         "loops": loops_digest(project_root),

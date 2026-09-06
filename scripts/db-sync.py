@@ -322,6 +322,14 @@ def main() -> int:
     args = ap.parse_args()
 
     root = pathlib.Path(args.root).resolve()
+    # T-067 (F-37): no config anywhere in `root` used to mean `load_cfg`
+    # silently returns `{}` and every sync step below reports a cheerful
+    # "✓ ...: 0 строк" over a directory that isn't even a seo-cycle
+    # project — indistinguishable from "synced, found nothing new" in a
+    # cron log. Refuse instead, the way `seo-cycle status`/`validate` do.
+    if not any((root / rel).exists() for rel in CONFIG_PATHS):
+        print(f"ERROR: seo-cycle.yaml not found in {root} — nothing to sync", file=sys.stderr)
+        return 2
     cfg = load_cfg(root)
     db_path = find_db_path(root, cfg, args.db)
     db_path.parent.mkdir(parents=True, exist_ok=True)

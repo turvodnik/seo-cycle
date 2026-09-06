@@ -25,7 +25,7 @@ from __future__ import annotations
 import argparse, os, pathlib, sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from seo_cycle_core.config import numeric  # noqa: E402
+from seo_cycle_core.config import config_section, numeric  # noqa: E402
 from seo_cycle_core.engines import engine_names  # noqa: E402
 
 try:
@@ -75,12 +75,18 @@ def check_required(cfg: dict, errors: list, warnings: list):
         if key not in cfg:
             errors.append(f"Missing required top-level key: {key}")
     if "project" in cfg:
+        project = config_section(cfg, "project")
+        if not project:
+            errors.append("project must be a mapping (e.g. project: {name: ..., domain: ...}), not a scalar/list")
         for k in ("name", "domain"):
-            if not cfg["project"].get(k):
+            if not project.get(k):
                 errors.append(f"project.{k} is required")
     if "locale" in cfg:
-        lang = cfg["locale"].get("language")
-        cty = cfg["locale"].get("country")
+        locale = config_section(cfg, "locale")
+        if not locale:
+            errors.append("locale must be a mapping (e.g. locale: {language: ..., country: ...}), not a scalar/list")
+        lang = locale.get("language")
+        cty = locale.get("country")
         if lang and lang not in ISO_LANGUAGES:
             warnings.append(f"locale.language={lang!r} — не в стандартном списке ISO 639-1 (возможно опечатка)")
         if cty and cty not in ISO_COUNTRIES:
@@ -226,7 +232,7 @@ def check_images(cfg: dict, env: dict, project_root: pathlib.Path, checklist: li
                 warnings.append(f"images.aspect_ratios.{key} не задан — wp-photo-image будет использовать fallback")
 
     upload = images.get("upload", {})
-    cms = (cfg.get("publishing", {}) or {}).get("cms") or cfg.get("cms")
+    cms = config_section(cfg, "publishing").get("cms") or cfg.get("cms")
     if isinstance(upload, dict) and upload.get("method") == "ssh_wp_cli" and cms == "wordpress":
         remote_root_env = upload.get("remote_root_env", "WP_REMOTE_ROOT")
         env_file = upload.get("env_file", ".env")
@@ -449,7 +455,7 @@ def check_project_policies(cfg: dict, env: dict, project_root: pathlib.Path, che
         if env.get("GOOGLE_NLP_CACHE_DIR") and not env.get("GOOGLE_NLP_CACHE_DAYS"):
             checklist.append("Добавить GOOGLE_NLP_CACHE_DAYS=30 для кэширования Google NLP")
 
-    country = (cfg.get("locale", {}) or {}).get("country")
+    country = config_section(cfg, "locale").get("country")
     if country == "RU" and not rel_project_path(project_root, policy_paths["data_collection_map"]).exists():
         warnings.append("RU-проект без seo/seo-data-collection-map.md — зафиксируй tracking policy перед аналитикой")
 
@@ -528,7 +534,7 @@ def check_governance(cfg: dict, project_root: pathlib.Path, checklist: list, war
         automation_policy = policy_files.get("automation_policy", "seo/automation-policy.yaml")
         if not rel_project_path(project_root, automation_policy).exists():
             checklist.append("Создать seo/automation-policy.yaml перед созданием scheduled automations")
-        planner = automation.get("planner_script") or (cfg.get("monthly_automation", {}) or {}).get("planner_script")
+        planner = automation.get("planner_script") or config_section(cfg, "monthly_automation").get("planner_script")
         if planner and not pathlib.Path(os.path.expanduser(planner)).exists():
             warnings.append(f"automation planner_script не найден: {planner}")
         checklist.append("Сгенерировать и проверить schedule artifacts: seo-cycle run script automation-plan --write --include-disabled")
@@ -660,7 +666,7 @@ def check_vnext_guardrails(cfg: dict, checklist: list, warnings: list):
             continue
         if block.get("writes_to_site"):
             warnings.append(f"{module}.writes_to_site=true — vNext modules must stay report-only by default.")
-        if block.get("paid_api_required") and (cfg.get("governance", {}).get("budget_policy", {}).get("monthly_paid_api_usd_cap", 0) in (0, "0", None)):
+        if block.get("paid_api_required") and (config_section(config_section(cfg, "governance"), "budget_policy").get("monthly_paid_api_usd_cap", 0) in (0, "0", None)):
             checklist.append(f"Утвердить paid API budget/approval перед запуском {module}.paid_api_required=true")
         if block.get("paid_api_default") not in (None, "disabled", "approval_only"):
             warnings.append(f"{module}.paid_api_default should be disabled or approval_only.")
@@ -735,8 +741,10 @@ def main():
     print(f"== seo-cycle config validation ==")
     print(f"  Config: {cfg_path}")
     print(f"  Project root: {project_root}")
-    print(f"  Project: {cfg.get('project',{}).get('name','?')} ({cfg.get('project',{}).get('domain','?')})")
-    print(f"  Locale: {cfg.get('locale',{}).get('language','?')}-{cfg.get('locale',{}).get('country','?')} / {cfg.get('locale',{}).get('region','?')}")
+    project = config_section(cfg, "project")
+    locale = config_section(cfg, "locale")
+    print(f"  Project: {project.get('name','?')} ({project.get('domain','?')})")
+    print(f"  Locale: {locale.get('language','?')}-{locale.get('country','?')} / {locale.get('region','?')}")
     print(f"  Type: {cfg.get('project_type','?')} on {cfg.get('cms','?')}")
     print(f"  Engines: {', '.join(engine_names(cfg)) or '?'}")
     print()

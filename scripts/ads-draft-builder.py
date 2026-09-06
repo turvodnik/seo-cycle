@@ -27,7 +27,7 @@ import sys
 from typing import Any
 
 from seo_cycle_core.ads import primary_platform
-from seo_cycle_core.config import find_config, load_yaml, nested_get, package_project_root, write_text
+from seo_cycle_core.config import config_section, find_config, load_yaml, nested_get, package_project_root, write_text
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("ads-draft-builder")
@@ -277,7 +277,7 @@ def main() -> int:
     log = setup_logging("ads-draft-builder", project_root, cfg)
 
     platform = args.platform if args.platform != "auto" else primary_platform(cfg)
-    site_url = str((cfg.get("project") or {}).get("url") or "").strip()
+    site_url = str(config_section(cfg, "project").get("url") or "").strip()
     include_networks = args.networks or bool(nested_get(cfg, "ads.draft.include_networks", False))
     try:
         draft = build_draft(package, cfg, platform, site_url, include_networks=include_networks)

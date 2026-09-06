@@ -20,6 +20,7 @@ from typing import Any
 from seo_cycle_core.config import (
     boolish,
     coerce_int,
+    config_section,
     find_config,
     load_yaml,
     policy_path,
@@ -311,12 +312,12 @@ def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route:
         "config": str(cfg_path),
         "project_root": str(project_root),
         "project": {
-            "name": (cfg.get("project") or {}).get("name"),
-            "domain": (cfg.get("project") or {}).get("domain"),
+            "name": config_section(cfg, "project").get("name"),
+            "domain": config_section(cfg, "project").get("domain"),
             "project_type": cfg.get("project_type"),
             "region_profile": cfg.get("region_profile"),
-            "country": (cfg.get("locale") or {}).get("country"),
-            "language": (cfg.get("locale") or {}).get("language"),
+            "country": config_section(cfg, "locale").get("country"),
+            "language": config_section(cfg, "locale").get("language"),
         },
         "task": {
             "text": route.get("task") or task,
