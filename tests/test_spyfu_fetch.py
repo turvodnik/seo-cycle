@@ -18,6 +18,8 @@ import pathlib
 import shutil
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -187,19 +189,58 @@ class SaveUsageAtomicityTest(unittest.TestCase):
 
 class ConcurrencyTest(unittest.TestCase):
     """F-12: без блокировки два параллельных run() читают один и тот же старый
-    _usage.json, и последняя запись побеждает, теряя чужой расход."""
+    _usage.json, и последняя запись побеждает, теряя чужой расход. Мутация
+    «убрать usage_lock» должна ронять именно этот тест, не пройти его случайно —
+    поэтому оба потока реально пересекаются внутри call(), а не идут по очереди."""
 
     def setUp(self) -> None:
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-spyfu-lock-"))
         self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
 
-    def test_two_sequential_spends_under_lock_both_land(self) -> None:
-        args = argparse_namespace(out=str(self.tmp), budget=40.0, ttl=30.0, force=False)
-        with mock.patch.object(spyfu, "call", return_value=domain_stats_response(1)):
-            spyfu.run("b64", "path/a", 0.50, {"domain": "a"}, args, lambda r: None)
-            spyfu.run("b64", "path/b", 0.50, {"domain": "b"}, args, lambda r: None)
+    def test_parallel_run_does_not_lose_either_spend(self) -> None:
+        entered_first = threading.Event()
+        release_first = threading.Event()
+        call_count = {"n": 0}
+        count_lock = threading.Lock()
+
+        def shared_call(_b64, _path, _params):
+            with count_lock:
+                call_count["n"] += 1
+                is_first = call_count["n"] == 1
+            if is_first:
+                entered_first.set()
+                # держим поток внутри критической секции — второй поток должен
+                # встать в очередь на flock(), а не прочитать тот же старый файл.
+                release_first.wait(timeout=2)
+            return domain_stats_response(1)
+
+        original_call = spyfu.call
+        spyfu.call = shared_call
+        self.addCleanup(setattr, spyfu, "call", original_call)
+
+        errors: list[BaseException] = []
+
+        def worker(idx: int) -> None:
+            try:
+                args = argparse_namespace(out=str(self.tmp), budget=40.0, ttl=30.0, force=False)
+                spyfu.run("b64", "some/path", 0.50, {"domain": f"d{idx}"}, args, lambda r: None)
+            except BaseException as e:  # noqa: BLE001 - тест должен увидеть любую ошибку потока
+                errors.append(e)
+
+        t1 = threading.Thread(target=worker, args=(1,))
+        t2 = threading.Thread(target=worker, args=(2,))
+        t1.start()
+        self.assertTrue(entered_first.wait(timeout=2), "поток 1 должен войти в call() до старта потока 2")
+        t2.start()
+        time.sleep(0.15)
+        release_first.set()
+        t1.join(timeout=3)
+        t2.join(timeout=3)
+
+        self.assertFalse(errors, f"потоки упали: {errors}")
         usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
-        self.assertEqual(usage["rows"], 2, "оба вызова обязаны попасть в итоговую сумму")
+        self.assertEqual(usage["rows"], 2, "без блокировки один из двух расходов "
+                                            "был бы потерян — победила бы последняя запись")
 
 
 def argparse_namespace(**kwargs):
