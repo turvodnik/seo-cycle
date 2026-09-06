@@ -437,7 +437,7 @@ Vladimir 04.09 (записано в `optimize/SPEC-seo-cycle-fixes.md`, п. 13) 
 
 ### Fix: конвенция путей и вызовов — CLI вместо несуществующего глобального пути
 
-- **Убран путь `~/.codex/skills/seo-cycle`** из 66 файлов (316 вхождений): такой
+- **Убран путь `~/.codex/skills/seo-cycle`** из 60 файлов (349 вхождений): такой
   установки нет и по правилам быть не должно — в `~/.codex/skills` живёт только
   универсальное, инструментальные пакеты подключаются в проект (`.codex/skills/...`
   → vendor-версия). Печатать этот путь пользователю значило давать команду, которая
@@ -462,7 +462,7 @@ Vladimir 04.09 (записано в `optimize/SPEC-seo-cycle-fixes.md`, п. 13) 
 - Внутренний рефакторинг, поведение и форматы отчётов не изменились:
   `seo/setup/<провайдер>-health.md`/`.json` для `gbp`, `google-ads`,
   `merchant`, `yandex-direct`, `yandex-business`, `notebooklm`, `perplexity`
-  — побайтно те же, что и до правки (24 golden-случая,
+  — побайтно те же, что и до правки (25 golden-случаев,
   `tests/fixtures/health/`, `tests/test_health_core.py`).
 - Новый `scripts/seo_cycle_core/health.py` (`HealthSpec` + `run_health()`,
   по образцу `vnext_audit_core.py`): семь скриптов были ручными копиями
