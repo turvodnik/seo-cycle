@@ -97,9 +97,28 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
     if not path.exists() and not path.is_symlink():
         return {}
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        raw = path.read_bytes()
     except OSError as exc:
         print(f"ERROR: {path}: не удалось прочитать конфиг: {exc}", file=sys.stderr)
+        sys.exit(2)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        # T-067 round 3 (second independent gate): an earlier version of
+        # this function used `errors="replace"` here, which turned a non-
+        # UTF-8 file (e.g. saved by an editor in cp1251 — not exotic for a
+        # Russian-language config) into MOJIBAKE that parsed "successfully"
+        # instead of failing — trading a loud F-35 crash for a silent F-37
+        # "✓ ..." over corrupted data, on 25 of 42 commands. The original
+        # QA report named `UnicodeDecodeError` explicitly among the F-35
+        # inputs; this function's own docstring above already promised
+        # exit(2) for "a file that isn't valid UTF-8" — this is that
+        # promise, finally kept.
+        print(
+            f"ERROR: {path}: файл не в кодировке UTF-8 "
+            f"(байт {exc.object[exc.start]:#04x} в позиции {exc.start}) — пересохрани в UTF-8",
+            file=sys.stderr,
+        )
         sys.exit(2)
     try:
         data = yaml.safe_load(text)
@@ -168,7 +187,16 @@ def require_config(cfg_path: pathlib.Path | None, *, where: pathlib.Path | None 
         location = f" in {where}" if where else ""
         print(f"ERROR: seo-cycle.yaml not found{location} — nothing to do", file=sys.stderr)
         sys.exit(2)
-    return load_yaml(cfg_path)
+    cfg = load_yaml(cfg_path)
+    if not cfg:
+        # T-067 round 3 (second independent gate, §6): an existing-but-empty
+        # file (empty, comment-only, a bare `---\nnull\n` document) used to
+        # pass this function's "exists" check and come back as `{}` — same
+        # green "✓ ..." over nothing this function exists to stop, just
+        # reached through the file existing instead of being absent.
+        print(f"ERROR: {cfg_path}: конфиг пуст — нечего использовать", file=sys.stderr)
+        sys.exit(2)
+    return cfg
 
 
 def write_text(path: pathlib.Path, text: str) -> None:

@@ -114,6 +114,35 @@ class LoadYamlFormTest(unittest.TestCase):
         cfg_path.write_text("", encoding="utf-8")
         self.assertEqual(load_yaml(cfg_path), {})
 
+    def test_non_utf8_exits_2_not_silently_mangled(self) -> None:
+        # T-067 round 3 (second independent gate, §5 — the blocker): an
+        # earlier version used `errors="replace"`, which turned a cp1251
+        # config (not exotic for Russian text) into mojibake that "parsed"
+        # instead of failing — 25 of 42 commands went from an honest crash
+        # (F-35) to a silent "✓ ..." over corrupted data (F-37). The
+        # original QA report named `UnicodeDecodeError` explicitly among
+        # the F-35 inputs this ticket exists to close.
+        cfg_path = self.root / "seo-cycle.yaml"
+        cfg_path.write_bytes("project:\n  name: тест\n".encode("cp1251"))
+        with self.assertRaises(SystemExit) as ctx:
+            load_yaml(cfg_path)
+        self.assertEqual(ctx.exception.code, 2)
+
+    def test_non_utf8_message_names_file_no_traceback(self) -> None:
+        cfg_path = self.root / "seo-cycle.yaml"
+        cfg_path.write_bytes("project:\n  name: тест\n".encode("cp1251"))
+        proc = subprocess.run(
+            [sys.executable, "-c",
+             f"import sys; sys.path.insert(0, {str(SCRIPTS)!r}); "
+             f"from seo_cycle_core.config import load_yaml; import pathlib; "
+             f"load_yaml(pathlib.Path({str(cfg_path)!r}))"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn(str(cfg_path), proc.stderr)
+        self.assertIn("UTF-8", proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+
 
 class ConfigSectionTest(unittest.TestCase):
     """`seo_cycle_core.config.config_section` — F-26/F-36 helper itself."""
@@ -150,6 +179,20 @@ class RequireConfigTest(unittest.TestCase):
         cfg_path.write_text("project:\n  name: acme\n", encoding="utf-8")
         self.assertEqual(require_config(cfg_path), {"project": {"name": "acme"}})
 
+    def test_empty_file_exits_2_not_treated_as_valid(self) -> None:
+        # T-067 round 3 (second gate, §6): `require_config` checked only
+        # "does the file exist", so an existing-but-empty file (or a
+        # comment-only file, or a bare `null` document) passed through as
+        # a "valid" config and produced the same green "✓ ..." over
+        # nothing this function exists to stop.
+        root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        cfg_path = root / "seo-cycle.yaml"
+        cfg_path.write_text("", encoding="utf-8")
+        with self.assertRaises(SystemExit) as ctx:
+            require_config(cfg_path)
+        self.assertEqual(ctx.exception.code, 2)
+
 
 class CliSectionAccessTest(unittest.TestCase):
     """End-to-end: the exact F-26 repro from the QA report, plus F-36's
@@ -173,8 +216,10 @@ class CliSectionAccessTest(unittest.TestCase):
         self.assertNotIn("Traceback", proc.stdout + proc.stderr)
         self.assertNotIn("AttributeError", proc.stdout + proc.stderr)
         self.assertEqual(proc.returncode, 0)
-        self.assertIn("'project'", proc.stderr)
-        self.assertIn("str", proc.stderr)
+        # T-067 round 3 (second gate, §7): a bare `assertIn("str", stderr)`
+        # is too loose — "str" is a substring of plenty of unrelated
+        # messages. Assert the exact warning prefix `config_section` prints.
+        self.assertIn("WARNING: конфиг: раздел 'project' задан как str", proc.stderr)
 
     def test_validate_on_project_as_string_reports_error_not_traceback(self) -> None:
         proc = run_cli(["validate"], cwd=self.root)
@@ -209,6 +254,26 @@ class CliMissingConfigTest(unittest.TestCase):
         # (T-052) — T-067 must not have disturbed it.
         proc = run_cli(["status"], cwd=self.root)
         self.assertEqual(proc.returncode, 2)
+
+    def test_dashboard_refuses_on_cp1251_config(self) -> None:
+        # T-067 round 3 (second gate, §5 — the blocker itself, exact
+        # reproduction): a config saved by an editor in cp1251 instead of
+        # UTF-8 (not exotic for Russian text) used to make `dashboard`
+        # print a green "✓ Dashboard → ..." and exit 0 over mangled
+        # data — a verbatim repro of the ticket's own F-37, on the branch
+        # that closes F-37.
+        (self.root / "seo-cycle.yaml").write_bytes("project:\n  name: тест\n".encode("cp1251"))
+        proc = run_cli(["dashboard"], cwd=self.root)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertNotIn("✓", proc.stdout + proc.stderr)
+        self.assertFalse((self.root / "seo" / "monthly-dashboard.md").exists())
+
+    def test_empty_config_file_refuses_like_missing(self) -> None:
+        (self.root / "seo-cycle.yaml").write_text("", encoding="utf-8")
+        proc = run_cli(["dashboard"], cwd=self.root)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertNotIn("✓", proc.stdout + proc.stderr)
+        self.assertFalse((self.root / "seo" / "monthly-dashboard.md").exists())
 
 
 class MatrixSiteTest(unittest.TestCase):
