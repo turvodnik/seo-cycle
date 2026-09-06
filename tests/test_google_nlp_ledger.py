@@ -26,7 +26,14 @@ sys.path.insert(0, str(SCRIPTS))
 
 spec = importlib.util.spec_from_file_location("google_nlp_audit", SCRIPTS / "google-nlp-audit.py")
 gnlp = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(gnlp)
+try:
+    spec.loader.exec_module(gnlp)
+except ImportError as e:
+    # google-nlp-audit.py требует опциональные зависимости из extras `google`
+    # (requests/beautifulsoup4/google-auth) — CI ставит только `.[dev]`, они
+    # там не установлены. Пропускаем модуль целиком, а не падаем ImportError'ом
+    # на уровне discovery (та же практика, что для остальных опциональных extras).
+    raise unittest.SkipTest(f"google-nlp-audit.py deps missing: {e}") from e
 
 
 class LoadUsageCorruptionTest(unittest.TestCase):
