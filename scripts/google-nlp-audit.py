@@ -410,12 +410,27 @@ def analyze_source(
             # засчитывается по факту вызова на обеих ветках.
             try:
                 response = call_feature(project_root, feature, clipped_text, language, config)
-            except requests.exceptions.RequestException as exc:
+            except Exception as exc:
+                # R2-2 (независимый гейт, круг 3): `requests.exceptions.
+                # RequestException` не покрывает всё, что может прилететь при
+                # чтении/парсинге тела уже отправленного запроса (тот же
+                # класс дефекта, что у остальных пяти клиентов) — инверсия на
+                # Exception вместо перечня конкретного исключения библиотеки.
                 usage = add_usage(usage, feature, units)
                 save_usage(cache_dir, usage)
                 results.append({"feature": feature, "status": "api_error", "units": units,
                                 "reason": str(exc)[:300]})
                 continue
+
+            # R2-2 (независимый гейт, круг 3): раньше запись кэша (диск,
+            # может упасть по OSError — полный диск, каталог только на
+            # чтение) стояла ПЕРЕД учётом расхода — платный вызов уже
+            # состоялся, а сбой записи кэша терял расход из _usage.json
+            # молча. Порядок строк — тот же класс F-13, просто без
+            # исключения из транспортного слоя. Учёт теперь фиксируется
+            # ДО попытки записи кэша.
+            usage = add_usage(usage, feature, units)
+            save_usage(cache_dir, usage)
 
             record = {
                 "cached_at": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -428,8 +443,6 @@ def analyze_source(
                 "response": response,
             }
             path.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            usage = add_usage(usage, feature, units)
-            save_usage(cache_dir, usage)
             results.append({"feature": feature, "status": "api_call", "units": units, "cache_file": str(path)})
 
     return results

@@ -155,6 +155,44 @@ class AnalyzeSourceF13Test(unittest.TestCase):
         usage = gnlp.load_usage(self._cache_dir(), month)
         self.assertGreater(usage["features"].get("analyzeEntities", 0), 0)
 
+    def test_exotic_exception_from_call_feature_still_records_units(self) -> None:
+        """R2-2 (независимый гейт, круг 3): `except requests.exceptions.
+        RequestException` не покрывает произвольный сбой внутри call_feature()
+        (например, декодирование ответа) — тот же класс, что у остальных
+        пяти клиентов. Мутация: верни except на requests.exceptions.
+        RequestException — этот тест обязан покраснеть (исключение уйдёт
+        из analyze_source() необработанным)."""
+        with mock.patch.object(gnlp, "call_feature", side_effect=ValueError("bad payload")):
+            results = gnlp.analyze_source(
+                project_root=self.tmp, source_id="https://example.com", text="hello world",
+                language="en", features=["analyzeEntities"], config=self.config,
+                dry_run=False, force_refresh=False, include_cache_result=False,
+            )
+        self.assertEqual(results[0]["status"], "api_error")
+        month = gnlp.month_key()
+        usage = gnlp.load_usage(self._cache_dir(), month)
+        self.assertGreater(usage["features"].get("analyzeEntities", 0), 0)
+
+    def test_cache_write_failure_does_not_lose_the_already_recorded_spend(self) -> None:
+        """R2-2 (независимый гейт, круг 3): раньше `path.write_text(...)`
+        (кэш ответа) стоял ПЕРЕД add_usage()/save_usage() — сбой записи кэша
+        (полный диск, каталог только на чтение) после УЖЕ состоявшегося
+        платного вызова терял расход из _usage.json молча. Порядок строк
+        теперь: учёт — первым, запись кэша — второй. Мутация: поменяй порядок
+        обратно — этот тест обязан покраснеть (юниты == 0 после OSError)."""
+        with mock.patch.object(gnlp, "call_feature", return_value={"entities": []}), \
+             mock.patch.object(pathlib.Path, "write_text", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                gnlp.analyze_source(
+                    project_root=self.tmp, source_id="https://example.com", text="hello world",
+                    language="en", features=["analyzeEntities"], config=self.config,
+                    dry_run=False, force_refresh=False, include_cache_result=False,
+                )
+        month = gnlp.month_key()
+        usage = gnlp.load_usage(self._cache_dir(), month)
+        self.assertGreater(usage["features"].get("analyzeEntities", 0), 0,
+                           "расход обязан быть учтён ДО попытки записи кэша, даже если запись упала")
+
 
 if __name__ == "__main__":
     unittest.main()
