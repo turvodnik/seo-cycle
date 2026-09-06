@@ -14,6 +14,8 @@ ValueError и всё остальное, что может прилететь п
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
 import pathlib
 import sys
 import unittest
@@ -73,6 +75,83 @@ class ApplyDirectExoticExceptionTest(unittest.TestCase):
         self.assertEqual(len(results), 3)
         self.assertEqual(results[1]["status"], "failed")
         self.assertIn("ValueError", results[1]["error"])
+
+
+class WriteAheadBeforeApplyLoopTest(unittest.TestCase):
+    """R3-1 (независимый гейт, круг 4): круг 3 писало расход `ledger_record()`
+    ПОСЛЕ цикла `apply_direct()` целиком (`requests=len(operations)`) — любое
+    исключение внутри цикла (в т.ч. KeyboardInterrupt/SystemExit, которые не
+    ловит НИ ОДИН except) уносило выполнение мимо записи навсегда, теряя ВСЕ
+    уже выполненные (и оплаченные) операции прогона, не только последнюю.
+    Фикс — write-ahead: запись на всю пачку операций ДО цикла.
+
+    Мутация: перенеси `ledger_record(...)` обратно после `apply_direct(...)`
+    — оба теста ниже обязаны покраснеть (recorded будет пуст, потому что
+    apply_direct подменён на исключение и main() никогда не дойдёт до записи)."""
+
+    def setUp(self) -> None:
+        import shutil
+        import tempfile
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-ads-apply-f13-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        (self.tmp / "seo-cycle.yaml").write_text(
+            "project:\n  name: ads-apply-f13\n  url: https://example.com\n"
+            "region_profile: ru\nads:\n  enabled: true\n  policy: approval_only\n"
+            "  yandex_direct:\n    enabled: true\n    sandbox: true\n",
+            encoding="utf-8",
+        )
+        draft = {"platform": "yandex_direct", "campaigns": [
+            {"name": "camp-1", "channel": "search", "budget_daily": 0, "ad_groups": [
+                {"name": "group-1", "keywords": [{"text": "kw1", "match_type": "phrase"}], "ads": []}
+            ], "negatives": []},
+        ]}
+        self.draft_path = self.tmp / "draft.json"
+        self.draft_path.write_text(json.dumps(draft), encoding="utf-8")
+        self._old_cwd = pathlib.Path.cwd()
+        os.chdir(self.tmp)
+        self.addCleanup(os.chdir, self._old_cwd)
+
+    def _run_live_with_apply_direct_raising(self, exc: BaseException) -> list:
+        recorded = []
+        argv = ["ads-apply.py", "--draft", str(self.draft_path), "--ticket", "T-1",
+                "--live", "--allow-write"]
+        with mock.patch.object(apply_mod, "ticket_status", return_value="approved"), \
+             mock.patch.object(apply_mod, "env_status", return_value={"present": True, "missing": []}), \
+             mock.patch.object(apply_mod, "ledger_preflight", return_value=(True, "ok")), \
+             mock.patch.object(apply_mod, "ledger_record",
+                               side_effect=lambda *a, **k: recorded.append(k) or True), \
+             mock.patch.object(apply_mod, "apply_direct", side_effect=exc), \
+             mock.patch.object(apply_mod, "notify"), \
+             mock.patch.object(sys, "argv", argv):
+            with self.assertRaises(type(exc)):
+                apply_mod.main()
+        return recorded
+
+    def test_keyboard_interrupt_during_apply_loop_is_already_recorded(self) -> None:
+        recorded = self._run_live_with_apply_direct_raising(KeyboardInterrupt())
+        self.assertTrue(recorded, "запись расхода на всю пачку операций обязана произойти ДО цикла apply_direct()")
+        self.assertEqual(recorded[0].get("requests"), 3, "вся пачка операций (3), а не только успевшие")
+
+    def test_system_exit_during_apply_loop_is_already_recorded(self) -> None:
+        recorded = self._run_live_with_apply_direct_raising(SystemExit(1))
+        self.assertTrue(recorded)
+        self.assertEqual(recorded[0].get("requests"), 3)
+
+    def test_ledger_record_false_refuses_the_apply(self) -> None:
+        """R3-3: отказ записи обязан остановить apply ДО первой операции."""
+        apply_direct_calls = []
+        argv = ["ads-apply.py", "--draft", str(self.draft_path), "--ticket", "T-1",
+                "--live", "--allow-write"]
+        with mock.patch.object(apply_mod, "ticket_status", return_value="approved"), \
+             mock.patch.object(apply_mod, "env_status", return_value={"present": True, "missing": []}), \
+             mock.patch.object(apply_mod, "ledger_preflight", return_value=(True, "ok")), \
+             mock.patch.object(apply_mod, "ledger_record", return_value=False), \
+             mock.patch.object(apply_mod, "apply_direct",
+                               side_effect=lambda *a, **k: apply_direct_calls.append(1) or []), \
+             mock.patch.object(sys, "argv", argv):
+            rc = apply_mod.main()
+        self.assertNotEqual(rc, 0)
+        self.assertFalse(apply_direct_calls, "запись не удалась — apply обязан быть отказан ДО первой операции")
 
 
 if __name__ == "__main__":

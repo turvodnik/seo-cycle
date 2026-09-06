@@ -267,14 +267,31 @@ def main() -> int:
         # пессимистично (квота API считается уже потраченной фактом отправки
         # запроса, а не фактом успешного ответа) — тогда ЛЮБОЕ исключение,
         # любого типа, сигнал, обрыв процесса после этой строки уже не теряет
-        # факт попытки. При неудаче — вторая запись с requests=0, только для
-        # заметки в журнале (без двойного счёта).
-        ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report} (в процессе)")
+        # факт попытки.
+        #
+        # R3-3 (независимый гейт, круг 4): write-ahead защищает только если
+        # запись РЕАЛЬНО состоялась. `ledger_record()` возвращает `bool`
+        # именно для этого случая — раньше возврат отбрасывался, и платный
+        # вызов уходил в сеть даже если журнал не смог принять запись
+        # (например каталог только на чтение): вызов состоялся, свидетельства
+        # нет, процесс выходил кодом 0. Теперь отказ записи останавливает
+        # выполнение ДО live_fetch().
+        if not ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report}"):
+            print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
+                  "а не платный вызов вслепую", file=sys.stderr)
+            return 2
+        # R3-4 (независимый гейт, круг 4): круг 3 обещал здесь «уточняющую
+        # запись requests=0 при неудаче» — она никогда не срабатывала
+        # (`usage-ledger.py record` отказывает без метрик: requests=0 и
+        # usd=0 не проходят проверку "at least one estimate metric"), и это
+        # было расхождением кода с CHANGELOG. Честный вариант: pending-запись
+        # выше И ЕСТЬ финальная запись; на неудаче — только предупреждение в
+        # stderr, без второй (несуществующей) записи в журнал.
         try:
             payload = live_fetch(args.report, cfg, args.days)
         except Exception as exc:
-            ledger_record(project_root, PLATFORM, requests=0,
-                          note=f"fetch {args.report} FAILED: {exc}")
+            print(f"WARNING: fetch {args.report} failed after the paid call was already "
+                  f"recorded ({exc})", file=sys.stderr)
             print(f"ERROR: Direct API call failed: {exc}", file=sys.stderr)
             return 1
     else:

@@ -214,13 +214,26 @@ def main() -> int:
         # JSONDecodeError) проигрывает следующему заходу. Write-ahead: запись
         # уходит ДО gaql_search() — квота считается уже потраченной фактом
         # отправки запроса, любое исключение/сигнал после этой строки уже не
-        # теряет факт попытки. При явной неудаче — уточнение (requests=0).
-        ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report} (в процессе)")
+        # теряет факт попытки.
+        #
+        # R3-3 (независимый гейт, круг 4): возврат `ledger_record()` раньше
+        # отбрасывался — отказ записи (например каталог только на чтение) не
+        # останавливал платный вызов, процесс выходил кодом 0 с пустым
+        # журналом. Теперь отказ записи — отказ вызова, ДО gaql_search().
+        if not ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report}"):
+            print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
+                  "а не платный вызов вслепую", file=sys.stderr)
+            return 2
+        # R3-4 (независимый гейт, круг 4): «уточняющая запись requests=0 при
+        # неудаче», обещанная кругом 3, никогда не срабатывала —
+        # `usage-ledger.py record` без ненулевых метрик отказывает. Честный
+        # вариант: pending-запись выше и есть финальная запись, на неудаче —
+        # только предупреждение в stderr.
         try:
             payload = gaql_search(args.report)
         except Exception as exc:
-            ledger_record(project_root, PLATFORM, requests=0,
-                          note=f"fetch {args.report} FAILED: {exc}")
+            print(f"WARNING: fetch {args.report} failed after the paid call was already "
+                  f"recorded ({exc})", file=sys.stderr)
             print(f"ERROR: Google Ads API call failed: {exc}", file=sys.stderr)
             return 1
     else:

@@ -141,8 +141,16 @@ def ledger_record(project_root: pathlib.Path, service: str, *, requests: int = 0
     landed — `check=False` + a silently discarded exit code (T-066 R-2: the
     write failing was previously indistinguishable from it succeeding, so a
     quota-spending call could vanish from the ledger with zero visibility).
-    Callers should at least warn on `False`; the paid call already happened
-    either way, so this is a bookkeeping-loss warning, not a stop condition."""
+
+    T-066 R3-3 (round-4 gate): when this is called write-ahead — BEFORE the
+    paid call, to survive Ctrl-C/SIGKILL — a `False` return means the ONLY
+    record of the upcoming spend does not exist yet. Callers using it that
+    way MUST treat `False` as a stop condition (refuse the paid call), not
+    just a warning: `yandex-direct-fetch.py`, `google-ads-fetch.py` and
+    `ads-apply.py` all do this now. A caller invoking this strictly
+    after-the-fact (spend already happened, nothing left to gate) may still
+    treat `False` as a bookkeeping-loss warning only — but no caller in this
+    codebase currently uses it that way."""
     script = pathlib.Path(__file__).resolve().parent.parent / "usage-ledger.py"
     command = [sys.executable, str(script), "record", "--service", service, "--category", category]
     if requests:
