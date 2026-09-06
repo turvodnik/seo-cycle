@@ -44,20 +44,26 @@ import argparse
 import base64
 import contextlib
 import datetime
-import fcntl
 import hashlib
 import json
-import math
 import os
 import pathlib
-import re
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.request
 
 from seo_cycle_core.config import find_config, load_yaml, nested_get
+from seo_cycle_core.usage_ledger import (
+    UsageLedgerError,
+    budget_arg,
+    effective_budget as _shared_effective_budget,
+    finite_nonneg as _finite_nonneg,
+    load_usage as _shared_load_usage,
+    save_usage,
+    usage_file as _shared_usage_file,
+    usage_lock,
+)
 
 API_BASE = "https://api.dataforseo.com/v3"
 DEFAULT_OUT = "seo/research/dataforseo"
@@ -89,29 +95,19 @@ def load_auth(env: dict | None = None) -> str:
              "(ключ DATAFORSEO_API_KEY_BASE64 лежит в Keychain).")
 
 
-# ---------- учёт расходов ----------
+# ---------- учёт расходов (общий модуль seo_cycle_core.usage_ledger, T-066) ----------
+#
+# Класс «денежный стоп» третий раз оказался шире, чем чинился поштучно (T-046,
+# T-059, независимый прогон 2026-09-06 F-11/F-12/F-13). Примитивы (проверка
+# значения, атомарная запись, блокировка, валидатор --budget) теперь живут в
+# seo_cycle_core/usage_ledger.py одной копией на всех платных клиентов; здесь —
+# только тонкие обёртки под интерфейс, которого ждут существующие вызовы/тесты.
 
-class UsageLedgerError(RuntimeError):
-    """_usage.json существует, но не читается: испорчен, не JSON, либо неожиданная
-    схема. НЕ трактуется как «потрачено 0» — иначе бюджетный стоп молча пропускает
-    платный вызов (T-059: ровно так и происходило до этого фикса)."""
-
-
-MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
+USAGE_FIELDS = ("spent_usd", "calls")
 
 
 def usage_file(out_dir: pathlib.Path) -> pathlib.Path:
-    return out_dir / "_usage.json"
-
-
-def _finite_nonneg(x: object) -> bool:
-    """Пригодно для денежной/счётной арифметики: число, не NaN/Infinity, не
-    отрицательное. `isinstance(x, (int, float))` одной этой проверки НЕДОСТАТОЧНО —
-    `json.loads` штатно парсит литералы `NaN`/`Infinity`/`-Infinity` в float, и они
-    проходят проверку типа, но `NaN >= budget` всегда ложно, а `NaN + cost` снова
-    NaN: бюджетный стоп молча отключается навсегда (T-059, находка ревью)."""
-    return (isinstance(x, (int, float)) and not isinstance(x, bool)
-            and math.isfinite(x) and x >= 0)
+    return _shared_usage_file(out_dir)
 
 
 def load_usage(out_dir: pathlib.Path) -> dict:
@@ -120,69 +116,17 @@ def load_usage(out_dir: pathlib.Path) -> dict:
     UsageLedgerError, а не тихо возвращает «потрачено 0» — вызывающая сторона
     (fetch()) решает, что делать: по умолчанию отказ, --force осознанно считает
     месяц заново."""
-    f = usage_file(out_dir)
-    month = datetime.date.today().strftime("%Y-%m")
-    if not f.exists():
-        return {"month": month, "spent_usd": 0.0, "calls": 0}
-    try:
-        u = json.loads(f.read_text(encoding="utf-8"))
-    except (ValueError, OSError) as e:
-        raise UsageLedgerError(f"{f}: {e}") from e
-    if not isinstance(u, dict):
-        raise UsageLedgerError(f"{f}: ожидался JSON-объект, получено {type(u).__name__}")
-    spent = u.get("spent_usd")
-    if not _finite_nonneg(spent):
-        raise UsageLedgerError(f"{f}: spent_usd непригоден для денежной арифметики ({spent!r})")
-    if "calls" in u and not _finite_nonneg(u["calls"]):
-        raise UsageLedgerError(f"{f}: calls непригоден ({u['calls']!r})")
-    stored_month = u.get("month")
-    if not isinstance(stored_month, str) or not MONTH_RE.match(stored_month):
-        raise UsageLedgerError(f"{f}: поле month испорчено ({stored_month!r})")
-    if stored_month != month:
-        return {"month": month, "spent_usd": 0.0, "calls": 0}
-    return u
-
-
-def save_usage(out_dir: pathlib.Path, u: dict) -> None:
-    """Атомарная запись: временный файл в той же папке + os.replace — читатель
-    никогда не увидит полузаписанный _usage.json при обрыве процесса (T-059).
-    Временный файл удаляется, если запись не дошла до replace (диск, сериализация)."""
-    path = usage_file(out_dir)
-    fd, tmp_name = tempfile.mkstemp(dir=out_dir, prefix=".usage-", suffix=".json.tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(u, f, indent=2, ensure_ascii=False)
-        os.replace(tmp_name, path)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.unlink(tmp_name)
-        raise
-
-
-@contextlib.contextmanager
-def usage_lock(out_dir: pathlib.Path):
-    """Файловая блокировка на время «проверка бюджета -> платный вызов -> запись
-    расхода» (T-059): без неё параллельные fetch() читают один и тот же старый
-    _usage.json, и последняя запись побеждает, теряя чужой расход."""
-    lock_path = out_dir / "_usage.json.lock"
-    with open(lock_path, "a", encoding="utf-8") as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    return _shared_load_usage(out_dir, USAGE_FIELDS)
 
 
 def effective_budget(args) -> float:
     """--budget, ограниченный сверху governance.subscriptions.dataforseo.monthly_usd_cap
     проекта, если конфиг найден и поле задано пригодным для арифметики числом
-    (T-059). Тот же путь читают scripts/spend-guard.py и scripts/usage-ledger.py
-    для всех платных подписок проекта — это установленная конвенция схемы, а не
-    новая. Конфиг без секции/файла — поведение как раньше (только --budget).
-    Битый YAML или мусор в самом значении cap — честный отказ (sys.exit), а не
-    молчаливый откат на --budget: иначе опечатка в конфиге тихо снимает лимит,
-    который человек специально понижал (ревью T-059, красный №1/№2 — тот же класс
-    «тип прошёл проверку, значение непригодно для денег»)."""
+    (T-059). Конфиг без секции/файла — поведение как раньше (только --budget).
+    Битый YAML — честный отказ (sys.exit), а не молчаливый откат на --budget:
+    иначе опечатка в конфиге тихо снимает лимит, который человек специально
+    понижал (ревью T-059, красный №1/№2 — «тип прошёл проверку, значение
+    непригодно для денег»)."""
     cfg_path = find_config(pathlib.Path.cwd())
     if cfg_path is None:
         return args.budget
@@ -193,13 +137,12 @@ def effective_budget(args) -> float:
                  f"убери секцию governance.subscriptions.dataforseo, чтобы работать "
                  f"только по --budget.")
     cap = nested_get(cfg, "governance.subscriptions.dataforseo.monthly_usd_cap")
-    if cap is None:
-        return args.budget
-    if not _finite_nonneg(cap):
-        sys.exit(f"ERROR: governance.subscriptions.dataforseo.monthly_usd_cap в "
-                 f"{cfg_path} непригоден для денежной арифметики ({cap!r}). Почини "
-                 f"значение или убери ключ, чтобы работать только по --budget.")
-    return min(args.budget, float(cap))
+    try:
+        return _shared_effective_budget(args.budget, cap, cap_label=(
+            f"governance.subscriptions.dataforseo.monthly_usd_cap в {cfg_path}"))
+    except ValueError as e:
+        sys.exit(f"ERROR: {e}. Почини значение или убери ключ, чтобы работать "
+                 f"только по --budget.")
 
 
 # ---------- транспорт ----------
@@ -312,14 +255,40 @@ def fetch(b64: str, path: str, payload: dict | None, args) -> dict:
                      f"(${u['spent_usd']:.4f}/${budget}, месяц {u['month']}). "
                      f"--force чтобы продолжить или подними --budget.")
 
+        # F-13 (независимый прогон 2026-09-06): деньги списываются самим фактом
+        # платного вызова, а не фактом «ответ хороший». Раньше и плохой
+        # status_code, и непригодное поле cost (response_cost) уходили в
+        # sys.exit ДО save_usage() — вызов был реальный, платный, а учёт про
+        # него не знал ничего. Поэтому: вызов сначала, запись под тем же
+        # usage_lock — ВСЕГДА, любой из выходов ниже происходит только после неё.
         resp = call(b64, path, payload)
-        if resp.get("status_code") not in (20000, None):
-            sys.exit(f"ERROR DataForSEO: {resp.get('status_code')} {resp.get('status_message')}")
-
-        cost = response_cost(resp)
-        u["spent_usd"] = round(u.get("spent_usd", 0.0) + cost, 6)
         u["calls"] = u.get("calls", 0) + 1
+        try:
+            cost = response_cost(resp)
+        except SystemExit as e:
+            cost = None
+            cost_error = str(e.code)
+        else:
+            cost_error = None
+        if cost is not None:
+            u["spent_usd"] = round(u.get("spent_usd", 0.0) + cost, 6)
+        else:
+            # Сумма неизвестна — списать нечего, но сам факт платного вызова
+            # обязан остаться в учёте (F-13): непригодность отражена отдельным
+            # счётчиком, а не потерей вызова из истории.
+            u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) + 1
         save_usage(out_dir, u)
+
+        if resp.get("status_code") not in (20000, None):
+            print(f"↑ запрос {path}: вызов #{u['calls']} зафиксирован в учёте, "
+                  f"ответ вернул ошибку конверта", file=sys.stderr)
+            sys.exit(f"ERROR DataForSEO: {resp.get('status_code')} {resp.get('status_message')}")
+        if cost_error is not None:
+            print(f"↑ запрос {path}: вызов #{u['calls']} зафиксирован в учёте "
+                  f"без суммы (cost непригоден)", file=sys.stderr)
+            sys.exit(f"ERROR DataForSEO: {cost_error} Расход по вызову #{u['calls']} "
+                     f"учтён без суммы — сверь {usage_file(out_dir)} вручную.")
+
         print(f"↑ запрос {path}: ${cost:.4f} · за месяц ${u['spent_usd']:.4f} "
               f"({u['calls']} вызовов)", file=sys.stderr)
 
@@ -467,7 +436,7 @@ def add_common(p: argparse.ArgumentParser, sub: bool) -> None:
     d = (lambda v: argparse.SUPPRESS) if sub else (lambda v: v)
     p.add_argument("--out", default=d(DEFAULT_OUT), help=f"папка кэша и учёта (умолч. {DEFAULT_OUT})")
     p.add_argument("--ttl", type=float, default=d(DEFAULT_TTL_DAYS), help="возраст кэша в днях")
-    p.add_argument("--budget", type=float, default=d(DEFAULT_BUDGET_USD),
+    p.add_argument("--budget", type=budget_arg, default=d(DEFAULT_BUDGET_USD),
                    help="месячный лимит трат, USD (итог — минимум с "
                         "governance.subscriptions.dataforseo.monthly_usd_cap проекта, если задан)")
     p.add_argument("--force", action="store_true", default=d(False),

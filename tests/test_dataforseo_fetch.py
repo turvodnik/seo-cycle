@@ -84,6 +84,29 @@ class AuthTest(unittest.TestCase):
                 dfs.load_auth({})
 
 
+class BudgetArgTest(unittest.TestCase):
+    """F-11 (независимый прогон 2026-09-06): --budget объявлялся как голое
+    `type=float`, и argparse штатно принимает nan/inf/-inf — дальше
+    `min(nan, cap)` даёт nan, и бюджетный стоп отключается полностью. Проверка
+    на уровне разбора аргументов (budget_arg), не внутри fetch()."""
+
+    def test_nan_is_rejected_at_parse_time(self) -> None:
+        with self.assertRaises(SystemExit):
+            dfs.build_parser().parse_args(["--budget", "nan", "balance"])
+
+    def test_inf_is_rejected_at_parse_time(self) -> None:
+        with self.assertRaises(SystemExit):
+            dfs.build_parser().parse_args(["--budget", "inf", "balance"])
+
+    def test_negative_is_rejected_at_parse_time(self) -> None:
+        with self.assertRaises(SystemExit):
+            dfs.build_parser().parse_args(["--budget", "-1", "balance"])
+
+    def test_ordinary_budget_still_parses(self) -> None:
+        args = dfs.build_parser().parse_args(["--budget", "12.5", "balance"])
+        self.assertEqual(args.budget, 12.5)
+
+
 class FetchTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-"))
@@ -130,6 +153,20 @@ class FetchTest(unittest.TestCase):
         with mock.patch.object(dfs, "call", return_value=bad):
             with self.assertRaises(SystemExit):
                 dfs.fetch("b64", "some/path", {"k": 4}, self.args)
+
+    def test_api_error_status_still_records_the_paid_call(self) -> None:
+        """F-13: выход по плохому status_code конверта раньше происходил ДО
+        любой записи в _usage.json — платный вызов случился, а учёт о нём не
+        узнавал (T-059 не трогал эту ветку). Теперь запись должна произойти
+        первой, sys.exit — вторым."""
+        bad = {"status_code": 40401, "status_message": "Not Found",
+               "cost": 0.03, "tasks": []}
+        with mock.patch.object(dfs, "call", return_value=bad):
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "some/path", {"k": 4}, self.args)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1)
+        self.assertAlmostEqual(usage["spent_usd"], 0.03)
 
     def test_task_level_error_is_not_cached(self) -> None:
         """T-059: конверт status_code=20000, но tasks[0] провалился — раньше это
@@ -546,16 +583,21 @@ class ResponseCostTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             dfs.response_cost({"cost": "много"})
 
-    def test_poisoned_api_cost_blocks_before_ledger_is_corrupted(self) -> None:
-        """Сквозной сценарий: DataForSEO вернула валидный конверт с NaN в cost —
-        fetch() обязан упасть ДО save_usage(), а не записать NaN в _usage.json."""
+    def test_poisoned_api_cost_still_exits_without_corrupting_spent_usd(self) -> None:
+        """F-13 (независимый прогон 2026-09-06): NaN в cost всё ещё поднимает
+        SystemExit (спорную сумму не заносим), но сам платный вызов теперь
+        обязан остаться в учёте — деньги списаны фактом вызова, а не фактом
+        валидного ответа. Раньше (T-059) fetch() падал ДО save_usage() и
+        _usage.json не появлялся вовсе — ровно так вызов терялся из истории."""
         bad = {"status_code": 20000, "cost": float("nan"),
                "tasks": [{"status_code": 20000, "result": [{"keyword": "x"}]}]}
         with mock.patch.object(dfs, "call", return_value=bad):
             with self.assertRaises(SystemExit):
                 dfs.fetch("b64", "some/path", {"k": 1}, self.args)
-        self.assertFalse((self.tmp / "_usage.json").exists(),
-                          "леджер не должен появиться с испорченным cost внутри")
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1, "платный вызов обязан быть учтён, даже если сумма неизвестна")
+        self.assertEqual(usage["spent_usd"], 0.0, "неизвестную сумму не приплюсовываем — NaN не проходит арифметику")
+        self.assertEqual(usage.get("cost_unknown_calls"), 1, "непригодность cost отражена отдельным полем")
 
 
 class DistillTest(unittest.TestCase):
