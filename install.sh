@@ -392,16 +392,47 @@ ensure_store() {
     fi
 }
 
+# F-10: a plain `git fetch --tags` REFUSES to overwrite a tag that moved on
+# the server (and never removes one deleted there) — silently, with exit
+# code 0. That silent-success path is exactly what let the phantom v2.1.0
+# tag stand undetected in the shared store (2026-09-03 audit). `--update`
+# now fetches with --force so a moved tag IS rewritten and --prune-tags so
+# a deleted one IS removed locally, checks the fetch's own exit code
+# instead of papering over it, and prints old→new for every tag that moved
+# or vanished — a silent rewrite would only be half the fix.
 update_store_only() {
+    local overall_rc=0
     for pair in "seo-cycle:$CORE" "seo-keywords:$KW_CORE"; do
         local_dir="${pair#*:}"
         label="${pair%%:*}"
         if [ -d "$local_dir/.git" ]; then
-            git -C "$local_dir" fetch --tags --quiet && log "✓ $label: fetch ok, latest tag: $(latest_tag "$local_dir")"
+            local before_file t old_c new_c
+            before_file="$(mktemp)"
+            git -C "$local_dir" tag --list 'v*' | while IFS= read -r t; do
+                [ -n "$t" ] || continue
+                printf '%s %s\n' "$t" "$(git -C "$local_dir" rev-parse --verify -q "refs/tags/$t" 2>/dev/null)"
+            done > "$before_file"
+            if git -C "$local_dir" fetch --tags --force --prune --prune-tags --quiet; then
+                while IFS=' ' read -r t old_c; do
+                    [ -n "$t" ] || continue
+                    new_c="$(git -C "$local_dir" rev-parse --verify -q "refs/tags/$t" 2>/dev/null || true)"
+                    if [ -z "$new_c" ]; then
+                        warn "$label: тег $t удалён на origin — убран локально"
+                    elif [ "$new_c" != "$old_c" ]; then
+                        warn "$label: тег $t переехал: ${old_c:0:8} → ${new_c:0:8}"
+                    fi
+                done < "$before_file"
+                log "✓ $label: fetch ok, latest tag: $(latest_tag "$local_dir")"
+            else
+                warn "$label: fetch тегов не удался — хранилище НЕ обновлено (offline? origin недоступен?)"
+                overall_rc=1
+            fi
+            rm -f "$before_file"
         else
             warn "$label: клона нет — запусти install.sh без аргументов"
         fi
     done
+    return "$overall_rc"
 }
 
 # ------------------------------------------------------------- project layer
