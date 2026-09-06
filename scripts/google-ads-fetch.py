@@ -210,9 +210,14 @@ def main() -> int:
         if not ok:
             print(f"ERROR: usage-ledger preflight blocked the run: {message}", file=sys.stderr)
             return 2
+        # F-13 (T-066, гейт круга 2): исключение из gaql_search() раньше уходило
+        # через `return 1` МИМО ledger_record() — квота уже потрачена (запрос
+        # ушёл), а учёт о попытке не узнавал. Запись теперь на обеих ветках.
         try:
             payload = gaql_search(args.report)
         except (urllib.error.URLError, KeyError, json.JSONDecodeError) as exc:
+            ledger_record(project_root, PLATFORM, requests=1,
+                          note=f"fetch {args.report} FAILED: {exc}")
             print(f"ERROR: Google Ads API call failed: {exc}", file=sys.stderr)
             return 1
         ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report}")

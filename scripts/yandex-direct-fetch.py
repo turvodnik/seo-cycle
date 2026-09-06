@@ -260,9 +260,15 @@ def main() -> int:
         if not ok:
             print(f"ERROR: usage-ledger preflight blocked the run: {message}", file=sys.stderr)
             return 2
+        # F-13 (T-066, гейт круга 2): раньше исключение из live_fetch() уходило
+        # через `return 1` МИМО ledger_record() — квота API уже потрачена
+        # (запрос ушёл), а governance-учёт о попытке не узнавал вовсе. Запись
+        # теперь происходит на обеих ветках: успех и явная неудача вызова.
         try:
             payload = live_fetch(args.report, cfg, args.days)
         except (urllib.error.URLError, RuntimeError, json.JSONDecodeError) as exc:
+            ledger_record(project_root, PLATFORM, requests=1,
+                          note=f"fetch {args.report} FAILED: {exc}")
             print(f"ERROR: Direct API call failed: {exc}", file=sys.stderr)
             return 1
         ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report}")

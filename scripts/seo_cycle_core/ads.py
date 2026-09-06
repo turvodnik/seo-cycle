@@ -136,7 +136,13 @@ def ledger_preflight(project_root: pathlib.Path, service: str, *, requests: int 
 
 
 def ledger_record(project_root: pathlib.Path, service: str, *, requests: int = 0,
-                  usd: float = 0.0, note: str = "", category: str = "ads") -> None:
+                  usd: float = 0.0, note: str = "", category: str = "ads") -> bool:
+    """Runs `usage-ledger.py record ...`. Returns whether the record actually
+    landed — `check=False` + a silently discarded exit code (T-066 R-2: the
+    write failing was previously indistinguishable from it succeeding, so a
+    quota-spending call could vanish from the ledger with zero visibility).
+    Callers should at least warn on `False`; the paid call already happened
+    either way, so this is a bookkeeping-loss warning, not a stop condition."""
     script = pathlib.Path(__file__).resolve().parent.parent / "usage-ledger.py"
     command = [sys.executable, str(script), "record", "--service", service, "--category", category]
     if requests:
@@ -145,7 +151,11 @@ def ledger_record(project_root: pathlib.Path, service: str, *, requests: int = 0
         command += ["--usd", str(usd)]
     if note:
         command += ["--note", note]
-    subprocess.run(command, cwd=project_root, text=True, capture_output=True, check=False)
+    proc = subprocess.run(command, cwd=project_root, text=True, capture_output=True, check=False)
+    if proc.returncode != 0:
+        print(f"WARNING: usage-ledger record failed (rc={proc.returncode}): "
+              f"{(proc.stderr or proc.stdout).strip()[-300:]}", file=sys.stderr)
+    return proc.returncode == 0
 
 
 def redact(text: str) -> str:

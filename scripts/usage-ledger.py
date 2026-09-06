@@ -24,6 +24,7 @@ except ImportError:
     sys.exit(2)
 
 from seo_cycle_core.config import config_section, find_config, load_yaml, numeric, policy_path, project_root_for, rel_path, require_config
+from seo_cycle_core.usage_ledger import finite_nonneg, nonneg_finite_arg, usage_lock
 
 
 COMMANDS = {"report", "check", "record"}
@@ -56,11 +57,20 @@ METRIC_KEYS = [
 ]
 
 
-def load_json(path: pathlib.Path) -> dict[str, Any]:
+def load_json(path: pathlib.Path) -> tuple[dict[str, Any], str | None]:
+    """Returns (data, error). A present-but-corrupt file used to come back as
+    `{}` (T-066 R-2, gate round 2 finding "б"/"в") — indistinguishable from a
+    legitimately empty/absent file, so a corrupted `_usage.json` silently
+    dropped that service's spend from the month's totals instead of refusing.
+    The caller decides what to do with a non-None error (surface it as a
+    ledger error that forces `evaluate()` to block, not a quiet zero)."""
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:  # noqa: BLE001 - any read/parse failure is reportable, not swallowed
+        return {}, f"{path}: {e}"
+    if not isinstance(data, dict):
+        return {}, f"{path}: ожидался JSON-объект, получено {type(data).__name__}"
+    return data, None
 
 
 def nested_numeric(data: dict[str, Any], path: list[str], default: float = 0.0) -> float:
@@ -147,20 +157,34 @@ def read_ledger_events(path: pathlib.Path, month: str) -> list[dict[str, Any]]:
 
 
 def imported_usage_events(project_root: pathlib.Path, month: str) -> list[dict[str, Any]]:
+    """T-066 R-2 (независимый гейт, круг 2, находка "б"/"в"): раньше корчинный
+    `_usage.json` (голое `except Exception: return {}`) и NaN/Infinity/
+    отрицательное в `spent_usd`/`rows`/`requests` (через `numeric()`, который
+    их не отсекает) молча уходили как «этот сервис в этом месяце не потратил
+    ничего» — та же дыра «потрачено 0», которую весь этот класс должен
+    закрывать. Теперь: ошибка чтения/формы ИЛИ непригодное для арифметики
+    значение — событие `_error`, которое `evaluate()` превращает в `blocked`."""
     events: list[dict[str, Any]] = []
     for fp in glob.glob(str(project_root / "seo/research/*/_usage.json")):
         path = pathlib.Path(fp)
-        data = load_json(path)
+        data, error = load_json(path)
+        if error is not None:
+            events.append({"_error": error})
+            continue
         if data.get("month") != month:
             continue
         service = path.parent.name
         metrics: dict[str, float] = {}
-        if numeric(data.get("spent_usd")):
-            metrics["usd"] = numeric(data.get("spent_usd"))
-        if numeric(data.get("rows")):
-            metrics["rows"] = numeric(data.get("rows"))
-        if numeric(data.get("requests")):
-            metrics["requests"] = numeric(data.get("requests"))
+        for field, metric_key in (("spent_usd", "usd"), ("rows", "rows"), ("requests", "requests")):
+            if field not in data:
+                continue
+            raw = data.get(field)
+            if not finite_nonneg(raw):
+                events.append({"_error": f"{path}: {field} непригоден для арифметики ({raw!r})"})
+                metrics = {}
+                break
+            if numeric(raw):
+                metrics[metric_key] = numeric(raw)
         if metrics:
             events.append(
                 {
@@ -178,10 +202,17 @@ def imported_usage_events(project_root: pathlib.Path, month: str) -> list[dict[s
         path = pathlib.Path(fp)
         if f"usage-{month}.json" not in path.name:
             continue
-        data = load_json(path)
+        data, error = load_json(path)
+        if error is not None:
+            events.append({"_error": error})
+            continue
         if data.get("month") != month:
             continue
         features = data.get("features", {}) if isinstance(data.get("features"), dict) else {}
+        bad_features = {k: v for k, v in features.items() if not finite_nonneg(v)}
+        if bad_features:
+            events.append({"_error": f"{path}: features содержит непригодные значения ({bad_features!r})"})
+            continue
         units = sum(numeric(value) for value in features.values())
         if units:
             events.append(
@@ -356,6 +387,24 @@ def load_state(cfg_path: pathlib.Path, month: str) -> dict[str, Any]:
 
 
 def cap_row(scope: str, metric: str, used: float, cap: float, reserve: float = 0.0, estimate: float = 0.0) -> dict[str, Any]:
+    # T-066 R-2 (независимый гейт, круг 2): used/estimate/cap/reserve непригодные
+    # для арифметики (NaN/Infinity/отрицательное) проходят КАЖДОЕ числовое
+    # сравнение ниже как False и на выходе давали статус "ok" — тот же класс,
+    # что F-11 закрывал для --budget, только внутри самого движка cap-проверки.
+    # Прогон гейта: used=NaN при cap=100 давал "ok" вместо блокировки.
+    if not (finite_nonneg(used) and finite_nonneg(estimate) and finite_nonneg(cap) and finite_nonneg(reserve)):
+        def _display(x: Any) -> float:
+            # Только для отображения в таблице отчёта — не для арифметики:
+            # NaN/Infinity печатаются как есть ("nan"/"inf"), не-число даёт 0.0
+            # вместо падения f"{None:.4f}" в render_markdown().
+            return x if isinstance(x, (int, float)) and not isinstance(x, bool) else 0.0
+        return {
+            "scope": scope, "metric": metric,
+            "used": _display(used), "estimate": _display(estimate),
+            "projected": None, "cap": _display(cap), "reserve": _display(reserve),
+            "effective_cap": None, "remaining": None,
+            "status": "blocked",
+        }
     effective_cap = cap - reserve if cap > 0 else cap
     projected = used + estimate
     remaining = effective_cap - projected if effective_cap > 0 else None
@@ -426,6 +475,20 @@ def evaluate(state: dict[str, Any], estimate: dict[str, Any] | None = None) -> d
                     estimate=numeric(estimate_value),
                 )
             )
+
+    # T-066 R-2: строки JSONL-леджера или импортированных _usage.json,
+    # которые не удалось разобрать/провалидировать, раньше просто исключались
+    # из суммы (totals["errors"] существовал только для отображения в отчёте)
+    # — это ЗАНИЖАЛО фактический расход молча. Наличие любой такой ошибки
+    # обязано блокировать вызов: мы не знаем, сколько потрачено на самом деле.
+    ledger_errors = totals.get("errors") or []
+    if ledger_errors:
+        rows.append({
+            "scope": "ledger", "metric": "integrity", "used": 0.0, "estimate": 0.0,
+            "projected": 0.0, "cap": 0.0, "reserve": 0.0, "effective_cap": 0.0,
+            "remaining": None, "status": "blocked",
+            "note": "; ".join(ledger_errors)[:500],
+        })
 
     approval_required = [row for row in rows if row["status"] == "approval_required"]
     blocked = [row for row in rows if row["status"] == "blocked"]
@@ -547,8 +610,12 @@ def append_record(state: dict[str, Any], args: argparse.Namespace) -> pathlib.Pa
     }
     path = state["ledger_path"]
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    # Блокировка на время добавления строки (тот же usage_lock, что и у
+    # per-service _usage.json) — append на POSIX обычно атомарен для короткой
+    # записи, но конвенция этого класса — не полагаться на "обычно" (T-066 R-2).
+    with usage_lock(path.parent, name=path.name):
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
     return path
 
 
@@ -571,18 +638,23 @@ def parse_cli(argv: list[str]) -> tuple[str, str | None, argparse.Namespace]:
     parser.add_argument("--task", default="", help="Task/cycle label.")
     parser.add_argument("--source", default="", help="Source artifact or command.")
     parser.add_argument("--note", default="", help="Human-readable note, no secrets.")
-    parser.add_argument("--usd", type=float, default=0)
-    parser.add_argument("--input-tokens", type=float, default=0)
-    parser.add_argument("--output-tokens", type=float, default=0)
-    parser.add_argument("--requests", type=float, default=0)
-    parser.add_argument("--credits", type=float, default=0)
-    parser.add_argument("--units", type=float, default=0)
-    parser.add_argument("--rows", type=float, default=0)
-    parser.add_argument("--browser-minutes", type=float, default=0)
-    parser.add_argument("--browser-pages", type=float, default=0)
-    parser.add_argument("--content-writer", type=float, default=0)
-    parser.add_argument("--ai-credits", type=float, default=0)
-    parser.add_argument("--plagiarism-checks", type=float, default=0)
+    # T-066 R-2 (независимый гейт, круг 2): каждый из этих флагов попадает
+    # прямиком в метрику расхода/квоты (metric_payload() -> append_record()
+    # -> JSONL -> evaluate()). Голый type=float принимал nan/inf/-inf —
+    # штатная команда `record --usd nan` снимала governance-стоп до конца
+    # месяца (двойник F-11 во втором денежном стопе).
+    parser.add_argument("--usd", type=nonneg_finite_arg("--usd"), default=0)
+    parser.add_argument("--input-tokens", type=nonneg_finite_arg("--input-tokens"), default=0)
+    parser.add_argument("--output-tokens", type=nonneg_finite_arg("--output-tokens"), default=0)
+    parser.add_argument("--requests", type=nonneg_finite_arg("--requests"), default=0)
+    parser.add_argument("--credits", type=nonneg_finite_arg("--credits"), default=0)
+    parser.add_argument("--units", type=nonneg_finite_arg("--units"), default=0)
+    parser.add_argument("--rows", type=nonneg_finite_arg("--rows"), default=0)
+    parser.add_argument("--browser-minutes", type=nonneg_finite_arg("--browser-minutes"), default=0)
+    parser.add_argument("--browser-pages", type=nonneg_finite_arg("--browser-pages"), default=0)
+    parser.add_argument("--content-writer", type=nonneg_finite_arg("--content-writer"), default=0)
+    parser.add_argument("--ai-credits", type=nonneg_finite_arg("--ai-credits"), default=0)
+    parser.add_argument("--plagiarism-checks", type=nonneg_finite_arg("--plagiarism-checks"), default=0)
     return command, config, parser.parse_args(raw)
 
 
