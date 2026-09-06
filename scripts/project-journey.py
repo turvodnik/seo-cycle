@@ -16,7 +16,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, project_root_for, write_text
+from seo_cycle_core.config import config_section, find_config, load_yaml, project_root_for, require_config, write_text
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.scorecard import load_latest as load_scorecards
 from seo_cycle_core.scorecard import render_scorecards_markdown
@@ -652,7 +652,10 @@ def build_action_plan(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def build_report(cfg_path: pathlib.Path, *, goal: str, research_package: str | None = None) -> dict[str, Any]:
     project_root = project_root_for(cfg_path)
-    cfg = load_yaml(cfg_path)
+    # T-067 round 4 (third gate): caller already guarantees cfg_path
+    # exists — require_config() additionally refuses an existing-but-empty
+    # file instead of writing a full journey report over nothing.
+    cfg = require_config(cfg_path)
     package = package_state(project_root, detect_research_package(project_root, research_package))
     stages = [
         setup_stage(cfg, project_root),
@@ -681,7 +684,7 @@ def build_report(cfg_path: pathlib.Path, *, goal: str, research_package: str | N
         "journey_score": round(done_count / len(stages) * 10, 1),
         "config": str(cfg_path),
         "project_root": str(project_root),
-        "project": cfg.get("project", {}),
+        "project": config_section(cfg, "project"),
         "research_package": package,
         "current_stage": current,
         "next_stage": next((item for item in stages if item["order"] == (current or {}).get("order", len(stages)) + 1), None)

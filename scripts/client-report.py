@@ -27,7 +27,7 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, write_text
+from seo_cycle_core.config import config_section, find_config, nested_get, project_root_for, require_config, write_text
 from seo_cycle_core.html_report import html_page, markdown_to_html_body
 from seo_cycle_core.logging_setup import setup_logging
 
@@ -185,8 +185,8 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any], period: str) -
         "audit_id": "client_report",
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "period": period,
-        "client": (cfg.get("project") or {}).get("name") or project_root.name,
-        "domain": (cfg.get("project") or {}).get("domain") or "",
+        "client": config_section(cfg, "project").get("name") or project_root.name,
+        "domain": config_section(cfg, "project").get("domain") or "",
         "agency": {
             "name": agency.get("name") or "",
             "contact": agency.get("contact") or "",
@@ -276,7 +276,11 @@ def main() -> int:
     if not cfg_path or not cfg_path.exists():
         print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
         return 2
-    cfg = load_yaml(cfg_path)
+    # T-067 round 4 (third gate): cfg_path is guaranteed non-None and
+    # existing at this point (checked above) — require_config() adds
+    # exactly the one thing that check didn't cover: an EXISTING but
+    # empty/comment-only file writing a full report over nothing.
+    cfg = require_config(cfg_path)
     project_root = project_root_for(cfg_path)
     global log
     log = setup_logging("client-report", project_root, cfg)

@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse, csv, json, pathlib, re, sys
 from datetime import date, timedelta
 
+from seo_cycle_core.config import config_section, require_config
 from seo_cycle_core.monitoring import find_latest_snapshot as _find_latest_snapshot_file
 from seo_cycle_core.monitoring import monitoring_dir
 
@@ -343,11 +344,20 @@ def main():
     ap.add_argument("--config", type=pathlib.Path, default=pathlib.Path("seo-cycle.yaml"))
     args = ap.parse_args()
 
-    project_name = "Project"
-    cfg: dict = {}
-    if yaml and args.config.exists():
-        cfg = yaml.safe_load(args.config.read_text(encoding="utf-8")) or {}
-        project_name = cfg.get("project", {}).get("name", project_name)
+    # T-067 (F-37): a missing/unreadable config used to fall back to `{}`
+    # silently and still print a green "✓ Dashboard → ..." over a project
+    # that plainly doesn't have one — the tool's own health/status commands
+    # already refuse this (`seo_cycle_cli.cmd_status`), the dashboard just
+    # never learned the rule.
+    if yaml is None:
+        print("ERROR: PyYAML не установлен — установи: pip3 install pyyaml", file=sys.stderr)
+        sys.exit(2)
+    # require_config() itself refuses (stderr + exit 2) when the path doesn't
+    # exist, and load_yaml()'s own form/parse checks (F-35) still apply once
+    # it does — this command's whole output is meaningless without a real
+    # project config, unlike a setup wizard's legitimate empty fallback.
+    cfg = require_config(args.config if args.config.exists() else None, where=pathlib.Path.cwd())
+    project_name = config_section(cfg, "project").get("name") or "Project"
 
     # Путь мониторинга — из конфига (monitoring.path, T-052 R3: тот же ключ,
     # тем же способом, что pulse.py и doctor/status — seo_cycle_core.monitoring),

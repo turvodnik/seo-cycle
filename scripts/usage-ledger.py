@@ -23,7 +23,7 @@ except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)
 
-from seo_cycle_core.config import find_config, load_yaml, numeric, policy_path, project_root_for, rel_path
+from seo_cycle_core.config import config_section, find_config, load_yaml, numeric, policy_path, project_root_for, rel_path, require_config
 
 
 COMMANDS = {"report", "check", "record"}
@@ -328,7 +328,10 @@ def global_caps(cfg: dict[str, Any], tool_budget: dict[str, Any]) -> dict[str, f
 
 
 def load_state(cfg_path: pathlib.Path, month: str) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    # T-067 round 4 (third gate): caller already guarantees cfg_path
+    # exists — require_config() additionally refuses an existing-but-empty
+    # project config instead of writing a ledger report over nothing.
+    cfg = require_config(cfg_path)
     project_root = project_root_for(cfg_path)
     tool_budget_path = policy_path(cfg, project_root, "tool_budget", "seo/tool-budget.yaml")
     tool_budget = load_yaml(tool_budget_path)
@@ -442,7 +445,7 @@ def build_report(state: dict[str, Any], estimate: dict[str, Any] | None = None) 
     cfg = state["cfg"]
     return {
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
-        "project": cfg.get("project", {}),
+        "project": config_section(cfg, "project"),
         "project_root": str(state["project_root"]),
         "month": state["month"],
         "ledger_path": str(state["ledger_path"]),

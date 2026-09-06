@@ -19,7 +19,7 @@ import sys
 import time
 from typing import Any
 
-from seo_cycle_core.config import coerce_int, find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import config_section, coerce_int, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.monitoring import find_latest_snapshot, monitoring_dir
@@ -239,7 +239,7 @@ def cmd_status(args: list[str], project: pathlib.Path) -> int:
         print(f"ERROR: seo-cycle.yaml not found in {project}", file=sys.stderr)
         return 2
     cfg = load_yaml(cfg_path)
-    name = (cfg.get("project") or {}).get("name")
+    name = config_section(cfg, "project").get("name")
     print(f"# seo-cycle status · {name or project.name}\n")
     snap, age = newest_snapshot(project, cfg)
     if snap is None:
@@ -312,7 +312,7 @@ def cmd_menu(project: pathlib.Path) -> int:
         return 2
     project = pick_project(project)
     while True:
-        name = (load_yaml(find_config(project)).get("project") or {}).get("name") if find_config(project) else None
+        name = config_section(load_yaml(find_config(project)), "project").get("name") if find_config(project) else None
         print(f"\n=== seo-cycle · {name or project} ===")
         for index, (title, _, _) in enumerate(MENU_ACTIONS, 1):
             print(f"  {index}. {title}")
@@ -483,7 +483,7 @@ def main(argv: list[str] | None = None) -> int:
         cms = "wordpress"
         cfg_for_sync = find_config(project)
         if cfg_for_sync:
-            cms = str(((load_yaml(cfg_for_sync).get("publishing") or {}) or {}).get("cms") or "wordpress")
+            cms = str(config_section(load_yaml(cfg_for_sync), "publishing").get("cms") or "wordpress")
         script = SYNC_ADAPTERS.get(cms)
         if not script:
             print(f"ERROR: no sync adapter for publishing.cms={cms!r}"

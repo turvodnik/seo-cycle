@@ -30,7 +30,7 @@ from seo_cycle_core.config import (
     coerce_float,
     coerce_int,
     find_config,
-    load_yaml,
+    require_config,
     nested_get,
     numeric,
     project_root_for,
@@ -319,7 +319,11 @@ def main() -> int:
     if not cfg_path or not cfg_path.exists():
         print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
         return 2
-    cfg = load_yaml(cfg_path)
+    # T-067 round 4 (third gate): cfg_path is guaranteed non-None and
+    # existing at this point (checked above) — require_config() adds
+    # exactly the one thing that check didn't cover: an EXISTING but
+    # empty/comment-only file writing a full report over nothing.
+    cfg = require_config(cfg_path)
     project_root = project_root_for(cfg_path)
     global log
     log = setup_logging("seo-forecast", project_root, cfg)

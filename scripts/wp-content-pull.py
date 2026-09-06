@@ -22,7 +22,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, project_root_for
+from seo_cycle_core.config import config_section, find_config, load_yaml, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.mirror import apply_pull, html_to_text, make_record, render_sync_markdown, sync_output_paths
 from seo_cycle_core.reports import write_report_bundle
@@ -115,7 +115,7 @@ def main() -> int:
             if record:
                 records.append(record)
     elif args.live:
-        base_url = os.environ.get("WP_BASE_URL", "").strip() or str((cfg.get("project") or {}).get("url") or "").strip()
+        base_url = os.environ.get("WP_BASE_URL", "").strip() or str(config_section(cfg, "project").get("url") or "").strip()
         if not base_url:
             print("ERROR: set WP_BASE_URL env (or project.url in seo-cycle.yaml)", file=sys.stderr)
             return 2

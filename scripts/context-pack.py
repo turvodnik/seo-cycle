@@ -20,11 +20,12 @@ from typing import Any
 from seo_cycle_core.config import (
     boolish,
     coerce_int,
+    config_section,
     find_config,
-    load_yaml,
     policy_path,
     project_root_for,
     rel_display,
+    require_config,
     skill_root,
 )
 from seo_cycle_core.context import build_context_manifest
@@ -279,7 +280,11 @@ def rag_posture(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, An
 
 
 def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route: bool) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    # T-067 round 4 (third gate, single-project CLI — no --all/registry mode
+    # here, so an empty/comment-only config has no legitimate reason to
+    # keep going): require_config() refuses (stderr + exit 2) instead of
+    # writing a report over nothing.
+    cfg = require_config(cfg_path)
     project_root = project_root_for(cfg_path)
     if task and refresh_route:
         run_task_router(cfg_path, project_root, task)
@@ -311,12 +316,12 @@ def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route:
         "config": str(cfg_path),
         "project_root": str(project_root),
         "project": {
-            "name": (cfg.get("project") or {}).get("name"),
-            "domain": (cfg.get("project") or {}).get("domain"),
+            "name": config_section(cfg, "project").get("name"),
+            "domain": config_section(cfg, "project").get("domain"),
             "project_type": cfg.get("project_type"),
             "region_profile": cfg.get("region_profile"),
-            "country": (cfg.get("locale") or {}).get("country"),
-            "language": (cfg.get("locale") or {}).get("language"),
+            "country": config_section(cfg, "locale").get("country"),
+            "language": config_section(cfg, "locale").get("language"),
         },
         "task": {
             "text": route.get("task") or task,

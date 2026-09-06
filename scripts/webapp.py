@@ -38,7 +38,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, project_root_for
+from seo_cycle_core.config import config_section, find_config, load_yaml, project_root_for
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.registry import registry_path
@@ -134,7 +134,7 @@ def load_projects() -> list[dict[str, Any]]:
     cwd_cfg = find_config(pathlib.Path.cwd())
     if cwd_cfg:
         root = project_root_for(cwd_cfg)
-        name = (load_yaml(cwd_cfg).get("project") or {}).get("name") or root.name
+        name = config_section(load_yaml(cwd_cfg), "project").get("name") or root.name
         projects.append({"name": str(name), "path": str(root)})
         seen.add(str(root))
     if REGISTRY.exists():

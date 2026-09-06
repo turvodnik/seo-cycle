@@ -64,10 +64,139 @@ def rel_display(project_root: pathlib.Path, path: pathlib.Path) -> str:
 
 
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists() or yaml is None:
+    """Load a YAML file as a dict, or refuse to hand back garbage.
+
+    T-067 (F-35/F-26/F-36): every one of the ~100 call sites across
+    `scripts/` treats the return value as "a dict, safe to `.get()`" — that
+    was true only for a well-formed file. A tab in the indent, a top-level
+    value that is a string/list/number instead of a mapping, or a file that
+    isn't valid UTF-8 all used to reach here and either blow up with a raw
+    `yaml.scanner.ScannerError` traceback two frames below the caller's own
+    code, or silently hand back a non-dict that crashed on the NEXT
+    `.get()` call with an unrelated-looking `AttributeError` (exactly the
+    F-26/F-36 class this ticket also closes). Every caller of this
+    function is a CLI entrypoint's `main()` — none of them has a reason to
+    "keep going" on an unparseable config, and asking every one of the ~100
+    call sites to add its own try/except would reopen the class at any
+    site someone forgets (the same failure mode T-052/T-063 called out for
+    per-callsite fixes) — so the fix lives here, once: print a short,
+    coordinate-bearing message to stderr and exit(2) instead of returning.
+    This is deliberately NOT "raise and let the caller decide" — there is
+    no caller in this tree for which continuing past an unparseable config
+    is correct.
+
+    A MISSING file is not an error here (unchanged behavior) — some
+    callers legitimately run with no config yet (setup/onboarding wizards,
+    multi-project scans). That case still returns `{}`.
+    """
+    if yaml is None:
         return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
+    # `.exists()` follows symlinks and reports "missing" for a broken link
+    # (F-42) — `.is_symlink()` catches that case so it isn't confused with
+    # "no config yet".
+    if not path.exists() and not path.is_symlink():
+        return {}
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        print(f"ERROR: {path}: не удалось прочитать конфиг: {exc}", file=sys.stderr)
+        sys.exit(2)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        # T-067 round 3 (second independent gate): an earlier version of
+        # this function used `errors="replace"` here, which turned a non-
+        # UTF-8 file (e.g. saved by an editor in cp1251 — not exotic for a
+        # Russian-language config) into MOJIBAKE that parsed "successfully"
+        # instead of failing — trading a loud F-35 crash for a silent F-37
+        # "✓ ..." over corrupted data, on 25 of 42 commands. The original
+        # QA report named `UnicodeDecodeError` explicitly among the F-35
+        # inputs; this function's own docstring above already promised
+        # exit(2) for "a file that isn't valid UTF-8" — this is that
+        # promise, finally kept.
+        print(
+            f"ERROR: {path}: файл не в кодировке UTF-8 "
+            f"(байт {exc.object[exc.start]:#04x} в позиции {exc.start}) — пересохрани в UTF-8",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    try:
+        data = yaml.safe_load(text)
+    except yaml.MarkedYAMLError as exc:
+        mark = exc.problem_mark
+        where = f"строка {mark.line + 1}, столбец {mark.column + 1}" if mark else "неизвестное место"
+        problem = exc.problem or exc.context or str(exc)
+        print(f"ERROR: {path}: {where}: {problem}", file=sys.stderr)
+        sys.exit(2)
+    except yaml.YAMLError as exc:
+        print(f"ERROR: {path}: ошибка разбора YAML: {exc}", file=sys.stderr)
+        sys.exit(2)
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        print(
+            f"ERROR: {path}: верхний уровень конфига должен быть словарём (получено {type(data).__name__})",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    return data
+
+
+def config_section(cfg: dict[str, Any], key: str) -> dict[str, Any]:
+    """The `X.get("section", {}) if isinstance(X.get("section"), dict) else {}`
+    idiom already used at `db-sync.py:180` and `config.py`'s own
+    `policy_path()`, lifted into one place (T-067, F-26/F-36): a config
+    section written as a string/list/number by hand (`project: "имя"`
+    instead of a nested block) must not raise `AttributeError` two calls
+    later just because the caller trusted the section's shape without
+    checking it — the same class as the unparseable-file case `load_yaml`
+    now guards against, one level down.
+
+    T-067 review round 2: silently returning `{}` on a wrong-shaped section
+    is not "a clear message" (the ticket's own criterion 2) — it is F-26/
+    F-36 traded for a quieter instance of F-37 (a report built over a
+    silently-ignored section, no signal at all). A warning to stderr naming
+    the key and the shape found is the minimum the QA report asked for at
+    `load_yaml` itself ("вместо тихого `{}` печатать в stderr")."""
+    value = cfg.get(key)
+    if value is not None and not isinstance(value, dict):
+        print(
+            f"WARNING: конфиг: раздел {key!r} задан как {type(value).__name__}, "
+            "ожидался блок (мэппинг) — использую пустой раздел",
+            file=sys.stderr,
+        )
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def require_config(cfg_path: pathlib.Path | None, *, where: pathlib.Path | None = None) -> dict[str, Any]:
+    """Load a config that a command cannot meaningfully run without.
+
+    T-067 (F-37): several report/sync commands treated "no config found"
+    as equivalent to "config is `{}`" and happily printed a green `✓ ...`
+    over a project that plainly doesn't exist yet (`monthly-dashboard.py`,
+    `db-sync.py`). Use this ONLY at a command whose whole output is
+    meaningless without a real project config — NOT at a command with a
+    legitimate empty-config fallback (setup/onboarding wizards, a
+    multi-project scan driven by a registry file instead of a single
+    project's config, `seo-cycle doctor`'s aggregator, which must keep
+    running so it can report the missing-config step as a failure rather
+    than aborting the whole health check).
+    """
+    if cfg_path is None:
+        location = f" in {where}" if where else ""
+        print(f"ERROR: seo-cycle.yaml not found{location} — nothing to do", file=sys.stderr)
+        sys.exit(2)
+    cfg = load_yaml(cfg_path)
+    if not cfg:
+        # T-067 round 3 (second independent gate, §6): an existing-but-empty
+        # file (empty, comment-only, a bare `---\nnull\n` document) used to
+        # pass this function's "exists" check and come back as `{}` — same
+        # green "✓ ..." over nothing this function exists to stop, just
+        # reached through the file existing instead of being absent.
+        print(f"ERROR: {cfg_path}: конфиг пуст — нечего использовать", file=sys.stderr)
+        sys.exit(2)
+    return cfg
 
 
 def write_text(path: pathlib.Path, text: str) -> None:
@@ -221,6 +350,6 @@ def nested_get(data: dict[str, Any], dotted: str, default: Any = None) -> Any:
 
 
 def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
-    policy_files = cfg.get("policy_files", {}) if isinstance(cfg.get("policy_files"), dict) else {}
+    policy_files = config_section(cfg, "policy_files")
     return rel_path(project_root, policy_files.get(key, default))
 
