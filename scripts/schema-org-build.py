@@ -23,6 +23,8 @@ areaServed, knowsAbout, sameAs — то, что связывает контен�
 from __future__ import annotations
 import argparse, json, pathlib, sys
 
+from seo_cycle_core.config import config_section
+
 try:
     import yaml
 except ImportError:
@@ -49,7 +51,7 @@ def build_org(cfg: dict) -> dict:
     node: dict = {
         "@type": bp.get("schema_type", "Organization"),
         "@id": org_id,
-        "name": bp.get("legal_name") or cfg.get("project", {}).get("brand_name_user_facing"),
+        "name": bp.get("legal_name") or config_section(cfg, "project").get("brand_name_user_facing"),
         "url": url,
     }
     if bp.get("logo"):

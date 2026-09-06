@@ -17,7 +17,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import coerce_int
+from seo_cycle_core.config import coerce_int, config_section
 
 try:
     import yaml
@@ -514,7 +514,7 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
         "config": str(cfg_path),
         "project_root": str(project_root),
         "month": month,
-        "project": cfg.get("project", {}),
+        "project": config_section(cfg, "project"),
         "budget_contract": budget,
         "token_contract": token,
         "token_guards": token_guards(token),

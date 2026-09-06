@@ -30,6 +30,8 @@ try:
 except ImportError:
     yaml = None
 
+from seo_cycle_core.config import require_config
+
 CONFIG_PATHS = ["seo-cycle.yaml", ".seo-cycle.yaml", "seo/seo-cycle.yaml", ".claude/seo-cycle.yaml"]
 CSV_SOURCES = {
     "keyword_queue": "seo/keyword-queue.csv",
@@ -50,13 +52,14 @@ def load_cfg(root: pathlib.Path) -> dict:
 def find_db_path(root: pathlib.Path, cfg: dict, override: str | None) -> pathlib.Path:
     if override:
         return pathlib.Path(override)
-    ds = (cfg.get("data_store") or {}).get("path")
+    data_store = cfg.get("data_store") if isinstance(cfg.get("data_store"), dict) else {}
+    ds = data_store.get("path")
     return (root / ds) if ds else (root / "seo" / "seo.db")
 
 
 def dashboard_path(cfg: dict) -> pathlib.Path | None:
     """Путь к md-дашборду в Obsidian vault, если obsidian включён с dashboards."""
-    ob = cfg.get("obsidian") or {}
+    ob = cfg.get("obsidian") if isinstance(cfg.get("obsidian"), dict) else {}
     if not (ob.get("enabled") and ob.get("dashboards")):
         return None
     vault = ob.get("central_vault")
@@ -327,10 +330,8 @@ def main() -> int:
     # "✓ ...: 0 строк" over a directory that isn't even a seo-cycle
     # project — indistinguishable from "synced, found nothing new" in a
     # cron log. Refuse instead, the way `seo-cycle status`/`validate` do.
-    if not any((root / rel).exists() for rel in CONFIG_PATHS):
-        print(f"ERROR: seo-cycle.yaml not found in {root} — nothing to sync", file=sys.stderr)
-        return 2
-    cfg = load_cfg(root)
+    found = next((root / rel for rel in CONFIG_PATHS if (root / rel).exists()), None)
+    cfg = require_config(found, where=root)  # exits(2)/stderr itself if `found` is None
     db_path = find_db_path(root, cfg, args.db)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)

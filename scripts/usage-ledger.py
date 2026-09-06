@@ -23,7 +23,7 @@ except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)
 
-from seo_cycle_core.config import find_config, load_yaml, numeric, policy_path, project_root_for, rel_path
+from seo_cycle_core.config import config_section, find_config, load_yaml, numeric, policy_path, project_root_for, rel_path
 
 
 COMMANDS = {"report", "check", "record"}
@@ -442,7 +442,7 @@ def build_report(state: dict[str, Any], estimate: dict[str, Any] | None = None) 
     cfg = state["cfg"]
     return {
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
-        "project": cfg.get("project", {}),
+        "project": config_section(cfg, "project"),
         "project_root": str(state["project_root"]),
         "month": state["month"],
         "ledger_path": str(state["ledger_path"]),

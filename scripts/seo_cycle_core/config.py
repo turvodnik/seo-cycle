@@ -131,8 +131,22 @@ def config_section(cfg: dict[str, Any], key: str) -> dict[str, Any]:
     instead of a nested block) must not raise `AttributeError` two calls
     later just because the caller trusted the section's shape without
     checking it — the same class as the unparseable-file case `load_yaml`
-    now guards against, one level down."""
+    now guards against, one level down.
+
+    T-067 review round 2: silently returning `{}` on a wrong-shaped section
+    is not "a clear message" (the ticket's own criterion 2) — it is F-26/
+    F-36 traded for a quieter instance of F-37 (a report built over a
+    silently-ignored section, no signal at all). A warning to stderr naming
+    the key and the shape found is the minimum the QA report asked for at
+    `load_yaml` itself ("вместо тихого `{}` печатать в stderr")."""
     value = cfg.get(key)
+    if value is not None and not isinstance(value, dict):
+        print(
+            f"WARNING: конфиг: раздел {key!r} задан как {type(value).__name__}, "
+            "ожидался блок (мэппинг) — использую пустой раздел",
+            file=sys.stderr,
+        )
+        return {}
     return value if isinstance(value, dict) else {}
 
 

@@ -163,11 +163,18 @@ class CliSectionAccessTest(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def test_status_on_project_as_string_does_not_crash(self) -> None:
+    def test_status_on_project_as_string_warns_instead_of_silently_swallowing(self) -> None:
+        # Review round 2: a bare `assertEqual(rc, 0)` here would fossilize
+        # "silently degrade to `?`" as the accepted behavior. The command may
+        # still complete (its output doesn't otherwise depend on `project`
+        # being well-formed) but it must NOT do so silently — `config_section`
+        # is required to name the offending key in stderr.
         proc = run_cli(["status"], cwd=self.root)
         self.assertNotIn("Traceback", proc.stdout + proc.stderr)
         self.assertNotIn("AttributeError", proc.stdout + proc.stderr)
         self.assertEqual(proc.returncode, 0)
+        self.assertIn("'project'", proc.stderr)
+        self.assertIn("str", proc.stderr)
 
     def test_validate_on_project_as_string_reports_error_not_traceback(self) -> None:
         proc = run_cli(["validate"], cwd=self.root)
@@ -202,6 +209,77 @@ class CliMissingConfigTest(unittest.TestCase):
         # (T-052) — T-067 must not have disturbed it.
         proc = run_cli(["status"], cwd=self.root)
         self.assertEqual(proc.returncode, 2)
+
+
+class MatrixSiteTest(unittest.TestCase):
+    """T-067 review round 2 — an independent gate built a "раздел × форма ×
+    команда" matrix over `config/project.template.yaml` and found 12 more
+    crash sites this ticket's first pass had missed by narrowing its own
+    search to files that import `seo_cycle_core.config` — `validate-config.py`
+    alone accounted for 8 of the 12 (`sources`, `publishing`, `content_rules`,
+    `artifacts`, `monitoring`, `eeat`, `backlinks`, plus a `TypeError` on
+    `engines`). One test per site, each mutating exactly the section the
+    review named and running exactly the command that crashed on it."""
+
+    TEMPLATE = ROOT / "config" / "project.template.yaml"
+
+    def healthy_cfg(self) -> dict:
+        import yaml
+        return yaml.safe_load(self.TEMPLATE.read_text(encoding="utf-8"))
+
+    def project_with(self, **overrides) -> pathlib.Path:
+        import yaml
+        cfg = self.healthy_cfg()
+        cfg.update(overrides)
+        root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        (root / "seo-cycle.yaml").write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
+        return root
+
+    def assert_no_traceback(self, args: list[str], root: pathlib.Path) -> subprocess.CompletedProcess:
+        proc = run_cli(args, cwd=root)
+        out = proc.stdout + proc.stderr
+        self.assertNotIn("Traceback", out, msg=f"{args} on {root}: {out[-800:]}")
+        return proc
+
+    def test_validate_survives_sources_as_scalar(self) -> None:
+        self.assert_no_traceback(["validate"], self.project_with(sources="mutant"))
+
+    def test_validate_survives_publishing_as_scalar(self) -> None:
+        self.assert_no_traceback(["validate"], self.project_with(publishing=[1, 2]))
+
+    def test_validate_survives_content_rules_as_scalar(self) -> None:
+        self.assert_no_traceback(["validate"], self.project_with(content_rules=7))
+
+    def test_validate_survives_artifacts_as_scalar(self) -> None:
+        self.assert_no_traceback(["validate"], self.project_with(artifacts="mutant"))
+
+    def test_validate_survives_monitoring_as_scalar(self) -> None:
+        self.assert_no_traceback(["validate"], self.project_with(monitoring=[1, 2]))
+
+    def test_validate_survives_eeat_as_scalar(self) -> None:
+        self.assert_no_traceback(["validate"], self.project_with(eeat=7))
+
+    def test_validate_survives_backlinks_as_scalar(self) -> None:
+        self.assert_no_traceback(["validate"], self.project_with(backlinks="mutant"))
+
+    def test_validate_survives_engines_as_int(self) -> None:
+        # `engine_names()` did `for item in raw` after `raw = cfg.get("engines")
+        # or []` — an int is truthy and not iterable: TypeError, not
+        # AttributeError, at `seo_cycle_core/engines.py:17`.
+        self.assert_no_traceback(["validate"], self.project_with(engines=7))
+
+    def test_spend_survives_project_as_scalar(self) -> None:
+        self.assert_no_traceback(["spend"], self.project_with(project="mutant"))
+
+    def test_ledger_report_survives_project_as_scalar(self) -> None:
+        self.assert_no_traceback(["ledger", "report"], self.project_with(project=[1, 2]))
+
+    def test_db_survives_data_store_as_scalar(self) -> None:
+        self.assert_no_traceback(["db"], self.project_with(data_store="mutant"))
+
+    def test_db_survives_obsidian_as_scalar(self) -> None:
+        self.assert_no_traceback(["db"], self.project_with(obsidian=7))
 
 
 if __name__ == "__main__":

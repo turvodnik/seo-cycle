@@ -21,6 +21,8 @@ import pathlib
 import sys
 from typing import Any
 
+from seo_cycle_core.config import config_section
+
 try:
     import yaml
 except ImportError:
@@ -119,7 +121,7 @@ def country_from_intake(intake: dict[str, Any], cfg: dict[str, Any]) -> str:
     markets = intake.get("markets", {}) if isinstance(intake.get("markets"), dict) else {}
     country = markets.get("primary_country")
     if not country or country == "not_configured":
-        country = (cfg.get("locale", {}) or {}).get("country")
+        country = config_section(cfg, "locale").get("country")
     return str(country or "RU").upper()
 
 
@@ -207,15 +209,15 @@ def recommended_profile(cfg: dict[str, Any], intake: dict[str, Any]) -> dict[str
     primary_region = markets.get("primary_region")
     primary_city = markets.get("primary_city")
     languages = markets.get("languages") or ([markets.get("language")] if markets.get("language") else [])
-    if not languages and (cfg.get("locale", {}) or {}).get("language"):
-        languages = [(cfg.get("locale", {}) or {}).get("language")]
+    if not languages and config_section(cfg, "locale").get("language"):
+        languages = [config_section(cfg, "locale").get("language")]
 
     return {
         "region_profile": region_profile_for(country),
         "locale": {
             "country": country,
-            "region": primary_region if primary_region and primary_region != "not_configured" else (cfg.get("locale", {}) or {}).get("region"),
-            "city": primary_city if primary_city and primary_city != "not_configured" else (cfg.get("locale", {}) or {}).get("city"),
+            "region": primary_region if primary_region and primary_region != "not_configured" else config_section(cfg, "locale").get("region"),
+            "city": primary_city if primary_city and primary_city != "not_configured" else config_section(cfg, "locale").get("city"),
             "languages": [item for item in languages if item],
         },
         "engines": engines,
@@ -236,8 +238,8 @@ def recommended_profile(cfg: dict[str, Any], intake: dict[str, Any]) -> dict[str
             "analytics_tags": marketing.get("analytics_tags", {}),
         },
         "governance": {
-            "profile": setup.get("default_governance_profile", (cfg.get("governance", {}) or {}).get("profile", "lean_quality")),
-            "automation_mode": setup.get("default_automation_mode", ((cfg.get("governance", {}) or {}).get("automation_policy", {}) or {}).get("default_mode", "approval_only")),
+            "profile": setup.get("default_governance_profile", config_section(cfg, "governance").get("profile", "lean_quality")),
+            "automation_mode": setup.get("default_automation_mode", config_section(config_section(cfg, "governance"), "automation_policy").get("default_mode", "approval_only")),
             "allow_paid_spend_without_explicit_approval": boolish(setup.get("allow_paid_spend_without_explicit_approval", False)),
             "allow_foreign_tracking_tags_for_rf_project": boolish(setup.get("allow_foreign_tracking_tags_for_rf_project", False)),
             "require_cache_for_expensive_sources": boolish(setup.get("require_cache_for_expensive_sources", True)),

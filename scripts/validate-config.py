@@ -105,7 +105,7 @@ def load_region_profile(profile_id: str) -> dict | None:
 
 
 def check_sources(cfg: dict, env: dict, project_root: pathlib.Path, checklist: list, warnings: list):
-    sources = cfg.get("sources", {})
+    sources = config_section(cfg, "sources")
     if not sources:
         warnings.append("Секция sources пуста — Phase 2 не сможет собрать данные")
         return
@@ -199,7 +199,7 @@ def check_one_source(name: str, cfg: dict, env: dict, project_root: pathlib.Path
 
 
 def check_publishing(cfg: dict, env: dict, checklist: list, warnings: list):
-    pub = cfg.get("publishing", {})
+    pub = config_section(cfg, "publishing")
     if not pub.get("enabled"):
         return
     env_vars = pub.get("env_vars", {})
@@ -209,8 +209,8 @@ def check_publishing(cfg: dict, env: dict, checklist: list, warnings: list):
 
 
 def check_images(cfg: dict, env: dict, project_root: pathlib.Path, checklist: list, warnings: list):
-    images = cfg.get("images", {})
-    if not isinstance(images, dict) or not images:
+    images = config_section(cfg, "images")
+    if not images:
         return
 
     for key in ("tool_script", "generator_script", "optimize_script"):
@@ -461,8 +461,8 @@ def check_project_policies(cfg: dict, env: dict, project_root: pathlib.Path, che
 
 
 def check_governance(cfg: dict, project_root: pathlib.Path, checklist: list, warnings: list):
-    gov = cfg.get("governance", {})
-    if not isinstance(gov, dict) or not gov:
+    gov = config_section(cfg, "governance")
+    if not gov:
         checklist.append("Добавить governance: token_policy, budget_policy, automation_policy")
         return
 
@@ -541,7 +541,7 @@ def check_governance(cfg: dict, project_root: pathlib.Path, checklist: list, war
 
 
 def check_content_rules(cfg: dict, project_root: pathlib.Path, warnings: list):
-    rules = cfg.get("content_rules", {})
+    rules = config_section(cfg, "content_rules")
     if rules.get("stock_first", {}).get("enabled") and cfg.get("project_type") not in ("ecommerce", "local_business"):
         warnings.append(f"content_rules.stock_first.enabled=true, но project_type={cfg.get('project_type')!r} — обычно stock-first нужен только для ecommerce")
     if rules.get("fact_check", {}).get("enabled"):
@@ -555,7 +555,7 @@ def check_content_rules(cfg: dict, project_root: pathlib.Path, warnings: list):
 
 
 def check_artifacts(cfg: dict, project_root: pathlib.Path, warnings: list):
-    arts = cfg.get("artifacts", {})
+    arts = config_section(cfg, "artifacts")
     for key, path in arts.items():
         if path:
             p = pathlib.Path(path)
@@ -567,8 +567,8 @@ def check_artifacts(cfg: dict, project_root: pathlib.Path, warnings: list):
 
 def check_observability_env(cfg: dict, env: dict, checklist: list, warnings: list):
     """Проверка env vars для observability hub (Phase 9 fetchers)."""
-    sources = cfg.get("sources", {}) or {}
-    mon = cfg.get("monitoring", {}) or {}
+    sources = config_section(cfg, "sources")
+    mon = config_section(cfg, "monitoring")
 
     # GSC (через делегат `claude-seo:seo-google`, но если хочется напрямую — gsc-fetch.py)
     gsc = sources.get("google_search_console", {})
@@ -614,24 +614,24 @@ def check_v11_extensions(cfg: dict, env: dict, checklist: list, warnings: list):
         warnings.append(f"mode={mode!r} — неизвестное значение (ожидаем standard|migration|programmatic)")
 
     if mode == "migration":
-        mig = cfg.get("migration", {})
+        mig = config_section(cfg, "migration")
         if not mig.get("enabled"):
             warnings.append("mode=migration, но migration.enabled=false — включи блок migration")
         for f in ("old_domain", "new_domain", "redirects_file"):
             if not mig.get(f):
                 warnings.append(f"migration.{f} не заполнено — обязательно для mode=migration")
 
-    mon = cfg.get("monitoring", {})
+    mon = config_section(cfg, "monitoring")
     if mon.get("pagespeed_insights", {}).get("enabled"):
         api_env = mon["pagespeed_insights"].get("api_key_env")
         if api_env and not env.get(api_env):
             checklist.append(f"Опц. в .env: {api_env}= (для PSI без ключа — rate limit ~25 req/day)")
 
-    eeat = cfg.get("eeat", {})
+    eeat = config_section(cfg, "eeat")
     if eeat.get("enabled") and cfg.get("project_type") not in ("blog", "media", "ecommerce", "saas"):
         warnings.append(f"eeat.enabled=true для project_type={cfg.get('project_type')!r} — обычно EEAT критичнее для blog/media/ecommerce")
 
-    bl = cfg.get("backlinks", {})
+    bl = config_section(cfg, "backlinks")
     if bl.get("enabled") and bl.get("source") == "manual" and not pathlib.Path(bl.get("file","")).exists():
         warnings.append(f"backlinks.enabled=true с source=manual, но файл {bl.get('file')} не существует")
 

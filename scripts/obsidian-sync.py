@@ -34,6 +34,8 @@ from __future__ import annotations
 import argparse, os, pathlib, re, shutil, sys
 from datetime import date
 
+from seo_cycle_core.config import config_section
+
 try:
     import yaml
 except ImportError:
@@ -390,7 +392,7 @@ def sync(project_root: pathlib.Path, vault_root: pathlib.Path, cfg: dict, args):
     # Загружаем entities.yaml — поддерживаем два формата:
     # 1) Плоский: {slug1: {name, ...}, slug2: {name, ...}}
     # 2) Категоризованный: {materials: [{slug, name}, ...], brands: [...], ...}
-    entities_path = pathlib.Path(cfg.get("artifacts", {}).get("entities_root", "./seo/entities")) / "entities.yaml"
+    entities_path = pathlib.Path(config_section(cfg, "artifacts").get("entities_root", "./seo/entities")) / "entities.yaml"
     if not entities_path.is_absolute():
         entities_path = project_root / entities_path
     entities: dict = {}
@@ -433,7 +435,7 @@ def sync(project_root: pathlib.Path, vault_root: pathlib.Path, cfg: dict, args):
             print(f"⚠ entities.yaml: {e}", file=sys.stderr)
 
     # Загружаем stock-inventory.yaml
-    stock_path = cfg.get("content_rules", {}).get("stock_first", {}).get("inventory_file", "./seo/stock-inventory.yaml")
+    stock_path = config_section(cfg, "content_rules").get("stock_first", {}).get("inventory_file", "./seo/stock-inventory.yaml")
     sp = pathlib.Path(stock_path)
     if not sp.is_absolute():
         sp = project_root / sp
