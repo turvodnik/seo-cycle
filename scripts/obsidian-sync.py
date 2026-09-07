@@ -439,7 +439,20 @@ def sync(project_root: pathlib.Path, vault_root: pathlib.Path, cfg: dict, args):
         try:
             from seo_cycle_core.config import load_yaml_any
             stock = load_yaml_any(sp) or {}
-        except (Exception, SystemExit) as e:
+        # T-090 round 3 (second independent gate, 🟡C): this used to be
+        # `except (Exception, SystemExit)` — `load_yaml_any()` reports a
+        # broken YAML file (bad syntax, non-UTF-8) by calling `sys.exit(2)`,
+        # which raises `SystemExit`, NOT a subclass of `Exception`. Adding
+        # `SystemExit` to the catch here overrode that decision: the core's
+        # loud, deliberate "stop, this file is broken" got turned right
+        # back into `⚠ stock-inventory.yaml: 2` + `✓ Done` + rc=0 — the same
+        # "single point of truth whose refusal can be swallowed one frame
+        # up" class this whole ticket exists to close, just at a `except`
+        # clause instead of a config read. A genuinely unexpected runtime
+        # error while loading the file (e.g. a permissions error surfaced
+        # as `OSError`) is still `Exception` and still caught below;
+        # `SystemExit` is left to propagate and end the process.
+        except Exception as e:
             print(f"⚠ stock-inventory.yaml: {e}", file=sys.stderr)
 
     entity_names = collect_entity_names(entities, stock)
@@ -635,8 +648,18 @@ def main():
             print(f"ERROR: seo-cycle.yaml не найден в {pathlib.Path.cwd()}", file=sys.stderr)
             sys.exit(2)
 
-    from seo_cycle_core.config import load_config
+    from seo_cycle_core.config import load_config, require_section
     cfg = load_config(cfg_path)
+    # T-090 round 3 (second independent gate, 🔴B): `project: null` used to
+    # sail past `cfg.get('project', {})`/the isinstance-guarded variant that
+    # replaced it in round 2 — both silently substitute `{}` and let the
+    # sync proceed, producing a vault with a `_README.md` titled
+    # "Project — Obsidian Vault" and real dashboard files for a project
+    # that, per its own config, doesn't exist. This command's entire output
+    # names a project (the vault README, the central_vault subfolder
+    # default) — there is no legitimate "no project" mode here, unlike
+    # `setup-onboarding.py`'s pre-project wizard.
+    require_section(cfg, "project", cfg_path)
     project_root = cfg_path.parent
     if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
         project_root = cfg_path.parent

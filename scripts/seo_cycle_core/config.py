@@ -55,17 +55,6 @@ CONFIG_SEARCH_PATHS = (
 
 
 _GUARD_INSTALLED = False
-# T-090 round 2 (independent gate 2026-09-07, 🟡4): this used to be a plain
-# module-level `_GUARD_ENABLED = True` — any code that could do
-# `from seo_cycle_core import config; config._GUARD_ENABLED = False` turned
-# the guard off for the rest of the process with one line, and the AST
-# bypass test didn't look for that assignment at all. A closure-local flag
-# plus a narrow, stack-checked setter closes both gaps: the flag itself
-# isn't a module attribute anyone can poke, and the only way to flip it is
-# `_testing_disable_guard()`/`_testing_enable_guard()`, which refuse to run
-# unless the CALLER is a file under `tests/` (same stack-walk technique the
-# guard itself uses below).
-_guard_state = {"enabled": True}
 
 
 def _this_file() -> str:
@@ -87,22 +76,6 @@ def _require_test_caller(fn_name: str) -> None:
         )
 
 
-def _testing_disable_guard() -> None:
-    """Turn the runtime YAML-bypass guard off — ONLY callable from a file
-    under `tests/`, so a test that needs to construct a Loader directly
-    (to test config.py's own internals) can, without handing every
-    `scripts/*.py` file a one-line way to disable the guard on itself."""
-    _require_test_caller("_testing_disable_guard")
-    _guard_state["enabled"] = False
-
-
-def _testing_enable_guard() -> None:
-    """Restore the runtime YAML-bypass guard — same access rule as
-    `_testing_disable_guard()`."""
-    _require_test_caller("_testing_enable_guard")
-    _guard_state["enabled"] = True
-
-
 def _install_yaml_bypass_guard() -> None:
     """Wrap PyYAML's Loader constructors so a Loader can only be built from
     inside this module (or from inside the `yaml` package's own code, which
@@ -115,7 +88,56 @@ def _install_yaml_bypass_guard() -> None:
     belong to the `yaml` package itself, and look at the first frame
     outside of it. If that frame isn't this file, someone is constructing a
     Loader without going through `seo_cycle_core.config` — refuse.
+
+    T-090 round 3 (second independent gate, 🟡4/E): the enable/disable flag
+    used to be a module-level dict object (`_guard_state = {"enabled":
+    True}`, still reachable from outside as `config._guard_state`) with a
+    docstring claiming it was "closure-local" — the gate's third bypass row
+    proved that false: `getattr(config, "_guard"+"_state")["enabled"] =
+    False` reaches straight through the module namespace and flips it. The
+    flag is now a genuine local variable of THIS function, mutated only from
+    inside the two nested closures below that this function exposes as
+    module attributes via `global`
+    (`config._testing_disable_guard`/`config._testing_enable_guard`) — there
+    is no module attribute holding the flag itself for any `getattr`/
+    `setattr` trick to reach; the only way in is through those two
+    functions, which still refuse to run unless their caller is a file
+    under `tests/` (same stack-walk technique the Loader wrapper uses
+    below). This does not change the gate's finding that a sufficiently
+    indirect caller (e.g. `getattr(config, "_testing_disable_guard")()`
+    from a file the stack-walk still resolves to `tests/`) is unaffected —
+    only that the flag can no longer be poked directly as a dict.
     """
+    guard_state = {"enabled": True}
+
+    # Exposed as module attributes below so `tests/` can call
+    # `config._testing_disable_guard()`/`config._testing_enable_guard()`/
+    # `config._testing_guard_enabled()` — but `guard_state` itself is never
+    # assigned anywhere reachable from outside this function's closure.
+    global _testing_disable_guard, _testing_enable_guard, _testing_guard_enabled
+
+    def _testing_disable_guard() -> None:
+        """Turn the runtime YAML-bypass guard off — ONLY callable from a
+        file under `tests/`, so a test that needs to construct a Loader
+        directly (to test config.py's own internals) can, without handing
+        every `scripts/*.py` file a one-line way to disable the guard on
+        itself."""
+        _require_test_caller("_testing_disable_guard")
+        guard_state["enabled"] = False
+
+    def _testing_enable_guard() -> None:
+        """Restore the runtime YAML-bypass guard — same access rule as
+        `_testing_disable_guard()`."""
+        _require_test_caller("_testing_enable_guard")
+        guard_state["enabled"] = True
+
+    def _testing_guard_enabled() -> bool:
+        """Read-only peek at the guard's current state, for tests that want
+        to assert the toggle actually took effect without any way to WRITE
+        the flag through this accessor (unlike the retired `_guard_state`
+        module dict, this returns a plain `bool` copy, not the container)."""
+        return guard_state["enabled"]
+
     if yaml is None:
         return
     global _GUARD_INSTALLED
@@ -149,7 +171,7 @@ def _install_yaml_bypass_guard() -> None:
 
         def make_wrapped(original_init):
             def wrapped_init(self, *args, **kwargs):
-                if _guard_state["enabled"]:
+                if guard_state["enabled"]:
                     frame = sys._getframe(1)
                     depth = 0
                     while frame is not None and depth < 50:
@@ -224,6 +246,27 @@ def rel_display(project_root: pathlib.Path, path: pathlib.Path) -> str:
         return str(path.relative_to(project_root))
     except ValueError:
         return str(path)
+
+
+def _require_pyyaml() -> None:
+    """T-090 round 3 (second independent gate, 🟡D): before the T-090
+    migration, ~26 `scripts/*.py` files each did their own `if yaml is
+    None: print("ERROR: PyYAML не установлен...", file=sys.stderr);
+    sys.exit(2)` before touching config. Migrating them onto the shared
+    `load_config`/`load_yaml_any` here dropped that check silently —
+    `_read_yaml_mapping()`/`load_yaml_any()` just returned `(False, None)`/
+    `None` when `yaml is None`, indistinguishable from "no config file
+    exists yet", so a caller's normal "missing config" branch (which
+    legitimately returns `{}`) ran instead — same class as F-37 (a
+    green report over nothing), just triggered by a missing dependency
+    instead of a missing/empty file. Called at the top of every caller
+    that CANNOT run meaningfully without actually parsing YAML."""
+    if yaml is None:
+        print(
+            "ERROR: PyYAML не установлен — установи зависимость (pip install pyyaml)",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
 
 def _read_yaml_mapping(path: pathlib.Path) -> tuple[bool, dict[str, Any] | None]:
@@ -364,6 +407,7 @@ def load_config(path: pathlib.Path) -> dict[str, Any]:
     docstring) but that is wrong for a file this call site is treating as
     authoritative.
     """
+    _require_pyyaml()
     existed, data = _read_yaml_mapping(path)
     if existed and not data:
         # `not data` covers both `data is None` (empty file/comment-only/
@@ -392,8 +436,7 @@ def load_yaml_any(path: pathlib.Path) -> Any:
     on healthy, working files — exactly the class of over-tightening T-090
     is not allowed to introduce.
     """
-    if yaml is None:
-        return None
+    _require_pyyaml()
     if not path.exists() and not path.is_symlink():
         return None
     try:

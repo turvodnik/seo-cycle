@@ -73,13 +73,30 @@ class RequireSectionProjectNullIntegrationTest(_TempProjectMixin, unittest.TestC
         self.assert_refuses("monthly-dashboard")
 
     def test_db_sync(self) -> None:
-        # db-sync's `require_section(cfg, "project", ...)` call site only
-        # runs on the Obsidian-dashboard code path (`dashboard_path(cfg)`
-        # returning non-None) — the gate's own mutation target
-        # (report §"3. Мутация", `db-sync.py:363`). A `project: null`
-        # config with Obsidian dashboards off never reaches that line at
-        # all, so this test enables it explicitly to actually exercise it,
-        # not just get an unrelated argparse rc=2.
+        # T-090 round 3 (second independent gate, 🔴A): round 2's version
+        # of this test enabled Obsidian dashboards to reach the ONE
+        # `require_section` call site that existed at the time — a
+        # different artifact than F-7's own repro, which the gate called
+        # out by name as a "holdout mutation" (checks a path the finding
+        # never named). `db-sync.py` now runs `require_section(cfg,
+        # "project", ...)` on its MAIN path, right after `require_config`,
+        # so the bare F-7 repro — `project: null`, no Obsidian config at
+        # all — must refuse on its own.
+        proj = self.make_project(self.PROJECT_NULL)
+        proc = run_script("db-sync", proj)
+        self.assertEqual(
+            proc.returncode, 2,
+            f"db-sync.py on `project: null` should exit 2, got {proc.returncode}\n"
+            f"stdout: {proc.stdout[:500]}\nstderr: {proc.stderr[:500]}",
+        )
+        self.assertNotIn("Traceback (most recent call last)", proc.stdout + proc.stderr)
+        # F-7's own complaint was as much about the SIDE EFFECT as the exit
+        # code — a `seo/seo.db` created over a project that doesn't exist.
+        self.assertFalse((proj / "seo" / "seo.db").exists(), "db-sync must not create seo.db on a refused config")
+
+    def test_db_sync_with_obsidian_dashboards_still_refuses(self) -> None:
+        # Round 2's exact repro, kept so a future revert of either call
+        # site is still caught.
         proj = self.make_project(
             "project: null\n"
             "obsidian:\n"
@@ -187,17 +204,62 @@ class LoadConfigEmptyFileIntegrationTest(_TempProjectMixin, unittest.TestCase):
 class ObsidianSyncProjectShapeIntegrationTest(_TempProjectMixin, unittest.TestCase):
     """obsidian-sync.py's f-string project-name interpolation crashed on
     both `project: null` (AttributeError on None) and `project: "acme"`
-    (AttributeError on str) before this round — a real, reproduced
-    traceback the gate found, not a theoretical one."""
+    (AttributeError on str) before round 2 — a real, reproduced traceback
+    the gate found, not a theoretical one.
 
-    def test_project_null_no_traceback(self) -> None:
-        proj = self.make_project("project: null\n")
+    T-090 round 3 (second independent gate, 🔴B): round 2's fix replaced
+    that crash with `(cfg.get('project') if isinstance(..., dict) else
+    {})` — no traceback, but ALSO no refusal: `rc=0`, "Загружено 0
+    сущностей", and 4 real vault files written with the title
+    "Project — Obsidian Vault", exactly the "loud failure turned into a
+    quiet green report with side effects" class the whole ticket exists to
+    close. Checking only `assertNotIn("Traceback", ...)` (as this class did
+    before) is blind to that regression — these tests now also assert the
+    exit code AND that nothing gets written to the vault."""
+
+    def assert_refuses_no_vault(self, config_text: str) -> None:
+        proj = self.make_project(config_text)
+        vault = proj / "obsidian-vault"
         proc = run_script("obsidian-sync", proj)
+        self.assertEqual(
+            proc.returncode, 2,
+            f"obsidian-sync.py on {config_text!r} should exit 2, got {proc.returncode}\n"
+            f"stdout: {proc.stdout[:500]}\nstderr: {proc.stderr[:500]}",
+        )
         self.assertNotIn("Traceback (most recent call last)", proc.stdout + proc.stderr)
+        self.assertFalse(vault.exists(), f"obsidian-sync must not create {vault} on a refused config")
 
-    def test_project_as_string_no_traceback(self) -> None:
-        proj = self.make_project('project: "acme"\n')
+    def test_project_null_refuses_and_creates_nothing(self) -> None:
+        self.assert_refuses_no_vault("project: null\n")
+
+    def test_project_as_string_refuses_and_creates_nothing(self) -> None:
+        self.assert_refuses_no_vault('project: "acme"\n')
+
+    def test_healthy_project_still_creates_the_vault(self) -> None:
+        # Sanity check for the other direction (T-090's own «Ограничения»:
+        # no narrowing on a healthy config) — a real `project:` mapping
+        # must still produce the vault README this class used to check
+        # only for the absence of a traceback.
+        proj = self.make_project("project:\n  name: acme\n  domain: acme.ru\n")
         proc = run_script("obsidian-sync", proj)
+        self.assertEqual(proc.returncode, 0, f"stdout: {proc.stdout[:500]}\nstderr: {proc.stderr[:500]}")
+        self.assertTrue((proj / "obsidian-vault" / "_README.md").exists())
+
+
+class PulseProjectNullIntegrationTest(_TempProjectMixin, unittest.TestCase):
+    """pulse.py orchestrates `db-sync.py` as a subprocess and used to
+    report `✓ db-sync: seo.db пересобрана` (rc=0 overall) even though
+    db-sync itself did nothing meaningful on `project: null` — the same
+    class as 🔴A, one layer up. Now that db-sync.py refuses with rc=2 on
+    its own, pulse.py's own `run_step()` check (`if rc: note(..., False,
+    ...)`) should surface that as a `db_sync_failed` finding instead of a
+    green note — verified by an actual subprocess run, not by assumption."""
+
+    def test_db_sync_failure_surfaces_as_a_finding(self) -> None:
+        proj = self.make_project("project: null\n")
+        proc = run_script("pulse", proj, "--skip-fetch")
+        self.assertNotIn("db-sync: seo.db пересобрана", proc.stdout,
+                         "pulse.py must not report db-sync as successful when it refused")
         self.assertNotIn("Traceback (most recent call last)", proc.stdout + proc.stderr)
 
 

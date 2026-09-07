@@ -27,6 +27,7 @@ import argparse, csv, glob, json, pathlib, re, sqlite3, sys
 
 from seo_cycle_core.config import load_yaml_any, require_config, require_section
 
+
 CONFIG_PATHS = ["seo-cycle.yaml", ".seo-cycle.yaml", "seo/seo-cycle.yaml", ".claude/seo-cycle.yaml"]
 CSV_SOURCES = {
     "keyword_queue": "seo/keyword-queue.csv",
@@ -331,6 +332,17 @@ def main() -> int:
     # cron log. Refuse instead, the way `seo-cycle status`/`validate` do.
     found = next((root / rel for rel in CONFIG_PATHS if (root / rel).exists()), None)
     cfg = require_config(found, where=root)  # exits(2)/stderr itself if `found` is None
+    # T-090 round 3 (second independent gate, 🔴A): `require_section(cfg,
+    # "project", ...)` used to live only on the Obsidian-dashboard branch
+    # below (`if dash:`), which an ordinary run without `obsidian.enabled/
+    # dashboards/central_vault` never reaches — so `project: null` (the
+    # exact repro named in F-7) sailed straight through to a cheerful
+    # "✓ positions: 0 строк" / rc=0, identical to F-37's class one field
+    # deeper. `db-sync.py`'s whole output is a report "for" a project, the
+    # same way `monthly-dashboard.py`'s is (already fixed) — so the check
+    # belongs on the MAIN path, right after the config itself is required,
+    # not tucked inside an optional side effect.
+    require_section(cfg, "project", found)
     db_path = find_db_path(root, cfg, args.db)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)

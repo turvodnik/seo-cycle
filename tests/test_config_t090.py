@@ -228,9 +228,9 @@ class TestingGuardTogglesTest(unittest.TestCase):
     def test_callable_from_this_test_file(self) -> None:
         # This call site IS under tests/ — must succeed silently.
         self._config._testing_disable_guard()
-        self.assertFalse(self._config._guard_state["enabled"])
+        self.assertFalse(self._config._testing_guard_enabled())
         self._config._testing_enable_guard()
-        self.assertTrue(self._config._guard_state["enabled"])
+        self.assertTrue(self._config._testing_guard_enabled())
 
     def test_rejected_from_a_non_tests_caller(self) -> None:
         # Simulate a `scripts/*.py` file calling the setter by invoking it
@@ -248,7 +248,19 @@ class TestingGuardTogglesTest(unittest.TestCase):
             namespace["call_it"](self._config._testing_disable_guard)
         # Guard must still be enabled — the rejected call must not have
         # had any side effect.
-        self.assertTrue(self._config._guard_state["enabled"])
+        self.assertTrue(self._config._testing_guard_enabled())
+
+    def test_no_module_attribute_holds_the_raw_flag(self) -> None:
+        # T-090 round 3 (second independent gate, 🟡E): the previous
+        # `_guard_state = {"enabled": True}` was a module-level dict, so
+        # `getattr(config, "_guard"+"_state")["enabled"] = False` reached
+        # it directly with no stack-walk check at all — the gate's third
+        # bypass row. The flag now lives only as a local variable closed
+        # over by `_testing_disable_guard`/`_testing_enable_guard`/
+        # `_testing_guard_enabled`; there must be no module attribute named
+        # `_guard_state` (or the retired `_GUARD_ENABLED`) left to poke.
+        self.assertFalse(hasattr(self._config, "_guard_state"))
+        self.assertFalse(hasattr(self._config, "_GUARD_ENABLED"))
 
 
 if __name__ == "__main__":

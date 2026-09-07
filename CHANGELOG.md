@@ -538,6 +538,93 @@ HTTP-запроса при одном инкременте счётчика на
     проверку. Байт-сравнение 17 команд на здоровом конфиге между
     `origin/main` и веткой после круга 2 — снова 0 расхождений.
 
+  **Круг 3 (второй независимый гейт 2026-09-07,
+  `optimize/reports/2026-09-07-review-T-090-round2.md`, вернул пакет в
+  `in_progress`).** Гейт подтвердил и снял `SINGLE-REVIEWER` со всех четырёх
+  находок первого гейта, но нашёл: (A) `db-sync.py` — `require_section(cfg,
+  "project", ...)` стоял только на ветке Obsidian-дашбордов, обычный запуск
+  без `obsidian.enabled/dashboards` её не достигал — F-7 на `db-sync.py`
+  оставался открытым буквально, и существующий тест это скрывал, включая
+  Obsidian-опции специально, чтобы дотянуться до строки; (B) `obsidian-
+  sync.py` на `project: null` перестал падать (круг 2), но вместо отказа
+  тихо подставлял `{}` и создавал 4 файла vault с заголовком «Project —
+  Obsidian Vault» — тот же класс «громкое падение → тихий зелёный отчёт»,
+  за который вернули круг 1, только на другом поле; `pulse.py` (оркестратор
+  над `db-sync`) унаследовал тот же дефект; (C) `except (Exception,
+  SystemExit)` в `obsidian-sync.py` перехватывал честный `sys.exit(2)` ядра
+  на битом `stock-inventory.yaml` и продолжал работу; (D) миграция сняла у
+  ~26 файлов собственную проверку «PyYAML не установлен» — при отсутствии
+  PyYAML ядро (`load_config`/`load_yaml_any`) молча отдавало `{}`/`None`
+  вместо явного отказа; (E) комментарий над `_guard_state` утверждал
+  «closure-local flag», а сам флаг был объявлен на уровне модуля —
+  `getattr(config, "_guard"+"_state")["enabled"] = False` реально его
+  выключал в обход обеих проверок.
+
+  - **A.** `db-sync.py`: `require_section(cfg, "project", found)` перенесён
+    на главный путь `main()`, сразу после `require_config()` — до создания
+    `seo/seo.db`. Тест `test_db_sync` переписан на дословный репро F-7
+    (`project: null`, без Obsidian) и проверяет и код возврата, и то, что
+    `seo/seo.db` не создаётся; прежний тест с включёнными Obsidian-опциями
+    оставлен рядом отдельным тестом (`test_db_sync_with_obsidian_dashboards_
+    still_refuses`), чтобы не терять покрытие второй решающей строки.
+  - **B.** `obsidian-sync.py`: главный путь `main()` теперь тоже зовёт
+    `require_section(cfg, "project", cfg_path)` сразу после `load_config()`
+    — до резолва `vault_root` и до первой записи на диск. Легитимного
+    «no-project» режима у этой команды нет (весь её вывод — vault
+    конкретного проекта). `pulse.py` не менялся отдельно: его `run_step()`
+    уже проверял `rc` от `db-sync.py`-подпроцесса и печатал `db_sync_failed`
+    при ненулевом коде — после фикса A он унаследовал правильное поведение
+    без изменений кода, подтверждено прогоном (см. «Результат» задачи).
+    Тесты в `ObsidianSyncProjectShapeIntegrationTest` переписаны: вместо
+    одного `assertNotIn("Traceback", ...)` — код возврата `== 2` И
+    отсутствие созданного `obsidian-vault/`; добавлен позитивный тест
+    (здоровый `project:` всё ещё создаёт vault). Новый
+    `PulseProjectNullIntegrationTest` гоняет `pulse.py --skip-fetch` на
+    `project: null` и проверяет, что зелёная строка `db-sync: seo.db
+    пересобрана` больше не печатается.
+  - **C.** `except (Exception, SystemExit)` → `except Exception` в
+    `obsidian-sync.py`'s чтении `stock-inventory.yaml` — `sys.exit(2)` ядра
+    (`load_yaml_any`) теперь честно останавливает процесс вместо тихого
+    `⚠ ...` + `✓ Done`. Остальные `except` в файле уже были
+    `except Exception` (не расширяли перехват на `SystemExit`) — проверено
+    построчно, других мест не нашлось.
+  - **D.** Новая `_require_pyyaml()` в `seo_cycle_core/config.py`, вызывается
+    в начале `load_config()` и `load_yaml_any()`: при `yaml is None`
+    печатает `ERROR: PyYAML не установлен — установи зависимость (pip
+    install pyyaml)` и `sys.exit(2)` вместо тихого `{}`/`None`. `load_yaml()`
+    сознательно оставлен терпимым (решение зафиксировано в «Результате»
+    задачи) — он и так уже трактует «файла нет» так же, как «PyYAML нет»,
+    для легитимно-опциональных читателей; ужесточение здесь не входило в
+    прямой запрос задачи и меняло бы поведение куда более широкого набора
+    вызывающих (77 файлов используют `load_yaml` для основного конфига), чем
+    оправдано этим циклом.
+  - **E.** `_guard_state` убран как атрибут модуля: флаг теперь обычная
+    локальная переменная `_install_yaml_bypass_guard()`, читаемая как
+    замыкание из обёртки Loader'ов; `_testing_disable_guard`/
+    `_testing_enable_guard`/новая `_testing_guard_enabled()` (только чтение,
+    для тестов) определены внутри той же функции и выставлены наружу через
+    `global` — то есть единственный путь наружу это сами функции, а не
+    структура данных. `getattr(config, "_guard"+"_state")` после фикса
+    бросает `AttributeError` — подтверждено прогоном. Комментарий над
+    функцией переписан, чтобы описывать именно этот код, а не старую
+    формулировку «closure-local».
+  - Юнит-тестов было 897, стало 901 (+2 в `test_config_t090.py` —
+    `test_no_module_attribute_holds_the_raw_flag`, +2 в
+    `test_t090_command_integration.py` — `test_db_sync_with_obsidian_
+    dashboards_still_refuses` и `PulseProjectNullIntegrationTest`, минус
+    объединение старых assert'ов ObsidianSync-теста в те же тестовые
+    методы) — все зелёные.
+  - Матрица `project: null` перепрогнана по всем 106 читателям конфига
+    (`grep -lE 'load_config|find_config|config_section|require_config|
+    load_yaml\(|load_yaml_any'` — то же число, что насчитал гейт): до фикса
+    дефектных (rc=0 + созданы файлы) было 4 (`db-sync`, `pulse`,
+    `obsidian-sync`, `resolve-sources`), после фикса осталось 1 —
+    `resolve-sources.py`, который не читает секцию `project` вообще (не
+    F-7/F-7b класс — как и `token-waste-audit`/`setup-gap-audit`/
+    `automation-recommender`, уже названные легитимной границей в круге 2),
+    не заявляет о несуществующем проекте и не входил в список файлов на
+    исправление этого круга.
+
 ## [2.1.0] — 2026-09-06
 
 ### Fix: dataforseo-fetch.py — денежный стоп больше не отключается молча (T-059)
