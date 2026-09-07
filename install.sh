@@ -106,6 +106,65 @@ fi
 log()  { echo "$*"; }
 warn() { echo "⚠ $*" >&2; }
 
+# T-091 круг 3 (защита в глубину, часть 1 — время выполнения). Круг 2's
+# text-only guard is a linter over one file — it cannot see a bypass that
+# never appears as the literal substring it scans for (a variable holding
+# "git", a helper wrapper, a line continuation, `git pull`/`git remote
+# update` instead of `git fetch`, a subcommand assembled in a variable).
+# This function SHADOWS every literal invocation of the `git` command
+# inside this script: bash resolves a command word against the function
+# table before PATH, and — critically — that resolution happens on the
+# WORD AFTER expansion, so `GITBIN=git; "$GITBIN" fetch --tags` still hits
+# this function exactly like a bare `git fetch --tags` would (verified:
+# `git(){ echo w; }; x=git; "$x" fetch` prints "w", not a real fetch).
+# A tag-fetching subcommand (fetch / pull / ls-remote / `remote update`)
+# called from any function OTHER than the ones that legitimately own it is
+# refused with a non-zero exit, not silently allowed.
+#
+# What this does NOT catch (documented honestly, not papered over — see
+# T-091's task packet, "Граница защиты"): `command git`, a backslash-escaped
+# `\git`, or an absolute path (`/usr/bin/git`) all explicitly skip bash's
+# function-lookup step — that is a language-level fact, not a bug in this
+# wrapper, and no runtime shell mechanism closes it. The text guard in
+# `tests/test_installer_contracts.py` targets exactly that residual class.
+# A wholly new script file elsewhere in the repo, or test code that calls
+# git directly instead of exercising install.sh, are outside what any
+# guard living inside install.sh can see at all — closed by PR code review,
+# not by this script.
+_GIT_FETCH_ALLOWED="fetch_tags_or_report"
+_GIT_LSREMOTE_ALLOWED="latest_tag ensure_worktree"
+_GIT_PULL_ALLOWED="install_or_update_repo install_or_update_optional_repo"
+git() {
+    local first="${1:-}" second="${2:-}" sub="" subarg=""
+    if [ "$first" = "-C" ]; then
+        sub="${3:-}"; subarg="${4:-}"
+    else
+        sub="$first"; subarg="$second"
+    fi
+    local caller="${FUNCNAME[1]:-main}"
+    local allowed="" label=""
+    case "$sub" in
+        fetch)     allowed="$_GIT_FETCH_ALLOWED"; label="fetch" ;;
+        ls-remote) allowed="$_GIT_LSREMOTE_ALLOWED"; label="ls-remote" ;;
+        pull)      allowed="$_GIT_PULL_ALLOWED"; label="pull" ;;
+        remote)
+            if [ "$subarg" = "update" ]; then
+                allowed=""; label="remote update"
+            fi
+            ;;
+    esac
+    if [ -n "$label" ]; then
+        case " $allowed " in
+            *" $caller "*) ;;
+            *)
+                echo "ERROR: попытка получить ссылки/теги с сервера (git $label) в обход общей точки (вызвано из ${caller}(), разрешено только: [${allowed:-нет разрешённых мест}]) — отклонено (T-091 круг 3)." >&2
+                return 1
+                ;;
+        esac
+    fi
+    command git "$@"
+}
+
 abs_path() {
     (cd "$1" && pwd)
 }
@@ -977,7 +1036,20 @@ PYEOF
     registry_update add "$project_dir" "$pin"
 
     if [ "$SYNC_ONLY" = "1" ]; then
-        log "✓ sync завершён (офлайн-проверка по локальному манифесту origin от $(manifest_age_human "$CORE"), не подтверждение с сервера — запусти install.sh --update для реальной сверки)"
+        # T-091 круг 3 (🟡, round-2 review §2): SYNC_ONLY=1 covers TWO very
+        # different callers — a real user `--sync` (NETWORK_ALLOWED=0, no
+        # network calls at all, verified only against the local manifest)
+        # AND upgrade_all()'s internal reuse of this same code path
+        # (NETWORK_ALLOWED=1 — ensure_store() just did a real fetch against
+        # origin moments earlier). Printing the offline-manifest wording
+        # unconditionally was itself dishonest in exactly the command that
+        # moves four live sites (`--upgrade-all --pin`) — the check has to
+        # hinge on NETWORK_ALLOWED, not on SYNC_ONLY.
+        if [ "$NETWORK_ALLOWED" = "1" ]; then
+            log "✓ sync завершён (сверено с origin в этом запуске — реальное сетевое обращение, не по кэшу)"
+        else
+            log "✓ sync завершён (офлайн-проверка по локальному манифесту origin от $(manifest_age_human "$CORE"), не подтверждение с сервера — запусти install.sh --update для реальной сверки)"
+        fi
         return 0
     fi
 

@@ -145,7 +145,17 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
     else:
         runtime = ensure_browser_runtime(args)
         if runtime.get("status") != "ready":
-            browser = {"status": "blocked", "error": runtime.get("status"), "downloads": [], "runtime": runtime}
+            # T-091 круг 3 (🟡, round-2 review §5): this used to set `error`
+            # to the bare status code ("missing"), throwing away
+            # ensure_browser_runtime()'s actual explanatory message ("Re-run
+            # with --install-browser-runtime to install it into ...") — the
+            # human saw only "browser_status: blocked" with no findings.
+            browser = {
+                "status": "blocked",
+                "error": runtime.get("error") or runtime.get("status"),
+                "downloads": [],
+                "runtime": runtime,
+            }
         else:
             import_dir.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(prefix="gsc-indexing-export-") as tmp:
@@ -183,6 +193,20 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
                 "severity": "medium",
                 "message": "No GSC export download was captured. Rerun with --manual-fallback-seconds 120 and click Export CSV manually in the opened browser.",
                 "evidence": {"issue_url": args.issue_url or "pages_index"},
+            }
+        )
+    if browser.get("status") == "blocked":
+        # T-091 круг 3 (🟡, round-2 review §5): without this, a blocked run
+        # (missing node, missing browser runtime, missing site_url) reached
+        # the report as bare "browser_status: blocked" with zero findings —
+        # the actual reason (e.g. "Re-run with --install-browser-runtime...")
+        # never surfaced anywhere a human would read it.
+        findings.append(
+            {
+                "id": "gsc_browser_blocked",
+                "severity": "medium",
+                "message": browser.get("error") or "Browser step was blocked for an unspecified reason.",
+                "evidence": {"status": browser.get("status")},
             }
         )
     distillate = {

@@ -153,6 +153,35 @@ class InstallerFixture(unittest.TestCase):
             env=full_env, capture_output=True, text=True,
         )
 
+    def run_install_with_injection(self, anchor: str, injected: str, *args: str,
+                                    env: dict | None = None) -> subprocess.CompletedProcess:
+        """T-091 round 3: the opposite of run_install_without() — INSERT
+        `injected` right before `anchor` in a real copy of install.sh on
+        disk, then run it exactly like a positive test would. Used to prove
+        the runtime git() choke-point guard (T-091 round 3) actually refuses
+        a bypass call placed in an unauthorised function, not just that a
+        text scan can see the bypass's source line."""
+        source = INSTALL.read_text(encoding="utf-8")
+        assert anchor in source, f"инъекция не нашла якорь: {anchor!r}"
+        mutated = source.replace(anchor, injected + anchor, 1)
+        assert mutated != source, "инъекция не применилась"
+        mutated_path = self.tmp / "install.injected.sh"
+        mutated_path.write_text(mutated, encoding="utf-8")
+        full_env = {
+            **os.environ,
+            "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
+            **(env or {}),
+        }
+        _assert_sandboxed_home(full_env)
+        return subprocess.run(
+            ["bash", str(mutated_path), *args],
+            env=full_env, capture_output=True, text=True,
+        )
+
 
 class TagNotOnOriginTest(InstallerFixture):
     def test_local_only_tag_is_rejected(self) -> None:
@@ -354,6 +383,21 @@ class UpgradeAllHonestyTest(InstallerFixture):
             self.read_lock()["external"]["seo-cycle"]["commit"], original_commit,
             "upgrade-all не должен записывать в лок расходящийся с origin коммит "
             "(должен либо исправить тег, либо отказать — но никогда не довериться дрейфу)",
+        )
+        # T-091 круг 3 (🟡, round-2 review §2): --upgrade-all reuses SYNC_ONLY=1
+        # internally but DID just make a real network call (ensure_store's
+        # fetch) — the "офлайн-проверка ... не подтверждение с сервера"
+        # wording from круг 2 was itself a lie in exactly this command,
+        # the one T-055 uses on four live sites. It must say the check WAS
+        # network-verified here, not claim an offline manifest check.
+        out = proc2.stdout + proc2.stderr
+        self.assertNotIn(
+            "офлайн-проверка", out,
+            f"--upgrade-all делал реальный сетевой fetch, но сообщение утверждает офлайн-проверку: {out!r}",
+        )
+        self.assertIn(
+            "сверено с origin", out,
+            f"--upgrade-all должен честно сказать, что проверка была сетевой: {out!r}",
         )
 
 
@@ -1902,6 +1946,12 @@ class SyncManifestRejectsUnfetchedTagTest(InstallerFixture):
             "--no-migrate-old-global",
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        # T-091 круг 3: a REAL --sync (NETWORK_ALLOWED=0) must keep the
+        # offline-manifest wording — only --upgrade-all's internal SYNC_ONLY
+        # reuse (NETWORK_ALLOWED=1) gets the network-verified wording.
+        out = proc.stdout + proc.stderr
+        self.assertIn("офлайн-проверка", out, f"настоящий --sync должен назвать себя офлайн-проверкой: {out!r}")
+        self.assertNotIn("сверено с origin", out, f"настоящий --sync не делает сетевых вызовов: {out!r}")
 
     def test_reverting_the_manifest_check_reintroduces_the_unverified_pin(self) -> None:
         """Genuine mutation: neuter verify_tag_against_manifest()'s call
@@ -1970,11 +2020,40 @@ class FetchChokePointStructuralGuardTest(unittest.TestCase):
     _LSREMOTE_RE = re.compile(r'\bgit\b.*\bls-remote\b')
     _FUNC_DEF_RE = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{')
 
-    @staticmethod
-    def _executable_lines(source: str) -> list[tuple[int, str]]:
+    # T-091 round 3 (2026-09-07 round-2 review, false positives): the round-2
+    # scan flagged a legitimate `warn "... run git fetch --tags by hand ..."`
+    # hint message and a legitimate heredoc-embedded help-text mention of
+    # `git fetch --tags` as if they were real invocations — it only knew how
+    # to skip `#`-comments. Both cases below are common, will recur, and the
+    # scan must not choke on them.
+    _MESSAGE_CALL_RE = re.compile(r'^(warn|log|die|echo|printf)\s')
+    _HEREDOC_START_RE = re.compile(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?\s*$")
+
+    @classmethod
+    def _executable_lines(cls, source: str) -> list[tuple[int, str]]:
+        """Lines that can plausibly EXECUTE a git invocation: not a `#`
+        comment, not the body of a heredoc (help text, embedded files —
+        anything between `<<TAG`/`<<'TAG'` and the matching closing `TAG`),
+        and not a call to one of the message-printing helpers (`warn`/`log`/
+        `die`/`echo`/`printf`), whose argument is a STRING to show a human,
+        never a command being run."""
         out = []
+        in_heredoc = False
+        heredoc_tag = None
         for i, line in enumerate(source.splitlines(), start=1):
-            if line.strip().startswith("#"):
+            if in_heredoc:
+                if line.strip() == heredoc_tag:
+                    in_heredoc = False
+                continue
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            m = cls._HEREDOC_START_RE.search(line)
+            if m:
+                in_heredoc = True
+                heredoc_tag = m.group(1)
+                continue
+            if cls._MESSAGE_CALL_RE.match(stripped):
                 continue
             out.append((i, line))
         return out
@@ -2068,6 +2147,288 @@ class FetchChokePointStructuralGuardTest(unittest.TestCase):
             self.assertEqual(len(fetch_lines), 1)
         with self.assertRaises(AssertionError):
             self.assertEqual(len(lsremote_lines), 3)
+
+
+# T-091 round 3 (2026-09-07 round-2 independent gate,
+# optimize/reports/2026-09-07-review-T-091-round2.md). The round-2 guard was
+# a single regex over install.sh's TEXT — the reviewer wrote eight concrete
+# bypasses (A–H) and every one of them passed silently, while two perfectly
+# legitimate lines (a hint message, a help-text mention) tripped a false
+# positive. The reviewer's own conclusion, endorsed by the coordinator: "the
+# criterion, as worded ('a bypass must be IMPOSSIBLE'), is unfalsifiable in
+# bash — a wrapper is beaten by `command git`, a text scan is beaten by
+# indirection". The reformulated, checkable criterion: EVERY bypass in the
+# fixed list below (A–H, kept in sync with the round-2 report) must be
+# individually demonstrated to be caught where it CAN be caught, and where
+# it genuinely cannot (H), that is stated as a documented boundary, not
+# quietly ignored. See the task packet's "Граница защиты" section for the
+# same enumeration read as a spec rather than as tests.
+#
+# Defense in depth, two independent layers, deliberately NOT one shared
+# mechanism (round-2 report §1: "ни одна половина по отдельности не
+# закрывает перечень"):
+#   1. RUNTIME — install.sh's own `git()` function (defined near the top of
+#      the file) shadows every LITERAL invocation of the `git` command
+#      inside the script and refuses a tag-fetching subcommand called from
+#      outside its owning function. Catches A, C, D, E, F — proven here by
+#      actually RUNNING a mutated install.sh in the sandbox and asserting a
+#      non-zero exit with the wrapper's own message, not by reading source.
+#   2. TEXT — a scan (over install.sh, and separately over the rest of the
+#      repository) for the specific forms that are known to evade #1 by
+#      bash-language construction (`command git`, a new script file). Catches
+#      B and G.
+#   H (test code that calls git directly instead of exercising install.sh)
+#      is NOT caught by either layer and cannot be, by construction — no
+#      mechanism living inside install.sh or scanning script files can see
+#      what test code chooses to execute directly. Documented as an accepted
+#      periphery limit, compensated by PR code review, not by automation.
+class GitChokePointBypassEnumerationTest(InstallerFixture):
+
+    # --------------------------------------------------------------- A–F:
+    # runtime-catchable forms, each run for real against a live sandboxed
+    # install.sh. All six are injected at the very top of ensure_store()
+    # (the exact injection point the round-1 reviewer used), which runs
+    # unconditionally on a bare `install.sh` (MODE=store, the default).
+    _ANCHOR = 'ensure_store() {\n'
+
+    def _assert_bypass_refused_at_runtime(self, injected_body: str, label: str) -> None:
+        injected = "ensure_store() {\n" + injected_body + "\n"
+        # run_install_with_injection() replaces the FIRST occurrence of the
+        # anchor with injected+anchor, which would duplicate "ensure_store(){"
+        # — instead we replace the whole def line directly.
+        source = INSTALL.read_text(encoding="utf-8")
+        assert self._ANCHOR in source, "anchor `ensure_store() {` не найден — install.sh изменился структурно"
+        mutated = source.replace(self._ANCHOR, injected, 1)
+        assert mutated != source, f"{label}: инъекция не применилась"
+        mutated_path = self.tmp / f"install.bypass-{label}.sh"
+        mutated_path.write_text(mutated, encoding="utf-8")
+        full_env = {
+            **os.environ, "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
+        }
+        _assert_sandboxed_home(full_env)
+        proc = subprocess.run(["bash", str(mutated_path)], env=full_env, capture_output=True, text=True)
+        self.assertNotEqual(
+            proc.returncode, 0,
+            f"обход {label} должен быть отклонён времени исполнения guard'ом, но install.sh завершился rc=0: "
+            f"{proc.stdout + proc.stderr}",
+        )
+        self.assertIn(
+            "круг 3", proc.stdout + proc.stderr,
+            f"обход {label}: install.sh упал, но не по причине guard'а T-091 круг 3 — "
+            f"{proc.stdout + proc.stderr}",
+        )
+
+    def test_bypass_a_subcommand_via_variable_indirection_is_refused(self) -> None:
+        # `"$GITBIN" fetch --tags` — bash resolves the function AFTER
+        # expanding the variable, so this hits the same shadowing `git()`.
+        self._assert_bypass_refused_at_runtime(
+            '    local GITBIN=git\n'
+            '    "$GITBIN" -C "$CORE" fetch --tags\n',
+            "A-variable-indirection",
+        )
+
+    def test_bypass_c_line_continuation_is_refused(self) -> None:
+        self._assert_bypass_refused_at_runtime(
+            '    git -C "$CORE" \\\n'
+            '        fetch --tags\n',
+            "C-line-continuation",
+        )
+
+    def test_bypass_d_git_remote_update_is_refused(self) -> None:
+        # No literal "fetch" anywhere — `git remote update` also pulls tags.
+        self._assert_bypass_refused_at_runtime(
+            '    git -C "$CORE" remote update --prune\n',
+            "D-remote-update",
+        )
+
+    def test_bypass_e_git_pull_tags_from_an_unauthorised_function_is_refused(self) -> None:
+        # `pull` IS legitimately used by install_or_update_repo()/
+        # install_or_update_optional_repo() — this proves it is refused when
+        # called from anywhere ELSE (ensure_store() is not on pull's
+        # allow-list either).
+        self._assert_bypass_refused_at_runtime(
+            '    git -C "$CORE" pull --tags origin main\n',
+            "E-pull-tags",
+        )
+
+    def test_bypass_f_subcommand_assembled_in_a_variable_is_refused(self) -> None:
+        self._assert_bypass_refused_at_runtime(
+            '    local sub=fetch\n'
+            '    git -C "$CORE" "$sub" --tags\n',
+            "F-subcommand-in-variable",
+        )
+
+    # ------------------------------------------------------------------ B:
+    # `command git` explicitly skips bash's function-lookup step — this is
+    # a language fact (verified below), so the RUNTIME wrapper cannot catch
+    # it by construction. The TEXT scan must.
+    _COMMAND_GIT_RE = re.compile(r'\bcommand\s+git\b.*\b(fetch|pull|ls-remote|remote)\b')
+    _BACKSLASH_GIT_RE = re.compile(r'(?:^|[^A-Za-z0-9_])\\git\b.*\b(fetch|pull|ls-remote|remote)\b')
+    _ABS_GIT_RE = re.compile(r'(/usr/bin/git|/usr/local/bin/git|/opt/homebrew/bin/git|\$\(\s*which\s+git\s*\)).*\b(fetch|pull|ls-remote|remote)\b')
+
+    def test_bypass_b_command_git_evades_the_runtime_wrapper_language_fact(self) -> None:
+        """Proves the CLAIM, not just cites it: define the same shadowing
+        `git()` this script uses, then show `command git` reaches the real
+        binary instead of the wrapper."""
+        proc = subprocess.run(
+            ["bash", "-c", 'git(){ echo WRAPPED; }; command git --version >/dev/null && echo REAL_GIT_RAN'],
+            capture_output=True, text=True,
+        )
+        self.assertIn("REAL_GIT_RAN", proc.stdout)
+        self.assertNotIn("WRAPPED", proc.stdout)
+
+    def test_bypass_b_command_git_is_caught_by_the_text_guard(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        anchor = "ensure_store() {\n"
+        injected = anchor + '    command git -C "$CORE" fetch --tags\n'
+        mutated = source.replace(anchor, injected, 1)
+        self.assertNotEqual(mutated, source, "инъекция B не применилась")
+        lines = FetchChokePointStructuralGuardTest._executable_lines(mutated)
+        hits = [i for i, line in lines if self._COMMAND_GIT_RE.search(line)]
+        self.assertTrue(hits, "текстовый гейт не поймал `command git ... fetch` — обход B прошёл бы молча")
+        # And baseline (unmutated) file has zero such hits — no existing
+        # false positive from this pattern.
+        baseline_hits = [i for i, line in FetchChokePointStructuralGuardTest._executable_lines(source)
+                          if self._COMMAND_GIT_RE.search(line)]
+        self.assertEqual(baseline_hits, [], f"ложное срабатывание на немутированном install.sh: {baseline_hits}")
+
+    def test_bypass_b_variants_absolute_path_and_backslash_are_caught_by_the_text_guard(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        anchor = "ensure_store() {\n"
+        for variant_line, pattern in (
+            ('    /usr/bin/git -C "$CORE" fetch --tags\n', self._ABS_GIT_RE),
+            ('    \\git -C "$CORE" fetch --tags\n', self._BACKSLASH_GIT_RE),
+        ):
+            mutated = source.replace(anchor, anchor + variant_line, 1)
+            self.assertNotEqual(mutated, source, f"инъекция не применилась: {variant_line!r}")
+            lines = FetchChokePointStructuralGuardTest._executable_lines(mutated)
+            hits = [i for i, line in lines if pattern.search(line)]
+            self.assertTrue(hits, f"текстовый гейт не поймал вариант: {variant_line!r}")
+
+    # ------------------------------------------------------------------ G:
+    # a brand-new script file elsewhere in the repository. install.sh's own
+    # scan (structural or textual) cannot see outside itself by
+    # construction — this needs a SEPARATE, repository-wide scan.
+    _REPO_WIDE_HIT_RE = re.compile(r'\bgit\b.*\b(fetch|ls-remote)\b|\bgit\b.*\bpull\b.*--tags\b|\bgit\b.*\bremote\b.*\bupdate\b')
+
+    @staticmethod
+    def _repo_wide_bypass_scan(root: pathlib.Path) -> list[tuple[str, int, str]]:
+        """Every *.sh/*.py file under `root` EXCEPT install.sh (covered by
+        its own dedicated scan above) and tests/ (test fixtures legitimately
+        call `git fetch`/`git tag -f` directly to SIMULATE what an external
+        actor did on origin — that is not a bypass of install.sh's own
+        behaviour, see the H boundary below) — checked for an unrouted
+        tag-fetching git call."""
+        hits: list[tuple[str, int, str]] = []
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() or path.suffix not in (".sh", ".py"):
+                continue
+            if path.name == "install.sh":
+                continue
+            try:
+                rel = path.relative_to(root)
+            except ValueError:
+                continue
+            if rel.parts and rel.parts[0] == "tests":
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            for i, line in enumerate(text.splitlines(), start=1):
+                if line.strip().startswith("#"):
+                    continue
+                if GitChokePointBypassEnumerationTest._REPO_WIDE_HIT_RE.search(line):
+                    hits.append((str(rel), i, line.strip()))
+        return hits
+
+    def test_bypass_g_real_repo_today_has_zero_ungated_fetches_outside_install_sh(self) -> None:
+        hits = self._repo_wide_bypass_scan(ROOT)
+        self.assertEqual(hits, [], f"обнаружены получения тегов вне install.sh/tests: {hits}")
+
+    def test_bypass_g_new_script_file_is_caught_by_the_repo_wide_scan(self) -> None:
+        scratch = self.tmp / "repo-copy"
+        (scratch / "scripts").mkdir(parents=True)
+        shutil.copy2(INSTALL, scratch / "install.sh")
+        rogue = scratch / "scripts" / "rev-sync-tags.sh"
+        rogue.write_text(
+            "#!/usr/bin/env bash\n"
+            'git -C "$1" fetch --tags --force\n',
+            encoding="utf-8",
+        )
+        hits = self._repo_wide_bypass_scan(scratch)
+        self.assertTrue(hits, "новый скрипт с прямым `git fetch` в repo не пойман repo-wide сканом")
+        self.assertTrue(any("rev-sync-tags.sh" in h[0] for h in hits), hits)
+
+    # ------------------------------------------------------------------ H:
+    # documented, not "caught". No guard living inside install.sh or
+    # scanning *.sh/*.py files can see what a test's own Python/subprocess
+    # code chooses to execute — that would require treating test code as
+    # hostile, which defeats the purpose of a test suite. This is a real,
+    # accepted boundary (round-2 report §1, "ни один текстовый линтер...
+    # не может видеть код теста"), stated honestly rather than claimed as
+    # solved. It is compensated by PR code review: a test whose name claims
+    # to exercise install.sh but instead calls `git fetch` directly is
+    # exactly the kind of thing a human reviewer would flag as testing the
+    # wrong thing.
+    def test_boundary_h_test_code_calling_git_directly_is_a_documented_non_goal(self) -> None:
+        """This test does not "catch" anything — it records, executably,
+        that this class of bypass is out of scope by construction, so the
+        claim is falsifiable (grep this file for the `_git(...)` helper
+        actually being used this way) rather than a bare assertion in prose."""
+        source = pathlib.Path(__file__).read_text(encoding="utf-8")
+        # The existing fixture helper `_git()` (top of this file) DOES call
+        # git directly, on purpose, in many places (to seed the fake origin,
+        # simulate a tag moving on the server, etc.) — that is legitimate
+        # test methodology, not a hole in install.sh. Confirms the boundary
+        # is real, not hypothetical.
+        self.assertIn('def _git(', source)
+        self.assertGreater(
+            source.count('_git(self.core, "fetch"') + source.count('_git(self.core, "tag"'), 0,
+            "фикстуры этого файла реально вызывают git напрямую в обход install.sh — "
+            "граница H не гипотетическая",
+        )
+
+    # ---------------------------------------------------- false positives:
+    # the two legitimate lines the round-2 reviewer used to show the guard
+    # cries wolf. Both must leave the guard GREEN.
+    def test_false_positive_hint_message_does_not_trip_the_guard(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        anchor = 'warn() { echo "⚠ $*" >&2; }\n'
+        injected = anchor + '\nwarn "не удалось; запусти git fetch --tags вручную"\n'
+        mutated = source.replace(anchor, injected, 1)
+        self.assertNotEqual(mutated, source, "инъекция ложного срабатывания #1 не применилась")
+        lines = FetchChokePointStructuralGuardTest._executable_lines(mutated)
+        fetch_hits = [i for i, line in lines if FetchChokePointStructuralGuardTest._FETCH_RE.search(line)]
+        # The injected hint line itself must not appear among the hits —
+        # any hit found must be the pre-existing real fetch call.
+        injected_lineno = mutated[:mutated.index('warn "не удалось')].count("\n") + 1
+        self.assertNotIn(
+            injected_lineno, fetch_hits,
+            f"ложное срабатывание: подсказка на строке {injected_lineno} посчитана как вызов fetch",
+        )
+
+    def test_false_positive_heredoc_help_text_does_not_trip_the_guard(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        anchor = 'warn() { echo "⚠ $*" >&2; }\n'
+        injected = (
+            anchor
+            + "\ncat > /dev/null <<'HELPTAG'\n"
+            + "Update tags manually with: git fetch --tags origin\n"
+            + "HELPTAG\n"
+        )
+        mutated = source.replace(anchor, injected, 1)
+        self.assertNotEqual(mutated, source, "инъекция ложного срабатывания #2 не применилась")
+        lines = FetchChokePointStructuralGuardTest._executable_lines(mutated)
+        fetch_hits_text = [line for _, line in lines if FetchChokePointStructuralGuardTest._FETCH_RE.search(line)]
+        self.assertFalse(
+            any("Update tags manually" in line for line in fetch_hits_text),
+            "ложное срабатывание: текст справки внутри heredoc посчитан как вызов fetch",
+        )
 
 
 if __name__ == "__main__":

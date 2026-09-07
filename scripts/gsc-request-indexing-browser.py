@@ -179,7 +179,16 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
     else:
         runtime = ensure_browser_runtime(args)
         if runtime.get("status") != "ready":
-            browser = {"status": "blocked", "error": runtime.get("status"), "results": [], "targets_total": len(targets), "runtime": runtime}
+            # T-091 круг 3 (🟡, round-2 review §5): don't throw away
+            # ensure_browser_runtime()'s explanatory message in favour of the
+            # bare status code.
+            browser = {
+                "status": "blocked",
+                "error": runtime.get("error") or runtime.get("status"),
+                "results": [],
+                "targets_total": len(targets),
+                "runtime": runtime,
+            }
         else:
             with tempfile.TemporaryDirectory(prefix="gsc-request-indexing-") as tmp:
                 tmp_path = pathlib.Path(tmp)
@@ -213,6 +222,19 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
         "request_button_not_found": counts.get("request_button_not_found", 0),
     }
     findings: list[dict[str, Any]] = []
+    if browser.get("status") == "blocked":
+        # T-091 круг 3 (🟡, round-2 review §5): surface the actual reason
+        # (e.g. missing node, missing browser runtime with its
+        # --install-browser-runtime hint) instead of leaving the human with
+        # only a bare "browser_status: blocked" and zero findings.
+        findings.append(
+            {
+                "id": "gsc_browser_blocked",
+                "severity": "medium",
+                "message": browser.get("error") or "Browser step was blocked for an unspecified reason.",
+                "evidence": {"status": browser.get("status")},
+            }
+        )
     if not args.auto_click:
         findings.append(
             {
