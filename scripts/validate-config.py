@@ -29,7 +29,7 @@ from seo_cycle_core.config import config_section, load_yaml_any, numeric  # noqa
 from seo_cycle_core.engines import engine_names  # noqa: E402
 
 try:
-    import yaml
+    import yaml  # noqa: F401 - presence check for the ImportError branch below
 except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)

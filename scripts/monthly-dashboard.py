@@ -25,7 +25,7 @@ from __future__ import annotations
 import argparse, csv, json, pathlib, re, sys
 from datetime import date, timedelta
 
-from seo_cycle_core.config import config_section, require_config, require_section
+from seo_cycle_core.config import require_config, require_section
 from seo_cycle_core.monitoring import find_latest_snapshot as _find_latest_snapshot_file
 from seo_cycle_core.monitoring import monitoring_dir
 

@@ -22,7 +22,7 @@ from typing import Any
 from seo_cycle_core.config import coerce_float, load_config
 
 try:
-    import yaml
+    import yaml  # noqa: F401 - presence check for the ImportError branch below
 except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)

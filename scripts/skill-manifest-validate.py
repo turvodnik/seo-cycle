@@ -17,7 +17,7 @@ import pathlib
 import sys
 
 try:
-    import yaml
+    import yaml  # noqa: F401 - presence check for the ImportError branch below
 except ImportError:  # pragma: no cover
     print("ERROR: PyYAML не установлен. python3 -m pip install pyyaml", file=sys.stderr)
     sys.exit(2)

@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any
 
 import requests
-import yaml
 from bs4 import BeautifulSoup
 from google.auth.transport.requests import Request as AuthRequest
 from google.oauth2 import service_account

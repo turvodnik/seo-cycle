@@ -64,7 +64,6 @@ def find_yaml_bypass(path: pathlib.Path) -> list[str]:
         elif isinstance(node, ast.ImportFrom):
             if node.module == "yaml":
                 for alias in node.names:
-                    bound = alias.asname or alias.name
                     if alias.name in YAML_LOADER_ATTRS or alias.name == "*":
                         violations.append(
                             f"{path}:{node.lineno}: `from yaml import {alias.name}` "

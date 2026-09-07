@@ -26,7 +26,7 @@ import argparse, json, pathlib, sys
 from seo_cycle_core.config import config_section, load_config
 
 try:
-    import yaml
+    import yaml  # noqa: F401 - presence check for the ImportError branch below
 except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)

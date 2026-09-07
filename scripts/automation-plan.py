@@ -21,7 +21,7 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 try:
-    import yaml
+    import yaml  # noqa: F401 - presence check for the ImportError branch below
 except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)
