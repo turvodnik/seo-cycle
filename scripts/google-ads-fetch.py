@@ -33,6 +33,7 @@ from seo_cycle_core.ads import (
     save_raw,
     summary_paths,
 )
+from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend
 from seo_cycle_core.config import coerce_float, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
@@ -220,17 +221,25 @@ def main() -> int:
         # отбрасывался — отказ записи (например каталог только на чтение) не
         # останавливал платный вызов, процесс выходил кодом 0 с пустым
         # журналом. Теперь отказ записи — отказ вызова, ДО gaql_search().
-        if not ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report}"):
-            print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
-                  "а не платный вызов вслепую", file=sys.stderr)
-            return 2
+        # T-089 round 2: armed_spend() below arms the real transport
+        # (urllib.request.urlopen) for googleads.googleapis.com only —
+        # gaql_search()'s own OAuth token exchange (oauth2.googleapis.com,
+        # free) is not gated. gaql_search() has no wrapper around it to
+        # bypass.
         # R3-4 (независимый гейт, круг 4): «уточняющая запись requests=0 при
         # неудаче», обещанная кругом 3, никогда не срабатывала —
         # `usage-ledger.py record` без ненулевых метрик отказывает. Честный
         # вариант: pending-запись выше и есть финальная запись, на неудаче —
         # только предупреждение в stderr.
         try:
-            payload = gaql_search(args.report)
+            with armed_spend(lambda: ledger_record(project_root, PLATFORM, requests=1,
+                                                    note=f"fetch {args.report}"),
+                              hosts="googleads.googleapis.com"):
+                payload = gaql_search(args.report)
+        except SpendNotArmedError:
+            print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
+                  "а не платный вызов вслепую", file=sys.stderr)
+            return 2
         except Exception as exc:
             print(f"WARNING: fetch {args.report} failed after the paid call was already "
                   f"recorded ({exc})", file=sys.stderr)

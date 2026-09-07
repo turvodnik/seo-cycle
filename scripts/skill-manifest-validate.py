@@ -14,13 +14,6 @@ from __future__ import annotations
 
 import argparse
 import pathlib
-import sys
-
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    print("ERROR: PyYAML не установлен. python3 -m pip install pyyaml", file=sys.stderr)
-    sys.exit(2)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -30,7 +23,10 @@ def validate(root: pathlib.Path) -> list[str]:
     manifest_path = root / "skills" / "manifest.yaml"
     if not manifest_path.exists():
         return [f"manifest отсутствует: {manifest_path}"]
-    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    # T-090 (F-8): manifest, not the project's config — tolerant load.
+    from seo_cycle_core.config import load_yaml_any
+    data = load_yaml_any(manifest_path)
+    data = data if isinstance(data, dict) else {}
 
     modules = data.get("modules") or {}
     phases_seen: dict[int, str] = {}

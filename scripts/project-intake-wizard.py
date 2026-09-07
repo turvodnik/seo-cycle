@@ -19,12 +19,6 @@ import pathlib
 import sys
 from typing import Any
 
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
-
 
 CONFIG_SEARCH_PATHS = [
     "seo-cycle.yaml",
@@ -124,15 +118,15 @@ def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Pat
     return path
 
 
+from seo_cycle_core.config import dump_yaml, load_yaml_any
+
+
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
-
-
-def dump_yaml(data: dict[str, Any]) -> str:
-    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+    # T-090 (F-8): intake wizard is a legitimate empty-config boundary
+    # (it exists to CREATE a project's config) — tolerant load via the
+    # shared core, not the strict project-config loader.
+    data = load_yaml_any(path)
+    return data if isinstance(data, dict) else {}
 
 
 def yes_no(value: Any) -> bool:

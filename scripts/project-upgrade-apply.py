@@ -19,13 +19,7 @@ import shutil
 import sys
 from typing import Any
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    print("ERROR: PyYAML is required. Install with `pip3 install pyyaml`.", file=sys.stderr)
-    sys.exit(2)
-
-from seo_cycle_core.config import find_config, load_yaml, project_root_for, write_text
+from seo_cycle_core.config import dump_yaml, find_config, load_yaml, project_root_for, write_text
 
 
 YES_ANSWERS = {"yes", "y", "true", "1", "да", "д", "yes_report_only", "yes_for_codex_projects"}
@@ -45,10 +39,6 @@ def template_policy_files() -> dict[str, str]:
     template = load_yaml(skill_root() / "config" / "project.template.yaml")
     policy = template.get("policy_files", {}) if isinstance(template.get("policy_files"), dict) else {}
     return {str(key): str(value) for key, value in policy.items()}
-
-
-def dump_yaml(data: dict[str, Any]) -> str:
-    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
 
 def questionnaire_path(project_root: pathlib.Path, raw: str | None) -> pathlib.Path:

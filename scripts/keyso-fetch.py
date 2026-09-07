@@ -32,6 +32,7 @@ scripts/seo_cycle_core/usage_ledger.py (T-066: тот же класс порчи
 from __future__ import annotations
 import argparse, hashlib, json, os, pathlib, sys, time, urllib.parse, urllib.request, urllib.error
 
+from seo_cycle_core.spend_guard import armed_spend
 from seo_cycle_core.usage_ledger import (
     bump_counter,
     current_month,  # noqa: F401 - re-exported for tests.test_keyso_fetch
@@ -88,13 +89,24 @@ def call(token: str, path: str, params: dict, _retry=True):
     qs = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
     req = urllib.request.Request(f"{BASE_URL}{path}?{qs}",
                                  headers={"X-Keyso-TOKEN": token, "Content-Type": "application/json"})
+
+    # T-089 round 2 (finding H, второй независимый гейт): bump_usage()
+    # раньше вызывался ПОСЛЕ чтения ответа — сигнал между отправкой запроса
+    # и этой строкой терял счётчик расхода лимита целиком, тот же класс, что
+    # F-1. Теперь счётчик пишется ДО вызова, под armed_spend() — api.keys.so
+    # зарегистрирован в PAID_HOSTS (seo_cycle_core.spend_guard), так что
+    # urlopen() на него без этого блока сам откажет с SpendNotArmedError, не
+    # дожидаясь код-ревью.
+    def _write_ahead() -> bool:
+        cnt = bump_usage(pathlib.Path("./seo/research/keyso"))
+        print(f"  [keyso usage: {cnt} запросов за месяц]", file=sys.stderr)
+        return True
+
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            _LAST[0] = time.time()
-            data = json.loads(r.read())
-            cnt = bump_usage(pathlib.Path("./seo/research/keyso"))
-            print(f"  [keyso usage: {cnt} запросов за месяц]", file=sys.stderr)
-            return data
+        with armed_spend(_write_ahead, hosts="api.keys.so"):
+            with urllib.request.urlopen(req, timeout=60) as r:
+                _LAST[0] = time.time()
+                return json.loads(r.read())
     except urllib.error.HTTPError as e:
         _LAST[0] = time.time()
         if e.code == 429 and _retry:

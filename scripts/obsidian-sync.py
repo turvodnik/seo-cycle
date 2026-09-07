@@ -36,12 +36,6 @@ from datetime import date
 
 from seo_cycle_core.config import config_section
 
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. pip3 install pyyaml", file=sys.stderr)
-    sys.exit(2)
-
 
 def safe_filename(s: str) -> str:
     """Превращает строку в безопасное имя файла Obsidian."""
@@ -398,7 +392,8 @@ def sync(project_root: pathlib.Path, vault_root: pathlib.Path, cfg: dict, args):
     entities: dict = {}
     if entities_path.exists():
         try:
-            raw = yaml.safe_load(entities_path.read_text(encoding="utf-8")) or {}
+            from seo_cycle_core.config import load_yaml_any
+            raw = load_yaml_any(entities_path) or {}
             if isinstance(raw, dict) and "entities" in raw:
                 raw = raw["entities"]
             if isinstance(raw, dict):
@@ -442,7 +437,21 @@ def sync(project_root: pathlib.Path, vault_root: pathlib.Path, cfg: dict, args):
     stock = {}
     if sp.exists():
         try:
-            stock = yaml.safe_load(sp.read_text(encoding="utf-8")) or {}
+            from seo_cycle_core.config import load_yaml_any
+            stock = load_yaml_any(sp) or {}
+        # T-090 round 3 (second independent gate, 🟡C): this used to be
+        # `except (Exception, SystemExit)` — `load_yaml_any()` reports a
+        # broken YAML file (bad syntax, non-UTF-8) by calling `sys.exit(2)`,
+        # which raises `SystemExit`, NOT a subclass of `Exception`. Adding
+        # `SystemExit` to the catch here overrode that decision: the core's
+        # loud, deliberate "stop, this file is broken" got turned right
+        # back into `⚠ stock-inventory.yaml: 2` + `✓ Done` + rc=0 — the same
+        # "single point of truth whose refusal can be swallowed one frame
+        # up" class this whole ticket exists to close, just at a `except`
+        # clause instead of a config read. A genuinely unexpected runtime
+        # error while loading the file (e.g. a permissions error surfaced
+        # as `OSError`) is still `Exception` and still caught below;
+        # `SystemExit` is left to propagate and end the process.
         except Exception as e:
             print(f"⚠ stock-inventory.yaml: {e}", file=sys.stderr)
 
@@ -572,7 +581,7 @@ def sync(project_root: pathlib.Path, vault_root: pathlib.Path, cfg: dict, args):
 tags: [vault-readme]
 ---
 
-# {cfg.get('project',{}).get('name','Project')} — Obsidian Vault
+# {(cfg.get('project') if isinstance(cfg.get('project'), dict) else {}).get('name','Project')} — Obsidian Vault
 
 Зеркало контента проекта в формате Obsidian.
 
@@ -639,7 +648,18 @@ def main():
             print(f"ERROR: seo-cycle.yaml не найден в {pathlib.Path.cwd()}", file=sys.stderr)
             sys.exit(2)
 
-    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    from seo_cycle_core.config import load_config, require_section
+    cfg = load_config(cfg_path)
+    # T-090 round 3 (second independent gate, 🔴B): `project: null` used to
+    # sail past `cfg.get('project', {})`/the isinstance-guarded variant that
+    # replaced it in round 2 — both silently substitute `{}` and let the
+    # sync proceed, producing a vault with a `_README.md` titled
+    # "Project — Obsidian Vault" and real dashboard files for a project
+    # that, per its own config, doesn't exist. This command's entire output
+    # names a project (the vault README, the central_vault subfolder
+    # default) — there is no legitimate "no project" mode here, unlike
+    # `setup-onboarding.py`'s pre-project wizard.
+    require_section(cfg, "project", cfg_path)
     project_root = cfg_path.parent
     if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
         project_root = cfg_path.parent
@@ -657,7 +677,7 @@ def main():
         vault_root = pathlib.Path(os.path.expanduser(args.vault))
     elif obs_cfg.get("central_vault"):
         central = pathlib.Path(os.path.expanduser(obs_cfg["central_vault"]))
-        subfolder = obs_cfg.get("project_subfolder") or cfg.get("project", {}).get("brand_name_technical") or "project"
+        subfolder = obs_cfg.get("project_subfolder") or (cfg.get("project") if isinstance(cfg.get("project"), dict) else {}).get("brand_name_technical") or "project"
         vault_root = central / subfolder
         if not central.exists():
             print(f"⚠ central_vault не существует: {central}", file=sys.stderr)

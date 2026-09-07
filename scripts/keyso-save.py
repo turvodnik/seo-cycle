@@ -22,6 +22,7 @@ Auth: X-Keyso-TOKEN (env KEYSO_API_TOKEN).
 from __future__ import annotations
 import argparse, json, os, pathlib, sys, urllib.request, urllib.error
 
+from seo_cycle_core.spend_guard import armed_spend
 from seo_cycle_core.usage_ledger import bump_counter
 
 API = "https://api.keys.so"
@@ -44,25 +45,41 @@ def load_token() -> str:
 
 
 def load_config() -> dict:
-    try:
-        import yaml
-    except ImportError:
+    # T-090 (F-7/F-8): this used to be its own hand-rolled loader with an
+    # `except ImportError: return {}` fallback — a dangerous class on its
+    # own: a broken PyYAML install silently looked identical to "no
+    # config", the same silent-success failure mode F-7/F-7b exist to
+    # close, just triggered by a missing dependency instead of an empty
+    # file. Routes through the shared core loader now — if PyYAML truly
+    # isn't installed, `seo_cycle_core.config.load_config` itself returns
+    # `{}` (unchanged for a missing OPTIONAL config in a write-only tool
+    # like this one), but a MALFORMED config gets the same coordinate-
+    # bearing error + exit(2) every other command gets, instead of this
+    # file's own silent swallow.
+    from seo_cycle_core.config import find_config, load_config as _load_config
+    found = find_config(pathlib.Path.cwd())
+    if found is None:
         return {}
-    for rel in ("seo-cycle.yaml", ".seo-cycle.yaml", "seo/seo-cycle.yaml"):
-        p = pathlib.Path.cwd() / rel
-        if p.exists():
-            return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    return {}
+    return _load_config(found)
 
 
 def post(token: str, path: str, body: dict) -> dict:
     req = urllib.request.Request(f"{API}{path}", data=json.dumps(body).encode(),
                                  headers={"X-Keyso-TOKEN": token, "Content-Type": "application/json"})
+
+    # T-089 round 3: found while strengthening the static host-scan (a third
+    # api.keys.so client sharing the same quota as keyso-fetch.py/
+    # competitor-discovery.py, R2-4/finding H) — bump_counter() was called
+    # AFTER reading the response, the exact F-1 class. api.keys.so is a
+    # PAID_HOSTS member; urlopen() to it now refuses without this block.
+    def _write_ahead() -> bool:
+        bump_counter(_USAGE_DIR, field="requests")
+        return True
+
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            data = json.loads(r.read())
-            bump_counter(_USAGE_DIR, field="requests")
-            return data
+        with armed_spend(_write_ahead, hosts="api.keys.so"):
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.loads(r.read())
     except urllib.error.HTTPError as e:
         sys.exit(f"ERROR Keys.so HTTP {e.code}: {e.read()[:200]}")
 

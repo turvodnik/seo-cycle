@@ -178,18 +178,21 @@ class CallErrorTest(unittest.TestCase):
         err = spyfu.urllib.error.HTTPError("url", 500, "Internal Server Error", {}, io.BytesIO(b"boom"))
         with mock.patch.object(spyfu.urllib.request, "urlopen", side_effect=err):
             with self.assertRaises(spyfu.ApiCallError):
-                spyfu.call("b64", "some/path", {"domain": "x"})
+                with spyfu.armed_spend(lambda: True, hosts="api.spyfu.com"):
+                    spyfu.call("b64", "some/path", {"domain": "x"})
 
     def test_url_error_raises_api_call_error(self) -> None:
         with mock.patch.object(spyfu.urllib.request, "urlopen",
                                side_effect=spyfu.urllib.error.URLError("no route to host")):
             with self.assertRaises(spyfu.ApiCallError):
-                spyfu.call("b64", "some/path", {"domain": "x"})
+                with spyfu.armed_spend(lambda: True, hosts="api.spyfu.com"):
+                    spyfu.call("b64", "some/path", {"domain": "x"})
 
     def test_malformed_json_raises_api_call_error(self) -> None:
         with mock.patch.object(spyfu.urllib.request, "urlopen", return_value=fake_response(b"{not valid")):
             with self.assertRaises(spyfu.ApiCallError):
-                spyfu.call("b64", "some/path", {"domain": "x"})
+                with spyfu.armed_spend(lambda: True, hosts="api.spyfu.com"):
+                    spyfu.call("b64", "some/path", {"domain": "x"})
 
 
 class RunThroughRealCallTest(unittest.TestCase):
