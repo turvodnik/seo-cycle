@@ -328,7 +328,7 @@ class AnnotatedTagComparisonTest(InstallerFixture):
         (self.core / "VERSION").write_text("2.0.0-local-drift\n", encoding="utf-8")
         _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
         _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local drift")
-        _git(self.core, "tag", "-f", "-a", "v2.0.0", "-m", "local-only repoint")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "tag", "-f", "-a", "v2.0.0", "-m", "local-only repoint")
 
         proc = self.run_install(
             "--project", str(self.project), "--pin", "v2.0.0", "--sync",
@@ -405,7 +405,7 @@ class SnapshotSHAReconciliationTest(InstallerFixture):
         (self.core / "VERSION").write_text("2.0.0-upgrade-all-drift\n", encoding="utf-8")
         _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
         _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local drift")
-        _git(self.core, "tag", "-f", "-a", "v2.0.0", "-m", "local-only repoint")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "tag", "-f", "-a", "v2.0.0", "-m", "local-only repoint")
 
         proc2 = self.run_install("--upgrade-all", "--pin", "v2.0.0")
         self.assertEqual(
