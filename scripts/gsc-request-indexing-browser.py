@@ -25,7 +25,7 @@ from seo_cycle_core.technical_artifacts import write_technical_report
 
 
 DEFAULT_PROFILE_DIR = pathlib.Path.home() / ".codex" / "browser-profiles" / "gsc"
-DEFAULT_NODE_DEPS_DIR = pathlib.Path.home() / ".codex" / "vendor" / "seo-cycle-node"
+DEFAULT_NODE_DEPS_DIR = pathlib.Path.home() / ".seo-cycle" / "vendor" / "seo-cycle-node"
 DEFAULT_QUEUE = "seo/technical/gsc-indexing-request-queue.csv"
 
 
@@ -86,8 +86,17 @@ def ensure_browser_runtime(args: argparse.Namespace) -> dict[str, Any]:
     package_path = deps_dir / "node_modules" / "playwright-core" / "package.json"
     if package_path.exists():
         return {"status": "ready", "node_modules": str(deps_dir / "node_modules"), "installed": False}
-    if args.skip_install_browser_runtime:
-        return {"status": "missing", "node_modules": str(deps_dir / "node_modules"), "installed": False}
+    if not args.install_browser_runtime:
+        # T-091 round 2 (F-18-class finding, 2026-09-07 review): a network
+        # npm install must be explicit opt-in, not a silent side effect of a
+        # normal run.
+        return {
+            "status": "missing",
+            "node_modules": str(deps_dir / "node_modules"),
+            "installed": False,
+            "error": "playwright-core is missing. Re-run with --install-browser-runtime to install it into "
+                     f"{deps_dir} (network access, one-time).",
+        }
     if not shutil.which("npm"):
         return {"status": "missing_npm", "node_modules": str(deps_dir / "node_modules"), "installed": False}
     deps_dir.mkdir(parents=True, exist_ok=True)
@@ -269,7 +278,7 @@ def main() -> int:
     parser.add_argument("--profile-dir", help=f"Persistent GSC browser profile. Default: {DEFAULT_PROFILE_DIR}")
     parser.add_argument("--browser-channel", default="chrome")
     parser.add_argument("--node-deps-dir", help=f"Shared Node dependency cache. Default: {DEFAULT_NODE_DEPS_DIR}")
-    parser.add_argument("--skip-install-browser-runtime", action="store_true")
+    parser.add_argument("--install-browser-runtime", action="store_true", help="Explicit opt-in: install playwright-core into the Node dependency cache (network access) if missing.")
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--keep-open", action="store_true")
     parser.add_argument("--timeout-seconds", type=int, default=90)
