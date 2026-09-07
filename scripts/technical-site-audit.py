@@ -9,7 +9,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, require_section
 from seo_cycle_core.technical_artifacts import severity_counts, write_technical_report
 
 
@@ -96,6 +96,13 @@ def top_sources(reports: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
     cfg = load_yaml(cfg_path)
+    # T-092 (F-3/B2): load_yaml() only guarantees "a dict" — `project: null`
+    # (or an empty file, which load_yaml turns into `{}`) passed through
+    # here and produced a green rollup with domain="" and 4 files written
+    # (reproduced: QA report F-3, `technical-site-audit.py --write` on a
+    # 0-byte config, exit 0). This aggregates OTHER audits' reports for one
+    # project — a rollup with no project to roll up for is meaningless.
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     slugs = args.source or DEFAULT_SLUGS
     reports = [report for slug in slugs if (report := load_report(project_root, slug))]

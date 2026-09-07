@@ -927,7 +927,15 @@ sources:
     # 2022 (dataforseo.com/update/russia-and-belarus-api-locations).
     # Два пути к одним и тем же данным:
     #   • MCP-сервер `dataforseo` — для диалога с агентом (см. .mcp.json проекта);
-    #   • helper_script — для конвейеров и cron (кэш + учёт трат по полю cost).
+    #     ЭТО ОТДЕЛЬНЫЙ ПРОЦЕСС (T-092, F-1 «шестой путь»): денежный шлюз и
+    #     журнал расхода (seo_cycle_core.spend_guard/usage_ledger) живут в
+    #     процессе Python-скриптов этого репозитория и структурно не видят
+    #     вызовы MCP-сервера — тот запускается и владеется отдельно (Claude
+    #     Code/IDE), не этим репозиторием. Трать через этот путь осознанно:
+    #     ни арминга, ни записи в _usage.json здесь нет и не может быть.
+    #   • helper_script — для конвейеров и cron (кэш + учёт трат по полю cost,
+    #     через armed_spend()/write-ahead — единственный путь, который
+    #     реально гейтится).
     enabled: false              # включить после верификации аккаунта и budget approval
     auth_env: DATAFORSEO_API_KEY_BASE64   # base64("login:password"), берётся из Keychain
     mcp_server: dataforseo

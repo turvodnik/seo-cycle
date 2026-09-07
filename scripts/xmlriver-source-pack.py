@@ -25,6 +25,8 @@ from seo_cycle_core.source_artifacts import (
     utc_now_iso,
     write_source_artifacts,
 )
+from seo_cycle_core.spend_guard import armed_spend
+from seo_cycle_core.usage_ledger import bump_counter
 
 
 PROVIDER = "xmlriver"
@@ -244,8 +246,19 @@ def live_fetch(cfg: dict[str, Any], args: argparse.Namespace, env: dict[str, str
     params = params_for(cfg, args, env)
     url = ENDPOINTS[args.engine] + "?" + urllib.parse.urlencode(params)
     request = urllib.request.Request(url, headers={"User-Agent": "seo-cycle-xmlriver/1"})
-    with urllib.request.urlopen(request, timeout=args.timeout_seconds) as response:  # nosec - explicit paid live mode
-        return response.read().decode("utf-8", errors="replace")
+
+    # T-092: xmlriver.com is a registered PAID_HOSTS member — a write-ahead
+    # counter runs BEFORE the call (same pattern as keyso-fetch.py). This
+    # module already gates behind --live/--allow-paid above; the money-gate
+    # is a second, independent line of defence, not a replacement for it.
+    def _write_ahead() -> bool:
+        cnt = bump_counter(pathlib.Path("./seo/research/xmlriver"))
+        print(f"  [xmlriver usage: {cnt} запросов за месяц]", file=sys.stderr)
+        return True
+
+    with armed_spend(_write_ahead, hosts="xmlriver.com"):
+        with urllib.request.urlopen(request, timeout=args.timeout_seconds) as response:  # nosec - explicit paid live mode
+            return response.read().decode("utf-8", errors="replace")
 
 
 def read_input(args: argparse.Namespace, cfg: dict[str, Any], env: dict[str, str]) -> tuple[str | None, str]:

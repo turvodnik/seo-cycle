@@ -33,6 +33,9 @@ competitor analysis). Serpstat ценен тем, что даёт Google-дан�
 from __future__ import annotations
 import argparse, hashlib, json, os, pathlib, sys, time, urllib.request
 
+from seo_cycle_core.spend_guard import armed_spend
+from seo_cycle_core.usage_ledger import bump_counter
+
 
 def nonneg_int_arg(raw: str) -> int:
     """T-066 R-2 (полный обзор класса "тратит квоту внешнего сервиса + имеет
@@ -76,8 +79,19 @@ def call(token: str, method: str, params: dict) -> dict:
     body = json.dumps({"id": "1", "method": method, "params": params}).encode()
     req = urllib.request.Request(f"{ENDPOINT}?token={token}", data=body,
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        out = json.loads(r.read())
+
+    # T-092: api.serpstat.com is a registered PAID_HOSTS member — this
+    # module used to not import seo_cycle_core at all, so the money gate
+    # was not even installed in this process (F-1). write-ahead counter
+    # runs BEFORE the call, same pattern as keyso-fetch.py.
+    def _write_ahead() -> bool:
+        cnt = bump_counter(pathlib.Path("./seo/research/serpstat"))
+        print(f"  [serpstat usage: {cnt} запросов за месяц]", file=sys.stderr)
+        return True
+
+    with armed_spend(_write_ahead, hosts="api.serpstat.com"):
+        with urllib.request.urlopen(req, timeout=60) as r:
+            out = json.loads(r.read())
     _LAST_CALL[0] = time.time()
     if "error" in out:
         sys.exit(f"ERROR Serpstat: {out['error']}")

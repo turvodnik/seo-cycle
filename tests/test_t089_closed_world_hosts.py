@@ -51,8 +51,14 @@ FREE_HOSTS = frozenset({
     "localhost", "example.com",
     "about.you.com", "accounts.google.com", "ahrefs.com", "aistudio.google.com",
     "analytics.google.com", "answerthepublic.com", "api-metrika.yandex.net",
-    "api.answerthepublic.com", "api.indexnow.org", "api.serpstat.com", "api.slack.com",
+    "api.indexnow.org", "api.slack.com",
     "api.telegram.org", "api.tildacdn.info", "api.webmaster.yandex.net",
+    # app.neuronwriter.com/app.writerzen.net: PAID (see spend_guard.py
+    # PAID_SERVICES_WITHOUT_HOST_GATE) but this Python process never
+    # dials them itself (neuronwriter: manual import; writerzen: a
+    # separate Node.js subprocess) — free from THIS gate's point of view,
+    # not from usage-ledger.py's billing point of view. Documented, not a
+    # gap: see PAID_SERVICES_WITHOUT_HOST_GATE's docstring for why.
     "app.neuronwriter.com", "app.writerzen.net", "bot.sidetrade.com", "business.google.com",
     "cohere.com", "commoncrawl.org", "console.cloud.google.com", "dataforseo.com",
     "dev.2gis.ru", "developer.amazon.com", "developers.facebook.com", "developers.google.com",
@@ -73,7 +79,7 @@ FREE_HOSTS = frozenset({
     "www.google.com", "www.googleapis.com", "www.grapeshot.co.uk", "www.indexnow.org",
     "www.keyso.so", "www.linkedin.com", "www.perplexity.ai", "www.pinterest.com",
     "www.qwant.com", "www.semrush.com", "www.sentibot.eu", "www.sitemaps.org",
-    "www.sogou.com", "www.timpi.io", "www.turnitin.com", "x.ai", "xmlriver.com",
+    "www.sogou.com", "www.timpi.io", "www.turnitin.com", "x.ai",
     "yandex.com", "yandex.ru",
 })
 
@@ -98,6 +104,11 @@ def _scan_hosts() -> dict[str, set[str]]:
 _DOCUMENTARY_ONLY = frozenset({
     "scripts/seo_cycle_core/spend_guard.py",  # defines PAID_HOSTS/armed_spend, doesn't call them
     "scripts/seo_cycle_core/usage_ledger.py",  # docstring cross-reference to keyso-fetch.py's history
+    # T-092: reference URLs only (docs page / "get your key here" links),
+    # no urlopen()/requests call in these files at all.
+    "scripts/access-key-assistant.py",
+    "scripts/auth-assistant.py",
+    "scripts/xmlriver-health.py",
 })
 
 

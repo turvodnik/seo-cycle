@@ -18,23 +18,27 @@ import sys
 from typing import Any
 
 from seo_cycle_core.config import config_section, find_config, load_yaml, numeric, policy_path, project_root_for, rel_path, require_config
+from seo_cycle_core.spend_guard import PAID_SERVICE_HOSTS, PAID_SERVICES_WITHOUT_HOST_GATE
 from seo_cycle_core.usage_ledger import MONTH_RE, finite_nonneg, nonneg_finite_arg, usage_lock
 
 
 COMMANDS = {"report", "check", "record"}
 LLM_SERVICES = {"openai", "anthropic", "claude", "gemini", "deepseek", "perplexity", "llm_cli", "codex", "antigravity"}
 ADS_SERVICES = {"google_ads", "yandex_direct", "microsoft_ads"}
-PAID_API_SERVICES = {
-    "neuronwriter",
-    "google_cloud_nlp",
-    "google_nlp",
-    "keys_so",
-    "keyso",
-    "serpstat",
-    "spyfu",
-    "dataforseo",
-    "answerthepublic",
-}
+# T-092: single source of truth is spend_guard.PAID_SERVICE_HOSTS (services
+# with a Python-reachable host this repo gates) plus
+# PAID_SERVICES_WITHOUT_HOST_GATE (services this Python-level gate cannot
+# see, documented there as a known exception) — this used to be a second,
+# hand-maintained list that silently drifted from the host gate (F-1:
+# serpstat/neuronwriter/answerthepublic were "paid" here and "free" in
+# tests/test_t089_closed_world_hosts.py's FREE_HOSTS at the same time).
+# `keys_so`/`google_cloud_nlp` are pre-existing spelling aliases for
+# `keyso`/`google_nlp` accepted by CLI callers; `google_ads`/`yandex_direct`
+# are excluded here even though they have host entries — they are already
+# classified under ADS_SERVICES above, one category per service.
+PAID_API_SERVICES = (
+    (set(PAID_SERVICE_HOSTS) | PAID_SERVICES_WITHOUT_HOST_GATE) - ADS_SERVICES
+) | {"keys_so", "google_cloud_nlp"}
 METRIC_KEYS = [
     "usd",
     "input_tokens",

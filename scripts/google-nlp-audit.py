@@ -420,11 +420,15 @@ def analyze_source(
             # сколько потрачено» состояния: write-ahead запись, сделанная до
             # call_feature(), уже финальна, уточнять её после ответа нечем.
             #
-            # T-089 round 2: armed_spend() ниже арендует реальный транспорт
-            # (requests.Session.request) под хост language.googleapis.com —
-            # у call_feature() нет обёртки-декоратора, которую можно снять:
-            # платный вызов мимо write-ahead ловится на уровне requests, не
-            # на уровне этой функции.
+            # T-089 round 3 (T-092: этот комментарий отставал от кода —
+            # называл механизм round 2): armed_spend() ниже арендует хост
+            # language.googleapis.com на уровне socket.getaddrinfo/
+            # socket.connect (spend_guard.py), а не на уровне
+            # requests.Session.request (это было round 2, заменено round 3
+            # семью независимо найденными обходами) — у call_feature() нет
+            # обёртки-декоратора, которую можно снять: платный вызов мимо
+            # write-ahead ловится на сокетном уровне, ниже любой конкретной
+            # HTTP-библиотеки.
             def _write_ahead(feature: str = feature, units: int = units) -> bool:
                 # Значения по умолчанию связывают ТЕКУЩИЕ feature/units в
                 # момент определения (ruff B023: замыкание на переменную

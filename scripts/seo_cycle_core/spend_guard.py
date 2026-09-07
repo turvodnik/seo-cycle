@@ -65,10 +65,27 @@ Buys:
 Does NOT buy — this is the boundary, stated for the release notes, not
 just this docstring:
   - **A process that never imports anything from `seo_cycle_core` at all**
-    is not gated at runtime. Every existing client uses shared
-    `seo_cycle_core` helpers (config, usage_ledger, ads) for reasons that
-    have nothing to do with this ticket, so today this is not a live gap —
-    but it is not a theorem either. The compensating control for this case
+    is not gated at runtime. T-092 (F-2, the QA report's THIRD independent
+    run to catch this claim overstating itself): this docstring used to say
+    "every existing client uses shared seo_cycle_core helpers... so today
+    this is not a live gap" — false as written: at the time it was
+    checked (`for f in scripts/*.py; do grep -qE "urlopen|requests\\.(get|
+    post|Session)" $f && ! grep -q seo_cycle_core $f && echo $f; done`),
+    NINE network scripts imported nothing from this package, two of them
+    (`serpstat-fetch.py`, `atp-fetch.py`) hitting hosts this codebase
+    itself classifies as paid — a live gap, not a theoretical one. Both are
+    now fixed (T-092: they import `seo_cycle_core` and call `armed_spend()`
+    like every other paid client). Re-running the same command today still
+    finds seven scripts with no `seo_cycle_core` import at all
+    (`ai-bot-access-check.py`, `deindex-detect.py`, `google-suggest.py`,
+    `metrika-fetch.py`, `psi-fetch.py`, `webmaster-fetch.py`,
+    `yandex-suggest.py`) — checked by hand against `PAID_HOSTS`, none of
+    them ever mentions a paid hostname, only free ones (Google/Yandex
+    suggest, PSI, webmaster, deindex checks, bot-access probes), so this IS
+    a live-gap-free state for THOSE SEVEN specifically, today — not a
+    property of "every client" as a class, and not something to take on
+    faith the next time a client is added here without re-running the
+    command above. The compensating control for a genuinely uncovered case
     is NOT runtime: `tests/test_t089_closed_world_hosts.py` fails CI when a
     script contains a `PAID_HOSTS` hostname (or any unclassified one)
     written as ONE WHOLE STRING LITERAL, without importing `seo_cycle_core`
@@ -95,13 +112,33 @@ just this docstring:
     specific combination — split/constructed literal AND no shared import —
     is accepted as an open gap, not a closed one.
   - **A subprocess started via `subprocess`/`os.system`/a shell script**
-    (this repo already has one: `scripts/nw-cli.sh` calls `curl` directly)
-    is a separate OS process with its own Python interpreter or no
+    (this repo already has one: `scripts/nw-cli.sh` calls `curl` directly;
+    T-092 names a second, paid one — `scripts/writerzen-browser-collect.py`
+    drives `writerzen-browser-runner.mjs`, a Node.js/Playwright subprocess
+    that dials `app.writerzen.net` in its OWN process) is a separate OS
+    process with its own Python interpreter, a JS runtime, or no
     interpreter at all — nothing importable in THIS process reaches into
     that one. Same compensating control as above: the static scan covers
     `scripts/*.py` only (documented limitation, `tests/
     test_t089_closed_world_hosts.py`'s own docstring says so) — shell/curl
     call sites are not scanned by either half of this mechanism today.
+    `app.writerzen.net`/`neuronwriter.com` are deliberately kept out of
+    `PAID_HOSTS` for this exact reason (see `PAID_SERVICES_WITHOUT_HOST_GATE`
+    above): putting a host this process never dials into `PAID_HOSTS` would
+    not add protection, only a permanently-failing static-scan requirement
+    on files that make a documentary-only mention of it.
+  - **`config/project.template.yaml`'s `mcp_server: dataforseo` path.** The
+    template documents TWO ways to reach DataForSEO: `helper_script`
+    (`scripts/dataforseo-fetch.py`, gated — `armed_spend()`, write-ahead,
+    `PAID_HOSTS`) and `mcp_server: dataforseo`, a Model Context Protocol
+    server — a THIRD OS process, started and owned by whatever MCP client
+    the user runs (Claude Code, an IDE, etc.), not by any script in this
+    repo. This module's socket patch only ever affects the Python process
+    that imports it; an MCP server process is never that process, by
+    construction, the same reason a WriterZen subprocess is out of reach
+    above. Accepted as a named, out-of-scope path (T-092, F-1's "sixth
+    path") — not something a helper-script-level fix can close, and not
+    claimed as covered anywhere in this file or the release notes.
   - **A raw socket connecting to an already-resolved numeric IP address**
     (no hostname anywhere in the call) cannot be matched against
     `PAID_HOSTS` — there is no name to compare. Nothing in this module (or
@@ -157,10 +194,13 @@ just this docstring:
   - `_ARMED_HOSTS` is a `contextvars.ContextVar`: it does not propagate into
     a new OS thread (a thread starts with a fresh context) or a new
     process. No paid client in this codebase currently spawns threads for
-    its network calls (checked: no `threading`/`concurrent.futures`/
-    `asyncio` import in any of the eight paid clients) — parallel
-    *processes* are unaffected (armed state lives per-process already, by
-    construction) and are the actual concurrency model these CLI tools use.
+    its network calls (checked, T-092: no `threading`/`concurrent.futures`/
+    `asyncio` import in any of the clients calling `armed_spend()` — count
+    verified by `grep -rl 'armed_spend(' scripts/*.py | grep -v
+    seo_cycle_core | wc -l`, not carried by hand between releases) —
+    parallel *processes* are unaffected (armed state lives per-process
+    already, by construction) and are the actual concurrency model these
+    CLI tools use.
 """
 
 from __future__ import annotations
@@ -170,19 +210,58 @@ import socket
 from contextlib import contextmanager
 from typing import Any, Callable, Iterable, Iterator
 
+# T-092: single source of truth for "which billing service owns which
+# host(s) this codebase's own Python process can actually reach". Every
+# other place in the repo that needs a paid-service name -> host mapping
+# (or the flat PAID_HOSTS set) derives it from THIS dict instead of keeping
+# a second hand-maintained list (that was exactly F-1's self-contradiction:
+# usage-ledger.py's PAID_API_SERVICES called serpstat/neuronwriter/
+# answerthepublic paid while tests/test_t089_closed_world_hosts.py's
+# FREE_HOSTS certified their hostnames as free).
+#
+# A service with NO entry here is either not paid, or paid but reached
+# through a channel this Python-level socket gate structurally cannot see
+# (a separate OS process — see PAID_SERVICES_WITHOUT_HOST_GATE below and the
+# "Граница защиты" section of CHANGELOG.md for why (a) is impossible there).
+PAID_SERVICE_HOSTS: "dict[str, frozenset[str]]" = {
+    "dataforseo": frozenset({"api.dataforseo.com"}),
+    "spyfu": frozenset({"api.spyfu.com"}),
+    "yandex_direct": frozenset({"api.direct.yandex.com", "api-sandbox.direct.yandex.com"}),
+    "google_ads": frozenset({"googleads.googleapis.com"}),
+    "google_nlp": frozenset({"language.googleapis.com"}),
+    "keyso": frozenset({"api.keys.so"}),
+    "serpstat": frozenset({"api.serpstat.com"}),
+    "answerthepublic": frozenset({"api.answerthepublic.com"}),
+    "xmlriver": frozenset({"xmlriver.com"}),
+}
+
+# Paid services this repo bills/tracks (scripts/usage-ledger.py:PAID_API_SERVICES
+# derives from this + PAID_SERVICE_HOSTS) but whose calls this Python-level
+# socket gate cannot see, by construction — not an oversight, a documented
+# known exception (path (b), T-092):
+#   neuronwriter — no Python API client exists in scripts/*.py at all; usage
+#     is imported from a manually-maintained seo/neuronwriter-limits.yaml
+#     (see usage-ledger.py:imported_neuronwriter_limits), not a live call
+#     this repo's process makes.
+#   writerzen    — scripts/writerzen-browser-collect.py drives a *separate*
+#     Node.js subprocess (writerzen-browser-runner.mjs, Playwright) that
+#     makes its own outbound HTTPS connections in ITS OWN process; this
+#     module's socket.getaddrinfo/socket.connect patch only affects the
+#     Python process it is imported into, so it cannot gate a child
+#     process's network stack. Rewriting WriterZen collection as a direct
+#     HTTP client is out of scope here (no documented public API — this is
+#     why it is scraped via a logged-in browser session in the first
+#     place); flat subscription billing (like Keys.so), not per-call
+#     $-metering, so a per-call write-ahead ledger entry would not mean
+#     anything additional here either.
+PAID_SERVICES_WITHOUT_HOST_GATE = frozenset({"neuronwriter", "writerzen"})
+
 # Hosts that MUST NOT be contacted by this codebase's own outbound calls
 # without an active armed_spend() naming that host. Keep in sync with
 # tests/test_t089_closed_world_hosts.py (FREE_HOSTS there covers every other
-# host any script in this repo actually references).
-PAID_HOSTS = frozenset({
-    "api.dataforseo.com",
-    "api.spyfu.com",
-    "api.direct.yandex.com",
-    "api-sandbox.direct.yandex.com",
-    "googleads.googleapis.com",
-    "language.googleapis.com",
-    "api.keys.so",
-})
+# host any script in this repo actually references). Derived from
+# PAID_SERVICE_HOSTS above — do not hand-maintain a second copy.
+PAID_HOSTS = frozenset().union(*PAID_SERVICE_HOSTS.values())
 
 _ARMED_HOSTS: "contextvars.ContextVar[frozenset[str]]" = contextvars.ContextVar(
     "seo_cycle_armed_hosts", default=frozenset()
