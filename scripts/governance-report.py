@@ -7,7 +7,7 @@ Phase 0 before expensive API calls, browser collection, publishing, or schedules
 
 from __future__ import annotations
 
-from seo_cycle_core.config import config_section, load_config
+from seo_cycle_core.config import load_config, require_section
 
 import argparse
 import json
@@ -15,12 +15,6 @@ import os
 import pathlib
 import sys
 from typing import Any
-
-try:
-    import yaml  # noqa: F401 - presence check for the ImportError branch below
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
 
 
 CONFIG_SEARCH_PATHS = [
@@ -256,7 +250,14 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
         # default, which only fires when the key is ABSENT) — this is the
         # exact class that crashed `render_markdown()` two calls later with
         # `'NoneType' object has no attribute 'get'`.
-        "project": config_section(cfg, "project"),
+        #
+        # T-090 round 2 (independent gate 2026-09-07, F-7b): `config_section`
+        # only warned and kept going, so the crash became a green
+        # "Project: ? (?)" report instead — the report's own explicit call-
+        # out. Project identity feeds this report's header directly and the
+        # whole report is meaningless without it, so this is a
+        # `require_section` case, not a `config_section` one.
+        "project": require_section(cfg, "project", cfg_path),
         "locale": cfg.get("locale", {}),
         "engines": cfg.get("engines", []),
         "region_profile": cfg.get("region_profile"),

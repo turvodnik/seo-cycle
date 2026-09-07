@@ -135,9 +135,120 @@ class ParseYamlTextTest(unittest.TestCase):
             parse_yaml_text("a: [unclosed\n")
 
 
-class LoadConfigAliasTest(unittest.TestCase):
-    def test_load_config_is_load_yaml(self) -> None:
-        self.assertIs(load_config, load_yaml)
+class LoadConfigVsLoadYamlSplitTest(unittest.TestCase):
+    """T-090 round 2 (independent gate 2026-09-07, F-7b): `load_config`
+    used to be a bare alias for `load_yaml` — an existing-but-empty file
+    (0 bytes, comment-only, a bare `---\\nnull\\n` document, `{}`) parsed
+    to `{}` exactly like a MISSING file for every caller, including the
+    ~60 command entrypoints that only call `load_config`/local wrappers
+    around it and never separately call `require_config`. This is the
+    read-function-level fix: `load_config` now draws the "file exists but
+    is semantically empty" line itself; `load_yaml` stays lenient for the
+    legitimate optional/multi-project readers that still want it."""
+
+    def setUp(self):
+        self.root = tmp_dir()
+        self.addCleanup(lambda: shutil.rmtree(self.root, ignore_errors=True))
+
+    def test_no_longer_the_same_object(self) -> None:
+        self.assertIsNot(load_config, load_yaml)
+
+    def test_missing_file_both_return_empty_dict(self) -> None:
+        p = self.root / "nope.yaml"
+        self.assertEqual(load_yaml(p), {})
+        self.assertEqual(load_config(p), {})
+
+    def test_empty_file_load_yaml_lenient_load_config_exits_2(self) -> None:
+        p = self.root / "seo-cycle.yaml"
+        p.write_text("", encoding="utf-8")
+        self.assertEqual(load_yaml(p), {})
+        with self.assertRaises(SystemExit) as ctx:
+            load_config(p)
+        self.assertEqual(ctx.exception.code, 2)
+
+    def test_comment_only_file_load_config_exits_2(self) -> None:
+        p = self.root / "seo-cycle.yaml"
+        p.write_text("# just a comment\n# another one\n", encoding="utf-8")
+        self.assertEqual(load_yaml(p), {})
+        with self.assertRaises(SystemExit):
+            load_config(p)
+
+    def test_bare_null_document_load_config_exits_2(self) -> None:
+        p = self.root / "seo-cycle.yaml"
+        p.write_text("---\nnull\n", encoding="utf-8")
+        self.assertEqual(load_yaml(p), {})
+        with self.assertRaises(SystemExit):
+            load_config(p)
+
+    def test_empty_map_document_load_config_exits_2(self) -> None:
+        # `{}` parses to an empty (falsy) dict, not `None` — same "nothing
+        # to work with" case as the other three forms above.
+        p = self.root / "seo-cycle.yaml"
+        p.write_text("{}\n", encoding="utf-8")
+        self.assertEqual(load_yaml(p), {})
+        with self.assertRaises(SystemExit):
+            load_config(p)
+
+    def test_healthy_file_both_return_same_dict(self) -> None:
+        p = self.root / "seo-cycle.yaml"
+        p.write_text("project:\n  name: acme\n  domain: acme.ru\n", encoding="utf-8")
+        expected = {"project": {"name": "acme", "domain": "acme.ru"}}
+        self.assertEqual(load_yaml(p), expected)
+        self.assertEqual(load_config(p), expected)
+
+    def test_project_null_is_not_load_configs_problem(self) -> None:
+        # `load_config` only closes the "file itself is empty" gap — a
+        # non-empty file with a null SECTION (`project: null`) is a
+        # different, per-section problem that `require_section` closes
+        # (see RequireSectionTest above and the per-command integration
+        # tests in test_t090_command_integration.py).
+        p = self.root / "seo-cycle.yaml"
+        p.write_text("project: null\n", encoding="utf-8")
+        self.assertEqual(load_config(p), {"project": None})
+
+
+class TestingGuardTogglesTest(unittest.TestCase):
+    """T-090 round 2 (independent gate 2026-09-07, 🟡4): the old
+    `config._GUARD_ENABLED = False` one-liner is gone — the only way to
+    disable the runtime YAML-bypass guard is `_testing_disable_guard()`/
+    `_testing_enable_guard()`, and even THOSE refuse to run unless the
+    caller is a file under `tests/` (checked by walking the call stack,
+    same technique the guard itself already used)."""
+
+    def setUp(self) -> None:
+        from seo_cycle_core import config as _config
+        self._config = _config
+        # Always leave the guard enabled for every other test in the
+        # process, regardless of how this test ends. Wrapped in a lambda
+        # DEFINED IN THIS FILE (not passed bare) so the stack-walk inside
+        # `_testing_enable_guard()` sees a caller frame under tests/, not
+        # unittest's own cleanup-runner frame.
+        self.addCleanup(lambda: self._config._testing_enable_guard())
+
+    def test_callable_from_this_test_file(self) -> None:
+        # This call site IS under tests/ — must succeed silently.
+        self._config._testing_disable_guard()
+        self.assertFalse(self._config._guard_state["enabled"])
+        self._config._testing_enable_guard()
+        self.assertTrue(self._config._guard_state["enabled"])
+
+    def test_rejected_from_a_non_tests_caller(self) -> None:
+        # Simulate a `scripts/*.py` file calling the setter by invoking it
+        # through a helper whose __code__.co_filename points outside
+        # tests/ — reuses the exact stack-walk the real guard performs.
+        fake_caller_path = str(SCRIPTS / "zz-not-a-test.py")
+        src = (
+            "def call_it(fn):\n"
+            "    fn()\n"
+        )
+        namespace: dict = {}
+        code = compile(src, fake_caller_path, "exec")
+        exec(code, namespace)  # noqa: S102 - controlled, in-memory only
+        with self.assertRaises(RuntimeError):
+            namespace["call_it"](self._config._testing_disable_guard)
+        # Guard must still be enabled — the rejected call must not have
+        # had any side effect.
+        self.assertTrue(self._config._guard_state["enabled"])
 
 
 if __name__ == "__main__":

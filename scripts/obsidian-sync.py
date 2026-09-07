@@ -36,12 +36,6 @@ from datetime import date
 
 from seo_cycle_core.config import config_section
 
-try:
-    import yaml  # noqa: F401 - presence check for the ImportError branch below
-except ImportError:
-    print("ERROR: PyYAML не установлен. pip3 install pyyaml", file=sys.stderr)
-    sys.exit(2)
-
 
 def safe_filename(s: str) -> str:
     """Превращает строку в безопасное имя файла Obsidian."""
@@ -574,7 +568,7 @@ def sync(project_root: pathlib.Path, vault_root: pathlib.Path, cfg: dict, args):
 tags: [vault-readme]
 ---
 
-# {cfg.get('project',{}).get('name','Project')} — Obsidian Vault
+# {(cfg.get('project') if isinstance(cfg.get('project'), dict) else {}).get('name','Project')} — Obsidian Vault
 
 Зеркало контента проекта в формате Obsidian.
 
@@ -660,7 +654,7 @@ def main():
         vault_root = pathlib.Path(os.path.expanduser(args.vault))
     elif obs_cfg.get("central_vault"):
         central = pathlib.Path(os.path.expanduser(obs_cfg["central_vault"]))
-        subfolder = obs_cfg.get("project_subfolder") or cfg.get("project", {}).get("brand_name_technical") or "project"
+        subfolder = obs_cfg.get("project_subfolder") or (cfg.get("project") if isinstance(cfg.get("project"), dict) else {}).get("brand_name_technical") or "project"
         vault_root = central / subfolder
         if not central.exists():
             print(f"⚠ central_vault не существует: {central}", file=sys.stderr)

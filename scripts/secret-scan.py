@@ -185,9 +185,8 @@ def load_ledger(path: pathlib.Path) -> list[dict]:
     fingerprint пустой строки, срок пересмотра) — в reconcile(), она же
     используется тестами напрямую на списках без файла.
     """
-    try:
-        import yaml  # noqa: F401 - presence check only, parsing goes through core
-    except ImportError:
+    from seo_cycle_core.config import yaml_available
+    if not yaml_available():
         print("ERROR: для --ledger нужен PyYAML. `pip3 install pyyaml`", file=sys.stderr)
         raise SystemExit(2) from None
     if not path.exists():

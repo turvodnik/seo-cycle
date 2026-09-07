@@ -28,12 +28,6 @@ Exit: 0 — чисто; 1 — есть ошибки; 2 — ошибка вызо
 from __future__ import annotations
 import argparse, pathlib, re, sys
 
-try:
-    import yaml  # noqa: F401 - presence check for the ImportError branch below
-except ImportError:
-    print("ERROR: PyYAML не установлен. pip3 install pyyaml", file=sys.stderr)
-    sys.exit(2)
-
 
 META_KEYS = {"meta", "_meta", "schema", "version"}
 CATEGORY_KEYS = {"materials", "brands", "constructions", "locations", "services",

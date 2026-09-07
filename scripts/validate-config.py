@@ -28,12 +28,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seo_cycle_core.config import config_section, load_yaml_any, numeric  # noqa: E402
 from seo_cycle_core.engines import engine_names  # noqa: E402
 
-try:
-    import yaml  # noqa: F401 - presence check for the ImportError branch below
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
-
 
 CONFIG_SEARCH_PATHS = [
     "seo-cycle.yaml",

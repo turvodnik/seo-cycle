@@ -6,11 +6,32 @@ below wraps every Loader class's `__init__` so that any code outside this
 file that tries to build a Loader (directly, or transitively via
 `yaml.safe_load`/`yaml.load`/etc., which all just construct one of these
 classes internally) blows up with a clear `RuntimeError` instead of
-quietly parsing YAML the old, unguarded way. This is what makes a "33rd
-file" structurally impossible rather than merely against convention: a
-future `scripts/whatever.py` that writes `yaml.safe_load(...)` does not
-"forget a best practice" — it crashes the first time it runs, in dev, with
-a message that says exactly what to call instead.
+quietly parsing YAML the old, unguarded way.
+
+T-090 round 2 (independent gate 2026-09-07, 🟡4): the previous version of
+this docstring called a bypass "structurally impossible". That overstated
+what a per-process runtime guard can do — it only protects a Python
+process that has ALREADY imported `seo_cycle_core.config` (true today for
+every one of the ~86 `scripts/*.py` files that read a config, since they
+all import this module for `find_config`/`project_root_for`/etc. before
+they'd have any reason to touch YAML at all). A brand-new `scripts/foo.py`
+that reads YAML WITHOUT ever importing this module runs in a process where
+the guard was never installed, and nothing here can reach into that
+process from the outside.
+
+What actually closes the class is the PAIR: this runtime guard (catches
+any file that DOES import `seo_cycle_core` — directly or transitively —
+and then tries to build a Loader some other way) plus the static AST
+sweep in `tests/test_no_yaml_bypass.py`, which runs in CI on every PR and
+fails the build if ANY `scripts/*.py` file other than this one so much as
+imports `yaml` (not just uses a specific loader function — the bare
+import itself is now the violation). A future `scripts/whatever.py` that
+writes `import yaml` either gets caught by that CI test before merge, or —
+if it also imports `seo_cycle_core` and calls `yaml.safe_load` at runtime
+— crashes immediately with a message naming the right call. Only a file
+that (a) skips `seo_cycle_core` entirely AND (b) somehow lands on `main`
+without the AST test running (a broken/bypassed CI) gets through — that
+residual risk is real and is a CI-configuration risk, not a Python one.
 """
 
 from __future__ import annotations
@@ -34,11 +55,52 @@ CONFIG_SEARCH_PATHS = (
 
 
 _GUARD_INSTALLED = False
-_GUARD_ENABLED = True  # tests flip this off to construct Loaders directly
+# T-090 round 2 (independent gate 2026-09-07, 🟡4): this used to be a plain
+# module-level `_GUARD_ENABLED = True` — any code that could do
+# `from seo_cycle_core import config; config._GUARD_ENABLED = False` turned
+# the guard off for the rest of the process with one line, and the AST
+# bypass test didn't look for that assignment at all. A closure-local flag
+# plus a narrow, stack-checked setter closes both gaps: the flag itself
+# isn't a module attribute anyone can poke, and the only way to flip it is
+# `_testing_disable_guard()`/`_testing_enable_guard()`, which refuse to run
+# unless the CALLER is a file under `tests/` (same stack-walk technique the
+# guard itself uses below).
+_guard_state = {"enabled": True}
 
 
 def _this_file() -> str:
     return pathlib.Path(__file__).resolve().as_posix()
+
+
+def _tests_dir() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parents[2] / "tests"
+
+
+def _require_test_caller(fn_name: str) -> None:
+    frame = sys._getframe(2)  # caller of the _testing_* wrapper
+    caller = pathlib.Path(frame.f_code.co_filename).resolve()
+    tests_dir = _tests_dir()
+    if tests_dir != caller and tests_dir not in caller.parents:
+        raise RuntimeError(
+            f"seo-cycle: {fn_name}() может вызываться только из tests/ "
+            f"(вызов из {caller})"
+        )
+
+
+def _testing_disable_guard() -> None:
+    """Turn the runtime YAML-bypass guard off — ONLY callable from a file
+    under `tests/`, so a test that needs to construct a Loader directly
+    (to test config.py's own internals) can, without handing every
+    `scripts/*.py` file a one-line way to disable the guard on itself."""
+    _require_test_caller("_testing_disable_guard")
+    _guard_state["enabled"] = False
+
+
+def _testing_enable_guard() -> None:
+    """Restore the runtime YAML-bypass guard — same access rule as
+    `_testing_disable_guard()`."""
+    _require_test_caller("_testing_enable_guard")
+    _guard_state["enabled"] = True
 
 
 def _install_yaml_bypass_guard() -> None:
@@ -87,7 +149,7 @@ def _install_yaml_bypass_guard() -> None:
 
         def make_wrapped(original_init):
             def wrapped_init(self, *args, **kwargs):
-                if _GUARD_ENABLED:
+                if _guard_state["enabled"]:
                     frame = sys._getframe(1)
                     depth = 0
                     while frame is not None and depth < 50:
@@ -164,39 +226,35 @@ def rel_display(project_root: pathlib.Path, path: pathlib.Path) -> str:
         return str(path)
 
 
-def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    """Load a YAML file as a dict, or refuse to hand back garbage.
+def _read_yaml_mapping(path: pathlib.Path) -> tuple[bool, dict[str, Any] | None]:
+    """Shared body of `load_yaml`/`load_config`: read+decode+parse a YAML
+    file that is expected to be a mapping (dict) at the top level.
 
-    T-067 (F-35/F-26/F-36): every one of the ~100 call sites across
-    `scripts/` treats the return value as "a dict, safe to `.get()`" — that
-    was true only for a well-formed file. A tab in the indent, a top-level
-    value that is a string/list/number instead of a mapping, or a file that
-    isn't valid UTF-8 all used to reach here and either blow up with a raw
-    `yaml.scanner.ScannerError` traceback two frames below the caller's own
-    code, or silently hand back a non-dict that crashed on the NEXT
-    `.get()` call with an unrelated-looking `AttributeError` (exactly the
-    F-26/F-36 class this ticket also closes). Every caller of this
-    function is a CLI entrypoint's `main()` — none of them has a reason to
-    "keep going" on an unparseable config, and asking every one of the ~100
-    call sites to add its own try/except would reopen the class at any
-    site someone forgets (the same failure mode T-052/T-063 called out for
-    per-callsite fixes) — so the fix lives here, once: print a short,
-    coordinate-bearing message to stderr and exit(2) instead of returning.
-    This is deliberately NOT "raise and let the caller decide" — there is
-    no caller in this tree for which continuing past an unparseable config
-    is correct.
+    Returns `(existed, data)`:
+    - `existed=False` means the path does not exist (and isn't a broken
+      symlink either, per F-42 — see `load_yaml`'s docstring); callers
+      treat that as "no config yet", not an error.
+    - `existed=True, data=None` means the file IS there but parsed to
+      nothing — empty, comment-only, or a bare `---\\nnull\\n` document
+      (T-090, F-7b). Whether that is an error is the CALLER's call:
+      `load_yaml` says no (some readers legitimately treat "empty file" as
+      "empty config"), `load_config` says yes (a command that treats its
+      config as authoritative cannot tell "no project yet" from "project
+      config that got truncated to zero bytes" any other way).
+    - `existed=True, data={...}` is the normal case.
 
-    A MISSING file is not an error here (unchanged behavior) — some
-    callers legitimately run with no config yet (setup/onboarding wizards,
-    multi-project scans). That case still returns `{}`.
+    Read errors, encoding errors, YAML syntax errors, and "top level isn't
+    a mapping" are NOT ambiguous for either caller — this function exits
+    the process on all three exactly as `load_yaml` always has.
     """
     if yaml is None:
-        return {}
+        return False, None
     # `.exists()` follows symlinks and reports "missing" for a broken link
     # (F-42) — `.is_symlink()` catches that case so it isn't confused with
     # "no config yet".
-    if not path.exists() and not path.is_symlink():
-        return {}
+    existed = path.exists() or path.is_symlink()
+    if not existed:
+        return False, None
     try:
         raw = path.read_bytes()
     except OSError as exc:
@@ -233,14 +291,89 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
         print(f"ERROR: {path}: ошибка разбора YAML: {exc}", file=sys.stderr)
         sys.exit(2)
     if data is None:
-        return {}
+        return True, None
     if not isinstance(data, dict):
         print(
             f"ERROR: {path}: верхний уровень конфига должен быть словарём (получено {type(data).__name__})",
             file=sys.stderr,
         )
         sys.exit(2)
-    return data
+    return True, data
+
+
+def load_yaml(path: pathlib.Path) -> dict[str, Any]:
+    """Load a YAML file as a dict, or refuse to hand back garbage.
+
+    T-067 (F-35/F-26/F-36): every one of the ~100 call sites across
+    `scripts/` treats the return value as "a dict, safe to `.get()`" — that
+    was true only for a well-formed file. A tab in the indent, a top-level
+    value that is a string/list/number instead of a mapping, or a file that
+    isn't valid UTF-8 all used to reach here and either blow up with a raw
+    `yaml.scanner.ScannerError` traceback two frames below the caller's own
+    code, or silently hand back a non-dict that crashed on the NEXT
+    `.get()` call with an unrelated-looking `AttributeError` (exactly the
+    F-26/F-36 class this ticket also closes). Every caller of this
+    function is a CLI entrypoint's `main()` — none of them has a reason to
+    "keep going" on an unparseable config, and asking every one of the ~100
+    call sites to add its own try/except would reopen the class at any
+    site someone forgets (the same failure mode T-052/T-063 called out for
+    per-callsite fixes) — so the fix lives here, once: print a short,
+    coordinate-bearing message to stderr and exit(2) instead of returning.
+    This is deliberately NOT "raise and let the caller decide" — there is
+    no caller in this tree for which continuing past an unparseable config
+    is correct.
+
+    A MISSING file is not an error here (unchanged behavior) — some
+    callers legitimately run with no config yet (setup/onboarding wizards,
+    multi-project scans). That case still returns `{}`.
+
+    T-090 round 2 (F-7b): this function stays deliberately LENIENT about
+    an EXISTING-but-empty file too (still returns `{}`, not an error) —
+    it is the shared helper for callers that read supplementary/optional
+    YAML (policy overlays, multi-project scan targets) where "empty file"
+    legitimately means "no overrides", same as "file absent". A command
+    whose OWN main project config being empty is meaningless must call
+    `load_config()` instead, which draws that exact line.
+    """
+    _existed, data = _read_yaml_mapping(path)
+    return data if data is not None else {}
+
+
+def load_config(path: pathlib.Path) -> dict[str, Any]:
+    """Like `load_yaml()`, but for the ONE file a command treats as *the*
+    project config it cannot meaningfully run without.
+
+    T-090 round 2 (F-7b, independent gate 2026-09-07): before this split,
+    `load_config` was a bare alias for `load_yaml` — so a config file that
+    EXISTS but is empty (0 bytes, comment-only, a bare `---\\nnull\\n`
+    document, or `{}`) parsed to `{}` exactly like a MISSING file, and
+    every caller that only checked "did I get a dict back" printed a green
+    report over nothing (`Project: ? (?)`, generated timestamps, the
+    works) instead of refusing. `require_config()` already drew this line
+    correctly for its own 13 callers; this function draws the SAME line at
+    the read function itself, so every caller that already spells
+    `load_config(cfg_path)` for its main config — not just the ones that
+    additionally call `require_config`/`require_section` — gets it for
+    free, without an code review having to catch each site by hand.
+
+    A MISSING file is still not an error here (a caller may want to fall
+    through to its own "no project yet" branch, or call `require_config`
+    itself for a exit(2)-with-a-specific-message version) — this only
+    closes the "file is there but semantically empty" gap `load_yaml`
+    deliberately leaves open for OTHER callers (see `load_yaml`'s own
+    docstring) but that is wrong for a file this call site is treating as
+    authoritative.
+    """
+    existed, data = _read_yaml_mapping(path)
+    if existed and not data:
+        # `not data` covers both `data is None` (empty file/comment-only/
+        # bare `---\nnull\n`) AND `data == {}` (an explicit empty mapping,
+        # e.g. a file containing just `{}`) — both are "nothing to work
+        # with" the same way a missing file would be, for a caller that
+        # treats this file as its one authoritative project config.
+        print(f"ERROR: {path}: конфиг пуст — нечего использовать", file=sys.stderr)
+        sys.exit(2)
+    return data if data is not None else {}
 
 
 def load_yaml_any(path: pathlib.Path) -> Any:
@@ -302,14 +435,6 @@ def parse_yaml_text(text: str, *, source: str | pathlib.Path = "<string>") -> An
         sys.exit(2)
 
 
-# T-090: `load_config` is the intention-revealing name for "parse the
-# project's seo-cycle.yaml, strictly". `load_yaml` is kept as an alias
-# (many of the ~100 existing call sites already spell it that way) rather
-# than renamed everywhere — one behavior, two names, during the
-# transition; new call sites should prefer `load_config`.
-load_config = load_yaml
-
-
 def config_section(cfg: dict[str, Any], key: str) -> dict[str, Any]:
     """The `X.get("section", {}) if isinstance(X.get("section"), dict) else {}`
     idiom already used at `db-sync.py:180` and `config.py`'s own
@@ -357,8 +482,14 @@ def require_config(cfg_path: pathlib.Path | None, *, where: pathlib.Path | None 
         location = f" in {where}" if where else ""
         print(f"ERROR: seo-cycle.yaml not found{location} — nothing to do", file=sys.stderr)
         sys.exit(2)
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
     if not cfg:
+        # T-090 round 2: `load_config` itself now exits(2) on an existing-
+        # but-empty file, so this branch is a defensive backstop (an
+        # existing `{}` document, `project: {}`-shaped edge cases) rather
+        # than the primary defense it used to be. Kept for clarity and to
+        # cover any future `load_config` caller that relaxes that rule.
+        #
         # T-067 round 3 (second independent gate, §6): an existing-but-empty
         # file (empty, comment-only, a bare `---\nnull\n` document) used to
         # pass this function's "exists" check and come back as `{}` — same
@@ -394,6 +525,43 @@ def require_section(cfg: dict[str, Any], key: str, cfg_path: pathlib.Path | str)
         )
         sys.exit(2)
     return value
+
+
+def yaml_available() -> bool:
+    """Is PyYAML importable at all? A handful of callers check this before
+    deciding whether to attempt a YAML-dependent code path (e.g. skip an
+    optional YAML sidecar file gracefully instead of calling into
+    `load_yaml_any`/`load_config`, which already degrade to `{}`/`None` on
+    their own when PyYAML is missing, but the CALLER wants to know that
+    BEFORE doing other work).
+
+    T-090 round 2 (independent gate 2026-09-07, 🟡4): exists so those
+    callers don't need their own `try: import yaml / except ImportError:
+    yaml = None` — that `import yaml` is exactly what the AST bypass test
+    now bans outside this module, regardless of what the import is used
+    for.
+    """
+    return yaml is not None
+
+
+def dump_yaml(data: Any) -> str:
+    """Serialize `data` back to a YAML string — `yaml.safe_dump(data,
+    allow_unicode=True, sort_keys=False)`, the one call shape every writer
+    across `scripts/` already used.
+
+    T-090 round 2 (independent gate 2026-09-07, 🟡4): the AST bypass test
+    now bans a bare `import yaml` anywhere outside this module, full stop
+    — not just Loader construction — because a per-attribute allowlist is
+    exactly what let variant (а) of the bypass through last round. That
+    rule doesn't distinguish "imported yaml to READ config" from "imported
+    yaml to WRITE a wizard's answers back out"; ~10 files needed the
+    latter (`project-intake-wizard.py`, `setup-blueprint.py`,
+    `launch-plan.py`'s dry-run preview, etc.), so writing needs a home in
+    this module too, same as reading does.
+    """
+    if yaml is None:  # pragma: no cover - same guard as the loaders above
+        raise RuntimeError("PyYAML не установлен — dump_yaml недоступен")
+    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
 
 def write_text(path: pathlib.Path, text: str) -> None:

@@ -22,10 +22,7 @@ check-stop-words.py — детектор стоп-слов с поддержко
 from __future__ import annotations
 import argparse, pathlib, re, sys
 
-try:
-    import yaml
-except ImportError:
-    yaml = None
+from seo_cycle_core.config import yaml_available
 
 
 # Паттерны учитывают морфологию (русские прилагательные имеют падежи/род/число).
@@ -103,7 +100,7 @@ IGNORE_PATTERNS = [
 
 def load_extra(config_path: pathlib.Path) -> tuple[list[str], list[str]]:
     """Returns (extra_simple_words, extra_regex_patterns)."""
-    if not yaml or not config_path.exists():
+    if not yaml_available() or not config_path.exists():
         return [], []
     try:
         # T-090 (F-8): routed through the shared core loader.
@@ -172,7 +169,7 @@ def main():
 
     # Определяем язык
     lang = args.lang
-    if lang == "auto" and cfg_path.exists() and yaml:
+    if lang == "auto" and cfg_path.exists() and yaml_available():
         try:
             from seo_cycle_core.config import load_yaml_any
             cfg = load_yaml_any(cfg_path) or {}

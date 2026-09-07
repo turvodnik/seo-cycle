@@ -25,11 +25,6 @@ Idempotent: каждый запуск пересоздаёт таблицы из
 from __future__ import annotations
 import argparse, csv, glob, json, pathlib, re, sqlite3, sys
 
-try:
-    import yaml
-except ImportError:
-    yaml = None
-
 from seo_cycle_core.config import load_yaml_any, require_config, require_section
 
 CONFIG_PATHS = ["seo-cycle.yaml", ".seo-cycle.yaml", "seo/seo-cycle.yaml", ".claude/seo-cycle.yaml"]

@@ -20,12 +20,7 @@ import re
 from collections import Counter
 from typing import Any
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    yaml = None
-
-from seo_cycle_core.config import coerce_int, nested_get, package_project_root, write_text
+from seo_cycle_core.config import coerce_int, nested_get, package_project_root, write_text, yaml_available
 from research_package_repair_core import repeated_phrase_clean
 
 
@@ -188,7 +183,7 @@ def read_json(path: pathlib.Path) -> dict[str, Any]:
 
 
 def read_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists() or yaml is None:
+    if not path.exists() or not yaml_available():
         return {}
     # T-090 (F-8): routed through the shared core loader (only allowed
     # Loader entry point). `load_yaml_any` raises `SystemExit` on a parse

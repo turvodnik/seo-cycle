@@ -17,13 +17,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import coerce_int, config_section, require_config, load_config
-
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
+from seo_cycle_core.config import dump_yaml, coerce_int, config_section, require_config, load_config
 
 
 CONFIG_SEARCH_PATHS = [
@@ -93,10 +87,6 @@ def load_json(path: pathlib.Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-
-
-def dump_yaml(data: dict[str, Any]) -> str:
-    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
 
 def write_text(path: pathlib.Path, text: str) -> None:

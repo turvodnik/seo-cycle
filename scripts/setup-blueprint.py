@@ -9,7 +9,7 @@ and writes only review artifacts, not project config changes.
 
 from __future__ import annotations
 
-from seo_cycle_core.config import load_config
+from seo_cycle_core.config import dump_yaml, load_config, require_section
 
 import argparse
 import csv
@@ -20,12 +20,6 @@ import pathlib
 import subprocess
 import sys
 from typing import Any
-
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
 
 
 CONFIG_SEARCH_PATHS = [
@@ -80,10 +74,6 @@ def load_json(path: pathlib.Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-
-
-def dump_yaml(data: dict[str, Any]) -> str:
-    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
 
 def write_text(path: pathlib.Path, text: str) -> None:
@@ -309,7 +299,9 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
         "config": str(cfg_path),
         "project_root": str(project_root),
-        "project": cfg.get("project", {}),
+        # T-090 round 2 (F-7 class): project name feeds the report
+        # header directly — must not silently render "Project: ? (?)".
+        "project": require_section(cfg, "project", cfg_path),
         "market_axes": {
             "country": market.get("country"),
             "region_profile": market.get("region_profile"),

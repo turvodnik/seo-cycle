@@ -8,7 +8,7 @@ surface and writes a questionnaire for newly available features.
 
 from __future__ import annotations
 
-from seo_cycle_core.config import load_config
+from seo_cycle_core.config import load_config, require_section
 
 import argparse
 import csv
@@ -18,12 +18,6 @@ import json
 import pathlib
 import sys
 from typing import Any
-
-try:
-    import yaml  # noqa: F401 - presence check for the ImportError branch below
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
 
 
 CONFIG_SEARCH_PATHS = [
@@ -446,7 +440,9 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
         "core_version": current_version(),
         "config": str(cfg_path),
         "project_root": str(project_root),
-        "project": cfg.get("project", {}),
+        # T-090 round 2 (F-7 class): project name feeds the report
+        # header directly — must not silently render "Project: ? (?)".
+        "project": require_section(cfg, "project", cfg_path),
         "runtime": runtime,
         "summary": {
             "features": len(rows),

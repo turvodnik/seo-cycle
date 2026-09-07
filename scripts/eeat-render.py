@@ -25,12 +25,6 @@ eeat-render.py — превращает fact_check_log из frontmatter публ
 from __future__ import annotations
 import argparse, html, pathlib, sys
 
-try:
-    import yaml  # noqa: F401 - presence check for the ImportError branch below
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
-
 SHOW_VERDICTS = {"достоверно", "частично", "verified", "partial"}
 
 

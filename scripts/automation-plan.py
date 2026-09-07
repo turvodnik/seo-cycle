@@ -8,7 +8,7 @@ all local policy gates allow schedules and `--install-cron` is explicitly passed
 
 from __future__ import annotations
 
-from seo_cycle_core.config import load_config
+from seo_cycle_core.config import load_config, require_section
 
 import argparse
 import json
@@ -19,12 +19,6 @@ import sys
 from dataclasses import dataclass
 from typing import Any
 from xml.sax.saxutils import escape
-
-try:
-    import yaml  # noqa: F401 - presence check for the ImportError branch below
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
 
 
 CONFIG_SEARCH_PATHS = [
@@ -384,6 +378,10 @@ def main() -> int:
         return 2
 
     cfg = load_yaml(cfg_path)
+    # T-090 round 2 (F-7 class): "project" feeds the report header
+    # directly — validate now, before building tasks/policy, instead of
+    # silently rendering "Project: ? (?)" over an unconfigured project.
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     policy_path = automation_policy_path(cfg, project_root)
     policy = load_yaml(policy_path)

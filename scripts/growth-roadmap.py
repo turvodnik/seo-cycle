@@ -18,13 +18,7 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import config_section, numeric, load_config
-
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
+from seo_cycle_core.config import dump_yaml, numeric, load_config, require_section
 
 
 CONFIG_SEARCH_PATHS = [
@@ -115,10 +109,6 @@ def load_json(path: pathlib.Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-
-
-def dump_yaml(data: dict[str, Any]) -> str:
-    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
 
 def write_text(path: pathlib.Path, text: str) -> None:
@@ -564,7 +554,12 @@ def build_report(cfg_path: pathlib.Path, max_actions: int = DEFAULT_MAX_ACTIONS)
         "project_root": str(project_root),
         # T-090 (F-7): same class as governance-report.py — `project: null`
         # must not pass through as `None`.
-        "project": config_section(cfg, "project"),
+        #
+        # T-090 round 2 (independent gate 2026-09-07, F-7b): `config_section`
+        # only warned, so the crash became a green "Project: ? (?)" report —
+        # the report's own explicit call-out. This report's header and
+        # meaning both depend on project identity, so `require_section`.
+        "project": require_section(cfg, "project", cfg_path),
         "market": {
             "country": country(cfg, intake),
             "region_profile": cfg.get("region_profile"),

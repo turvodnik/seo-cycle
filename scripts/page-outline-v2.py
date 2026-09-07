@@ -17,12 +17,7 @@ import pathlib
 import re
 from typing import Any
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    yaml = None
-
-from seo_cycle_core.config import write_text
+from seo_cycle_core.config import write_text, yaml_available
 
 
 def utc_now() -> str:
@@ -52,7 +47,7 @@ def read_json(path: pathlib.Path) -> dict[str, Any]:
 
 
 def read_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists() or yaml is None:
+    if not path.exists() or not yaml_available():
         return {}
     # T-090 (F-8): routed through the shared core loader. It raises
     # `SystemExit` on a parse error rather than returning — caught here

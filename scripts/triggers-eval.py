@@ -30,12 +30,6 @@ from __future__ import annotations
 import argparse, json, pathlib, re, sys
 from datetime import date, datetime
 
-try:
-    import yaml  # noqa: F401 - presence check for the ImportError branch below
-except ImportError:
-    print("ERROR: PyYAML не установлен. pip3 install pyyaml", file=sys.stderr)
-    sys.exit(2)
-
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 from seo_cycle_core.config import numeric  # noqa: E402

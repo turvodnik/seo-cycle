@@ -14,13 +14,6 @@ from __future__ import annotations
 
 import argparse
 import pathlib
-import sys
-
-try:
-    import yaml  # noqa: F401 - presence check for the ImportError branch below
-except ImportError:  # pragma: no cover
-    print("ERROR: PyYAML не установлен. python3 -m pip install pyyaml", file=sys.stderr)
-    sys.exit(2)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 

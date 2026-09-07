@@ -10,7 +10,7 @@ unless `--allow-schedules` is explicitly passed.
 
 from __future__ import annotations
 
-from seo_cycle_core.config import load_config
+from seo_cycle_core.config import dump_yaml, load_config
 
 import argparse
 import copy
@@ -19,12 +19,6 @@ import json
 import pathlib
 import sys
 from typing import Any
-
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
 
 
 CONFIG_SEARCH_PATHS = [
@@ -163,10 +157,6 @@ def load_json(path: pathlib.Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-
-
-def dump_yaml(data: dict[str, Any]) -> str:
-    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
 
 def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
