@@ -34,6 +34,7 @@ from seo_cycle_core.ads import (
     ledger_record,
     require_enabled,
 )
+from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend, guarded_spend
 from seo_cycle_core.config import coerce_float, coerce_int, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 
@@ -104,6 +105,7 @@ def direct_request(host: str, service: str, payload: dict[str, Any]) -> dict[str
         return json.loads(resp.read().decode("utf-8"))
 
 
+@guarded_spend
 def apply_direct(operations: list[dict[str, Any]], sandbox: bool) -> list[dict[str, Any]]:
     """Create campaigns/groups/keywords in Yandex Direct following the plan order."""
     host = SANDBOX_HOST if sandbox else API_HOST
@@ -277,16 +279,23 @@ def main() -> int:
     # цикла — тогда обрыв в любой точке цикла уже не теряет запись.
     # R3-3: отказ записи (не bool True) останавливает выполнение ДО первой
     # сетевой операции, а не только предупреждает после факта.
-    if not ledger_record(project_root, platform, requests=len(operations),
-                         note=f"apply ticket {args.ticket}: {len(operations)} operations requested"):
-        print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
-              "а не платный apply вслепую", file=sys.stderr)
-        return 2
-
     sandbox = bool(nested_get(ads, "yandex_direct.sandbox", False))
     log.warning("APPLY start: %s operations to %s (sandbox=%s) ticket=%s",
                 len(operations), platform, sandbox, args.ticket)
-    results = apply_direct(operations, sandbox)
+    # T-089 (F-1): apply_direct() is @guarded_spend — it refuses to run
+    # unless armed_spend() has already run ledger_record() (write-ahead) and
+    # it returned True. A future caller that skips straight to apply_direct()
+    # gets SpendNotArmedError, not a silent unlogged spend.
+    try:
+        with armed_spend(lambda: ledger_record(
+            project_root, platform, requests=len(operations),
+            note=f"apply ticket {args.ticket}: {len(operations)} operations requested",
+        )):
+            results = apply_direct(operations, sandbox)
+    except SpendNotArmedError:
+        print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
+              "а не платный apply вслепую", file=sys.stderr)
+        return 2
     applied = sum(1 for row in results if row["status"] == "ok")
     failed = sum(1 for row in results if row["status"] == "failed")
     # R3-4: никакой второй «уточняющей» записи с реальным applied/failed —

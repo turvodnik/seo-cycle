@@ -26,6 +26,7 @@ from bs4 import BeautifulSoup
 from google.auth.transport.requests import Request as AuthRequest
 from google.oauth2 import service_account
 
+from seo_cycle_core.spend_guard import armed_spend, guarded_spend
 from seo_cycle_core.usage_ledger import finite_nonneg, save_usage as _shared_save_usage, usage_lock
 
 
@@ -336,6 +337,7 @@ def document_payload(text: str, language: str, api_version: str, include_encodin
     return payload
 
 
+@guarded_spend
 def call_feature(project_root: Path, feature: str, text: str, language: str, config: dict[str, str]) -> dict[str, Any]:
     api_version, endpoint = FEATURE_ENDPOINTS[feature]
     creds = credentials(project_root, config)
@@ -402,35 +404,49 @@ def analyze_source(
                 results.append({"feature": feature, "status": "planned", "units": units, "cache_file": str(path)})
                 continue
 
-            # F-13 (независимый гейт, круг 2): раньше исключение из
-            # call_feature() (сеть, HTTP-ошибка через raise_for_status())
-            # уходило из analyze_source() необработанным — запрос уже был
-            # отправлен Google (и мог быть биллингован), а add_usage()/
-            # save_usage() ниже просто не выполнялись. Теперь расход
-            # засчитывается по факту вызова на обеих ветках.
-            try:
-                response = call_feature(project_root, feature, clipped_text, language, config)
-            except Exception as exc:
-                # R2-2 (независимый гейт, круг 3): `requests.exceptions.
-                # RequestException` не покрывает всё, что может прилететь при
-                # чтении/парсинге тела уже отправленного запроса (тот же
-                # класс дефекта, что у остальных пяти клиентов) — инверсия на
-                # Exception вместо перечня конкретного исключения библиотеки.
+            # T-089 (F-1, круг QA-v2.2.0): круг 4 (R3-1) перевёл остальных
+            # пять платных клиентов на write-ahead — учёт расхода ДО
+            # отправки запроса, а не после — ровно потому что `except
+            # Exception` не ловит BaseException (Ctrl-C/SystemExit) и никакой
+            # except не ловит сигнал (SIGTERM/SIGKILL). Этот файл (круг 3,
+            # R2-2) остался на старой конструкции: учёт стоял ПОСЛЕ
+            # call_feature(), в обеих ветках — сигнал между отправкой запроса
+            # и записью терял расход полностью, и второго рубежа
+            # (аналога cost_unknown_calls) тоже не было.
+            #
+            # У этого клиента цена детерминирована ДО вызова (units_for()
+            # выше зависит только от длины текста, не от ответа Google) — в
+            # отличие от DataForSEO/SpyFu, здесь нет отдельного «неизвестно
+            # сколько потрачено» состояния: write-ahead запись, сделанная до
+            # call_feature(), уже финальна, уточнять её после ответа нечем.
+            #
+            # call_feature() декорирован @guarded_spend (seo_cycle_core.
+            # spend_guard, T-089) — он физически отказывается выполниться,
+            # если не пройден armed_spend() ниже: платный вызов мимо
+            # write-ahead-записи для ЛЮБОГО клиента этого модуля больше не
+            # тихая ошибка кода, а SpendNotArmedError.
+            def _write_ahead(feature: str = feature, units: int = units) -> bool:
+                # Значения по умолчанию связывают ТЕКУЩИЕ feature/units в
+                # момент определения (ruff B023: замыкание на переменную
+                # цикла иначе прочитало бы её значение на момент ВЫЗОВА —
+                # здесь _write_ahead() вызывается сразу же, той же итерацией,
+                # так что риска на практике нет, но связывание по умолчанию
+                # делает это верным структурно, а не по совпадению).
+                nonlocal usage
                 usage = add_usage(usage, feature, units)
                 save_usage(cache_dir, usage)
+                return True
+
+            try:
+                with armed_spend(_write_ahead):
+                    response = call_feature(project_root, feature, clipped_text, language, config)
+            except Exception as exc:
+                # Расход уже записан write-ahead-строкой выше — сигнал/
+                # исключение здесь теряет только кэш этого прогона, не факт
+                # оплаты (тот же инвариант, что у остальных пяти клиентов).
                 results.append({"feature": feature, "status": "api_error", "units": units,
                                 "reason": str(exc)[:300]})
                 continue
-
-            # R2-2 (независимый гейт, круг 3): раньше запись кэша (диск,
-            # может упасть по OSError — полный диск, каталог только на
-            # чтение) стояла ПЕРЕД учётом расхода — платный вызов уже
-            # состоялся, а сбой записи кэша терял расход из _usage.json
-            # молча. Порядок строк — тот же класс F-13, просто без
-            # исключения из транспортного слоя. Учёт теперь фиксируется
-            # ДО попытки записи кэша.
-            usage = add_usage(usage, feature, units)
-            save_usage(cache_dir, usage)
 
             record = {
                 "cached_at": dt.datetime.now(dt.timezone.utc).isoformat(),

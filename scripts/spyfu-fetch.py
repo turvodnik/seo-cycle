@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse, base64, hashlib, json, os, pathlib, sys, time, urllib.error, urllib.parse, urllib.request
 
 from seo_cycle_core.config import find_config, load_yaml, nested_get
+from seo_cycle_core.spend_guard import armed_spend, guarded_spend
 from seo_cycle_core.usage_ledger import (
     ApiCallError,
     UsageLedgerError,
@@ -138,6 +139,7 @@ def effective_budget(args) -> float:
                  f"только по --budget.")
 
 
+@guarded_spend
 def call(b64: str, path: str, params: dict) -> dict:
     """Любая ошибка после отправки запроса (HTTP, сеть, битый JSON) поднимает
     ApiCallError вместо голого traceback/sys.exit — run() решает, что писать
@@ -236,15 +238,21 @@ def run(b64, path, cpm, params, args, distill):
         # не знает cost/rows до ответа — поэтому write-ahead помечает вызов
         # как cost_unknown_calls, а после успешного ответа уточняет запись на
         # месте (никакой отдельной «уточняющей» записи, R3-4).
-        u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) + 1
-        save_usage(out_dir, u)
+        # T-089 (F-1): call() is @guarded_spend — it refuses to run unless
+        # armed_spend() below has already run this write-ahead closure and
+        # it returned True.
+        def _write_ahead() -> bool:
+            u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) + 1
+            save_usage(out_dir, u)
+            return True
 
         error_message: str | None = None
         rows = 0
         cost = 0.0
         resp: dict = {}
         try:
-            resp = call(b64, path, params)
+            with armed_spend(_write_ahead):
+                resp = call(b64, path, params)
         except ApiCallError as e:
             error_message = str(e)
             u["failed_calls"] = u.get("failed_calls", 0) + 1
