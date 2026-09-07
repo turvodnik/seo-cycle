@@ -696,7 +696,17 @@ ext[tool] = {
     "version": version,
     "commit": commit,
     "path": store_path,
-    "updated": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+    # Microsecond resolution (root-cause fix for a flaky CI test, 2026-09):
+    # second-resolution here made two write_lock_entry() calls issued
+    # within the same wall-clock second (routine on a fast CI runner —
+    # test_installer_contracts.py's setUp() pins a project and the test
+    # body re-pins it again moments later) produce a BYTE-IDENTICAL lock
+    # entry, because "updated" was the only field allowed to differ and it
+    # didn't. That is not just a test artifact: it means two genuinely
+    # distinct real re-pins that happen to land in the same second are
+    # indistinguishable in the lock file too. Microseconds make every call
+    # to this function produce a distinguishable timestamp in practice.
+    "updated": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f"),
 }
 lock_path.parent.mkdir(parents=True, exist_ok=True)
 lock_path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False))
