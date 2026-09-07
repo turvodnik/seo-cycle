@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse, hashlib, json, os, pathlib, sys, time, urllib.parse, urllib.request, urllib.error
 from collections import defaultdict
 
+from seo_cycle_core.spend_guard import armed_spend
 from seo_cycle_core.usage_ledger import bump_counter, nonneg_finite_arg
 
 # R2-4 (независимый гейт, круг 3): --ttl голым type=float принимал nan/inf —
@@ -69,14 +70,24 @@ def fetch_top(token, keyword, base, ttl):
     qs = urllib.parse.urlencode({"keyword": keyword, "base": base})
     req = urllib.request.Request(f"{BASE_URL}/report/simple/keyword_dashboard?{qs}",
                                  headers={"X-Keyso-TOKEN": token, "Content-Type": "application/json"})
+
+    # T-089 round 2 (finding H): bump_counter() раньше вызывался ПОСЛЕ
+    # чтения ответа — сигнал между отправкой запроса и этой строкой терял
+    # счётчик целиком (тот же класс, что F-1). Теперь пишется ДО вызова, под
+    # armed_spend(); api.keys.so в PAID_HOSTS — urlopen() на него без этого
+    # блока сам откажет.
+    def _write_ahead() -> bool:
+        # R2-4 (независимый гейт, круг 3): этот клиент тратит ту же квоту
+        # api.keys.so, что keyso-fetch.py, мимо его счётчика — общий
+        # bump_counter() на тот же CACHE_DIR.
+        bump_counter(CACHE_DIR, field="requests")
+        return True
+
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            _LAST[0] = time.time()
-            data = json.loads(r.read())
-            # R2-4 (независимый гейт, круг 3): этот клиент тратит ту же квоту
-            # api.keys.so, что keyso-fetch.py, мимо его счётчика — теперь
-            # считается тем же общим bump_counter() на тот же CACHE_DIR.
-            bump_counter(CACHE_DIR, field="requests")
+        with armed_spend(_write_ahead, hosts="api.keys.so"):
+            with urllib.request.urlopen(req, timeout=60) as r:
+                _LAST[0] = time.time()
+                data = json.loads(r.read())
     except urllib.error.HTTPError as e:
         _LAST[0] = time.time()
         if e.code == 429:

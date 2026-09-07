@@ -20,6 +20,7 @@ import pathlib
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -33,6 +34,7 @@ from seo_cycle_core.ads import (
     save_raw,
     summary_paths,
 )
+from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend
 from seo_cycle_core.config import coerce_float, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
@@ -276,10 +278,9 @@ def main() -> int:
         # (например каталог только на чтение): вызов состоялся, свидетельства
         # нет, процесс выходил кодом 0. Теперь отказ записи останавливает
         # выполнение ДО live_fetch().
-        if not ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report}"):
-            print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
-                  "а не платный вызов вслепую", file=sys.stderr)
-            return 2
+        # T-089 round 2: armed_spend() below arms the real transport
+        # (urllib.request.urlopen) for the exact Yandex Direct host this
+        # run targets — live_fetch() has no wrapper around it to bypass.
         # R3-4 (независимый гейт, круг 4): круг 3 обещал здесь «уточняющую
         # запись requests=0 при неудаче» — она никогда не срабатывала
         # (`usage-ledger.py record` отказывает без метрик: requests=0 и
@@ -288,7 +289,15 @@ def main() -> int:
         # выше И ЕСТЬ финальная запись; на неудаче — только предупреждение в
         # stderr, без второй (несуществующей) записи в журнал.
         try:
-            payload = live_fetch(args.report, cfg, args.days)
+            with armed_spend(lambda: ledger_record(project_root, PLATFORM, requests=1,
+                                                    note=f"fetch {args.report}"),
+                              hosts=urllib.parse.urlsplit(api_host(
+                                  bool(nested_get(cfg, "ads.yandex_direct.sandbox", False)))).hostname):
+                payload = live_fetch(args.report, cfg, args.days)
+        except SpendNotArmedError:
+            print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
+                  "а не платный вызов вслепую", file=sys.stderr)
+            return 2
         except Exception as exc:
             print(f"WARNING: fetch {args.report} failed after the paid call was already "
                   f"recorded ({exc})", file=sys.stderr)

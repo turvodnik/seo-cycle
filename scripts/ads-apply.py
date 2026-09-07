@@ -24,6 +24,7 @@ import pathlib
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -34,6 +35,7 @@ from seo_cycle_core.ads import (
     ledger_record,
     require_enabled,
 )
+from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend
 from seo_cycle_core.config import coerce_float, coerce_int, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 
@@ -277,16 +279,24 @@ def main() -> int:
     # цикла — тогда обрыв в любой точке цикла уже не теряет запись.
     # R3-3: отказ записи (не bool True) останавливает выполнение ДО первой
     # сетевой операции, а не только предупреждает после факта.
-    if not ledger_record(project_root, platform, requests=len(operations),
-                         note=f"apply ticket {args.ticket}: {len(operations)} operations requested"):
-        print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
-              "а не платный apply вслепую", file=sys.stderr)
-        return 2
-
     sandbox = bool(nested_get(ads, "yandex_direct.sandbox", False))
     log.warning("APPLY start: %s operations to %s (sandbox=%s) ticket=%s",
                 len(operations), platform, sandbox, args.ticket)
-    results = apply_direct(operations, sandbox)
+    # T-089 round 2: armed_spend() below arms the real transport
+    # (urllib.request.urlopen, via direct_request()) for the exact Yandex
+    # Direct host this run targets (sandbox or production) — apply_direct()
+    # has no wrapper around it to bypass; the refusal lives in urlopen().
+    apply_host = urllib.parse.urlsplit(SANDBOX_HOST if sandbox else API_HOST).hostname
+    try:
+        with armed_spend(lambda: ledger_record(
+            project_root, platform, requests=len(operations),
+            note=f"apply ticket {args.ticket}: {len(operations)} operations requested",
+        ), hosts=apply_host):
+            results = apply_direct(operations, sandbox)
+    except SpendNotArmedError:
+        print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
+              "а не платный apply вслепую", file=sys.stderr)
+        return 2
     applied = sum(1 for row in results if row["status"] == "ok")
     failed = sum(1 for row in results if row["status"] == "failed")
     # R3-4: никакой второй «уточняющей» записи с реальным applied/failed —

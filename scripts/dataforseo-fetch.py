@@ -53,6 +53,7 @@ import urllib.error
 import urllib.request
 
 from seo_cycle_core.config import find_config, load_yaml, nested_get
+from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend
 from seo_cycle_core.usage_ledger import (
     ApiCallError,
     UsageLedgerError,
@@ -191,6 +192,14 @@ def call(b64: str, path: str, payload: dict | None) -> dict:
         raise ApiCallError(f"сеть недоступна ({e})") from e
     except ApiCallError:
         raise
+    except SpendNotArmedError:
+        # T-089 round 2: this means urlopen() refused BEFORE sending
+        # anything (no armed_spend() for api.dataforseo.com was active) —
+        # the opposite of "request already sent, response failed", which is
+        # what the broad except below is for. Must not be reclassified as
+        # ApiCallError, or the distinction the transport gate exists to draw
+        # is lost one line later.
+        raise
     except Exception as e:
         # R2-2 (независимый гейт, круг 3): перечень конкретных типов исключений
         # (URLError/TimeoutError) проигрывает следующему заходу так же, как
@@ -326,16 +335,26 @@ def fetch(b64: str, path: str, payload: dict | None, args) -> dict:
         # save_usage() обязана реально отработать: если она сама бросит
         # исключение, оно обязано долететь до вызывающего кода НЕ пойманным —
         # платный вызов не должен уйти в сеть при недоказанной записи (R3-3).
-        u["calls"] = u.get("calls", 0) + 1
-        u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) + 1
-        save_usage(out_dir, u)
+        # T-089 round 2 (F-1 + review findings A/C/D): the refusal is no
+        # longer a decorator on call() — `armed_spend()` arms the ACTUAL
+        # transport (urllib.request.urlopen) for the exact host DataForSEO
+        # uses. There is no wrapper around call() left to unwrap; call()
+        # calling urlopen() against api.dataforseo.com without this block
+        # having run first raises SpendNotArmedError from inside urlopen()
+        # itself, before any byte reaches the network.
+        def _write_ahead() -> bool:
+            u["calls"] = u.get("calls", 0) + 1
+            u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) + 1
+            save_usage(out_dir, u)
+            return True
 
         error_message: str | None = None
         cost: float | None = None
         cost_error: str | None = None
         resp: dict = {}
         try:
-            resp = call(b64, path, payload)
+            with armed_spend(_write_ahead, hosts="api.dataforseo.com"):
+                resp = call(b64, path, payload)
         except ApiCallError as e:
             error_message = str(e)
         else:
