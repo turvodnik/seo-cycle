@@ -796,13 +796,13 @@ class NetworkErrorTest(unittest.TestCase):
         with mock.patch.object(dfs.urllib.request, "urlopen",
                                side_effect=dfs.urllib.error.URLError("no route to host")):
             with self.assertRaises(dfs.ApiCallError):
-                with dfs.armed_spend(lambda: True):
+                with dfs.armed_spend(lambda: True, hosts="api.dataforseo.com"):
                     dfs.call("b64", "some/path", {"k": 1})
 
     def test_timeout_raises_api_call_error(self) -> None:
         with mock.patch.object(dfs.urllib.request, "urlopen", side_effect=TimeoutError("timed out")):
             with self.assertRaises(dfs.ApiCallError):
-                with dfs.armed_spend(lambda: True):
+                with dfs.armed_spend(lambda: True, hosts="api.dataforseo.com"):
                     dfs.call("b64", "some/path", {"k": 1})
 
     def test_http_error_raises_api_call_error(self) -> None:
@@ -810,13 +810,13 @@ class NetworkErrorTest(unittest.TestCase):
         err = dfs.urllib.error.HTTPError("url", 500, "Internal Server Error", {}, io.BytesIO(b"boom"))
         with mock.patch.object(dfs.urllib.request, "urlopen", side_effect=err):
             with self.assertRaises(dfs.ApiCallError):
-                with dfs.armed_spend(lambda: True):
+                with dfs.armed_spend(lambda: True, hosts="api.dataforseo.com"):
                     dfs.call("b64", "some/path", {"k": 1})
 
     def test_malformed_json_response_raises_api_call_error(self) -> None:
         with mock.patch.object(dfs.urllib.request, "urlopen", return_value=fake_response(b"{not valid json")):
             with self.assertRaises(dfs.ApiCallError):
-                with dfs.armed_spend(lambda: True):
+                with dfs.armed_spend(lambda: True, hosts="api.dataforseo.com"):
                     dfs.call("b64", "some/path", {"k": 1})
 
     def test_json_null_body_raises_api_call_error(self) -> None:
@@ -825,13 +825,13 @@ class NetworkErrorTest(unittest.TestCase):
         голым AttributeError мимо перехвата."""
         with mock.patch.object(dfs.urllib.request, "urlopen", return_value=fake_response(b"null")):
             with self.assertRaises(dfs.ApiCallError):
-                with dfs.armed_spend(lambda: True):
+                with dfs.armed_spend(lambda: True, hosts="api.dataforseo.com"):
                     dfs.call("b64", "some/path", {"k": 1})
 
     def test_json_array_body_raises_api_call_error(self) -> None:
         with mock.patch.object(dfs.urllib.request, "urlopen", return_value=fake_response(b"[]")):
             with self.assertRaises(dfs.ApiCallError):
-                with dfs.armed_spend(lambda: True):
+                with dfs.armed_spend(lambda: True, hosts="api.dataforseo.com"):
                     dfs.call("b64", "some/path", {"k": 1})
 
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
 import pathlib
 import signal
 import sys
@@ -97,34 +98,85 @@ def _ads_project_root(project_root: pathlib.Path) -> None:
 
 
 def run_ads_apply(project_root: pathlib.Path) -> None:
+    """Runs the REAL apply_direct() (review finding E: round 1 replaced the
+    whole product function with a stand-in and never exercised the real
+    write-ahead ordering in this cell) — only its own network primitive,
+    direct_request(), is replaced, so the loop/order inside apply_direct()
+    executes for real."""
     _ads_project_root(project_root)
     mod = _load("ads_apply_t089", "ads-apply.py")
-    mod.apply_direct = _hang
+    mod.direct_request = _hang
     operations = [{"op": "create_campaign", "name": "camp-1"}]
     with mod.armed_spend(lambda: mod.ledger_record(
         project_root, "yandex_direct", requests=len(operations), note="t089 signal matrix"
-    )):
+    ), hosts="api-sandbox.direct.yandex.com"):
         mod.apply_direct(operations, sandbox=True)
 
 
 def run_yandex_direct(project_root: pathlib.Path) -> None:
+    """Runs the REAL live_fetch() (review finding E) — only direct_request()
+    is replaced."""
     _ads_project_root(project_root)
     mod = _load("yandex_direct_fetch_t089", "yandex-direct-fetch.py")
-    mod.live_fetch = _hang
+    mod.direct_request = _hang
     with mod.armed_spend(lambda: mod.ledger_record(
         project_root, mod.PLATFORM, requests=1, note="t089 signal matrix"
-    )):
+    ), hosts=mod.api_host(False).split("//", 1)[1]):
         mod.live_fetch("campaigns", {}, 7)
 
 
 def run_google_ads(project_root: pathlib.Path) -> None:
+    """Runs the REAL gaql_search() (review finding E). gaql_search() has no
+    separate transport helper (its urlopen() call is inline) and needs a
+    valid-looking OAuth token first — oauth_access_token() is replaced with
+    a stub so the run reaches the actual paid call, which is where the
+    hang/signal needs to land."""
     _ads_project_root(project_root)
     mod = _load("google_ads_fetch_t089", "google-ads-fetch.py")
-    mod.gaql_search = _hang
-    with mod.armed_spend(lambda: mod.ledger_record(
-        project_root, mod.PLATFORM, requests=1, note="t089 signal matrix"
-    )):
-        mod.gaql_search("campaigns")
+    mod.oauth_access_token = lambda: "fake-token"
+    original_urlopen = mod.urllib.request.urlopen
+
+    def _hang_urlopen(*_a, **_kw):
+        print("STARTED", flush=True)
+        time.sleep(60)
+        raise AssertionError("hang() was not interrupted by the expected signal")
+
+    mod.urllib.request.urlopen = _hang_urlopen
+    try:
+        os.environ.setdefault("GOOGLE_ADS_CUSTOMER_ID", "1234567890")
+        os.environ.setdefault("GOOGLE_ADS_DEVELOPER_TOKEN", "fake-dev-token")
+        with mod.armed_spend(lambda: mod.ledger_record(
+            project_root, mod.PLATFORM, requests=1, note="t089 signal matrix"
+        ), hosts="googleads.googleapis.com"):
+            mod.gaql_search("campaigns")
+    finally:
+        mod.urllib.request.urlopen = original_urlopen
+
+
+def _hang_urlopen(*_a, **_kw):
+    print("STARTED", flush=True)
+    time.sleep(60)
+    raise AssertionError("hang() was not interrupted by the expected signal")
+
+
+def run_keyso(out_dir: pathlib.Path) -> None:
+    """keyso-fetch.py (review finding H, second gate) hardcodes its usage
+    directory to `./seo/research/keyso` regardless of --out — chdir into
+    out_dir so the write-ahead record lands under it, same as the other
+    clients' out_dir contract."""
+    os.chdir(out_dir)
+    mod = _load("keyso_fetch_t089", "keyso-fetch.py")
+    mod.urllib.request.urlopen = _hang_urlopen
+    mod.call("fake-token", "/report/simple/keyword_dashboard", {"keyword": "x", "base": "msk"})
+
+
+def run_competitor_discovery(out_dir: pathlib.Path) -> None:
+    """competitor-discovery.py (review finding H) — same api.keys.so quota,
+    same hardcoded `./seo/research/keyso` cache dir."""
+    os.chdir(out_dir)
+    mod = _load("competitor_discovery_t089", "competitor-discovery.py")
+    mod.urllib.request.urlopen = _hang_urlopen
+    mod.fetch_top("fake-token", "minvata", "msk", 60)
 
 
 CLIENTS = {
@@ -134,6 +186,8 @@ CLIENTS = {
     "ads_apply": run_ads_apply,
     "yandex_direct": run_yandex_direct,
     "google_ads": run_google_ads,
+    "keyso": run_keyso,
+    "competitor_discovery": run_competitor_discovery,
 }
 
 
