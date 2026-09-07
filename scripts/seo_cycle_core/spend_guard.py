@@ -371,7 +371,15 @@ def _normalize_host(host: Any) -> str:
             host = host.decode("idna")
         except (UnicodeError, UnicodeDecodeError):
             host = host.decode("utf-8", "replace")
-    return _strip_port(str(host).strip().lower().rstrip("."))
+    # T-094 round 3 (R2-1, independent gate): order matters. Stripping the
+    # trailing dot BEFORE the port turned `api.dataforseo.com.:443` into
+    # `api.dataforseo.com.` (dot still there, port gone) — `.rstrip(".")`
+    # only strips from the very end of the string, and `:443` was still
+    # sitting after that dot, so it never fired. Reproduced live against a
+    # local listener (no external byte) by the gate. Port first, dot after:
+    # `_strip_port` on `api.dataforseo.com.:443` correctly returns
+    # `api.dataforseo.com.`, and THEN `.rstrip(".")` reaches the dot.
+    return _strip_port(str(host).strip().lower()).rstrip(".")
 
 
 def _check_host(host: str) -> None:

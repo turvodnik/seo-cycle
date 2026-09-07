@@ -68,6 +68,16 @@ class ProxyTunnelGateTest(unittest.TestCase):
         self.assertEqual(sg._strip_port("api.dataforseo.com:443"), "api.dataforseo.com")
         self.assertEqual(sg._strip_port("api.dataforseo.com"), "api.dataforseo.com")
 
+    def test_trailing_dot_and_port_combined_do_not_evade_normalize(self) -> None:
+        # T-094 round 3 (R2-1): order matters — stripping the trailing dot
+        # BEFORE the port left "api.dataforseo.com." (dot survives, port
+        # gone) because rstrip(".") only strips from the string's end and
+        # ":443" was still there when it ran. Port must be stripped first.
+        self.assertEqual(sg._normalize_host("api.dataforseo.com.:443"), "api.dataforseo.com")
+        conn = http.client.HTTPConnection("127.0.0.1", 1)
+        with self.assertRaises(sg.SpendNotArmedError):
+            conn.set_tunnel("api.dataforseo.com.:443")
+
 
 if __name__ == "__main__":
     unittest.main()
