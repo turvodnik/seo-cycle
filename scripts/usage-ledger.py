@@ -17,12 +17,6 @@ import pathlib
 import sys
 from typing import Any
 
-try:
-    import yaml  # noqa: F401 - hard requirement for this script
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
-
 from seo_cycle_core.config import config_section, find_config, load_yaml, numeric, policy_path, project_root_for, rel_path, require_config
 from seo_cycle_core.usage_ledger import MONTH_RE, finite_nonneg, nonneg_finite_arg, usage_lock
 

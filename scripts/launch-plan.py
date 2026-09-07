@@ -19,13 +19,7 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import coerce_int
-
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
+from seo_cycle_core.config import dump_yaml, coerce_int, load_config, require_section
 
 
 CONFIG_SEARCH_PATHS = [
@@ -68,10 +62,13 @@ def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Pat
 
 
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
+    # T-090 (F-8): this used to call `yaml.safe_load` directly — one of ~32
+    # files across scripts/ bypassing seo_cycle_core's guarantees (no
+    # coordinate-bearing error on broken YAML, no UTF-8 check, no protection
+    # against a non-dict top level). Delegates to the shared core loader,
+    # which is now also the ONLY place in this tree allowed to construct a
+    # PyYAML Loader (see seo_cycle_core/config.py's runtime guard).
+    return load_config(path)
 
 
 def load_json(path: pathlib.Path) -> dict[str, Any]:
@@ -79,10 +76,6 @@ def load_json(path: pathlib.Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-
-
-def dump_yaml(data: dict[str, Any]) -> str:
-    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
 
 def write_text(path: pathlib.Path, text: str) -> None:
@@ -489,7 +482,9 @@ def build_report(cfg_path: pathlib.Path, max_execution_steps: int = DEFAULT_MAX_
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
         "config": str(cfg_path),
         "project_root": str(project_root),
-        "project": cfg.get("project", {}),
+        # T-090 round 2 (F-7 class): project name feeds the report
+        # header directly — must not silently render "Project: ? (?)".
+        "project": require_section(cfg, "project", cfg_path),
         "market_matrix": market,
         "business_matrix": business,
         "token_contract": token,

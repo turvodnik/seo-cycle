@@ -25,12 +25,8 @@ Idempotent: каждый запуск пересоздаёт таблицы из
 from __future__ import annotations
 import argparse, csv, glob, json, pathlib, re, sqlite3, sys
 
-try:
-    import yaml
-except ImportError:
-    yaml = None
+from seo_cycle_core.config import load_yaml_any, require_config, require_section
 
-from seo_cycle_core.config import require_config
 
 CONFIG_PATHS = ["seo-cycle.yaml", ".seo-cycle.yaml", "seo/seo-cycle.yaml", ".claude/seo-cycle.yaml"]
 CSV_SOURCES = {
@@ -41,11 +37,15 @@ CSV_SOURCES = {
 
 
 def load_cfg(root: pathlib.Path) -> dict:
-    if yaml:
-        for rel in CONFIG_PATHS:
-            p = root / rel
-            if p.exists():
-                return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    # T-090 (F-8): route through the shared core loader instead of a local
+    # `yaml.safe_load` — this is the last of two places in this file that
+    # used to bypass `seo_cycle_core.config` (the other was the
+    # `require_config()` call in `main()`, already fixed at T-067).
+    for rel in CONFIG_PATHS:
+        p = root / rel
+        if p.exists():
+            data = load_yaml_any(p)
+            return data if isinstance(data, dict) else {}
     return {}
 
 
@@ -332,6 +332,17 @@ def main() -> int:
     # cron log. Refuse instead, the way `seo-cycle status`/`validate` do.
     found = next((root / rel for rel in CONFIG_PATHS if (root / rel).exists()), None)
     cfg = require_config(found, where=root)  # exits(2)/stderr itself if `found` is None
+    # T-090 round 3 (second independent gate, 🔴A): `require_section(cfg,
+    # "project", ...)` used to live only on the Obsidian-dashboard branch
+    # below (`if dash:`), which an ordinary run without `obsidian.enabled/
+    # dashboards/central_vault` never reaches — so `project: null` (the
+    # exact repro named in F-7) sailed straight through to a cheerful
+    # "✓ positions: 0 строк" / rc=0, identical to F-37's class one field
+    # deeper. `db-sync.py`'s whole output is a report "for" a project, the
+    # same way `monthly-dashboard.py`'s is (already fixed) — so the check
+    # belongs on the MAIN path, right after the config itself is required,
+    # not tucked inside an optional side effect.
+    require_section(cfg, "project", found)
     db_path = find_db_path(root, cfg, args.db)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
@@ -350,7 +361,13 @@ def main() -> int:
 
     dash = dashboard_path(cfg)
     if dash:
-        project = (cfg.get("project") or {}).get("name", root.name)
+        # T-090 (F-7): `(cfg.get("project") or {})` used to swallow
+        # `project: null` and silently fall back to `root.name` — a
+        # cheerful "✓ Obsidian-дашборд → ..." for a directory whose config
+        # doesn't actually name a project, exactly the class
+        # `require_config()` (T-067) was added to this same file to stop,
+        # just reached one key deeper.
+        project = require_section(cfg, "project", found).get("name", root.name)
         try:
             write_md_dashboard(conn, dash, project)
             print(f"  ✓ Obsidian-дашборд → {dash}")

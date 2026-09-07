@@ -14,11 +14,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    yaml = None
-
 from wiki_common import CONFIG, WIKI_ROOT, clean_text, ensure_wiki_tree, utc_now, write_json
 
 

@@ -22,7 +22,7 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, project_root_for, skill_root, write_text
+from seo_cycle_core.config import find_config, load_config, project_root_for, require_section, skill_root, write_text
 
 
 def run_step(name: str, command: list[str], cwd: pathlib.Path) -> dict[str, Any]:
@@ -353,7 +353,7 @@ def main() -> int:
 
     root = skill_root()
     project_root = project_root_for(cfg_path)
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)  # T-090 round 2: main project config, required
     setup_dir = project_root / "seo" / "setup"
     steps: list[dict[str, Any]] = []
 
@@ -553,7 +553,7 @@ def main() -> int:
         write_text(setup_dir / "latest-governance.json", governance_step.get("stdout", ""))
         write_text(setup_dir / "latest-sources.json", sources_step.get("stdout", ""))
 
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)  # T-090 round 2: main project config, required
     governance = load_json_output(governance_step)
     sources = load_json_output(sources_step)
     automation_step = next((step for step in steps if step["name"] == "automation plan"), {})
@@ -693,7 +693,10 @@ def main() -> int:
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
         "config": str(cfg_path),
         "project_root": str(project_root),
-        "project": cfg.get("project", {}),
+        # T-090 round 2 (F-7 class): "project" feeds the report header
+        # directly — a present-but-null section must not silently
+        # render "Project: ? (?)" as if the report were meaningful.
+        "project": require_section(cfg, "project", cfg_path),
         "runtime": cfg.get("runtime", "auto"),
         "region_profile": cfg.get("region_profile"),
         "validation": validation,

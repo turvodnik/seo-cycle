@@ -8,6 +8,8 @@ surface and writes a questionnaire for newly available features.
 
 from __future__ import annotations
 
+from seo_cycle_core.config import load_config, require_section
+
 import argparse
 import csv
 import datetime as dt
@@ -16,12 +18,6 @@ import json
 import pathlib
 import sys
 from typing import Any
-
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
 
 
 CONFIG_SEARCH_PATHS = [
@@ -373,10 +369,13 @@ def project_root_for(cfg_path: pathlib.Path) -> pathlib.Path:
 
 
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
+    # T-090 (F-8): this used to call `yaml.safe_load` directly — one of ~32
+    # files across scripts/ bypassing seo_cycle_core's guarantees (no
+    # coordinate-bearing error on broken YAML, no UTF-8 check, no protection
+    # against a non-dict top level). Delegates to the shared core loader,
+    # which is now also the ONLY place in this tree allowed to construct a
+    # PyYAML Loader (see seo_cycle_core/config.py's runtime guard).
+    return load_config(path)
 
 
 def write_text(path: pathlib.Path, text: str) -> None:
@@ -441,7 +440,9 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
         "core_version": current_version(),
         "config": str(cfg_path),
         "project_root": str(project_root),
-        "project": cfg.get("project", {}),
+        # T-090 round 2 (F-7 class): project name feeds the report
+        # header directly — must not silently render "Project: ? (?)".
+        "project": require_section(cfg, "project", cfg_path),
         "runtime": runtime,
         "summary": {
             "features": len(rows),

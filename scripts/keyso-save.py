@@ -44,15 +44,22 @@ def load_token() -> str:
 
 
 def load_config() -> dict:
-    try:
-        import yaml
-    except ImportError:
+    # T-090 (F-7/F-8): this used to be its own hand-rolled loader with an
+    # `except ImportError: return {}` fallback — a dangerous class on its
+    # own: a broken PyYAML install silently looked identical to "no
+    # config", the same silent-success failure mode F-7/F-7b exist to
+    # close, just triggered by a missing dependency instead of an empty
+    # file. Routes through the shared core loader now — if PyYAML truly
+    # isn't installed, `seo_cycle_core.config.load_config` itself returns
+    # `{}` (unchanged for a missing OPTIONAL config in a write-only tool
+    # like this one), but a MALFORMED config gets the same coordinate-
+    # bearing error + exit(2) every other command gets, instead of this
+    # file's own silent swallow.
+    from seo_cycle_core.config import find_config, load_config as _load_config
+    found = find_config(pathlib.Path.cwd())
+    if found is None:
         return {}
-    for rel in ("seo-cycle.yaml", ".seo-cycle.yaml", "seo/seo-cycle.yaml"):
-        p = pathlib.Path.cwd() / rel
-        if p.exists():
-            return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    return {}
+    return _load_config(found)
 
 
 def post(token: str, path: str, body: dict) -> dict:

@@ -17,7 +17,7 @@ import re
 import sys
 from typing import Any
 
-from seo_cycle_core.config import config_section, find_config, load_yaml, policy_path, project_root_for, skill_root
+from seo_cycle_core.config import config_section, find_config, load_config, load_yaml, policy_path, project_root_for, require_section, skill_root
 from seo_cycle_core.context import build_context_manifest
 from seo_cycle_core.subprocesses import run_json
 
@@ -280,7 +280,7 @@ def automation_status(route_automation: str, automation_policy: dict[str, Any]) 
 
 
 def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = None) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)  # T-090 round 2: main project config, required
     project_root = project_root_for(cfg_path)
     policies = load_project_policies(cfg, project_root)
     intake = policies["intake"]
@@ -374,7 +374,9 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
         "project_root": str(project_root),
         "task": task,
         "task_type": task_type,
-        "project": cfg.get("project", {}),
+        # T-090 round 2 (F-7 class): project name feeds the route
+        # report header directly.
+        "project": require_section(cfg, "project", cfg_path),
         "region_profile": cfg.get("region_profile"),
         "country": country(cfg, intake),
         "phases": meta["phases"],

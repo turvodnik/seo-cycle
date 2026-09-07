@@ -18,12 +18,6 @@ import subprocess
 import sys
 from typing import Any
 
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
-
 
 CONFIG_SEARCH_PATHS = [
     "seo-cycle.yaml",
@@ -62,11 +56,14 @@ def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Pat
     return path
 
 
+from seo_cycle_core.config import dump_yaml, load_yaml_any
+
+
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
+    # T-090 (F-8): onboarding is a legitimate empty-config boundary
+    # (project may not exist yet) — tolerant load via the shared core.
+    data = load_yaml_any(path)
+    return data if isinstance(data, dict) else {}
 
 
 def load_json(path: pathlib.Path) -> dict[str, Any]:
@@ -74,10 +71,6 @@ def load_json(path: pathlib.Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-
-
-def dump_yaml(data: dict[str, Any]) -> str:
-    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
 
 def write_text(path: pathlib.Path, text: str) -> None:
@@ -552,7 +545,12 @@ def build_report(cfg_path: pathlib.Path, max_steps: int = DEFAULT_MAX_STEPS) -> 
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
         "config": str(cfg_path),
         "project_root": str(project_root),
-        "project": cfg.get("project", {}),
+        # T-090 round 2: onboarding legitimately runs before a project
+        # config exists yet (this file's own `load_yaml` docstring above)
+        # — a present-but-null `project:` key must fall back to an empty
+        # block here rather than crash `render_markdown()`, same as the
+        # "no config found" path already does for this command.
+        "project": cfg.get("project", {}) if isinstance(cfg.get("project"), dict) else {},
         "market": {
             "country": country(cfg, intake),
             "region_profile": cfg.get("region_profile"),
