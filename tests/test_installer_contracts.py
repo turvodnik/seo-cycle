@@ -1750,13 +1750,12 @@ class PlainAttachForceFetchTest(InstallerFixture):
         new_local = _git(self.core, "rev-parse", "v1.0.0").stdout.strip()
         self.assertEqual(new_local, origin_now, "тег в хранилище обязан обновиться на плейн-запуске, без --update")
 
-    def test_plain_attach_reports_the_real_cause_not_a_guessed_offline(self) -> None:
-        """F-12's second half: the old code's `|| warn "...(offline?)"`
-        printed a GUESSED cause regardless of what actually failed. Force a
-        REAL non-offline fetch rejection (a tag that would be clobbered)
-        and confirm the message doesn't lie about the network being the
-        problem when it demonstrably isn't (this whole repro never leaves
-        localhost)."""
+    def test_plain_attach_fetch_failure_prints_gits_real_error_not_only_a_guess(self) -> None:
+        """F-12's second half: the old code's `fetch --tags --quiet
+        2>/dev/null || warn "...(offline?)"` threw away git's own error line
+        AND printed a guessed cause in its place. This fetch is no longer
+        `2>/dev/null`'d — a real failure must still show git's own message
+        (whatever it actually is) alongside the `warn`, not instead of it."""
         proc = self.run_install(
             "--project", str(self.project), "--pin", "v1.0.0",
             "--skip-init", "--no-migrate-old-global",
@@ -1772,10 +1771,47 @@ class PlainAttachForceFetchTest(InstallerFixture):
             )
         finally:
             offline.rename(self.origin)
-        # This IS the genuinely offline case — rc must be non-zero and the
-        # store must not silently claim to be updated.
         self.assertNotEqual(proc2.returncode, 0, proc2.stdout + proc2.stderr)
         combined = proc2.stdout + proc2.stderr
+        self.assertIn("не удался", combined, combined)
+        # Git's own real cause (not suppressed) — this IS the genuinely
+        # offline/unreachable case, so "fatal:" from git itself is expected
+        # to be visible, not swallowed behind the hedged warn alone.
+        self.assertIn("fatal:", combined, combined)
+
+    def test_reverting_the_stderr_suppression_hides_gits_real_error(self) -> None:
+        """Genuine mutation: put `2>/dev/null` back on the fetch inside
+        fetch_tags_or_report() (the old code's own construction) and re-run
+        the same offline scenario. Git's real "fatal:" line must disappear,
+        leaving only the hedged warn — proving removing that suppression,
+        not something else, is what makes the real cause visible."""
+        source = INSTALL.read_text(encoding="utf-8")
+        needle = 'if git -C "$local_dir" fetch origin --tags --force --prune --prune-tags --quiet; then'
+        mutated_line = 'if git -C "$local_dir" fetch origin --tags --force --prune --prune-tags --quiet 2>/dev/null; then'
+        assert needle in source, "мутация не нашла fetch внутри fetch_tags_or_report()"
+        mutated_path = self.tmp / "install.mutated6.sh"
+        mutated_path.write_text(source.replace(needle, mutated_line, 1), encoding="utf-8")
+        full_env = {
+            **os.environ, "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
+        }
+        _assert_sandboxed_home(full_env)
+
+        offline = self.origin.with_name(self.origin.name + ".OFFLINE")
+        self.origin.rename(offline)
+        try:
+            proc = subprocess.run(
+                ["bash", str(mutated_path), "--project", str(self.tmp / "project3b"),
+                 "--pin", "v1.0.0", "--skip-init", "--no-migrate-old-global"],
+                env=full_env, capture_output=True, text=True,
+            )
+        finally:
+            offline.rename(self.origin)
+        combined = proc.stdout + proc.stderr
+        self.assertNotIn("fatal:", combined, combined)
         self.assertIn("не удался", combined, combined)
 
     def test_reverting_the_force_fetch_in_plain_attach_reintroduces_the_stale_tag(self) -> None:

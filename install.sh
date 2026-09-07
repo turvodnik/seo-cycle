@@ -156,9 +156,16 @@ is_git_worktree_checkout() {
 #
 # Returns 0 and prints old→new / "тег отсутствует" for every local tag that
 # moved or vanished when the fetch itself succeeded (a moved/deleted tag is
-# NOT a failure — it is the normal, correctly-handled case). Returns 1 and
-# warns with the fetch's REAL cause (not a guessed "offline?") only when the
-# fetch command itself failed.
+# NOT a failure — it is the normal, correctly-handled case). Returns 1 only
+# when the fetch command itself failed — and, unlike the old code, this
+# fetch is NOT `2>/dev/null`'d, so git's own real error line (e.g. "Could
+# not read from remote repository") always prints too, right above the
+# `warn` below. The warn's own "(offline? origin недоступен?)" stays a
+# hedge, not a false diagnosis: --force means "would clobber existing tag"
+# (the old, hidden, non-network cause of this exact failure) can no longer
+# happen here, so a real remaining failure is overwhelmingly a reachability
+# problem — and the true git message sitting right above it is what a human
+# actually diagnoses from, not this one hedged line alone.
 fetch_tags_or_report() {
     local local_dir="$1" label="$2"
     local before_file t old_c new_c rc=0
