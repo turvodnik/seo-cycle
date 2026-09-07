@@ -52,7 +52,8 @@ class ApplyDirectExoticExceptionTest(unittest.TestCase):
             return {"result": {"AddResults": [{"Id": 111}]}}
 
         with mock.patch.object(apply_mod, "direct_request", side_effect=fake_direct_request):
-            return apply_mod.apply_direct(OPERATIONS, sandbox=True)
+            with apply_mod.armed_spend(lambda: True, hosts="api-sandbox.direct.yandex.com"):
+                return apply_mod.apply_direct(OPERATIONS, sandbox=True)
 
     def test_connection_reset_marks_op_failed_and_continues(self) -> None:
         results = self._run_with_second_call_raising(ConnectionResetError("connection reset by peer"))
