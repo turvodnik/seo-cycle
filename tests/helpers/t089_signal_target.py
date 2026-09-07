@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import os
 import pathlib
 import signal
@@ -89,6 +90,9 @@ CFG = (
     "project:\n  name: t089-signal-matrix\n  url: https://example.com\n"
     "governance:\n  budget_policy:\n    monthly_total_usd_cap: 500\n"
     "    monthly_paid_api_usd_cap: 90\n"
+    "ads:\n  enabled: true\n  policy: approval_only\n"
+    "  yandex_direct:\n    enabled: true\n    sandbox: true\n"
+    "  google_ads:\n    enabled: true\n"
 )
 
 
@@ -98,59 +102,62 @@ def _ads_project_root(project_root: pathlib.Path) -> None:
 
 
 def run_ads_apply(project_root: pathlib.Path) -> None:
-    """Runs the REAL apply_direct() (review finding E: round 1 replaced the
-    whole product function with a stand-in and never exercised the real
-    write-ahead ordering in this cell) — only its own network primitive,
-    direct_request(), is replaced, so the loop/order inside apply_direct()
-    executes for real."""
+    """Runs the REAL main() → armed_spend(ledger_record) → apply_direct()
+    path (review round-2 finding R2-9: round 2's harness called
+    apply_direct() directly and armed it with the harness's OWN
+    armed_spend()/ledger_record() call, never executing main()'s own
+    write-ahead call site — the matrix cell proved the harness, not the
+    product). Only the environment/approval PRECONDITIONS (which need real
+    env vars / a real approved ticket) and the network primitive are
+    stubbed; ledger_record()/armed_spend()/apply_direct() are the real
+    functions, called from the real main()."""
     _ads_project_root(project_root)
+    os.chdir(project_root)
     mod = _load("ads_apply_t089", "ads-apply.py")
     mod.direct_request = _hang
-    operations = [{"op": "create_campaign", "name": "camp-1"}]
-    with mod.armed_spend(lambda: mod.ledger_record(
-        project_root, "yandex_direct", requests=len(operations), note="t089 signal matrix"
-    ), hosts="api-sandbox.direct.yandex.com"):
-        mod.apply_direct(operations, sandbox=True)
+    mod.env_status = lambda _platform: {"present": True, "missing": []}
+    mod.ticket_status = lambda _project_root, _ticket: "approved"
+    draft = {
+        "platform": "yandex_direct",
+        "campaigns": [{"name": "camp-1", "channel": "search", "budget_daily": 0, "ad_groups": []}],
+    }
+    draft_path = project_root / "draft.json"
+    draft_path.write_text(json.dumps(draft), encoding="utf-8")
+    mod.sys.argv = ["ads-apply.py", "--draft", str(draft_path), "--ticket", "T-1",
+                    "--live", "--allow-write"]
+    mod.main()
 
 
 def run_yandex_direct(project_root: pathlib.Path) -> None:
-    """Runs the REAL live_fetch() (review finding E) — only direct_request()
-    is replaced."""
+    """Runs the REAL main() → armed_spend(ledger_record) → live_fetch() path
+    (R2-9) — only direct_request() (the network primitive) and the
+    env/preflight preconditions are stubbed."""
     _ads_project_root(project_root)
+    os.chdir(project_root)
     mod = _load("yandex_direct_fetch_t089", "yandex-direct-fetch.py")
     mod.direct_request = _hang
-    with mod.armed_spend(lambda: mod.ledger_record(
-        project_root, mod.PLATFORM, requests=1, note="t089 signal matrix"
-    ), hosts=mod.api_host(False).split("//", 1)[1]):
-        mod.live_fetch("campaigns", {}, 7)
+    mod.env_status = lambda _platform: {"present": True, "missing": []}
+    mod.ledger_preflight = lambda *_a, **_kw: (True, "ok")
+    mod.sys.argv = ["yandex-direct-fetch.py", "--report", "campaigns", "--live"]
+    mod.main()
 
 
 def run_google_ads(project_root: pathlib.Path) -> None:
-    """Runs the REAL gaql_search() (review finding E). gaql_search() has no
-    separate transport helper (its urlopen() call is inline) and needs a
-    valid-looking OAuth token first — oauth_access_token() is replaced with
-    a stub so the run reaches the actual paid call, which is where the
-    hang/signal needs to land."""
+    """Runs the REAL main() → armed_spend(ledger_record) → gaql_search()
+    path (R2-9). gaql_search()'s urlopen() call is inline (no separate
+    transport helper) — hung via a module-level urlopen stub; a valid-
+    looking OAuth token is stubbed so the run reaches the actual paid call."""
     _ads_project_root(project_root)
+    os.chdir(project_root)
     mod = _load("google_ads_fetch_t089", "google-ads-fetch.py")
     mod.oauth_access_token = lambda: "fake-token"
-    original_urlopen = mod.urllib.request.urlopen
-
-    def _hang_urlopen(*_a, **_kw):
-        print("STARTED", flush=True)
-        time.sleep(60)
-        raise AssertionError("hang() was not interrupted by the expected signal")
-
     mod.urllib.request.urlopen = _hang_urlopen
-    try:
-        os.environ.setdefault("GOOGLE_ADS_CUSTOMER_ID", "1234567890")
-        os.environ.setdefault("GOOGLE_ADS_DEVELOPER_TOKEN", "fake-dev-token")
-        with mod.armed_spend(lambda: mod.ledger_record(
-            project_root, mod.PLATFORM, requests=1, note="t089 signal matrix"
-        ), hosts="googleads.googleapis.com"):
-            mod.gaql_search("campaigns")
-    finally:
-        mod.urllib.request.urlopen = original_urlopen
+    mod.env_status = lambda _platform: {"present": True, "missing": []}
+    mod.ledger_preflight = lambda *_a, **_kw: (True, "ok")
+    os.environ["GOOGLE_ADS_CUSTOMER_ID"] = "1234567890"
+    os.environ["GOOGLE_ADS_DEVELOPER_TOKEN"] = "fake-dev-token"
+    mod.sys.argv = ["google-ads-fetch.py", "--report", "campaigns", "--live"]
+    mod.main()
 
 
 def _hang_urlopen(*_a, **_kw):

@@ -251,43 +251,50 @@ def _fresh_module(modname: str, filename: str):
 
 
 class TransportGateBypassTest(unittest.TestCase):
-    """Критерий приёмки круга 2: обход единой точки обязан падать —
-    проверено на транспорте (`urllib.request.urlopen` /
-    `requests.Session.request`), а не на декораторе клиента (которого
-    больше нет, review finding A). Для каждого клиента: (1) вызов реальной
-    функции без armed_spend() обязан поднять SpendNotArmedError, (2)
-    настоящий транспорт при этом НЕ вызывается — доказано подменой
-    `spend_guard._real_urlopen`/`_real_session_request` (не публичного
-    `urlopen`/`Session.request`, которые и есть наш собственный шлюз) на
-    функцию, которая падает AssertionError, если её вообще позвали
-    (review finding B: раньше закоммиченные тесты держали живые вызовы,
-    потому что мокали не тот слой)."""
+    """Критерий приёмки круга 3: обход единой точки обязан падать —
+    проверено на самом нижнем практичном уровне (`socket.getaddrinfo` /
+    `socket.socket.connect`/`connect_ex`), не на `urlopen`/`Session.request`
+    (round-2 review broke that layer seven ways — see spend_guard.py's
+    module docstring). Каждый тест: (1) вызов реальной функции клиента без
+    armed_spend() обязан поднять SpendNotArmedError, (2) настоящий резолвер
+    при этом НЕ вызывается — доказано подменой `spend_guard._real_getaddrinfo`
+    (не публичного `socket.getaddrinfo`, который и есть наш шлюз) на функцию,
+    падающую AssertionError, если её вообще позвали."""
 
-    def _assert_urllib_bypass_raises(self, modname: str, filename: str, call) -> None:
+    def setUp(self) -> None:
+        # R2-5: если мутация (или будущая правка) снимет установку шлюза,
+        # это обязано провалиться здесь быстро и очевидно — а не тем, что
+        # следующие строки теста реально уйдут в сеть.
+        self.assertTrue(spend_guard.gate_installed(),
+                        "транспортный шлюз не установлен — тесты ниже "
+                        "перестали бы что-либо проверять и рисковали бы "
+                        "живой сетью")
+
+    def _assert_bypass_raises(self, modname: str, filename: str, call) -> None:
         mod = _fresh_module(modname, filename)
         raiser = mock.Mock(side_effect=AssertionError(
-            "real urlopen() reached — the transport gate did not block in time"))
-        with mock.patch.object(spend_guard, "_real_urlopen", raiser):
+            "real getaddrinfo() reached — the transport gate did not block in time"))
+        with mock.patch.object(spend_guard, "_real_getaddrinfo", raiser):
             with self.assertRaises(SpendNotArmedError):
                 call(mod)
         raiser.assert_not_called()
 
     def test_dataforseo_call_bypass_raises(self) -> None:
-        self._assert_urllib_bypass_raises("dfs_bypass", "dataforseo-fetch.py",
-                                          lambda mod: mod.call("b64", "some/path", {"k": 1}))
+        self._assert_bypass_raises("dfs_bypass", "dataforseo-fetch.py",
+                                   lambda mod: mod.call("b64", "some/path", {"k": 1}))
 
     def test_spyfu_call_bypass_raises(self) -> None:
-        self._assert_urllib_bypass_raises("spyfu_bypass", "spyfu-fetch.py",
-                                          lambda mod: mod.call("b64", "some/path", {"domain": "x"}))
+        self._assert_bypass_raises("spyfu_bypass", "spyfu-fetch.py",
+                                   lambda mod: mod.call("b64", "some/path", {"domain": "x"}))
 
     def test_google_nlp_call_feature_bypass_raises(self) -> None:
         if not _GOOGLE_NLP_DEPS_OK:
             self.skipTest("google-nlp-audit.py optional deps missing")
         mod = _fresh_module("gnlp_bypass", "google-nlp-audit.py")
         raiser = mock.Mock(side_effect=AssertionError(
-            "real requests transport reached — the gate did not block in time"))
+            "real getaddrinfo() reached — the gate did not block in time"))
         with mock.patch.object(mod, "credentials", return_value=mock.Mock(token="x")), \
-             mock.patch.object(spend_guard, "_real_session_request", raiser):
+             mock.patch.object(spend_guard, "_real_getaddrinfo", raiser):
             with self.assertRaises(SpendNotArmedError):
                 mod.call_feature(pathlib.Path("/nonexistent"), "analyzeEntities", "hi", "en",
                                  {"GOOGLE_APPLICATION_CREDENTIALS": "/nonexistent"})
@@ -295,16 +302,15 @@ class TransportGateBypassTest(unittest.TestCase):
 
     def test_ads_apply_apply_direct_bypass_raises(self) -> None:
         """apply_direct() catches exceptions PER OPERATION (T-066 R2-2, by
-        design — one operation failing must not lose the ones after it), so
-        a SpendNotArmedError raised by urlopen() inside direct_request()
+        design), so a SpendNotArmedError from inside direct_request()
         surfaces as a `status: failed` row, not a raised exception. The
-        proof that matters is unchanged: the real transport is never
+        proof that matters is unchanged: the real resolver is never
         reached without armed_spend()."""
         mod = _fresh_module("ads_apply_bypass", "ads-apply.py")
         raiser = mock.Mock(side_effect=AssertionError(
-            "real urlopen() reached — the transport gate did not block in time"))
+            "real getaddrinfo() reached — the gate did not block in time"))
         with mock.patch.dict(os.environ, {"YANDEX_DIRECT_TOKEN": "fake-token"}), \
-             mock.patch.object(spend_guard, "_real_urlopen", raiser):
+             mock.patch.object(spend_guard, "_real_getaddrinfo", raiser):
             results = mod.apply_direct([{"op": "create_campaign", "name": "x"}], sandbox=True)
         raiser.assert_not_called()
         self.assertEqual(len(results), 1)
@@ -312,7 +318,7 @@ class TransportGateBypassTest(unittest.TestCase):
         self.assertIn("SpendNotArmedError", results[0]["error"])
 
     def test_yandex_direct_live_fetch_bypass_raises(self) -> None:
-        self._assert_urllib_bypass_raises(
+        self._assert_bypass_raises(
             "yandex_bypass", "yandex-direct-fetch.py",
             lambda mod: mod.live_fetch("campaigns", {}, 7))
 
@@ -321,19 +327,16 @@ class TransportGateBypassTest(unittest.TestCase):
         mod.oauth_access_token = lambda: "fake-token"
         os.environ.setdefault("GOOGLE_ADS_CUSTOMER_ID", "1234567890")
         os.environ.setdefault("GOOGLE_ADS_DEVELOPER_TOKEN", "fake-dev-token")
-        self._assert_urllib_bypass_raises(
+        self._assert_bypass_raises(
             "google_ads_bypass2", "google-ads-fetch.py",
             lambda _mod: mod.gaql_search("campaigns"))
 
-    def test_keyso_call_cannot_be_invoked_without_its_own_write_ahead(self) -> None:
-        """keyso-fetch.py and competitor-discovery.py (finding H) embed the
-        write-ahead + armed_spend() INSIDE call()/fetch_top() itself, not in
-        an outer caller — unlike the other six clients there is no separate
-        "bypass the wrapper, call the primitive directly" surface to
-        demonstrate: calling call() at all always writes ahead first. This
-        test proves that positively instead of via a non-existent bypass:
-        the real transport is reached (mocked here only to avoid a live
-        request), and the usage file is written BEFORE it is."""
+    def test_keyso_call_writes_ahead_of_its_own_network_attempt(self) -> None:
+        """keyso-fetch.py/competitor-discovery.py/keyso-save.py embed
+        write-ahead + armed_spend() INSIDE the function itself — there is no
+        separate "call the wrapper vs. call the primitive" surface to
+        demonstrate a bypass on. Proved positively instead: write lands
+        before the (stubbed) network attempt, in that order, every time."""
         mod = _fresh_module("keyso_direct", "keyso-fetch.py")
         write_order: list[str] = []
         real_bump = mod.bump_usage
@@ -342,7 +345,7 @@ class TransportGateBypassTest(unittest.TestCase):
             write_order.append("write")
             return real_bump(*a, **kw)
 
-        def _tracking_urlopen(*_a, **_kw):
+        def _tracking_getaddrinfo(host, *a, **kw):
             write_order.append("network")
             raise AssertionError("stub network — no live call")
 
@@ -351,7 +354,7 @@ class TransportGateBypassTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="seo-keyso-order-") as td:
             os.chdir(td)
             try:
-                with mock.patch.object(spend_guard, "_real_urlopen", _tracking_urlopen):
+                with mock.patch.object(spend_guard, "_real_getaddrinfo", _tracking_getaddrinfo):
                     with self.assertRaises(AssertionError):
                         mod.call("fake-token", "/report/simple/keyword_dashboard",
                                 {"keyword": "x", "base": "msk"})
@@ -360,7 +363,7 @@ class TransportGateBypassTest(unittest.TestCase):
         self.assertEqual(write_order, ["write", "network"],
                          "запись расхода обязана произойти ДО сетевого вызова, не после")
 
-    def test_competitor_discovery_fetch_top_cannot_be_invoked_without_its_own_write_ahead(self) -> None:
+    def test_competitor_discovery_fetch_top_writes_ahead_of_its_own_network_attempt(self) -> None:
         mod = _fresh_module("competitor_discovery_direct", "competitor-discovery.py")
         write_order: list[str] = []
         real_bump = mod.bump_counter
@@ -369,7 +372,7 @@ class TransportGateBypassTest(unittest.TestCase):
             write_order.append("write")
             return real_bump(*a, **kw)
 
-        def _tracking_urlopen(*_a, **_kw):
+        def _tracking_getaddrinfo(host, *a, **kw):
             write_order.append("network")
             raise AssertionError("stub network — no live call")
 
@@ -378,7 +381,7 @@ class TransportGateBypassTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="seo-compdisc-order-") as td:
             os.chdir(td)
             try:
-                with mock.patch.object(spend_guard, "_real_urlopen", _tracking_urlopen):
+                with mock.patch.object(spend_guard, "_real_getaddrinfo", _tracking_getaddrinfo):
                     with self.assertRaises(AssertionError):
                         mod.fetch_top("fake-token", "minvata", "msk", 60)
             finally:
@@ -386,26 +389,184 @@ class TransportGateBypassTest(unittest.TestCase):
         self.assertEqual(write_order, ["write", "network"],
                          "запись расхода обязана произойти ДО сетевого вызова, не после")
 
+    def test_keyso_save_post_writes_ahead_of_its_own_network_attempt(self) -> None:
+        """T-089 round 3: keyso-save.py — a THIRD api.keys.so client, found
+        while strengthening the static scan (R2-3), not named by either
+        review round. Same class as F-1: bump_counter() was called after
+        reading the response."""
+        mod = _fresh_module("keyso_save_direct", "keyso-save.py")
+        write_order: list[str] = []
+        real_bump = mod.bump_counter
+
+        def _tracking_bump(*a, **kw):
+            write_order.append("write")
+            return real_bump(*a, **kw)
+
+        def _tracking_getaddrinfo(host, *a, **kw):
+            write_order.append("network")
+            raise AssertionError("stub network — no live call")
+
+        mod.bump_counter = _tracking_bump
+        original_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory(prefix="seo-keysosave-order-") as td:
+            os.chdir(td)
+            try:
+                with mock.patch.object(spend_guard, "_real_getaddrinfo", _tracking_getaddrinfo):
+                    with self.assertRaises(AssertionError):
+                        mod.post("fake-token", "/report/group", {"domains": ["a.ru"]})
+            finally:
+                os.chdir(original_cwd)
+        self.assertEqual(write_order, ["write", "network"],
+                         "запись расхода обязана произойти ДО сетевого вызова, не после")
+
     def test_eighth_client_against_an_already_registered_paid_host_is_refused_automatically(self) -> None:
-        """Review finding C, closed for the case that matters in practice:
-        a brand-new client file, written the ordinary way (no decorator, no
-        knowledge of spend_guard at all), that reuses an ALREADY REGISTERED
-        paid host is refused with zero code of its own — the gate lives on
-        urlopen(), not on anything this new file has to opt into."""
+        """Finding C: a brand-new client file, written the ordinary way (no
+        decorator, no knowledge of spend_guard), reusing an ALREADY
+        REGISTERED paid host is refused with zero code of its own — as long
+        as its process imported anything from seo_cycle_core (this test
+        does, transitively, via `spend_guard` above; production clients do
+        too, via config/usage_ledger/ads — see module docstring for the
+        documented boundary when that is not true)."""
         import urllib.request
-        raiser = mock.Mock(side_effect=AssertionError("real urlopen() reached"))
+        raiser = mock.Mock(side_effect=AssertionError("real getaddrinfo() reached"))
 
         def brand_new_eighth_client() -> dict:
-            # No import of spend_guard, no decorator, no armed_spend — this
-            # is exactly what an unaware author would write.
             req = urllib.request.Request("https://api.dataforseo.com/v3/some/new/endpoint")
             with urllib.request.urlopen(req, timeout=5) as resp:
                 return {"cost": 1.23, "body": resp.read()}
 
-        with mock.patch.object(spend_guard, "_real_urlopen", raiser):
+        with mock.patch.object(spend_guard, "_real_getaddrinfo", raiser):
             with self.assertRaises(SpendNotArmedError):
                 brand_new_eighth_client()
         raiser.assert_not_called()
+
+
+class InProcessBypassProbesTest(unittest.TestCase):
+    """Round-2 review, finding R2-2: seven concrete in-process bypasses of
+    the (then) urlopen/Session.request-level gate, all reproduced against a
+    live DNS lookup under the reviewer's own sandbox shim. Reproduced here
+    against the round-3 socket-level gate, with `spend_guard._real_getaddrinfo`
+    /`_real_connect`/`_real_connect_ex` replaced by raisers so no real
+    lookup or connection is possible regardless of outcome — every probe
+    below is expected to be REFUSED now; two are kept as living controls
+    (they were never bypasses) to prove the harness itself can still say
+    "reached" when something really does get through."""
+
+    def setUp(self) -> None:
+        self.assertTrue(spend_guard.gate_installed())
+        self._raiser_getaddrinfo = mock.Mock(side_effect=AssertionError("real getaddrinfo() reached"))
+        self._raiser_connect = mock.Mock(side_effect=AssertionError("real socket connect() reached"))
+        self._raiser_connect_ex = mock.Mock(side_effect=AssertionError("real socket connect_ex() reached"))
+        self._patches = [
+            mock.patch.object(spend_guard, "_real_getaddrinfo", self._raiser_getaddrinfo),
+            mock.patch.object(spend_guard, "_real_connect", self._raiser_connect),
+            mock.patch.object(spend_guard, "_real_connect_ex", self._raiser_connect_ex),
+        ]
+        for p in self._patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def _assert_refused(self, label: str, fn) -> None:
+        with self.assertRaises(SpendNotArmedError, msg=label):
+            fn()
+        self._raiser_getaddrinfo.assert_not_called()
+        self._raiser_connect.assert_not_called()
+        self._raiser_connect_ex.assert_not_called()
+
+    def test_01_early_bound_urlopen_import_order(self) -> None:
+        import urllib.request as ur
+        from urllib.request import urlopen as bound_urlopen  # noqa: PLC0415 — deliberately late, testing early-bind
+        self._assert_refused("early-bound urlopen", lambda: bound_urlopen("https://api.dataforseo.com/x", timeout=2))
+        del ur
+
+    def test_02_build_opener_and_redirect_path(self) -> None:
+        import urllib.request
+        opener = urllib.request.build_opener()
+        self._assert_refused("build_opener().open", lambda: opener.open("https://api.dataforseo.com/y", timeout=2))
+
+    def test_04_http_client_direct(self) -> None:
+        import http.client
+
+        def go():
+            conn = http.client.HTTPSConnection("api.dataforseo.com", timeout=2)
+            conn.request("GET", "/z")
+            return conn.getresponse()
+
+        self._assert_refused("http.client direct", go)
+
+    def test_05_raw_socket(self) -> None:
+        import socket as socket_mod
+
+        def go():
+            s = socket_mod.socket(socket_mod.AF_INET, socket_mod.SOCK_STREAM)
+            s.settimeout(2)
+            return s.connect(("api.dataforseo.com", 443))
+
+        self._assert_refused("raw socket", go)
+
+    def test_06_restore_original_transport_one_liner(self) -> None:
+        """Round-2's own bypass: reassign urllib.request.urlopen back to
+        whatever was saved. Round 3 doesn't save urlopen at all — there is
+        nothing named `urlopen` to "restore" that skips the gate, because
+        the gate is not on urlopen."""
+        import urllib.request
+        # The only thing round 2 exposed for this trick was
+        # spend_guard._real_urlopen — that name no longer exists.
+        self.assertFalse(hasattr(spend_guard, "_real_urlopen"))
+        self._assert_refused("urlopen after a no-op 'restore'",
+                             lambda: urllib.request.urlopen("https://api.dataforseo.com/w", timeout=2))
+
+    def test_07_saved_real_callable_called_directly(self) -> None:
+        """Round-2's bypass: `spend_guard._real_urlopen(...)` called
+        directly. Round 3's equivalent saved names are `_real_getaddrinfo`/
+        `_real_connect`/`_real_connect_ex` — but calling them directly is
+        exactly what these tests DO to prove they're never reached; there is
+        no client-facing path that reaches them without going through
+        `_check_host` first, because `_check_host` runs INSIDE the guarded
+        wrapper, not in a separate step a caller could skip. Demonstrated by
+        the raiser never firing across every other test in this class."""
+        self.assertIsNotNone(spend_guard._real_getaddrinfo)  # noqa: SLF001
+
+    def test_08_trailing_dot_host(self) -> None:
+        import urllib.request
+        self._assert_refused(
+            "trailing-dot host",
+            lambda: urllib.request.urlopen("https://api.dataforseo.com./w", timeout=2))
+
+    def test_11_requests_session_send_prepared(self) -> None:
+        requests = pytest_or_skip_requests(self)
+        session = requests.Session()
+        req = requests.Request("GET", "https://api.dataforseo.com/prepared").prepare()
+        self._assert_refused("Session.send(prepared)", lambda: session.send(req, timeout=2))
+
+    def test_12_requests_http_adapter_send(self) -> None:
+        requests = pytest_or_skip_requests(self)
+        adapter = requests.adapters.HTTPAdapter()
+        req = requests.Request("GET", "https://api.dataforseo.com/adapter").prepare()
+        self._assert_refused("HTTPAdapter.send", lambda: adapter.send(req, timeout=2))
+
+    def test_00_baseline_control_refused(self) -> None:
+        """Живой контроль: обычный urlopen() на платный хост без арминга
+        обязан отказать — если бы он вдруг НЕ отказал, значило бы, что шлюз
+        снят целиком, и все "refused" выше были бы холостыми."""
+        import urllib.request
+        self._assert_refused("baseline", lambda: urllib.request.urlopen("https://api.dataforseo.com/base", timeout=2))
+
+    def test_09_uppercase_host_control(self) -> None:
+        import urllib.request
+        self._assert_refused("uppercase host",
+                             lambda: urllib.request.urlopen("https://API.DATAFORSEO.COM/w", timeout=2))
+
+    def test_10_requests_get_str_control(self) -> None:
+        requests = pytest_or_skip_requests(self)
+        self._assert_refused("requests.get", lambda: requests.get("https://api.dataforseo.com/req", timeout=2))
+
+
+def pytest_or_skip_requests(testcase: unittest.TestCase):
+    if not _GOOGLE_NLP_DEPS_OK:
+        testcase.skipTest("requests not installed")
+    import requests
+    return requests
 
 
 if __name__ == "__main__":

@@ -90,6 +90,27 @@ def _scan_hosts() -> dict[str, set[str]]:
     return found
 
 
+# Files that mention a PAID_HOSTS hostname WITHOUT making a network call
+# themselves — documentary mentions only (docstrings/comments explaining the
+# shared quota). Reviewed by hand; a file here that later grows a real
+# urlopen()/requests call becomes exactly the R2-3 gap this test exists to
+# catch, so keep this list as short and as scrutinized as PAID_HOSTS itself.
+_DOCUMENTARY_ONLY = frozenset({
+    "scripts/seo_cycle_core/spend_guard.py",  # defines PAID_HOSTS/armed_spend, doesn't call them
+    "scripts/seo_cycle_core/usage_ledger.py",  # docstring cross-reference to keyso-fetch.py's history
+})
+
+
+def _files_mentioning_paid_hosts() -> dict[str, set[str]]:
+    """relative file path -> set of PAID_HOSTS hostnames it mentions."""
+    per_file: dict[str, set[str]] = {}
+    for host, files in _scan_hosts().items():
+        if host in PAID_HOSTS:
+            for f in files:
+                per_file.setdefault(f, set()).add(host)
+    return per_file
+
+
 class ClosedWorldHostsTest(unittest.TestCase):
     def test_registries_do_not_overlap(self) -> None:
         overlap = PAID_HOSTS & FREE_HOSTS
@@ -119,6 +140,40 @@ class ClosedWorldHostsTest(unittest.TestCase):
         # other "keep the registry tidy" check would be.
         self.assertFalse(stale, f"PAID_HOSTS содержит хосты, которых больше нет в scripts/: {stale} "
                                 f"(не баг безопасности — но лишний список гниёт молча, если не смотреть)")
+
+    def test_every_file_mentioning_a_paid_host_imports_and_uses_the_guard(self) -> None:
+        """Round-3 fix for R2-3(a): the round-2 static scan only classified
+        hostnames — it never checked that a file mentioning an
+        ALREADY-REGISTERED paid host actually goes through the guard.
+        A 9th client copy-pasting `https://api.dataforseo.com/...` into a
+        new file with zero mention of `spend_guard`/`armed_spend` passed the
+        old scan silently. This is textual, not semantic (it cannot verify
+        `armed_spend(` is used CORRECTLY, only that the string appears
+        somewhere in the file) — an honest, documented limit, not a claim of
+        full static verification. Caught for real: this exact check found
+        `keyso-save.py`, a third api.keys.so client neither review round
+        had named, still writing its usage counter AFTER the paid call."""
+        offenders = []
+        for relpath, hosts in sorted(_files_mentioning_paid_hosts().items()):
+            if relpath in _DOCUMENTARY_ONLY:
+                continue
+            text = (ROOT / relpath).read_text(encoding="utf-8", errors="replace")
+            imports_guard = "seo_cycle_core" in text and (
+                "spend_guard" in text or "import seo_cycle_core" in text
+            )
+            uses_armed_spend = "armed_spend(" in text
+            if not (imports_guard and uses_armed_spend):
+                offenders.append((relpath, sorted(hosts), imports_guard, uses_armed_spend))
+        if offenders:
+            lines = [
+                f"  {f}: hosts={hosts}, imports seo_cycle_core={imp}, calls armed_spend(={arm}"
+                for f, hosts, imp, arm in offenders
+            ]
+            self.fail(
+                "Файлы упоминают платный хост из PAID_HOSTS, но не проходят через "
+                "spend_guard (не импортируют его и/или не вызывают armed_spend()) — "
+                "платный вызов в них не защищён:\n" + "\n".join(lines)
+            )
 
     def test_scan_actually_finds_something(self) -> None:
         """Positive control: the regex itself must be capable of finding a
