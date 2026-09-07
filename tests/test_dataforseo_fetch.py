@@ -84,6 +84,47 @@ class AuthTest(unittest.TestCase):
                 dfs.load_auth({})
 
 
+class BudgetArgTest(unittest.TestCase):
+    """F-11 (независимый прогон 2026-09-06): --budget объявлялся как голое
+    `type=float`, и argparse штатно принимает nan/inf/-inf — дальше
+    `min(nan, cap)` даёт nan, и бюджетный стоп отключается полностью. Проверка
+    на уровне разбора аргументов (budget_arg), не внутри fetch()."""
+
+    def test_nan_is_rejected_at_parse_time(self) -> None:
+        with self.assertRaises(SystemExit):
+            dfs.build_parser().parse_args(["--budget", "nan", "balance"])
+
+    def test_inf_is_rejected_at_parse_time(self) -> None:
+        with self.assertRaises(SystemExit):
+            dfs.build_parser().parse_args(["--budget", "inf", "balance"])
+
+    def test_negative_is_rejected_at_parse_time(self) -> None:
+        with self.assertRaises(SystemExit):
+            dfs.build_parser().parse_args(["--budget", "-1", "balance"])
+
+    def test_ordinary_budget_still_parses(self) -> None:
+        args = dfs.build_parser().parse_args(["--budget", "12.5", "balance"])
+        self.assertEqual(args.budget, 12.5)
+
+
+class TtlArgTest(unittest.TestCase):
+    """R-4 (гейт круга 2): --ttl оставался голым type=float. --ttl nan делает
+    `(now - mtime) / 86400 <= nan` вечно False — кэш никогда не используется,
+    каждый вызов становится платным (F-11 называл --ttl прямо в тексте)."""
+
+    def test_nan_is_rejected_at_parse_time(self) -> None:
+        with self.assertRaises(SystemExit):
+            dfs.build_parser().parse_args(["--ttl", "nan", "balance"])
+
+    def test_inf_is_rejected_at_parse_time(self) -> None:
+        with self.assertRaises(SystemExit):
+            dfs.build_parser().parse_args(["--ttl", "inf", "balance"])
+
+    def test_negative_is_rejected_at_parse_time(self) -> None:
+        with self.assertRaises(SystemExit):
+            dfs.build_parser().parse_args(["--ttl", "-1", "balance"])
+
+
 class FetchTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-"))
@@ -131,6 +172,20 @@ class FetchTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 dfs.fetch("b64", "some/path", {"k": 4}, self.args)
 
+    def test_api_error_status_still_records_the_paid_call(self) -> None:
+        """F-13: выход по плохому status_code конверта раньше происходил ДО
+        любой записи в _usage.json — платный вызов случился, а учёт о нём не
+        узнавал (T-059 не трогал эту ветку). Теперь запись должна произойти
+        первой, sys.exit — вторым."""
+        bad = {"status_code": 40401, "status_message": "Not Found",
+               "cost": 0.03, "tasks": []}
+        with mock.patch.object(dfs, "call", return_value=bad):
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "some/path", {"k": 4}, self.args)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1)
+        self.assertAlmostEqual(usage["spent_usd"], 0.03)
+
     def test_task_level_error_is_not_cached(self) -> None:
         """T-059: конверт status_code=20000, но tasks[0] провалился — раньше это
         всё равно писалось в кэш на --ttl (по умолчанию 30) дней."""
@@ -149,6 +204,171 @@ class FetchTest(unittest.TestCase):
             dfs.fetch("b64", "some/path", payload, self.args)
         cpath = dfs.cache_path(self.tmp, "some/path", payload)
         self.assertTrue(cpath.exists())
+
+
+class FetchThroughRealCallTest(unittest.TestCase):
+    """Круг 2 независимого гейта: круг-1 тесты мокали `dfs.call` целиком —
+    ровно тот слой, который сам делал sys.exit, так что F-13 в call() был
+    невидим для тестов. Здесь мокается `urllib.request.urlopen` — на один
+    уровень ниже, — и через fetch() идёт настоящий call() со всеми его
+    ветками выхода. Каждый тест — одна ветка, каждый проверяет: _usage.json
+    существует, calls == 1, ДО того, как проверяется SystemExit."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-realcall-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.args = dfs.build_parser().parse_args(["--out", str(self.tmp), "volume", "vata"])
+
+    def _run_and_check_recorded(self, urlopen_kwargs) -> None:
+        with mock.patch.object(dfs.urllib.request, "urlopen", **urlopen_kwargs):
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "keywords_data/google_ads/search_volume/live", {"k": 1}, self.args)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1, "платный вызов обязан быть учтён на этой ветке выхода")
+
+    def test_http_error_records_before_exit(self) -> None:
+        import io
+        err = dfs.urllib.error.HTTPError("url", 500, "Internal Server Error", {}, io.BytesIO(b"boom"))
+        self._run_and_check_recorded({"side_effect": err})
+
+    def test_url_error_records_before_exit(self) -> None:
+        self._run_and_check_recorded({"side_effect": dfs.urllib.error.URLError("no route to host")})
+
+    def test_malformed_json_records_before_exit(self) -> None:
+        self._run_and_check_recorded({"return_value": fake_response(b"{not valid json")})
+
+    def test_json_null_body_records_before_exit(self) -> None:
+        self._run_and_check_recorded({"return_value": fake_response(b"null")})
+
+    def test_json_array_body_records_before_exit(self) -> None:
+        self._run_and_check_recorded({"return_value": fake_response(b"[]")})
+
+    def test_bad_envelope_status_records_before_exit(self) -> None:
+        body = json.dumps({"status_code": 40401, "status_message": "Not Found"}).encode()
+        self._run_and_check_recorded({"return_value": fake_response(body)})
+
+    def test_unusable_cost_records_before_exit(self) -> None:
+        body = json.dumps({"status_code": 20000, "cost": float("nan"),
+                            "tasks": [{"status_code": 20000, "result": []}]}).encode()
+        self._run_and_check_recorded({"return_value": fake_response(body)})
+
+    def test_missing_cost_on_paid_path_records_before_exit(self) -> None:
+        """R-5: платный метод без поля cost — тоже честный отказ, не 0."""
+        body = json.dumps({"status_code": 20000,
+                            "tasks": [{"status_code": 20000, "result": []}]}).encode()
+        self._run_and_check_recorded({"return_value": fake_response(body)})
+
+    # R2-2 (независимый гейт, круг 3): тело УЖЕ отправленного запроса может
+    # порваться множеством способов, ни один из которых — HTTPError/URLError/
+    # TimeoutError, которые круг 2 ловил перечнем. Каждый следующий тест — мок
+    # `.read()`, поднимающий ровно такое исключение (запрос считается ушедшим).
+    # Мутация: замени `except Exception as e:` обратно на перечень конкретных
+    # типов в call() — все четыре теста ниже обязаны покраснеть.
+    def _run_read_raises_and_check_recorded(self, exc: BaseException) -> None:
+        class RaisingReadResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                raise exc
+
+        with mock.patch.object(dfs.urllib.request, "urlopen", return_value=RaisingReadResponse()):
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "keywords_data/google_ads/search_volume/live", {"k": 1}, self.args)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1, "платный вызов обязан быть учтён даже при экзотическом обрыве чтения")
+
+    def test_incomplete_read_records_before_exit(self) -> None:
+        import http.client
+        self._run_read_raises_and_check_recorded(http.client.IncompleteRead(b""))
+
+    def test_connection_reset_records_before_exit(self) -> None:
+        self._run_read_raises_and_check_recorded(ConnectionResetError("connection reset by peer"))
+
+    def test_ssl_error_records_before_exit(self) -> None:
+        import ssl
+        self._run_read_raises_and_check_recorded(ssl.SSLError("decryption failed"))
+
+    def test_memory_error_records_before_exit(self) -> None:
+        self._run_read_raises_and_check_recorded(MemoryError())
+
+
+class WriteAheadSurvivesBaseExceptionTest(unittest.TestCase):
+    """R3-1 (независимый гейт, круг 4): круг 3 закрыл потерю расхода через
+    `except Exception` в call() — но `except Exception` НЕ ловит
+    KeyboardInterrupt/SystemExit/GeneratorExit (все — BaseException), и ни
+    один except вообще не ловит SIGKILL. Правильный уровень — записать
+    намерение потратить (write-ahead) ДО отправки запроса, а не пытаться
+    перехватить после. Мутация: перенеси write-ahead (`u["calls"] += 1;
+    u["cost_unknown_calls"] += 1; save_usage(...)`) обратно ПОСЛЕ call() —
+    оба теста ниже обязаны покраснеть (usage.json не будет содержать запись,
+    потому что KeyboardInterrupt улетит до save_usage())."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-baseexc-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.args = dfs.build_parser().parse_args(["--out", str(self.tmp), "volume", "vata"])
+
+    def test_keyboard_interrupt_after_request_sent_is_already_recorded(self) -> None:
+        with mock.patch.object(dfs.urllib.request, "urlopen", side_effect=KeyboardInterrupt()):
+            with self.assertRaises(KeyboardInterrupt):
+                dfs.fetch("b64", "keywords_data/google_ads/search_volume/live", {"k": 1}, self.args)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1, "запрос ушёл — обязан быть учтён на диске ДО того как "
+                                             "KeyboardInterrupt долетит до вызывающего кода")
+        self.assertEqual(usage.get("cost_unknown_calls"), 1)
+
+    def test_system_exit_after_request_sent_is_already_recorded(self) -> None:
+        with mock.patch.object(dfs.urllib.request, "urlopen", side_effect=SystemExit(1)):
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "keywords_data/google_ads/search_volume/live", {"k": 1}, self.args)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1)
+        self.assertEqual(usage.get("cost_unknown_calls"), 1)
+
+
+class CostUnknownBlocksFurtherCallsTest(unittest.TestCase):
+    """R2-3 (независимый гейт, круг 3): «сумма неизвестна» — не «сумма 0».
+    Мутация: убери проверку `cost_unknown_calls` в fetch() — тест обязан
+    показать, что 200 вызовов проходят при бюджете $1."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-costunknown-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.args = dfs.build_parser().parse_args(
+            ["--out", str(self.tmp), "--budget", "1.0", "volume", "vata"])
+
+    def test_first_cost_unknown_call_blocks_the_next(self) -> None:
+        no_cost = {"status_code": 20000, "tasks": [{"status_code": 20000, "result": []}]}
+        calls_made = 0
+        with mock.patch.object(dfs, "call", return_value=no_cost):
+            for _ in range(200):
+                self.args.__dict__.pop("_cache_bust", None)
+                payload = {"unique": calls_made}
+                try:
+                    dfs.fetch("b64", "keywords_data/google_ads/search_volume/live", payload, self.args)
+                except SystemExit:
+                    pass
+                calls_made += 1
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1,
+                          "после первого вызова с неизвестной суммой дальнейшие платные вызовы обязаны блокироваться")
+        self.assertEqual(usage.get("cost_unknown_calls"), 1)
+
+    def test_force_overrides_the_cost_unknown_block(self) -> None:
+        no_cost = {"status_code": 20000, "tasks": [{"status_code": 20000, "result": []}]}
+        self.args.force = True
+        with mock.patch.object(dfs, "call", return_value=no_cost):
+            for i in range(3):
+                try:
+                    dfs.fetch("b64", "keywords_data/google_ads/search_volume/live", {"unique": i}, self.args)
+                except SystemExit:
+                    pass
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 3, "--force обязан осознанно снимать этот стоп, как и денежный")
 
 
 class LedgerCorruptionTest(unittest.TestCase):
@@ -252,6 +472,78 @@ class LedgerCorruptionTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 dfs.fetch("b64", "some/path", {"k": 1}, self.args)
             called.assert_not_called()
+
+
+class PoisonedCostUnknownCallsTest(unittest.TestCase):
+    """R4-1 (независимый гейт, круг 4→5): `cost_unknown_calls` — стоп,
+    введённый write-ahead'ом круга 4, — не входит в `USAGE_FIELDS`
+    (`("spent_usd", "calls")`), поэтому старая версия `load_usage()`
+    (проверявшая только перечисленные по имени поля) пропускала его
+    NaN/Infinity/отрицательное значение без единой проверки — F-11 в шестой
+    раз, на строке, написанной, чтобы обрыв ловился лучше, а не хуже. Фикс:
+    `usage_ledger.load_usage()` проверяет каждое числовое поле по ТИПУ
+    значения, а не по имени из списка — этот тест ловит именно эту дыру у
+    `dataforseo-fetch.py`, отдельно от `spyfu-fetch.py` (R4-2 круга 4:
+    покрытие соседа не защищает этот клиент)."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-cuc-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.args = dfs.build_parser().parse_args(["--out", str(self.tmp), "volume", "vata"])
+
+    def _write(self, cost_unknown_calls) -> None:
+        # Текущий месяц, не "2099-01": для НЕотравленных значений (1, 0)
+        # файл обязан пройти проверку month == current и остаться как есть —
+        # "2099-01" из соседних тестов класса LedgerCorruptionTest годится
+        # только когда значение само по себе отравлено и падает ДО сверки
+        # месяца.
+        (self.tmp / "_usage.json").write_text(
+            json.dumps({"month": dfs.datetime.date.today().strftime("%Y-%m"), "spent_usd": 0.0,
+                        "calls": 0, "cost_unknown_calls": cost_unknown_calls}), encoding="utf-8")
+
+    def test_nan_cost_unknown_calls_is_treated_as_corrupt(self) -> None:
+        (self.tmp / "_usage.json").write_text(
+            '{"month": "2099-01", "spent_usd": 0.0, "calls": 0, "cost_unknown_calls": NaN}',
+            encoding="utf-8")
+        with self.assertRaises(dfs.UsageLedgerError):
+            dfs.load_usage(self.tmp)
+
+    def test_negative_cost_unknown_calls_blocks_paid_call(self) -> None:
+        """Отрицательное значение — самое опасное: `-5 + 1 - 1 = -5`, стоп
+        `> 0` не сработает больше НИКОГДА (самоподдерживающаяся дыра, R4-1)."""
+        self._write(-5)
+        with mock.patch.object(dfs, "call") as called:
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "some/path", {"k": 1}, self.args)
+            called.assert_not_called()
+
+    def test_infinity_cost_unknown_calls_blocks_paid_call(self) -> None:
+        (self.tmp / "_usage.json").write_text(
+            '{"month": "2099-01", "spent_usd": 0.0, "calls": 0, "cost_unknown_calls": Infinity}',
+            encoding="utf-8")
+        with mock.patch.object(dfs, "call") as called:
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "some/path", {"k": 1}, self.args)
+            called.assert_not_called()
+
+    def test_legitimate_positive_value_still_blocks_as_designed(self) -> None:
+        """Положительный контроль: значение 1 обязано блокировать (это и есть
+        стоп R2-3/R3-1), стенд не сломан — R4-1 закрывает ТОЛЬКО отравленные
+        значения, не сам стоп."""
+        self._write(1)
+        with mock.patch.object(dfs, "call") as called:
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "some/path", {"k": 1}, self.args)
+            called.assert_not_called()
+
+    def test_zero_value_lets_the_paid_call_through(self) -> None:
+        """Положительный контроль в другую сторону: легитимный ноль обязан
+        пропускать вызов — иначе стенд ловит не дыру, а сломанный тест."""
+        self._write(0)
+        with mock.patch.object(dfs, "call", return_value=volume_response(0.01)):
+            dfs.fetch("b64", "some/path", {"k": 1}, self.args)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["cost_unknown_calls"], 0)
 
 
 class SaveUsageAtomicityTest(unittest.TestCase):
@@ -482,37 +774,59 @@ class IdeasPayloadTest(unittest.TestCase):
         self.assertNotIn("keywords", payload)
 
 
-class NetworkErrorTest(unittest.TestCase):
-    """T-059: сетевые ошибки и битый JSON — управляемый sys.exit, не голый traceback."""
+def fake_response(body: bytes):
+    class FakeResponse:
+        def __enter__(self):
+            return self
 
-    def test_url_error_gives_clean_exit(self) -> None:
+        def __exit__(self, *exc_info):
+            return False
+
+        def read(self):
+            return body
+
+    return FakeResponse()
+
+
+class NetworkErrorTest(unittest.TestCase):
+    """T-059/F-13 (круг 2): сетевые ошибки и битый JSON поднимают ApiCallError
+    (не sys.exit) из call() — так fetch() может записать расход до выхода."""
+
+    def test_url_error_raises_api_call_error(self) -> None:
         with mock.patch.object(dfs.urllib.request, "urlopen",
                                side_effect=dfs.urllib.error.URLError("no route to host")):
-            with self.assertRaises(SystemExit) as ctx:
+            with self.assertRaises(dfs.ApiCallError):
                 dfs.call("b64", "some/path", {"k": 1})
-        self.assertTrue(ctx.exception.code)
 
-    def test_timeout_gives_clean_exit(self) -> None:
+    def test_timeout_raises_api_call_error(self) -> None:
         with mock.patch.object(dfs.urllib.request, "urlopen", side_effect=TimeoutError("timed out")):
-            with self.assertRaises(SystemExit) as ctx:
+            with self.assertRaises(dfs.ApiCallError):
                 dfs.call("b64", "some/path", {"k": 1})
-        self.assertTrue(ctx.exception.code)
 
-    def test_malformed_json_response_gives_clean_exit(self) -> None:
-        class FakeResponse:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *exc_info):
-                return False
-
-            def read(self):
-                return b"{not valid json"
-
-        with mock.patch.object(dfs.urllib.request, "urlopen", return_value=FakeResponse()):
-            with self.assertRaises(SystemExit) as ctx:
+    def test_http_error_raises_api_call_error(self) -> None:
+        import io
+        err = dfs.urllib.error.HTTPError("url", 500, "Internal Server Error", {}, io.BytesIO(b"boom"))
+        with mock.patch.object(dfs.urllib.request, "urlopen", side_effect=err):
+            with self.assertRaises(dfs.ApiCallError):
                 dfs.call("b64", "some/path", {"k": 1})
-        self.assertTrue(ctx.exception.code)
+
+    def test_malformed_json_response_raises_api_call_error(self) -> None:
+        with mock.patch.object(dfs.urllib.request, "urlopen", return_value=fake_response(b"{not valid json")):
+            with self.assertRaises(dfs.ApiCallError):
+                dfs.call("b64", "some/path", {"k": 1})
+
+    def test_json_null_body_raises_api_call_error(self) -> None:
+        """Гейт круга 2: валидный JSON, но не объект (`null`) — раньше это
+        не было исключением вообще, а падало дальше в response_cost()
+        голым AttributeError мимо перехвата."""
+        with mock.patch.object(dfs.urllib.request, "urlopen", return_value=fake_response(b"null")):
+            with self.assertRaises(dfs.ApiCallError):
+                dfs.call("b64", "some/path", {"k": 1})
+
+    def test_json_array_body_raises_api_call_error(self) -> None:
+        with mock.patch.object(dfs.urllib.request, "urlopen", return_value=fake_response(b"[]")):
+            with self.assertRaises(dfs.ApiCallError):
+                dfs.call("b64", "some/path", {"k": 1})
 
 
 class ResponseCostTest(unittest.TestCase):
@@ -527,35 +841,46 @@ class ResponseCostTest(unittest.TestCase):
         self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
         self.args = dfs.build_parser().parse_args(["--out", str(self.tmp), "volume", "vata"])
 
-    def test_missing_cost_field_is_free(self) -> None:
-        self.assertEqual(dfs.response_cost({"status_code": 20000}), 0.0)
+    def test_missing_cost_field_is_honest_failure_not_free(self) -> None:
+        """R-5 (независимый гейт, круг 2): response_cost() обслуживает только
+        платные методы (вызывается исключительно из fetch()) — единственный
+        бесплатный метод, `balance`, идёт через call() напрямую и никогда не
+        доходит до response_cost(). Поэтому «нет поля cost» здесь — не
+        легитимный бесплатный случай, а сюрприз в контракте API, и он обязан
+        падать так же честно, как NaN/Infinity/отрицательное."""
+        with self.assertRaises(ValueError):
+            dfs.response_cost({"status_code": 20000})
 
     def test_normal_cost_passes_through(self) -> None:
         self.assertEqual(dfs.response_cost({"cost": 0.05}), 0.05)
 
     def test_nan_cost_is_honest_failure_not_silent_zero(self) -> None:
-        with self.assertRaises(SystemExit) as ctx:
+        with self.assertRaises(ValueError):
             dfs.response_cost({"cost": float("nan")})
-        self.assertTrue(ctx.exception.code)
 
     def test_negative_cost_is_honest_failure(self) -> None:
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(ValueError):
             dfs.response_cost({"cost": -1.0})
 
     def test_non_numeric_cost_is_honest_failure(self) -> None:
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(ValueError):
             dfs.response_cost({"cost": "много"})
 
-    def test_poisoned_api_cost_blocks_before_ledger_is_corrupted(self) -> None:
-        """Сквозной сценарий: DataForSEO вернула валидный конверт с NaN в cost —
-        fetch() обязан упасть ДО save_usage(), а не записать NaN в _usage.json."""
+    def test_poisoned_api_cost_still_exits_without_corrupting_spent_usd(self) -> None:
+        """F-13 (независимый прогон 2026-09-06): NaN в cost всё ещё поднимает
+        SystemExit (спорную сумму не заносим), но сам платный вызов теперь
+        обязан остаться в учёте — деньги списаны фактом вызова, а не фактом
+        валидного ответа. Раньше (T-059) fetch() падал ДО save_usage() и
+        _usage.json не появлялся вовсе — ровно так вызов терялся из истории."""
         bad = {"status_code": 20000, "cost": float("nan"),
                "tasks": [{"status_code": 20000, "result": [{"keyword": "x"}]}]}
         with mock.patch.object(dfs, "call", return_value=bad):
             with self.assertRaises(SystemExit):
                 dfs.fetch("b64", "some/path", {"k": 1}, self.args)
-        self.assertFalse((self.tmp / "_usage.json").exists(),
-                          "леджер не должен появиться с испорченным cost внутри")
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["calls"], 1, "платный вызов обязан быть учтён, даже если сумма неизвестна")
+        self.assertEqual(usage["spent_usd"], 0.0, "неизвестную сумму не приплюсовываем — NaN не проходит арифметику")
+        self.assertEqual(usage.get("cost_unknown_calls"), 1, "непригодность cost отражена отдельным полем")
 
 
 class DistillTest(unittest.TestCase):

@@ -210,12 +210,32 @@ def main() -> int:
         if not ok:
             print(f"ERROR: usage-ledger preflight blocked the run: {message}", file=sys.stderr)
             return 2
+        # R2-2 (независимый гейт, круг 3): перечень типов (URLError/KeyError/
+        # JSONDecodeError) проигрывает следующему заходу. Write-ahead: запись
+        # уходит ДО gaql_search() — квота считается уже потраченной фактом
+        # отправки запроса, любое исключение/сигнал после этой строки уже не
+        # теряет факт попытки.
+        #
+        # R3-3 (независимый гейт, круг 4): возврат `ledger_record()` раньше
+        # отбрасывался — отказ записи (например каталог только на чтение) не
+        # останавливал платный вызов, процесс выходил кодом 0 с пустым
+        # журналом. Теперь отказ записи — отказ вызова, ДО gaql_search().
+        if not ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report}"):
+            print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
+                  "а не платный вызов вслепую", file=sys.stderr)
+            return 2
+        # R3-4 (независимый гейт, круг 4): «уточняющая запись requests=0 при
+        # неудаче», обещанная кругом 3, никогда не срабатывала —
+        # `usage-ledger.py record` без ненулевых метрик отказывает. Честный
+        # вариант: pending-запись выше и есть финальная запись, на неудаче —
+        # только предупреждение в stderr.
         try:
             payload = gaql_search(args.report)
-        except (urllib.error.URLError, KeyError, json.JSONDecodeError) as exc:
+        except Exception as exc:
+            print(f"WARNING: fetch {args.report} failed after the paid call was already "
+                  f"recorded ({exc})", file=sys.stderr)
             print(f"ERROR: Google Ads API call failed: {exc}", file=sys.stderr)
             return 1
-        ledger_record(project_root, PLATFORM, requests=1, note=f"fetch {args.report}")
     else:
         cached = load_latest_raw(
             project_root, PLATFORM, args.report,

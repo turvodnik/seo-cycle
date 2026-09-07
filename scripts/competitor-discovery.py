@@ -24,6 +24,14 @@ from __future__ import annotations
 import argparse, hashlib, json, os, pathlib, sys, time, urllib.parse, urllib.request, urllib.error
 from collections import defaultdict
 
+from seo_cycle_core.usage_ledger import bump_counter, nonneg_finite_arg
+
+# R2-4 (независимый гейт, круг 3): --ttl голым type=float принимал nan/inf —
+# тот же класс, что R-4 закрывал у dataforseo/spyfu/keyso-fetch (условие
+# свежести кэша `(now-mtime)/86400 <= nan` всегда False, каждый прогон тратит
+# квоту Keys.so заново).
+ttl_arg = nonneg_finite_arg("--ttl")
+
 BASE_URL = "https://api.keys.so"
 CACHE_DIR = pathlib.Path("./seo/research/keyso")
 _LAST = [0.0]
@@ -65,6 +73,10 @@ def fetch_top(token, keyword, base, ttl):
         with urllib.request.urlopen(req, timeout=60) as r:
             _LAST[0] = time.time()
             data = json.loads(r.read())
+            # R2-4 (независимый гейт, круг 3): этот клиент тратит ту же квоту
+            # api.keys.so, что keyso-fetch.py, мимо его счётчика — теперь
+            # считается тем же общим bump_counter() на тот же CACHE_DIR.
+            bump_counter(CACHE_DIR, field="requests")
     except urllib.error.HTTPError as e:
         _LAST[0] = time.time()
         if e.code == 429:
@@ -75,16 +87,20 @@ def fetch_top(token, keyword, base, ttl):
     return data
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("seeds", nargs="*", help="коммерческие seed-ключи")
     ap.add_argument("--file", help="файл с ключами (по одному на строку)")
     ap.add_argument("--base", default="msk")
     ap.add_argument("--top", type=int, default=20, help="глубина топа на ключ")
-    ap.add_argument("--ttl", type=float, default=60)
+    ap.add_argument("--ttl", type=ttl_arg, default=60)
     ap.add_argument("--exclude-giants", action="store_true")
     ap.add_argument("--md", action="store_true")
-    args = ap.parse_args()
+    return ap
+
+
+def main() -> int:
+    args = build_parser().parse_args()
 
     seeds = list(args.seeds)
     if args.file:

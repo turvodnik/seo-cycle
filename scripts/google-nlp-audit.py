@@ -26,6 +26,8 @@ from bs4 import BeautifulSoup
 from google.auth.transport.requests import Request as AuthRequest
 from google.oauth2 import service_account
 
+from seo_cycle_core.usage_ledger import finite_nonneg, save_usage as _shared_save_usage, usage_lock
+
 
 DEFAULT_POLICY_REL = "seo/entities/google-nlp-policy.yaml"
 DEFAULT_ENV_RELS = (".env", "seo/.env")
@@ -227,21 +229,50 @@ def usage_path(cache_dir: Path, month: str) -> Path:
 
 
 def load_usage(cache_dir: Path, month: str) -> dict[str, Any]:
+    """T-066 R-2 (независимый гейт, круг 2, находка "в"): третья, своя
+    реализация денежного/квотного учёта — `json.loads` без единой проверки
+    (битый файл раньше поднимал голый необработанный JSONDecodeError), и
+    `check_monthly_cap()` принимала отрицательное значение `used` без вопросов
+    (int(-99999) не бросает исключение — только NaN/строка бы бросили, а
+    отрицательное молча пропускало вызов сверх лимита). Теперь: любая порча
+    (не JSON, не объект, `features` не объект, значение внутри непригодно для
+    арифметики) — управляемый GuardError, а не голый traceback и не тихий 0."""
     path = usage_path(cache_dir, month)
     if not path.exists():
         return {"month": month, "features": {}}
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise GuardError(f"{path}: файл учёта расхода Google NLP повреждён ({e})") from e
+    if not isinstance(data, dict):
+        raise GuardError(f"{path}: ожидался JSON-объект, получено {type(data).__name__}")
+    features = data.get("features", {})
+    if not isinstance(features, dict):
+        raise GuardError(f"{path}: поле features повреждено (не объект)")
+    for feature, value in features.items():
+        if not finite_nonneg(value):
+            raise GuardError(f"{path}: features[{feature}] непригодно для арифметики ({value!r})")
+    if data.get("month") != month:
+        return {"month": month, "features": {}}
+    return data
 
 
 def save_usage(cache_dir: Path, usage: dict[str, Any]) -> None:
+    """Атомарная запись (общий модуль seo_cycle_core.usage_ledger, T-066) —
+    раньше был прямой write_text без temp+replace."""
     cache_dir.mkdir(parents=True, exist_ok=True)
-    path = usage_path(cache_dir, usage["month"])
-    path.write_text(json.dumps(usage, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _shared_save_usage(cache_dir, usage, name=f"usage-{usage['month']}.json")
 
 
 def check_monthly_cap(config: dict[str, str], usage: dict[str, Any], feature: str, units: int) -> None:
     cap = total_cap_for(config, feature)
-    used = int(usage.get("features", {}).get(feature, 0))
+    raw_used = usage.get("features", {}).get(feature, 0)
+    if not finite_nonneg(raw_used):
+        # load_usage() уже не должна пропускать сюда непригодное значение —
+        # это защита в глубину на случай прямого вызова check_monthly_cap()
+        # с самодельным usage-словарём в обход load_usage() (T-066 R-2).
+        raise GuardError(f"{feature}: used непригоден для арифметики ({raw_used!r})")
+    used = int(raw_used)
     if used + units > cap:
         raise GuardError(f"{feature} would use {used + units} units, above configured cap {cap}")
 
@@ -336,7 +367,7 @@ def analyze_source(
     ttl_days = env_int(config, "GOOGLE_NLP_CACHE_DAYS", 30)
     max_chars = env_int(config, "GOOGLE_NLP_MAX_CHARS_PER_URL", 10000)
     clipped_text = text[:max_chars]
-    usage = load_usage(cache_dir, month_key())
+    month = month_key()
     results: list[dict[str, Any]] = []
 
     for feature in features:
@@ -354,32 +385,65 @@ def analyze_source(
             results.append(cache_hit)
             continue
 
-        try:
-            check_monthly_cap(config, usage, feature, units)
-        except GuardError as exc:
-            results.append({"feature": feature, "status": "guard_blocked", "units": units, "reason": str(exc)})
-            continue
+        # T-066 R-2: проверка лимита -> платный вызов -> запись расхода — под
+        # одной блокировкой (usage_lock, тот же примитив, что у всех платных
+        # клиентов), файл учёта перечитывается заново под ней — иначе
+        # конкурентные запуски analyze_source() на разных источниках читают
+        # один и тот же устаревший usage-<месяц>.json и теряют чужой расход.
+        with usage_lock(cache_dir, name=f"usage-{month}.json"):
+            usage = load_usage(cache_dir, month)
+            try:
+                check_monthly_cap(config, usage, feature, units)
+            except GuardError as exc:
+                results.append({"feature": feature, "status": "guard_blocked", "units": units, "reason": str(exc)})
+                continue
 
-        plan = {"feature": feature, "status": "planned", "units": units, "cache_file": str(path)}
-        if dry_run:
-            results.append(plan)
-            continue
+            if dry_run:
+                results.append({"feature": feature, "status": "planned", "units": units, "cache_file": str(path)})
+                continue
 
-        response = call_feature(project_root, feature, clipped_text, language, config)
-        record = {
-            "cached_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-            "source": source_id,
-            "language": language,
-            "feature": feature,
-            "api_version": api_version,
-            "cleaned_text_sha256": sha256_text(clipped_text),
-            "units": units,
-            "response": response,
-        }
-        path.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        usage = add_usage(usage, feature, units)
-        save_usage(cache_dir, usage)
-        results.append({"feature": feature, "status": "api_call", "units": units, "cache_file": str(path)})
+            # F-13 (независимый гейт, круг 2): раньше исключение из
+            # call_feature() (сеть, HTTP-ошибка через raise_for_status())
+            # уходило из analyze_source() необработанным — запрос уже был
+            # отправлен Google (и мог быть биллингован), а add_usage()/
+            # save_usage() ниже просто не выполнялись. Теперь расход
+            # засчитывается по факту вызова на обеих ветках.
+            try:
+                response = call_feature(project_root, feature, clipped_text, language, config)
+            except Exception as exc:
+                # R2-2 (независимый гейт, круг 3): `requests.exceptions.
+                # RequestException` не покрывает всё, что может прилететь при
+                # чтении/парсинге тела уже отправленного запроса (тот же
+                # класс дефекта, что у остальных пяти клиентов) — инверсия на
+                # Exception вместо перечня конкретного исключения библиотеки.
+                usage = add_usage(usage, feature, units)
+                save_usage(cache_dir, usage)
+                results.append({"feature": feature, "status": "api_error", "units": units,
+                                "reason": str(exc)[:300]})
+                continue
+
+            # R2-2 (независимый гейт, круг 3): раньше запись кэша (диск,
+            # может упасть по OSError — полный диск, каталог только на
+            # чтение) стояла ПЕРЕД учётом расхода — платный вызов уже
+            # состоялся, а сбой записи кэша терял расход из _usage.json
+            # молча. Порядок строк — тот же класс F-13, просто без
+            # исключения из транспортного слоя. Учёт теперь фиксируется
+            # ДО попытки записи кэша.
+            usage = add_usage(usage, feature, units)
+            save_usage(cache_dir, usage)
+
+            record = {
+                "cached_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+                "source": source_id,
+                "language": language,
+                "feature": feature,
+                "api_version": api_version,
+                "cleaned_text_sha256": sha256_text(clipped_text),
+                "units": units,
+                "response": response,
+            }
+            path.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            results.append({"feature": feature, "status": "api_call", "units": units, "cache_file": str(path)})
 
     return results
 

@@ -176,6 +176,12 @@ def main():
     p.add_argument("--output", type=pathlib.Path, help="Markdown файл для сохранения отчёта")
     p.add_argument("--me", action="store_true", help="Только health check")
     p.add_argument("--report-id", help="UUID уже созданного parent_search — только pull отчёта (free)")
+    p.add_argument("--live", action="store_true",
+                   help="Явное разрешение на платный запрос (создание search тратит ~8 "
+                        "кредитов AnswerThePublic — по докстрингу файла, даже при одном "
+                        "provider создаются все 8 child-search). Без --live создание search "
+                        "отказывает ДО сети; --me и --report-id (pull уже существующего "
+                        "отчёта) бесплатны и --live не требуют (R3-2, независимый гейт T-066).")
     args = p.parse_args()
 
     token = _env_token()
@@ -188,6 +194,11 @@ def main():
     if not parent_id:
         if not args.keyword:
             p.error("Either provide a keyword or use --report-id / --me")
+        if not args.live:
+            print("ERROR: создание ATP search тратит кредиты (~8 за прогон) — нужен "
+                  "--live, иначе используй --report-id для pull уже существующего "
+                  "отчёта (бесплатно) или --me для health check.", file=sys.stderr)
+            sys.exit(2)
         print(f"== Create ATP search: {args.keyword!r} ({args.lang}/{args.region}, provider={args.provider}) ==", file=sys.stderr)
         resp = create_search(token, args.keyword, args.lang, args.region, args.provider)
         if "error" in resp:

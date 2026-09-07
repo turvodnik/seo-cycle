@@ -42,22 +42,34 @@ from __future__ import annotations
 
 import argparse
 import base64
-import contextlib
 import datetime
-import fcntl
 import hashlib
 import json
-import math
 import os
 import pathlib
-import re
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.request
 
 from seo_cycle_core.config import find_config, load_yaml, nested_get
+from seo_cycle_core.usage_ledger import (
+    ApiCallError,
+    UsageLedgerError,
+    budget_arg,
+    effective_budget as _shared_effective_budget,
+    finite_nonneg as _finite_nonneg,
+    load_usage as _shared_load_usage,
+    nonneg_finite_arg,
+    save_usage,
+    usage_file as _shared_usage_file,
+    usage_lock,
+)
+
+# R-4 (гейт круга 2): `--ttl` голым `type=float` даёт `--ttl nan`, и
+# `(now - mtime) / 86400 <= nan` всегда False — кэш становится вечным
+# промахом, каждый вызов платный. Отчёт F-11 называл `--ttl` прямо.
+ttl_arg = nonneg_finite_arg("--ttl")
 
 API_BASE = "https://api.dataforseo.com/v3"
 DEFAULT_OUT = "seo/research/dataforseo"
@@ -89,100 +101,48 @@ def load_auth(env: dict | None = None) -> str:
              "(ключ DATAFORSEO_API_KEY_BASE64 лежит в Keychain).")
 
 
-# ---------- учёт расходов ----------
+# ---------- учёт расходов (общий модуль seo_cycle_core.usage_ledger, T-066) ----------
+#
+# Класс «денежный стоп» третий раз оказался шире, чем чинился поштучно (T-046,
+# T-059, независимый прогон 2026-09-06 F-11/F-12/F-13). Примитивы (проверка
+# значения, атомарная запись, блокировка, валидатор --budget) теперь живут в
+# seo_cycle_core/usage_ledger.py одной копией на всех платных клиентов; здесь —
+# только тонкие обёртки под интерфейс, которого ждут существующие вызовы/тесты.
 
-class UsageLedgerError(RuntimeError):
-    """_usage.json существует, но не читается: испорчен, не JSON, либо неожиданная
-    схема. НЕ трактуется как «потрачено 0» — иначе бюджетный стоп молча пропускает
-    платный вызов (T-059: ровно так и происходило до этого фикса)."""
-
-
-MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
+# USAGE_FIELDS больше НЕ управляет проверкой значений (R4-1, независимый
+# гейт, круг 4→5): новый стоп `cost_unknown_calls` не был вписан в этот
+# список, и `load_usage()` пропускал его значение без единой проверки —
+# ровно F-11 в шестой раз, на строке, написанной, чтобы F-13 больше не
+# повторялся. Теперь `usage_ledger.load_usage()` проверяет КАЖДОЕ числовое
+# поле файла по признаку типа (int/float, не bool), а не по имени из списка
+# — список ниже только задаёт нулевые значения для пустого/отсутствующего
+# файла, добавить сюда новое поле для его защиты уже не нужно и не поможет
+# забыть добавить: непроверяемых числовых полей больше не бывает.
+USAGE_FIELDS = ("spent_usd", "calls")
 
 
 def usage_file(out_dir: pathlib.Path) -> pathlib.Path:
-    return out_dir / "_usage.json"
-
-
-def _finite_nonneg(x: object) -> bool:
-    """Пригодно для денежной/счётной арифметики: число, не NaN/Infinity, не
-    отрицательное. `isinstance(x, (int, float))` одной этой проверки НЕДОСТАТОЧНО —
-    `json.loads` штатно парсит литералы `NaN`/`Infinity`/`-Infinity` в float, и они
-    проходят проверку типа, но `NaN >= budget` всегда ложно, а `NaN + cost` снова
-    NaN: бюджетный стоп молча отключается навсегда (T-059, находка ревью)."""
-    return (isinstance(x, (int, float)) and not isinstance(x, bool)
-            and math.isfinite(x) and x >= 0)
+    return _shared_usage_file(out_dir)
 
 
 def load_usage(out_dir: pathlib.Path) -> dict:
-    """Месячный учёт трат. Нечитаемый/повреждённый файл (включая NaN/Infinity/
-    отрицательный spent_usd, нечисловой calls, испорченный month) поднимает
-    UsageLedgerError, а не тихо возвращает «потрачено 0» — вызывающая сторона
-    (fetch()) решает, что делать: по умолчанию отказ, --force осознанно считает
-    месяц заново."""
-    f = usage_file(out_dir)
-    month = datetime.date.today().strftime("%Y-%m")
-    if not f.exists():
-        return {"month": month, "spent_usd": 0.0, "calls": 0}
-    try:
-        u = json.loads(f.read_text(encoding="utf-8"))
-    except (ValueError, OSError) as e:
-        raise UsageLedgerError(f"{f}: {e}") from e
-    if not isinstance(u, dict):
-        raise UsageLedgerError(f"{f}: ожидался JSON-объект, получено {type(u).__name__}")
-    spent = u.get("spent_usd")
-    if not _finite_nonneg(spent):
-        raise UsageLedgerError(f"{f}: spent_usd непригоден для денежной арифметики ({spent!r})")
-    if "calls" in u and not _finite_nonneg(u["calls"]):
-        raise UsageLedgerError(f"{f}: calls непригоден ({u['calls']!r})")
-    stored_month = u.get("month")
-    if not isinstance(stored_month, str) or not MONTH_RE.match(stored_month):
-        raise UsageLedgerError(f"{f}: поле month испорчено ({stored_month!r})")
-    if stored_month != month:
-        return {"month": month, "spent_usd": 0.0, "calls": 0}
-    return u
-
-
-def save_usage(out_dir: pathlib.Path, u: dict) -> None:
-    """Атомарная запись: временный файл в той же папке + os.replace — читатель
-    никогда не увидит полузаписанный _usage.json при обрыве процесса (T-059).
-    Временный файл удаляется, если запись не дошла до replace (диск, сериализация)."""
-    path = usage_file(out_dir)
-    fd, tmp_name = tempfile.mkstemp(dir=out_dir, prefix=".usage-", suffix=".json.tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(u, f, indent=2, ensure_ascii=False)
-        os.replace(tmp_name, path)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.unlink(tmp_name)
-        raise
-
-
-@contextlib.contextmanager
-def usage_lock(out_dir: pathlib.Path):
-    """Файловая блокировка на время «проверка бюджета -> платный вызов -> запись
-    расхода» (T-059): без неё параллельные fetch() читают один и тот же старый
-    _usage.json, и последняя запись побеждает, теряя чужой расход."""
-    lock_path = out_dir / "_usage.json.lock"
-    with open(lock_path, "a", encoding="utf-8") as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    """Месячный учёт трат. Нечитаемый/повреждённый файл, ЛЮБОЕ числовое поле
+    (не только spent_usd/calls — по типу значения, а не по имени из списка,
+    R4-1) с NaN/Infinity/отрицательным значением, испорченный month — всё
+    поднимает UsageLedgerError, а не тихо возвращает «потрачено 0» —
+    вызывающая сторона (fetch()) решает, что делать: по умолчанию отказ,
+    --force осознанно считает месяц заново."""
+    return _shared_load_usage(out_dir, USAGE_FIELDS)
 
 
 def effective_budget(args) -> float:
     """--budget, ограниченный сверху governance.subscriptions.dataforseo.monthly_usd_cap
     проекта, если конфиг найден и поле задано пригодным для арифметики числом
-    (T-059). Тот же путь читают scripts/spend-guard.py и scripts/usage-ledger.py
-    для всех платных подписок проекта — это установленная конвенция схемы, а не
-    новая. Конфиг без секции/файла — поведение как раньше (только --budget).
-    Битый YAML или мусор в самом значении cap — честный отказ (sys.exit), а не
-    молчаливый откат на --budget: иначе опечатка в конфиге тихо снимает лимит,
-    который человек специально понижал (ревью T-059, красный №1/№2 — тот же класс
-    «тип прошёл проверку, значение непригодно для денег»)."""
+    (T-059). Конфиг без секции/файла — поведение как раньше (только --budget).
+    Битый YAML — честный отказ (sys.exit), а не молчаливый откат на --budget:
+    иначе опечатка в конфиге тихо снимает лимит, который человек специально
+    понижал (ревью T-059, красный №1/№2 — «тип прошёл проверку, значение
+    непригодно для денег»)."""
     cfg_path = find_config(pathlib.Path.cwd())
     if cfg_path is None:
         return args.budget
@@ -193,21 +153,25 @@ def effective_budget(args) -> float:
                  f"убери секцию governance.subscriptions.dataforseo, чтобы работать "
                  f"только по --budget.")
     cap = nested_get(cfg, "governance.subscriptions.dataforseo.monthly_usd_cap")
-    if cap is None:
-        return args.budget
-    if not _finite_nonneg(cap):
-        sys.exit(f"ERROR: governance.subscriptions.dataforseo.monthly_usd_cap в "
-                 f"{cfg_path} непригоден для денежной арифметики ({cap!r}). Почини "
-                 f"значение или убери ключ, чтобы работать только по --budget.")
-    return min(args.budget, float(cap))
+    try:
+        return _shared_effective_budget(args.budget, cap, cap_label=(
+            f"governance.subscriptions.dataforseo.monthly_usd_cap в {cfg_path}"))
+    except ValueError as e:
+        sys.exit(f"ERROR: {e}. Почини значение или убери ключ, чтобы работать "
+                 f"только по --budget.")
 
 
 # ---------- транспорт ----------
+#
+# `ApiCallError` (из общего модуля, F-13 круг 2) — call() поднимает его вместо
+# sys.exit на любой ошибке после отправки запроса; fetch() решает, что писать
+# в учёт, ДО того как решит, выходить ли.
 
 def call(b64: str, path: str, payload: dict | None) -> dict:
-    """POST (live-методы) либо GET (без payload). Ошибки API, сети и битого JSON
-    поднимаются как управляемый sys.exit с понятным сообщением, а не голый
-    traceback (T-059)."""
+    """POST (live-методы) либо GET (без payload). Любая ошибка — HTTP, сеть,
+    битый JSON, JSON не-объектной формы — поднимает ApiCallError, а не
+    sys.exit: с точки зрения биллинга запрос уже мог уйти и быть оплачен
+    независимо от того, разобрали мы ответ или нет (F-13)."""
     data = None
     if payload is not None:
         data = json.dumps([payload]).encode("utf-8")
@@ -222,33 +186,48 @@ def call(b64: str, path: str, payload: dict | None) -> dict:
             raw = r.read()
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")[:300]
-        sys.exit(f"ERROR DataForSEO HTTP {e.code}: {body}")
-    except (urllib.error.URLError, TimeoutError) as e:
-        sys.exit(f"ERROR DataForSEO: сеть недоступна ({e}).")
+        raise ApiCallError(f"HTTP {e.code}: {body}") from e
+    except urllib.error.URLError as e:
+        raise ApiCallError(f"сеть недоступна ({e})") from e
+    except ApiCallError:
+        raise
+    except Exception as e:
+        # R2-2 (независимый гейт, круг 3): перечень конкретных типов исключений
+        # (URLError/TimeoutError) проигрывает следующему заходу так же, как
+        # перечень СЦЕНАРИЕВ проиграл кругу 2 — тело ответа уже отправленного
+        # запроса может порваться множеством способов (IncompleteRead,
+        # ConnectionResetError, ssl.SSLError, MemoryError...), ни один из
+        # которых не является URLError/TimeoutError. Инверсия вместо перечня:
+        # ЛЮБОЕ исключение после отправки запроса становится ApiCallError и
+        # долетает до fetch(), которая пишет учёт ДО re-raise/exit (F-13).
+        raise ApiCallError(f"ошибка после отправки запроса ({type(e).__name__}: {e})") from e
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
     except ValueError as e:
-        sys.exit(f"ERROR DataForSEO: битый ответ, не JSON ({e}).")
+        raise ApiCallError(f"битый ответ, не JSON ({e})") from e
+    if not isinstance(parsed, dict):
+        raise ApiCallError(f"ответ не JSON-объект, получено {type(parsed).__name__}")
+    return parsed
 
 
 def response_cost(resp: dict) -> float:
-    """Реальная стоимость вызова из ответа API (в USD). Отсутствие поля — 0
-    (бесплатные методы вроде balance его не возвращают). Присутствие с
-    непригодным для арифметики значением (не число, NaN, Infinity, отрицательное)
-    — sys.exit, а не тихий 0: заниженный/испорченный учёт из ответа API — тот же
-    риск, что «потрачено 0» при битом файле учёта (T-059, второй круг после
-    гейта — response_cost() не был затронут первым проходом)."""
+    """Реальная стоимость вызова из ответа API (в USD). Эта функция вызывается
+    только для платных методов (через fetch()) — отсутствие `cost` там ТОЖЕ
+    непригодно, а не «бесплатно» (R-5, круг 2 гейта: `balance` — единственный
+    бесплатный метод — идёт через call() напрямую, минуя fetch()/response_cost()
+    вовсе, так что «нет поля — 0» здесь никогда не было легитимным путём, только
+    маскировкой сюрприза в контракте API). Непригодное для арифметики значение
+    (не число, NaN, Infinity, отрицательное) или отсутствие поля — ValueError,
+    не sys.exit: решение «что делать дальше» — за вызывающей стороной (F-13)."""
     raw = resp.get("cost")
     if raw is None:
-        return 0.0
+        raise ValueError("поле cost отсутствует в ответе платного метода")
     try:
         cost = float(raw)
-    except (TypeError, ValueError):
-        sys.exit(f"ERROR DataForSEO: поле cost в ответе непригодно для денежной "
-                 f"арифметики ({raw!r}).")
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"поле cost в ответе непригодно для денежной арифметики ({raw!r})") from e
     if not _finite_nonneg(cost):
-        sys.exit(f"ERROR DataForSEO: поле cost в ответе непригодно для денежной "
-                 f"арифметики ({raw!r}).")
+        raise ValueError(f"поле cost в ответе непригодно для денежной арифметики ({raw!r})")
     return cost
 
 
@@ -311,15 +290,88 @@ def fetch(b64: str, path: str, payload: dict | None, args) -> dict:
             sys.exit(f"ERROR: месячный лимит DataForSEO исчерпан "
                      f"(${u['spent_usd']:.4f}/${budget}, месяц {u['month']}). "
                      f"--force чтобы продолжить или подними --budget.")
+        # R2-3 (независимый гейт, круг 3): «сумма неизвестна» — это не «сумма
+        # ноль». spent_usd сравнением с бюджетом не двигается, пока cost
+        # непригоден/отсутствует в ответе — при массовом сбое поля cost стоп
+        # не срабатывает ни разу, сколько бы вызовов ни прошло. Любой
+        # неучтённый по сумме вызов блокирует ДАЛЬНЕЙШИЕ платные вызовы, пока
+        # человек не разберётся (--force снимает осознанно).
+        if u.get("cost_unknown_calls", 0) > 0 and not args.force:
+            sys.exit(f"ERROR: {u['cost_unknown_calls']} вызов(ов) в этом месяце "
+                     f"учтены БЕЗ суммы (поле cost непригодно/отсутствовало) — "
+                     f"дальнейшие платные вызовы заблокированы, реальный расход "
+                     f"неизвестен. Сверь {usage_file(out_dir)} вручную, либо "
+                     f"--force чтобы продолжить вслепую.")
 
-        resp = call(b64, path, payload)
-        if resp.get("status_code") not in (20000, None):
-            sys.exit(f"ERROR DataForSEO: {resp.get('status_code')} {resp.get('status_message')}")
-
-        cost = response_cost(resp)
-        u["spent_usd"] = round(u.get("spent_usd", 0.0) + cost, 6)
+        # F-13 (независимый прогон 2026-09-06, круг 2): деньги списываются
+        # самим фактом платного вызова, а не фактом «ответ хороший». Круг 1
+        # закрыл только две ветки, названные в отчёте по строкам (bad
+        # status_code, непригодный cost) — гейт нашёл ещё четыре: HTTP-ошибка,
+        # сетевая ошибка, битый JSON и валидный JSON не-объектной формы, все
+        # внутри call(), до того как fetch() успевал что-то записать. Теперь
+        # call() только поднимает ApiCallError (см. класс выше) — НИ ОДНО
+        # исключение между отправкой запроса и save_usage() не покидает этот
+        # try/except, не долетев до записи.
+        #
+        # R3-1 (независимый гейт, круг 4): круг 3 закрыл это через
+        # `except Exception` в call() — но `except Exception` НЕ ловит
+        # BaseException (Ctrl-C/KeyboardInterrupt, SystemExit, GeneratorExit),
+        # и никакой except вообще не ловит SIGKILL. Инверсия на уровне
+        # исключения снова была перечнем — просто более широким. Правильный
+        # уровень — до отправки запроса: пишем намерение потратить
+        # (write-ahead) на диск ДО call(), а не пытаемся перехватить после.
+        # Тогда Ctrl-C/SIGTERM/SIGKILL — все становятся одним и тем же
+        # случаем: pending-запись уже на диске, cost_unknown_calls > 0
+        # блокирует дальнейшие вызовы (R2-3), пока человек не разберётся.
+        # save_usage() обязана реально отработать: если она сама бросит
+        # исключение, оно обязано долететь до вызывающего кода НЕ пойманным —
+        # платный вызов не должен уйти в сеть при недоказанной записи (R3-3).
         u["calls"] = u.get("calls", 0) + 1
+        u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) + 1
         save_usage(out_dir, u)
+
+        error_message: str | None = None
+        cost: float | None = None
+        cost_error: str | None = None
+        resp: dict = {}
+        try:
+            resp = call(b64, path, payload)
+        except ApiCallError as e:
+            error_message = str(e)
+        else:
+            # cost читается независимо от status_code конверта: DataForSEO
+            # выставляет реальную стоимость и на успешных, и на провалившихся
+            # задачах — окно F-13 про факт вызова, а не про факт успеха.
+            try:
+                cost = response_cost(resp)
+            except ValueError as e:
+                cost_error = str(e)
+            if resp.get("status_code") not in (20000, None):
+                error_message = f"{resp.get('status_code')} {resp.get('status_message')}"
+
+        if cost is not None:
+            # Сумма известна — уточняем pending-запись: переносим вызов из
+            # «неизвестно» в «потрачено». Никакой отдельной «уточняющей
+            # записи» здесь не пишется (R3-4) — pending и есть финальная
+            # запись, она просто дополняется суммой на месте.
+            u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) - 1
+            u["spent_usd"] = round(u.get("spent_usd", 0.0) + cost, 6)
+            save_usage(out_dir, u)
+        # else: вызов не удался или сумма непригодна — write-ahead запись уже
+        # отражает и факт вызова, и cost_unknown_calls; дописывать нечего.
+        # На неудаче второй записи не будет никогда — это финальное решение
+        # (R3-4), а не временное упущение.
+
+        if error_message is not None:
+            print(f"↑ запрос {path}: вызов #{u['calls']} зафиксирован в учёте, "
+                  f"ошибка вызова: {error_message}", file=sys.stderr)
+            sys.exit(f"ERROR DataForSEO: {error_message}")
+        if cost_error is not None:
+            print(f"↑ запрос {path}: вызов #{u['calls']} зафиксирован в учёте "
+                  f"без суммы (cost непригоден)", file=sys.stderr)
+            sys.exit(f"ERROR DataForSEO: {cost_error}. Расход по вызову #{u['calls']} "
+                     f"учтён без суммы — сверь {usage_file(out_dir)} вручную.")
+
         print(f"↑ запрос {path}: ${cost:.4f} · за месяц ${u['spent_usd']:.4f} "
               f"({u['calls']} вызовов)", file=sys.stderr)
 
@@ -466,8 +518,8 @@ def add_common(p: argparse.ArgumentParser, sub: bool) -> None:
     заданные до подкоманды (`--md volume X` и `volume X --md` работают одинаково)."""
     d = (lambda v: argparse.SUPPRESS) if sub else (lambda v: v)
     p.add_argument("--out", default=d(DEFAULT_OUT), help=f"папка кэша и учёта (умолч. {DEFAULT_OUT})")
-    p.add_argument("--ttl", type=float, default=d(DEFAULT_TTL_DAYS), help="возраст кэша в днях")
-    p.add_argument("--budget", type=float, default=d(DEFAULT_BUDGET_USD),
+    p.add_argument("--ttl", type=ttl_arg, default=d(DEFAULT_TTL_DAYS), help="возраст кэша в днях")
+    p.add_argument("--budget", type=budget_arg, default=d(DEFAULT_BUDGET_USD),
                    help="месячный лимит трат, USD (итог — минимум с "
                         "governance.subscriptions.dataforseo.monthly_usd_cap проекта, если задан)")
     p.add_argument("--force", action="store_true", default=d(False),

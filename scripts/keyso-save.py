@@ -22,7 +22,13 @@ Auth: X-Keyso-TOKEN (env KEYSO_API_TOKEN).
 from __future__ import annotations
 import argparse, json, os, pathlib, sys, urllib.request, urllib.error
 
+from seo_cycle_core.usage_ledger import bump_counter
+
 API = "https://api.keys.so"
+# R2-4 (независимый гейт, круг 3): третий клиент той же квоты api.keys.so,
+# что keyso-fetch.py и competitor-discovery.py — тот же out_dir, тот же
+# общий bump_counter().
+_USAGE_DIR = pathlib.Path("./seo/research/keyso")
 
 def load_token() -> str:
     tok = os.environ.get("KEYSO_API_TOKEN")
@@ -54,7 +60,9 @@ def post(token: str, path: str, body: dict) -> dict:
                                  headers={"X-Keyso-TOKEN": token, "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
-            return json.loads(r.read())
+            data = json.loads(r.read())
+            bump_counter(_USAGE_DIR, field="requests")
+            return data
     except urllib.error.HTTPError as e:
         sys.exit(f"ERROR Keys.so HTTP {e.code}: {e.read()[:200]}")
 

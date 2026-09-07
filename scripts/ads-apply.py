@@ -157,8 +157,17 @@ def apply_direct(operations: list[dict[str, Any]], sandbox: bool) -> list[dict[s
                                 "id": nested_get(data, "result.AddResults", [{}])[0].get("Id")})
             else:
                 results.append({**operation, "status": "skipped", "reason": "not in v1 apply scope"})
-        except (urllib.error.URLError, KeyError, json.JSONDecodeError) as exc:
-            results.append({**operation, "status": "failed", "error": str(exc)[:200]})
+        except Exception as exc:
+            # R2-2 (независимый гейт, круг 3): перечень типов (URLError/
+            # KeyError/JSONDecodeError) не покрывает ConnectionResetError/
+            # TimeoutError/ValueError и всё, что может прилететь при чтении
+            # тела уже отправленного запроса — раньше такое исключение
+            # уходило из apply_direct() ЦЕЛИКОМ (мимо ledger_record() на
+            # вызывающей стороне) голым traceback'ом, и операции ПОСЛЕ той,
+            # что упала, вообще не выполнялись и не попадали в results.
+            # Заявление предыдущего круга «ads-apply.py уже безопасен»
+            # проверкой этой ветки не подтвердилось (см. отчёт круга 2).
+            results.append({**operation, "status": "failed", "error": f"{type(exc).__name__}: {str(exc)[:200]}"})
     return results
 
 
@@ -260,14 +269,31 @@ def main() -> int:
         print(f"ERROR: usage-ledger preflight blocked apply: {message}", file=sys.stderr)
         return 2
 
+    # R3-1 (независимый гейт, круг 4): круг 3 записывало расход ПОСЛЕ цикла
+    # apply_direct() целиком — Ctrl-C/SystemExit/сигнал во время цикла уносил
+    # выполнение мимо ledger_record() навсегда, теряя ВСЕ уже выполненные
+    # (и оплаченные) операции прогона, не только последнюю. Write-ahead:
+    # намерение потратить на всю пачку операций фиксируется на диске ДО
+    # цикла — тогда обрыв в любой точке цикла уже не теряет запись.
+    # R3-3: отказ записи (не bool True) останавливает выполнение ДО первой
+    # сетевой операции, а не только предупреждает после факта.
+    if not ledger_record(project_root, platform, requests=len(operations),
+                         note=f"apply ticket {args.ticket}: {len(operations)} operations requested"):
+        print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
+              "а не платный apply вслепую", file=sys.stderr)
+        return 2
+
     sandbox = bool(nested_get(ads, "yandex_direct.sandbox", False))
     log.warning("APPLY start: %s operations to %s (sandbox=%s) ticket=%s",
                 len(operations), platform, sandbox, args.ticket)
     results = apply_direct(operations, sandbox)
     applied = sum(1 for row in results if row["status"] == "ok")
     failed = sum(1 for row in results if row["status"] == "failed")
-    ledger_record(project_root, platform, requests=len(operations),
-                  note=f"apply ticket {args.ticket}: {applied} ok, {failed} failed")
+    # R3-4: никакой второй «уточняющей» записи с реальным applied/failed —
+    # write-ahead выше и есть финальная запись расхода (она считает по факту
+    # ОТПРАВКИ операций, не по факту успеха). Итог по applied/failed остаётся
+    # в отчёте/логе ниже, не в леджере.
+    log.warning("APPLY done: %s ok, %s failed (ticket=%s)", applied, failed, args.ticket)
     notify(project_root,
            f"Ads apply ({platform}{', sandbox' if sandbox else ''}): {applied} ok, {failed} failed,"
            f" ticket {args.ticket}")

@@ -17,6 +17,11 @@ Endpoint: https://api.keys.so · Auth: header X-Keyso-TOKEN (env KEYSO_API_TOKEN
 Опции: --base msk (региональная база) | --per-page 50 | --ttl 60 | --out DIR | --md
 Расход: кэш на диск (TTL 60д) + локальный счётчик запросов (_usage.json). Повторный
 запрос той же темы в пределах TTL = 0 обращений к API (экономия лимита Pro-тарифа).
+Keys.so — плоская подписка с лимитом запросов (не $-биллинг по вызову), поэтому
+здесь нет денежного стопа; счётчик — только видимость расхода лимита. Атомарность
+записи и блокировка на конкурентные запуски — общий модуль
+scripts/seo_cycle_core/usage_ledger.py (T-066: тот же класс порчи файла учёта,
+что и в dataforseo-fetch.py/spyfu-fetch.py, был и здесь).
 
 Пример:
   python3 keyso-fetch.py keyword-info "минеральная вата"
@@ -26,6 +31,16 @@ Endpoint: https://api.keys.so · Auth: header X-Keyso-TOKEN (env KEYSO_API_TOKEN
 
 from __future__ import annotations
 import argparse, hashlib, json, os, pathlib, sys, time, urllib.parse, urllib.request, urllib.error
+
+from seo_cycle_core.usage_ledger import (
+    bump_counter,
+    current_month,  # noqa: F401 - re-exported for tests.test_keyso_fetch
+    nonneg_finite_arg,
+)
+
+# R-4 (гейт круга 2, T-066): `--ttl` голым `type=float` — тот же «вечный
+# промах кэша» на nan/inf, что F-11 называл прямо для всех клиентов.
+ttl_arg = nonneg_finite_arg("--ttl")
 
 BASE_URL = "https://api.keys.so"
 _LAST = [0.0]
@@ -54,22 +69,16 @@ def load_token() -> str:
 
 
 def bump_usage(out_dir, n=1):
-    """Локальный счётчик реальных запросов Keys.so (месячный сброс) — визибилити расхода."""
-    import datetime
-    f = pathlib.Path(out_dir) / "_usage.json"
-    month = datetime.date.today().strftime("%Y-%m")
-    u = {"month": month, "requests": 0}
-    if f.exists():
-        try:
-            old = json.loads(f.read_text())
-            if old.get("month") == month:
-                u = old
-        except Exception:
-            pass
-    u["requests"] = u.get("requests", 0) + n
-    f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(json.dumps(u, ensure_ascii=False, indent=2), encoding="utf-8")
-    return u["requests"]
+    """Локальный счётчик реальных запросов Keys.so (месячный сброс) — визибилити
+    расхода лимита Pro-тарифа, не денежный стоп (плоская подписка).
+
+    R2-4 (независимый гейт, круг 3): счётчик считал только этот клиент, хотя
+    `competitor-discovery.py` и `keyso-save.py` ходят в тот же `api.keys.so` и
+    тратят ту же квоту мимо него — теперь общая примитив `bump_counter()`
+    (seo_cycle_core.usage_ledger), которую вызывают все три клиента с тем же
+    out_dir/полем, так что счётчик суммирует реальный расход, а не только
+    вызовы через этот файл."""
+    return bump_counter(out_dir, field="requests", n=n)
 
 
 def call(token: str, path: str, params: dict, _retry=True):
@@ -131,7 +140,7 @@ def main() -> int:
     ap.add_argument("arg", help="keyword или domain")
     ap.add_argument("--base", default="msk", help="региональная база Keys.so (msk=Яндекс Москва)")
     ap.add_argument("--per-page", type=int, default=50)
-    ap.add_argument("--ttl", type=float, default=60, help="кэш в днях (дефолт 60 — экономия лимита)")
+    ap.add_argument("--ttl", type=ttl_arg, default=60, help="кэш в днях (дефолт 60 — экономия лимита)")
     ap.add_argument("--out", default="./seo/research/keyso")
     ap.add_argument("--md", action="store_true")
     args = ap.parse_args()
