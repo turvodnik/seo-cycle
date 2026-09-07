@@ -53,7 +53,7 @@ import urllib.error
 import urllib.request
 
 from seo_cycle_core.config import find_config, load_yaml, nested_get
-from seo_cycle_core.spend_guard import armed_spend, guarded_spend
+from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend
 from seo_cycle_core.usage_ledger import (
     ApiCallError,
     UsageLedgerError,
@@ -168,7 +168,6 @@ def effective_budget(args) -> float:
 # sys.exit на любой ошибке после отправки запроса; fetch() решает, что писать
 # в учёт, ДО того как решит, выходить ли.
 
-@guarded_spend
 def call(b64: str, path: str, payload: dict | None) -> dict:
     """POST (live-методы) либо GET (без payload). Любая ошибка — HTTP, сеть,
     битый JSON, JSON не-объектной формы — поднимает ApiCallError, а не
@@ -192,6 +191,14 @@ def call(b64: str, path: str, payload: dict | None) -> dict:
     except urllib.error.URLError as e:
         raise ApiCallError(f"сеть недоступна ({e})") from e
     except ApiCallError:
+        raise
+    except SpendNotArmedError:
+        # T-089 round 2: this means urlopen() refused BEFORE sending
+        # anything (no armed_spend() for api.dataforseo.com was active) —
+        # the opposite of "request already sent, response failed", which is
+        # what the broad except below is for. Must not be reclassified as
+        # ApiCallError, or the distinction the transport gate exists to draw
+        # is lost one line later.
         raise
     except Exception as e:
         # R2-2 (независимый гейт, круг 3): перечень конкретных типов исключений
@@ -328,11 +335,13 @@ def fetch(b64: str, path: str, payload: dict | None, args) -> dict:
         # save_usage() обязана реально отработать: если она сама бросит
         # исключение, оно обязано долететь до вызывающего кода НЕ пойманным —
         # платный вызов не должен уйти в сеть при недоказанной записи (R3-3).
-        # T-089 (F-1): call() is decorated with @guarded_spend — it refuses
-        # to run unless armed_spend() below has already run this write-ahead
-        # closure and it returned True. A future caller of call() that skips
-        # this block entirely (a hostile bypass, or a careless copy-paste)
-        # gets SpendNotArmedError instead of a silent unlogged spend.
+        # T-089 round 2 (F-1 + review findings A/C/D): the refusal is no
+        # longer a decorator on call() — `armed_spend()` arms the ACTUAL
+        # transport (urllib.request.urlopen) for the exact host DataForSEO
+        # uses. There is no wrapper around call() left to unwrap; call()
+        # calling urlopen() against api.dataforseo.com without this block
+        # having run first raises SpendNotArmedError from inside urlopen()
+        # itself, before any byte reaches the network.
         def _write_ahead() -> bool:
             u["calls"] = u.get("calls", 0) + 1
             u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) + 1
@@ -344,7 +353,7 @@ def fetch(b64: str, path: str, payload: dict | None, args) -> dict:
         cost_error: str | None = None
         resp: dict = {}
         try:
-            with armed_spend(_write_ahead):
+            with armed_spend(_write_ahead, hosts="api.dataforseo.com"):
                 resp = call(b64, path, payload)
         except ApiCallError as e:
             error_message = str(e)

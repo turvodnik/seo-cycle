@@ -26,7 +26,7 @@ from bs4 import BeautifulSoup
 from google.auth.transport.requests import Request as AuthRequest
 from google.oauth2 import service_account
 
-from seo_cycle_core.spend_guard import armed_spend, guarded_spend
+from seo_cycle_core.spend_guard import armed_spend
 from seo_cycle_core.usage_ledger import finite_nonneg, save_usage as _shared_save_usage, usage_lock
 
 
@@ -337,7 +337,6 @@ def document_payload(text: str, language: str, api_version: str, include_encodin
     return payload
 
 
-@guarded_spend
 def call_feature(project_root: Path, feature: str, text: str, language: str, config: dict[str, str]) -> dict[str, Any]:
     api_version, endpoint = FEATURE_ENDPOINTS[feature]
     creds = credentials(project_root, config)
@@ -420,11 +419,11 @@ def analyze_source(
             # сколько потрачено» состояния: write-ahead запись, сделанная до
             # call_feature(), уже финальна, уточнять её после ответа нечем.
             #
-            # call_feature() декорирован @guarded_spend (seo_cycle_core.
-            # spend_guard, T-089) — он физически отказывается выполниться,
-            # если не пройден armed_spend() ниже: платный вызов мимо
-            # write-ahead-записи для ЛЮБОГО клиента этого модуля больше не
-            # тихая ошибка кода, а SpendNotArmedError.
+            # T-089 round 2: armed_spend() ниже арендует реальный транспорт
+            # (requests.Session.request) под хост language.googleapis.com —
+            # у call_feature() нет обёртки-декоратора, которую можно снять:
+            # платный вызов мимо write-ahead ловится на уровне requests, не
+            # на уровне этой функции.
             def _write_ahead(feature: str = feature, units: int = units) -> bool:
                 # Значения по умолчанию связывают ТЕКУЩИЕ feature/units в
                 # момент определения (ruff B023: замыкание на переменную
@@ -438,7 +437,7 @@ def analyze_source(
                 return True
 
             try:
-                with armed_spend(_write_ahead):
+                with armed_spend(_write_ahead, hosts="language.googleapis.com"):
                     response = call_feature(project_root, feature, clipped_text, language, config)
             except Exception as exc:
                 # Расход уже записан write-ahead-строкой выше — сигнал/

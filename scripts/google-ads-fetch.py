@@ -33,7 +33,7 @@ from seo_cycle_core.ads import (
     save_raw,
     summary_paths,
 )
-from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend, guarded_spend
+from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend
 from seo_cycle_core.config import coerce_float, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
@@ -87,7 +87,6 @@ def oauth_access_token() -> str:
         return json.loads(resp.read().decode("utf-8"))["access_token"]
 
 
-@guarded_spend
 def gaql_search(report: str) -> dict[str, Any]:
     version = os.environ.get("GOOGLE_ADS_API_VERSION", DEFAULT_API_VERSION)
     customer_id = os.environ["GOOGLE_ADS_CUSTOMER_ID"].replace("-", "")
@@ -222,9 +221,11 @@ def main() -> int:
         # отбрасывался — отказ записи (например каталог только на чтение) не
         # останавливал платный вызов, процесс выходил кодом 0 с пустым
         # журналом. Теперь отказ записи — отказ вызова, ДО gaql_search().
-        # T-089 (F-1): gaql_search() is @guarded_spend — refuses to run
-        # unless armed_spend() has already run ledger_record() (write-ahead)
-        # and it returned True.
+        # T-089 round 2: armed_spend() below arms the real transport
+        # (urllib.request.urlopen) for googleads.googleapis.com only —
+        # gaql_search()'s own OAuth token exchange (oauth2.googleapis.com,
+        # free) is not gated. gaql_search() has no wrapper around it to
+        # bypass.
         # R3-4 (независимый гейт, круг 4): «уточняющая запись requests=0 при
         # неудаче», обещанная кругом 3, никогда не срабатывала —
         # `usage-ledger.py record` без ненулевых метрик отказывает. Честный
@@ -232,7 +233,8 @@ def main() -> int:
         # только предупреждение в stderr.
         try:
             with armed_spend(lambda: ledger_record(project_root, PLATFORM, requests=1,
-                                                    note=f"fetch {args.report}")):
+                                                    note=f"fetch {args.report}"),
+                              hosts="googleads.googleapis.com"):
                 payload = gaql_search(args.report)
         except SpendNotArmedError:
             print("ERROR: запись расхода в usage-ledger не удалась — отказ, "

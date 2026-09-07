@@ -20,6 +20,7 @@ import pathlib
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -33,7 +34,7 @@ from seo_cycle_core.ads import (
     save_raw,
     summary_paths,
 )
-from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend, guarded_spend
+from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend
 from seo_cycle_core.config import coerce_float, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
@@ -145,7 +146,6 @@ def parse_tsv(text: str, field_names: list[str]) -> list[dict[str, Any]]:
     return [dict(zip(columns, line.split("\t"), strict=False)) for line in lines[start:]]
 
 
-@guarded_spend
 def live_fetch(report: str, cfg: dict[str, Any], days: int) -> Any:
     token = os.environ.get("YANDEX_DIRECT_TOKEN", "")
     client_login = os.environ.get("YANDEX_DIRECT_CLIENT_LOGIN", "") or str(
@@ -278,9 +278,9 @@ def main() -> int:
         # (например каталог только на чтение): вызов состоялся, свидетельства
         # нет, процесс выходил кодом 0. Теперь отказ записи останавливает
         # выполнение ДО live_fetch().
-        # T-089 (F-1): live_fetch() is @guarded_spend — refuses to run
-        # unless armed_spend() has already run ledger_record() (write-ahead)
-        # and it returned True.
+        # T-089 round 2: armed_spend() below arms the real transport
+        # (urllib.request.urlopen) for the exact Yandex Direct host this
+        # run targets — live_fetch() has no wrapper around it to bypass.
         # R3-4 (независимый гейт, круг 4): круг 3 обещал здесь «уточняющую
         # запись requests=0 при неудаче» — она никогда не срабатывала
         # (`usage-ledger.py record` отказывает без метрик: requests=0 и
@@ -290,7 +290,9 @@ def main() -> int:
         # stderr, без второй (несуществующей) записи в журнал.
         try:
             with armed_spend(lambda: ledger_record(project_root, PLATFORM, requests=1,
-                                                    note=f"fetch {args.report}")):
+                                                    note=f"fetch {args.report}"),
+                              hosts=urllib.parse.urlsplit(api_host(
+                                  bool(nested_get(cfg, "ads.yandex_direct.sandbox", False)))).hostname):
                 payload = live_fetch(args.report, cfg, args.days)
         except SpendNotArmedError:
             print("ERROR: запись расхода в usage-ledger не удалась — отказ, "

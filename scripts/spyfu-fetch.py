@@ -40,7 +40,7 @@ from __future__ import annotations
 import argparse, base64, hashlib, json, os, pathlib, sys, time, urllib.error, urllib.parse, urllib.request
 
 from seo_cycle_core.config import find_config, load_yaml, nested_get
-from seo_cycle_core.spend_guard import armed_spend, guarded_spend
+from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend
 from seo_cycle_core.usage_ledger import (
     ApiCallError,
     UsageLedgerError,
@@ -139,7 +139,6 @@ def effective_budget(args) -> float:
                  f"только по --budget.")
 
 
-@guarded_spend
 def call(b64: str, path: str, params: dict) -> dict:
     """Любая ошибка после отправки запроса (HTTP, сеть, битый JSON) поднимает
     ApiCallError вместо голого traceback/sys.exit — run() решает, что писать
@@ -159,6 +158,11 @@ def call(b64: str, path: str, params: dict) -> dict:
     except urllib.error.URLError as e:
         raise ApiCallError(f"сеть недоступна ({e})") from e
     except ApiCallError:
+        raise
+    except SpendNotArmedError:
+        # T-089 round 2: urlopen() refused BEFORE sending anything — not
+        # "request already sent, response failed" (see dataforseo-fetch.py
+        # for the identical reasoning).
         raise
     except Exception as e:
         # R2-2 (независимый гейт, круг 3): перечень типов (URLError/TimeoutError)
@@ -238,9 +242,9 @@ def run(b64, path, cpm, params, args, distill):
         # не знает cost/rows до ответа — поэтому write-ahead помечает вызов
         # как cost_unknown_calls, а после успешного ответа уточняет запись на
         # месте (никакой отдельной «уточняющей» записи, R3-4).
-        # T-089 (F-1): call() is @guarded_spend — it refuses to run unless
-        # armed_spend() below has already run this write-ahead closure and
-        # it returned True.
+        # T-089 round 2: armed_spend() below arms the real transport
+        # (urllib.request.urlopen) for api.spyfu.com — call() has no
+        # wrapper around it to bypass.
         def _write_ahead() -> bool:
             u["cost_unknown_calls"] = u.get("cost_unknown_calls", 0) + 1
             save_usage(out_dir, u)
@@ -251,7 +255,7 @@ def run(b64, path, cpm, params, args, distill):
         cost = 0.0
         resp: dict = {}
         try:
-            with armed_spend(_write_ahead):
+            with armed_spend(_write_ahead, hosts="api.spyfu.com"):
                 resp = call(b64, path, params)
         except ApiCallError as e:
             error_message = str(e)

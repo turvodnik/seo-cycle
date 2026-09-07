@@ -24,6 +24,7 @@ import pathlib
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -34,7 +35,7 @@ from seo_cycle_core.ads import (
     ledger_record,
     require_enabled,
 )
-from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend, guarded_spend
+from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend
 from seo_cycle_core.config import coerce_float, coerce_int, find_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 
@@ -105,7 +106,6 @@ def direct_request(host: str, service: str, payload: dict[str, Any]) -> dict[str
         return json.loads(resp.read().decode("utf-8"))
 
 
-@guarded_spend
 def apply_direct(operations: list[dict[str, Any]], sandbox: bool) -> list[dict[str, Any]]:
     """Create campaigns/groups/keywords in Yandex Direct following the plan order."""
     host = SANDBOX_HOST if sandbox else API_HOST
@@ -282,15 +282,16 @@ def main() -> int:
     sandbox = bool(nested_get(ads, "yandex_direct.sandbox", False))
     log.warning("APPLY start: %s operations to %s (sandbox=%s) ticket=%s",
                 len(operations), platform, sandbox, args.ticket)
-    # T-089 (F-1): apply_direct() is @guarded_spend — it refuses to run
-    # unless armed_spend() has already run ledger_record() (write-ahead) and
-    # it returned True. A future caller that skips straight to apply_direct()
-    # gets SpendNotArmedError, not a silent unlogged spend.
+    # T-089 round 2: armed_spend() below arms the real transport
+    # (urllib.request.urlopen, via direct_request()) for the exact Yandex
+    # Direct host this run targets (sandbox or production) — apply_direct()
+    # has no wrapper around it to bypass; the refusal lives in urlopen().
+    apply_host = urllib.parse.urlsplit(SANDBOX_HOST if sandbox else API_HOST).hostname
     try:
         with armed_spend(lambda: ledger_record(
             project_root, platform, requests=len(operations),
             note=f"apply ticket {args.ticket}: {len(operations)} operations requested",
-        )):
+        ), hosts=apply_host):
             results = apply_direct(operations, sandbox)
     except SpendNotArmedError:
         print("ERROR: запись расхода в usage-ledger не удалась — отказ, "
