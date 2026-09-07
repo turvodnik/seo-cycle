@@ -136,6 +136,60 @@ is_git_worktree_checkout() {
     [ -f "$1/.git" ] && grep -q '^gitdir:' "$1/.git" 2>/dev/null
 }
 
+# T-091 (F-12/F-13): single choke point for "pull tags from origin". Before
+# this ticket there were THREE independent call sites doing this
+# (install_or_update_repo, install_or_update_optional_repo, and
+# update_store_only) and only the third one was ever fixed (T-068) — the
+# other two, which run on EVERY plain `install.sh` / `--project` attach (the
+# most common invocation, and the one T-055 uses to move four live sites),
+# kept the exact construction that produced the phantom v2.1.0 tag: a bare
+# `git fetch --tags` REFUSES to overwrite a tag that moved on the server
+# (silently, exit 0) and never removes one deleted there, and both call
+# sites additionally threw the fetch's own exit code away (`|| warn
+# "...(offline?)"` on one, a bare `|| true` on the other) so a real fetch
+# failure got reported as the wrong cause. Every caller that needs tags now
+# routes through here instead of reinventing the fetch — closing the class
+# by construction (one function to fix, not three call sites to remember)
+# rather than by an exhaustive-but-forgettable list. Also refreshes the
+# origin-tags manifest (see write_origin_tags_manifest) on success so a
+# later --sync (F-14) has honest data to verify an explicit --pin against.
+#
+# Returns 0 and prints old→new / "тег отсутствует" for every local tag that
+# moved or vanished when the fetch itself succeeded (a moved/deleted tag is
+# NOT a failure — it is the normal, correctly-handled case). Returns 1 and
+# warns with the fetch's REAL cause (not a guessed "offline?") only when the
+# fetch command itself failed.
+fetch_tags_or_report() {
+    local local_dir="$1" label="$2"
+    local before_file t old_c new_c rc=0
+    before_file="$(mktemp)"
+    git -C "$local_dir" tag --list | while IFS= read -r t; do
+        [ -n "$t" ] || continue
+        printf '%s %s\n' "$t" "$(git -C "$local_dir" rev-parse --verify -q "refs/tags/$t" 2>/dev/null)"
+    done > "$before_file"
+    # Explicit `origin` (T-068 review): a bare `fetch --tags` follows
+    # whatever remote git picks by default, which is usually origin but is
+    # not guaranteed to be — --prune-tags on the wrong remote would prune
+    # release tags that are perfectly fine on origin.
+    if git -C "$local_dir" fetch origin --tags --force --prune --prune-tags --quiet; then
+        while IFS=' ' read -r t old_c; do
+            [ -n "$t" ] || continue
+            new_c="$(git -C "$local_dir" rev-parse --verify -q "refs/tags/$t" 2>/dev/null || true)"
+            if [ -z "$new_c" ]; then
+                warn "$label: тег $t отсутствует на origin — убран локально (--prune-tags)"
+            elif [ "$new_c" != "$old_c" ]; then
+                warn "$label: тег $t переехал: ${old_c:0:8} → ${new_c:0:8}"
+            fi
+        done < "$before_file"
+        write_origin_tags_manifest "$local_dir"
+    else
+        warn "$label: fetch тегов не удался — не обновлено (offline? origin недоступен?)"
+        rc=1
+    fi
+    rm -f "$before_file"
+    return "$rc"
+}
+
 install_or_update_repo() {
     local repo="$1" dest="$2" label="$3"
     mkdir -p "$(dirname "$dest")"
@@ -154,7 +208,9 @@ install_or_update_repo() {
     fi
     if [ -d "$dest/.git" ]; then
         log "▶ обновляю $label..."
-        git -C "$dest" fetch --tags --quiet 2>/dev/null || warn "$label: fetch не удался (offline?)"
+        if ! fetch_tags_or_report "$dest" "$label"; then
+            return 1
+        fi
         git -C "$dest" pull --quiet --ff-only 2>/dev/null || log "  (есть локальные изменения — pull пропущен)"
     else
         if [ -e "$dest" ]; then
@@ -164,6 +220,7 @@ install_or_update_repo() {
         fi
         log "▶ клонирую $label..."
         git clone --quiet "$repo" "$dest"
+        write_origin_tags_manifest "$dest"
     fi
 }
 
@@ -172,9 +229,14 @@ install_or_update_optional_repo() {
     mkdir -p "$(dirname "$dest")"
     if [ -L "$dest" ]; then rm "$dest"; fi
     if [ -d "$dest/.git" ]; then
-        git -C "$dest" fetch --tags --quiet 2>/dev/null || true
+        # Optional repo (T-091): a failed fetch is reported truthfully (no
+        # more silent `|| true`) but does not abort the whole install —
+        # seo-keywords being unreachable must not block the mandatory
+        # seo-cycle core, same reasoning as T-064's kw_pin fallback below.
+        fetch_tags_or_report "$dest" "$label" || true
         git -C "$dest" pull --quiet --ff-only 2>/dev/null || true
     elif git clone --quiet "$repo" "$dest" 2>/dev/null; then
+        write_origin_tags_manifest "$dest"
         log "▶ $label установлен"
     else
         log "  ($label пропущен — необязателен)"
@@ -182,15 +244,82 @@ install_or_update_optional_repo() {
 }
 
 ensure_python_deps() {
+    # T-091 (F-18): SEO_CYCLE_SKIP_PYTHON_DEPS lets the test suite (and
+    # anyone else driving install.sh against a throwaway HOME) opt out of
+    # touching the machine's real Python at all — the independent QA found
+    # the test run installing packages into the SYSTEM python (with
+    # --break-system-packages on the third fallback) and, on a machine
+    # without network, hanging forever because none of the three pip
+    # invocations below carried a timeout.
+    if [ "${SEO_CYCLE_SKIP_PYTHON_DEPS:-0}" = "1" ]; then
+        log "  (пропускаю установку python-зависимостей — SEO_CYCLE_SKIP_PYTHON_DEPS=1)"
+        return 0
+    fi
     log "▶ проверяю python-зависимости (pyyaml, requests, pillow, beautifulsoup4, google-auth)..."
     if ! python3 -c "import yaml, requests, PIL, bs4; import google.auth, google.oauth2.service_account" 2>/dev/null; then
-        python3 -m pip install --quiet pyyaml requests pillow beautifulsoup4 google-auth 2>/dev/null \
-            || pip3 install --quiet pyyaml requests pillow beautifulsoup4 google-auth 2>/dev/null \
-            || python3 -m pip install --quiet --break-system-packages pyyaml requests pillow beautifulsoup4 google-auth 2>/dev/null \
+        # --timeout 20 (T-091, F-18): without it, a dead/absent network made
+        # pip hang indefinitely instead of failing honestly — the fallback
+        # chain below never got a chance to run, so the offline case just
+        # froze the whole installer rather than printing the `warn` at the
+        # end.
+        python3 -m pip install --quiet --timeout 20 pyyaml requests pillow beautifulsoup4 google-auth 2>/dev/null \
+            || pip3 install --quiet --timeout 20 pyyaml requests pillow beautifulsoup4 google-auth 2>/dev/null \
+            || python3 -m pip install --quiet --timeout 20 --break-system-packages pyyaml requests pillow beautifulsoup4 google-auth 2>/dev/null \
             || warn "установи вручную: python3 -m pip install [--break-system-packages] pyyaml requests pillow beautifulsoup4 google-auth"
     fi
 }
 
+# T-091 (F-14): single choke point that RECORDS what fetch_tags_or_report()
+# (or the initial clone) just confirmed against origin. Lives inside
+# .git/ — never part of the working tree, never committed, and cannot be
+# forged by a plain `git tag -f` the way a ref can (a local tag write does
+# not touch this file). This is what lets a later --sync verify an explicit
+# --pin WITHOUT making a network call of its own (see verify_tag_against_manifest).
+ORIGIN_TAGS_MANIFEST_NAME="seo-cycle-origin-tags.tsv"
+
+write_origin_tags_manifest() {
+    local repo_dir="$1"
+    local manifest="$repo_dir/.git/$ORIGIN_TAGS_MANIFEST_NAME"
+    local tmp t c
+    tmp="$(mktemp)"
+    git -C "$repo_dir" tag --list | while IFS= read -r t; do
+        [ -n "$t" ] || continue
+        c="$(git -C "$repo_dir" rev-parse --verify -q "refs/tags/$t^{commit}" 2>/dev/null || true)"
+        [ -n "$c" ] || continue
+        printf '%s\t%s\n' "$t" "$c"
+    done > "$tmp"
+    mv "$tmp" "$manifest"
+}
+
+# F-14 repro: `git tag -f v9.9.9 HEAD~3` (never pushed) then
+# `--pin v9.9.9 --sync` sailed through with a green "✓ sync завершён" —
+# NETWORK_ALLOWED=0 (a real --sync) skipped ensure_worktree()'s origin
+# ls-remote check entirely, and a purely local tag is indistinguishable
+# from a fetched one by `git rev-parse` alone. Since --sync's whole point is
+# making ZERO network calls, the fix cannot be "ls-remote anyway" — it has
+# to be a check against data ALREADY confirmed against origin by the most
+# recent fetch/clone (the manifest above). No manifest, or the tag missing
+# from it, or a commit mismatch → refused, same as if ls-remote itself had
+# said so.
+verify_tag_against_manifest() {
+    local repo_dir="$1" tag="$2" tag_commit="$3"
+    local manifest="$repo_dir/.git/$ORIGIN_TAGS_MANIFEST_NAME"
+    if [ ! -f "$manifest" ]; then
+        warn "--sync: нет сведений о состоянии origin (install.sh ни разу не подтверждал теги) — тег $tag не подтверждён; запусти install.sh --update"
+        return 1
+    fi
+    local manifest_commit
+    manifest_commit="$(awk -F'\t' -v t="$tag" '$1==t{print $2}' "$manifest")"
+    if [ -z "$manifest_commit" ]; then
+        warn "--sync: тег $tag отсутствовал на origin при последнем install.sh --update — отклонён (F-14). Запусти install.sh --update."
+        return 1
+    fi
+    if [ "$manifest_commit" != "$tag_commit" ]; then
+        warn "--sync: тег $tag локально указывает на ${tag_commit:0:8}, а по данным последнего install.sh --update — на ${manifest_commit:0:8}; запусти install.sh --update"
+        return 1
+    fi
+    return 0
+}
 
 # Tags that exist on origin AND locally (sorted newest-first). Empty (refuse)
 # when origin cannot be reached at all while NETWORK_ALLOWED=1 (T-064): a
@@ -298,6 +427,13 @@ ensure_worktree() {
                 return 1
             fi
         fi
+    else
+        # T-091 (F-14): NETWORK_ALLOWED=0 means a real --sync, which cannot
+        # ls-remote — but "cannot verify" must not silently become "assume
+        # trusted". Check the explicit/locked --pin against the manifest
+        # the most recent fetch/clone actually confirmed against origin
+        # instead of skipping verification outright.
+        verify_tag_against_manifest "$repo_dir" "$tag" "$tag_commit" || return 1
     fi
     if [ -e "$dest/SKILL.md" ] || [ -e "$dest/VERSION" ]; then
         local snapshot_commit
@@ -418,43 +554,15 @@ update_store_only() {
         local_dir="${pair#*:}"
         label="${pair%%:*}"
         if [ -d "$local_dir/.git" ]; then
-            local before_file t old_c new_c
-            before_file="$(mktemp)"
-            # Review fix (T-068): `tag --list 'v*'` used to mask the
-            # snapshot to release tags only — a tag OUTSIDE that mask
-            # (e.g. a local-only marker tag) got pruned by --prune-tags
-            # below with zero report. Snapshot ALL local tags so nothing
-            # vanishes silently.
-            git -C "$local_dir" tag --list | while IFS= read -r t; do
-                [ -n "$t" ] || continue
-                printf '%s %s\n' "$t" "$(git -C "$local_dir" rev-parse --verify -q "refs/tags/$t" 2>/dev/null)"
-            done > "$before_file"
-            # Explicit `origin` (review fix): a bare `fetch --tags` follows
-            # whatever remote git picks by default, which is usually origin
-            # but is not guaranteed to be — --prune-tags on the wrong remote
-            # would prune release tags that are perfectly fine on origin.
-            if git -C "$local_dir" fetch origin --tags --force --prune --prune-tags --quiet; then
-                while IFS=' ' read -r t old_c; do
-                    [ -n "$t" ] || continue
-                    new_c="$(git -C "$local_dir" rev-parse --verify -q "refs/tags/$t" 2>/dev/null || true)"
-                    if [ -z "$new_c" ]; then
-                        # Review fix: this run can only see origin's CURRENT
-                        # state, not whether the tag was ever there before —
-                        # so the wording states the fact this fetch actually
-                        # observed ("отсутствует на origin", present tense)
-                        # rather than claiming a removal event that a
-                        # local-only, never-pushed tag never had.
-                        warn "$label: тег $t отсутствует на origin — убран локально (--prune-tags)"
-                    elif [ "$new_c" != "$old_c" ]; then
-                        warn "$label: тег $t переехал: ${old_c:0:8} → ${new_c:0:8}"
-                    fi
-                done < "$before_file"
+            # T-091: this used to duplicate the fetch inline — now routed
+            # through the same choke point as install_or_update_repo() /
+            # install_or_update_optional_repo() (fetch_tags_or_report), so
+            # the three places that pull tags cannot drift apart again.
+            if fetch_tags_or_report "$local_dir" "$label"; then
                 log "✓ $label: fetch ok, latest tag: $(latest_tag "$local_dir")"
             else
-                warn "$label: fetch тегов не удался — хранилище НЕ обновлено (offline? origin недоступен?)"
                 overall_rc=1
             fi
-            rm -f "$before_file"
         else
             warn "$label: клона нет — запусти install.sh без аргументов"
         fi
@@ -876,7 +984,15 @@ PYEOF
 
     log ""
     log "✓ Проект подключён: seo-cycle @ $pin"
-    log "  Обновление:   install.sh --project \"$project_dir\" --pin <новый-тег> --sync"
+    # T-091 (F-14): the installer used to print --pin+--sync ALONE as "the"
+    # update recipe, without the --update that fetches new tags into the
+    # store first — the exact sequence that let a locally-created tag
+    # (never on origin) sail through unverified. --sync now checks the
+    # explicit pin against the origin-tags manifest either way (see
+    # verify_tag_against_manifest), but the printed hint should still model
+    # the safe two-step sequence rather than the one line that used to be
+    # exploitable.
+    log "  Обновление:   install.sh --update && install.sh --project \"$project_dir\" --pin <новый-тег> --sync"
     log "  Отключение:   install.sh --project \"$project_dir\" --detach"
 }
 
