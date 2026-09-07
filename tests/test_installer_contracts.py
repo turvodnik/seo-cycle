@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import tempfile
@@ -1935,6 +1936,138 @@ class SyncManifestRejectsUnfetchedTagTest(InstallerFixture):
             f"без manifest-проверки тег должен был снова пройти — {mutated_proc.stdout + mutated_proc.stderr!r}",
         )
         self.assertTrue(self.lock_path().exists())
+
+
+class FetchChokePointStructuralGuardTest(unittest.TestCase):
+    """T-091 round 2 (2026-09-07 review, 🔴-1): the independent gate wrote
+    its OWN new function with a bare `git fetch --tags` + an unchecked
+    `ls-remote`, called from ensure_store() — a location the "single call
+    site" checks above never look at, because they assert about EXISTING
+    call sites, not about whether a NEW one could appear anywhere else.
+    That injection passed `bash -n`, `shellcheck -S error` and the whole
+    46-test suite in total silence: the ban on bypassing
+    fetch_tags_or_report()/the three known ls-remote sites was a comment
+    and a convention, not a mechanism.
+
+    This is deliberately NOT a behavioural test (you cannot behaviourally
+    test a call site that does not exist yet) and deliberately NOT a list
+    of known-good line numbers (T-068 already zeroed twice on "the known
+    addresses are fine" while a NEW address was open). It is a count over
+    the whole file: exactly one `git … fetch` line (inside
+    fetch_tags_or_report(), the choke point) and exactly three
+    `git … ls-remote` lines (inside latest_tag() and ensure_worktree(),
+    the two call sites T-064/T-068 already hardened). Add a fetch or
+    ls-remote call ANYWHERE else in the file — choke point or not,
+    ensure_store() or any other function — and the count changes and this
+    test goes red. The negative control below is the reviewer's own
+    injection, verbatim, and is asserted to fail this guard.
+    """
+
+    # Comment lines that merely discuss "git fetch"/"ls-remote" in prose
+    # (e.g. line 146's `# \`git fetch --tags\` REFUSES to overwrite ...`)
+    # are excluded — only executable lines count.
+    _FETCH_RE = re.compile(r'\bgit\b.*\bfetch\b')
+    _LSREMOTE_RE = re.compile(r'\bgit\b.*\bls-remote\b')
+    _FUNC_DEF_RE = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{')
+
+    @staticmethod
+    def _executable_lines(source: str) -> list[tuple[int, str]]:
+        out = []
+        for i, line in enumerate(source.splitlines(), start=1):
+            if line.strip().startswith("#"):
+                continue
+            out.append((i, line))
+        return out
+
+    @classmethod
+    def _function_at_line(cls, source: str, lineno: int) -> str | None:
+        """Name of the function whose braces contain `lineno`, found by
+        walking top-level `name() {` definitions in file order (install.sh
+        has no nested top-level function defs, verified by inspection)."""
+        current = None
+        for i, line in enumerate(source.splitlines(), start=1):
+            m = cls._FUNC_DEF_RE.match(line)
+            if m:
+                current = m.group(1)
+            if i == lineno:
+                return current
+        return None
+
+    def _scan(self, source: str) -> tuple[list[int], list[int]]:
+        fetch_lines = [i for i, line in self._executable_lines(source) if self._FETCH_RE.search(line)]
+        lsremote_lines = [i for i, line in self._executable_lines(source) if self._LSREMOTE_RE.search(line)]
+        return fetch_lines, lsremote_lines
+
+    def test_exactly_one_git_fetch_call_and_it_is_the_choke_point(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        fetch_lines, _ = self._scan(source)
+        self.assertEqual(
+            len(fetch_lines), 1,
+            f"ожидалась ровно одна строка вида `git … fetch` во всём install.sh "
+            f"(единственная точка получения тегов) — найдено {len(fetch_lines)}: {fetch_lines}",
+        )
+        fn = self._function_at_line(source, fetch_lines[0])
+        self.assertEqual(
+            fn, "fetch_tags_or_report",
+            f"строка {fetch_lines[0]} с `git fetch` лежит в функции {fn!r}, "
+            f"а не в общей точке fetch_tags_or_report() — обход choke point",
+        )
+
+    def test_exactly_three_ls_remote_calls_in_the_two_known_functions(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        _, lsremote_lines = self._scan(source)
+        self.assertEqual(
+            len(lsremote_lines), 3,
+            f"ожидались ровно три строки вида `git … ls-remote` (latest_tag() "
+            f"+ ensure_worktree(), T-064/T-068) — найдено {len(lsremote_lines)}: {lsremote_lines}",
+        )
+        allowed = {"latest_tag", "ensure_worktree"}
+        for lineno in lsremote_lines:
+            fn = self._function_at_line(source, lineno)
+            self.assertIn(
+                fn, allowed,
+                f"строка {lineno} с `git ls-remote` лежит в функции {fn!r}, "
+                f"вне известных мест {sorted(allowed)} — новая точка обращения к серверу",
+            )
+
+    def test_negative_control_reviewers_bypass_injection_is_caught(self) -> None:
+        """Verbatim reproduction of the independent reviewer's 🔴-1 finding
+        (2026-09-07 report, §4): a brand-new function with a bare
+        `git fetch --tags` and an unchecked `git ls-remote`, wired into
+        ensure_store() — the exact injection that passed `bash -n`,
+        shellcheck and all 46 tests silently before this guard existed.
+        This guard MUST turn it red, or it is not doing its job."""
+        source = INSTALL.read_text(encoding="utf-8")
+        anchor = "ensure_store() {"
+        self.assertIn(anchor, source, "anchor `ensure_store() {` не найден — install.sh изменился структурно")
+
+        baseline_fetch, baseline_lsremote = self._scan(source)
+
+        injected_fn = (
+            "sneaky_bypass_fetch() {\n"
+            "    local d=\"$1\"\n"
+            "    git -C \"$d\" fetch --tags\n"
+            "    git -C \"$d\" ls-remote --tags origin 'refs/tags/v*'\n"
+            "}\n\n"
+        )
+        mutated = source.replace(anchor, injected_fn + anchor, 1)
+        self.assertNotEqual(mutated, source, "мутация не применилась")
+
+        fetch_lines, lsremote_lines = self._scan(mutated)
+        self.assertEqual(
+            len(fetch_lines), len(baseline_fetch) + 1,
+            "негативный контроль сломан: инъекция обхода не увеличила счётчик `fetch`",
+        )
+        self.assertEqual(
+            len(lsremote_lines), len(baseline_lsremote) + 1,
+            "негативный контроль сломан: инъекция обхода не увеличила счётчик `ls-remote`",
+        )
+        # And, run through the actual guard assertions on the mutated source:
+        # both must now fail exactly as they would in CI.
+        with self.assertRaises(AssertionError):
+            self.assertEqual(len(fetch_lines), 1)
+        with self.assertRaises(AssertionError):
+            self.assertEqual(len(lsremote_lines), 3)
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ PROVIDER = "writerzen"
 DEFAULT_REPORTS = ["topic_discovery", "keyword_explorer", "keyword_planner", "domain_focus"]
 DEFAULT_IMPORT_DIR = "seo/research/writerzen/imports"
 DEFAULT_PROFILE_DIR = pathlib.Path.home() / ".codex" / "browser-profiles" / "writerzen"
-DEFAULT_NODE_DEPS_DIR = pathlib.Path.home() / ".codex" / "vendor" / "seo-cycle-node"
+DEFAULT_NODE_DEPS_DIR = pathlib.Path.home() / ".seo-cycle" / "vendor" / "seo-cycle-node"
 LOGIN_URL = "https://app.writerzen.net/"
 
 
@@ -136,12 +136,18 @@ def ensure_browser_runtime(plan: dict[str, Any], args: argparse.Namespace) -> di
     package_path = deps_dir / "node_modules" / "playwright-core" / "package.json"
     if package_path.exists():
         return {"status": "ready", "node_modules": str(deps_dir / "node_modules"), "installed": False}
-    if args.skip_install_browser_runtime:
+    if not args.install_browser_runtime:
+        # T-091 round 2 (F-18-class finding, 2026-09-07 review): installing a
+        # third-party npm package is a network side effect a normal run must
+        # not perform silently — the user opts in explicitly with
+        # --install-browser-runtime, same principle as pip installs in
+        # install.sh requiring an explicit run of the installer.
         return {
             "status": "missing",
             "node_modules": str(deps_dir / "node_modules"),
             "installed": False,
-            "error": "playwright-core is missing and --skip-install-browser-runtime was set.",
+            "error": "playwright-core is missing. Re-run with --install-browser-runtime to install it into "
+                     f"{deps_dir} (network access, one-time).",
         }
     if not shutil.which("npm"):
         return {"status": "missing_npm", "node_modules": str(deps_dir / "node_modules"), "installed": False}
@@ -250,7 +256,7 @@ def main() -> int:
     parser.add_argument("--import-dir", help=f"Project import dir. Default: {DEFAULT_IMPORT_DIR}")
     parser.add_argument("--browser-channel", default="chrome", help="Playwright browser channel: chrome, msedge, chromium via auto/empty.")
     parser.add_argument("--node-deps-dir", help=f"Shared Node dependency cache. Default: {DEFAULT_NODE_DEPS_DIR}")
-    parser.add_argument("--skip-install-browser-runtime", action="store_true", help="Do not auto-install playwright-core into the shared cache.")
+    parser.add_argument("--install-browser-runtime", action="store_true", help="Explicit opt-in: install playwright-core into the Node dependency cache (network access) if missing. Without this flag a missing runtime is reported, not silently installed.")
     parser.add_argument("--headless", action="store_true", help="Run headless. Use headed for first login/2FA.")
     parser.add_argument("--keep-open", action="store_true", help="Leave browser open after collection.")
     parser.add_argument("--manual-fallback-seconds", type=int, default=0, help="If export button is not found, wait for a manual download for N seconds.")
@@ -305,7 +311,7 @@ def main() -> int:
                 if runtime.get("status") == "missing_npm":
                     report["next_actions"].append("Install npm or preinstall playwright-core into the shared cache.")
                 elif runtime.get("status") == "missing":
-                    report["next_actions"].append("Run without --skip-install-browser-runtime or install playwright-core manually in the shared cache.")
+                    report["next_actions"].append("Re-run with --install-browser-runtime, or install playwright-core manually in the shared cache.")
                 else:
                     report["next_actions"].append("Browser runtime install failed; inspect seo/setup/writerzen-browser-collect.json stderr.")
                 if args.write:

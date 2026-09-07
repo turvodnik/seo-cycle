@@ -57,7 +57,7 @@ SOURCES = [
     },
     {
         "label": "NotebookLM SEO knowledge base",
-        "url": "https://notebooklm.google.com/notebook/8ad724f9-72ab-43be-8fcd-77239f0cc2e4",
+        "url": "https://notebooklm.google.com/notebook/<notebook-id>",
         "topic": "expert_sources",
     },
 ]

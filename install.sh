@@ -284,6 +284,23 @@ ensure_python_deps() {
 # --pin WITHOUT making a network call of its own (see verify_tag_against_manifest).
 ORIGIN_TAGS_MANIFEST_NAME="seo-cycle-origin-tags.tsv"
 
+# T-091 round 2 (🟡-2, 2026-09-07 review): `--sync` is offline by contract —
+# it verifies an explicit --pin against this manifest, never against origin
+# itself. If the tag moved on origin AFTER the last successful --update, the
+# manifest still (honestly) reflects the OLD commit and --sync accepts it
+# with rc=0: correct given the contract, but "✓ sync завершён" alone reads
+# like a live confirmation. This prints how stale that offline check is, so
+# the human sees it is a local-manifest check, not a server confirmation.
+manifest_age_human() {
+    local repo_dir="$1"
+    local manifest="$repo_dir/.git/$ORIGIN_TAGS_MANIFEST_NAME"
+    [ -f "$manifest" ] || { echo "нет данных"; return; }
+    local epoch
+    epoch="$(stat -f %m "$manifest" 2>/dev/null || stat -c %Y "$manifest" 2>/dev/null || true)"
+    if [ -z "$epoch" ]; then echo "неизвестно когда"; return; fi
+    date -r "$epoch" '+%Y-%m-%d %H:%M' 2>/dev/null || date -d "@$epoch" '+%Y-%m-%d %H:%M' 2>/dev/null || echo "неизвестно когда"
+}
+
 write_origin_tags_manifest() {
     local repo_dir="$1"
     local manifest="$repo_dir/.git/$ORIGIN_TAGS_MANIFEST_NAME"
@@ -960,7 +977,7 @@ PYEOF
     registry_update add "$project_dir" "$pin"
 
     if [ "$SYNC_ONLY" = "1" ]; then
-        log "✓ sync завершён"
+        log "✓ sync завершён (офлайн-проверка по локальному манифесту origin от $(manifest_age_human "$CORE"), не подтверждение с сервера — запусти install.sh --update для реальной сверки)"
         return 0
     fi
 
