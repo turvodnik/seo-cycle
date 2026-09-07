@@ -235,6 +235,124 @@ class TagNotOnOriginTest(InstallerFixture):
         )
 
 
+class AnnotatedTagComparisonTest(InstallerFixture):
+    """T-095: `ensure_worktree()`'s origin/SHA check compared a local
+    `rev-parse "$tag^{commit}"` (always the COMMIT) against a plain
+    `ls-remote --tags origin "refs/tags/$tag"` (the TAG OBJECT for an
+    annotated tag, since asking for an exact ref alone never returns
+    git's dereferenced `^{}` line). The two sides were never comparable for
+    an annotated tag, so the check failed on EVERY annotated tag regardless
+    of whether it actually matched origin — exactly the case that shipped as
+    every release tag (`git tag -a`) and blocked `--upgrade-all --pin` for
+    all four live projects. Every fixture up to this class used only
+    lightweight tags (`git tag`, no `-a`), where the object and the commit
+    are the same thing, so the mismatch never had a chance to show up.
+    This class runs the same matrix (match / diverged / missing) against
+    genuine annotated tags, and pairs each positive case with the matching
+    lightweight one so a regression that breaks only one form is caught."""
+
+    def _annotate(self, repo: pathlib.Path, name: str, msg: str = "release") -> None:
+        _git(repo, "-c", "user.email=t@t.t", "-c", "user.name=t",
+             "tag", "-a", name, "-m", msg)
+
+    # --- matching commit: accepted, both tag forms -------------------------
+
+    def test_annotated_tag_matching_origin_is_accepted(self) -> None:
+        self._annotate(self.core, "v2.0.0")
+        _git(self.core, "push", "-q", "origin", "--tags")
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v2.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(
+            self.read_lock()["external"]["seo-cycle"]["commit"],
+            _git(self.core, "rev-parse", "v2.0.0^{commit}").stdout.strip(),
+        )
+
+    def test_lightweight_tag_matching_origin_is_still_accepted(self) -> None:
+        """Companion to the annotated case above — same scenario, the form
+        this bug never broke, kept green as a control that the fix did not
+        regress the already-working path."""
+        _git(self.core, "tag", "v2.0.1")
+        _git(self.core, "push", "-q", "origin", "--tags")
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v2.0.1",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_reverting_the_dereference_query_reintroduces_the_annotated_tag_bug(self) -> None:
+        """Negative control: strip the second `^{}` ls-remote pattern this
+        ticket added and show the exact positive-path scenario above goes
+        red again — proof the new query, not something else, is what fixes
+        annotated tags."""
+        self._annotate(self.core, "v2.0.0")
+        _git(self.core, "push", "-q", "origin", "--tags")
+        proc = self.run_install_without(
+            ' "refs/tags/$tag^{}"',
+            "--project", str(self.project), "--pin", "v2.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        out = proc.stdout + proc.stderr
+        self.assertNotEqual(
+            proc.returncode, 0,
+            msg="без дизъюнкции ^{} проверка обязана СНОВА ложно отклонять "
+                "совпадающий аннотированный тег: " + out,
+        )
+        # Pinned to the exact comparison branch this ticket fixed, not just
+        # "some warn fired" — a mutant that broke something else entirely
+        # (e.g. origin unreachable) must not make this test pass by accident.
+        self.assertIn(
+            "локально указывает на", out,
+            f"ожидался отказ ИМЕННО из-за расхождения объект/коммит тега, получено: {out!r}",
+        )
+
+    # --- diverged: rejected, both tag forms ---------------------------------
+
+    def test_annotated_tag_diverged_from_origin_is_rejected(self) -> None:
+        # Confirm v2.0.0 against origin first (writes the manifest / lock
+        # with the good commit), same pattern as
+        # test_same_named_tag_pointing_at_a_different_commit_is_rejected.
+        self._annotate(self.core, "v2.0.0")
+        _git(self.core, "push", "-q", "origin", "--tags")
+        proc0 = self.run_install(
+            "--project", str(self.project), "--pin", "v2.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc0.returncode, 0, proc0.stdout + proc0.stderr)
+        good_commit = self.read_lock()["external"]["seo-cycle"]["commit"]
+
+        # Re-point v2.0.0 locally to a new commit and re-annotate it, WITHOUT
+        # pushing — origin still has the original annotated tag/commit.
+        (self.core / "VERSION").write_text("2.0.0-local-drift\n", encoding="utf-8")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local drift")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "tag", "-f", "-a", "v2.0.0", "-m", "local-only repoint")
+
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v2.0.0", "--sync",
+            "--no-migrate-old-global",
+        )
+        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(
+            self.read_lock()["external"]["seo-cycle"]["commit"], good_commit,
+            "лок не должен быть переписан расходящимся аннотированным тегом",
+        )
+
+    # --- missing on origin: rejected, both tag forms ------------------------
+
+    def test_annotated_tag_never_pushed_is_rejected(self) -> None:
+        self._annotate(self.core, "v9.9.9-annotated-local-only")  # never pushed
+
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v9.9.9-annotated-local-only",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertFalse(self.lock_path().exists(), "лок не должен создаваться при отказе")
+
+
 class SnapshotSHAReconciliationTest(InstallerFixture):
     def test_moved_tag_rebuilds_snapshot_and_lock(self) -> None:
         proc = self.run_install(
@@ -398,6 +516,39 @@ class UpgradeAllHonestyTest(InstallerFixture):
         self.assertIn(
             "сверено с origin", out,
             f"--upgrade-all должен честно сказать, что проверка была сетевой: {out!r}",
+        )
+
+    def test_upgrade_all_self_heals_an_annotated_tag_diverged_from_origin(self) -> None:
+        """T-095, annotated companion to test_upgrade_all_rejects_a_tag_diverged_from_origin
+        above: same self-heal contract (--upgrade-all's ensure_store force-fetch
+        corrects a purely-local repoint before the pin is even resolved), run
+        against an ANNOTATED tag instead of a lightweight one — the form every
+        real release actually uses and the one this ticket's bug broke."""
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t",
+             "tag", "-a", "v2.0.0", "-m", "release")
+        _git(self.core, "push", "-q", "origin", "--tags")
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v2.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        original_commit = self.read_lock()["external"]["seo-cycle"]["commit"]
+
+        (self.core / "VERSION").write_text("2.0.0-upgrade-all-drift\n", encoding="utf-8")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local drift")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "tag", "-f", "-a", "v2.0.0", "-m", "local-only repoint")
+
+        proc2 = self.run_install("--upgrade-all", "--pin", "v2.0.0")
+        self.assertEqual(
+            proc2.returncode, 0,
+            "upgrade-all обязан исправить разошедшийся АННОТИРОВАННЫЙ тег через "
+            f"force-fetch, а не остаться на локальном дрейфе — {proc2.stdout + proc2.stderr!r}",
+        )
+        self.assertEqual(
+            self.read_lock()["external"]["seo-cycle"]["commit"], original_commit,
+            "upgrade-all не должен записывать в лок расходящийся с origin коммит "
+            "аннотированного тега",
         )
 
 

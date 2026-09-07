@@ -486,7 +486,16 @@ ensure_worktree() {
     # (no network) is unconditional.
     if [ "$NETWORK_ALLOWED" = "1" ]; then
         local remote_out
-        remote_out="$(git -C "$repo_dir" ls-remote --tags origin "refs/tags/$tag" 2>/dev/null || true)"
+        # T-095: requesting the exact ref alone (`refs/tags/$tag`) makes git
+        # print only the tag OBJECT line for an annotated tag — the
+        # dereferenced `^{}` commit line only appears when the query also
+        # asks for it. Passing that second literal pattern alongside the
+        # exact ref gets both lines (still exact-matched, no glob) so the
+        # comparison below always has the commit to compare, for annotated
+        # tags exactly the same as for lightweight ones (where the object
+        # already IS the commit and the `^{}` pattern simply matches nothing
+        # extra).
+        remote_out="$(git -C "$repo_dir" ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}" 2>/dev/null || true)"
         if [ -z "$remote_out" ]; then
             if git -C "$repo_dir" ls-remote --tags origin 'refs/tags/v*' >/dev/null 2>&1; then
                 warn "тег $tag не найден на origin ($tool)"
