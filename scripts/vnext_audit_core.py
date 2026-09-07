@@ -18,7 +18,7 @@ import re
 import sys
 from typing import Any
 
-from seo_cycle_core.config import boolish, find_config, load_yaml, nested_get, policy_path, project_root_for, rel_path, require_config, require_section, write_text  # noqa: F401 -- load_yaml re-exported for ai-bot-access-check.py's `from vnext_audit_core import ...`
+from seo_cycle_core.config import boolish, find_config, load_config, load_yaml, nested_get, policy_path, project_root_for, rel_path, require_config, require_section, write_text  # noqa: F401 -- load_yaml/load_config re-exported for ai-bot-access-check.py's `from vnext_audit_core import ...`
 
 
 SOURCES = [
