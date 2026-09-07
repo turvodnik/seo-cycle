@@ -126,7 +126,11 @@ warn() { echo "⚠ $*" >&2; }
 # `\git`, or an absolute path (`/usr/bin/git`) all explicitly skip bash's
 # function-lookup step — that is a language-level fact, not a bug in this
 # wrapper, and no runtime shell mechanism closes it. The text guard in
-# `tests/test_installer_contracts.py` targets exactly that residual class.
+# `tests/test_installer_contracts.py` targets that residual class but does
+# not cover it fully: an independent review (T-091 round 3) got three forms
+# past both layers — a git path held in a variable, `command git` preceded by
+# another statement on the same line, and git called inside a heredoc-fed
+# `bash`. Those remain closed by PR code review only.
 # A wholly new script file elsewhere in the repo, or test code that calls
 # git directly instead of exercising install.sh, are outside what any
 # guard living inside install.sh can see at all — closed by PR code review,
