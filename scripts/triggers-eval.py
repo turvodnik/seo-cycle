@@ -30,12 +30,6 @@ from __future__ import annotations
 import argparse, json, pathlib, re, sys
 from datetime import date, datetime
 
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. pip3 install pyyaml", file=sys.stderr)
-    sys.exit(2)
-
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 from seo_cycle_core.config import numeric  # noqa: E402
@@ -327,19 +321,23 @@ def main():
         sys.exit(2)
 
     snapshot = json.loads(args.snapshot.read_text(encoding="utf-8"))
-    triggers_cfg = yaml.safe_load(args.triggers.read_text(encoding="utf-8"))
-    triggers = triggers_cfg.get("triggers", [])
+    from seo_cycle_core.config import load_config, load_yaml_any
+    # T-090 (F-8): triggers file is a top-level LIST-shaped or dict-with-
+    # "triggers"-key file, not the project's main config — tolerant load.
+    triggers_cfg = load_yaml_any(args.triggers)
+    triggers = (triggers_cfg or {}).get("triggers", []) if isinstance(triggers_cfg, dict) else []
 
     # Project override (rules с тем же id перезаписывают/добавляют)
     if args.project_yaml and args.project_yaml.exists():
-        proj = yaml.safe_load(args.project_yaml.read_text(encoding="utf-8")) or {}
+        proj = load_config(args.project_yaml)
         extra_triggers_path = proj.get("monitoring", {}).get("triggers_file")
         if extra_triggers_path:
             p = pathlib.Path(extra_triggers_path)
             if not p.is_absolute():
                 p = args.project_yaml.parent / p
             if p.exists():
-                extra = yaml.safe_load(p.read_text(encoding="utf-8")).get("triggers", [])
+                extra_data = load_yaml_any(p)
+                extra = extra_data.get("triggers", []) if isinstance(extra_data, dict) else []
                 # merge by id
                 by_id = {t["id"]: t for t in triggers}
                 for t in extra:

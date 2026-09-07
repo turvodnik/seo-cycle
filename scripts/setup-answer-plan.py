@@ -8,6 +8,8 @@ or stores rejected secret-like values.
 
 from __future__ import annotations
 
+from seo_cycle_core.config import load_config, require_section
+
 import argparse
 import csv
 import datetime as dt
@@ -17,12 +19,6 @@ import pathlib
 import re
 import sys
 from typing import Any
-
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
 
 
 CONFIG_SEARCH_PATHS = [
@@ -68,10 +64,13 @@ def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Pat
 
 
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
+    # T-090 (F-8): this used to call `yaml.safe_load` directly — one of ~32
+    # files across scripts/ bypassing seo_cycle_core's guarantees (no
+    # coordinate-bearing error on broken YAML, no UTF-8 check, no protection
+    # against a non-dict top level). Delegates to the shared core loader,
+    # which is now also the ONLY place in this tree allowed to construct a
+    # PyYAML Loader (see seo_cycle_core/config.py's runtime guard).
+    return load_config(path)
 
 
 def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:
@@ -196,7 +195,9 @@ def build_report(cfg_path: pathlib.Path, questionnaire_path: pathlib.Path | None
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
         "config": str(cfg_path),
         "project_root": str(project_root),
-        "project": cfg.get("project", {}),
+        # T-090 round 2 (F-7 class): project name feeds the report
+        # header directly — must not silently render "Project: ? (?)".
+        "project": require_section(cfg, "project", cfg_path),
         "questionnaire_csv": str(questionnaire),
         "row_count": len(rows),
         "accepted_count": len(changes),

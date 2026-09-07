@@ -25,14 +25,8 @@ from __future__ import annotations
 import argparse, os, pathlib, sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from seo_cycle_core.config import config_section, numeric  # noqa: E402
+from seo_cycle_core.config import config_section, load_yaml_any, numeric  # noqa: E402
 from seo_cycle_core.engines import engine_names  # noqa: E402
-
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
 
 
 CONFIG_SEARCH_PATHS = [
@@ -100,8 +94,9 @@ def load_region_profile(profile_id: str) -> dict | None:
                  / "config" / "region-profiles" / f"{profile_id}.yaml")
     if not prof_path.exists():
         return None
-    with prof_path.open(encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    # T-090 (F-8): region profile, not the project's own config.
+    data = load_yaml_any(prof_path)
+    return data if isinstance(data, dict) else {}
 
 
 def check_sources(cfg: dict, env: dict, project_root: pathlib.Path, checklist: list, warnings: list):
@@ -705,11 +700,12 @@ def main():
     elif "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
         project_root = cfg_path.parent.parent
 
-    try:
-        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
-    except Exception as e:
-        print(f"ERROR: не могу распарсить YAML: {e}", file=sys.stderr)
-        sys.exit(2)
+    # T-090 (F-8): validate-config's whole job is to DIAGNOSE a config,
+    # including a deliberately broken one — it must not become stricter
+    # than itself, so this stays `load_yaml_any` (tolerant of a non-dict
+    # top level) rather than the strict `load_config`, with this
+    # function's own dict check kept right below.
+    cfg = load_yaml_any(cfg_path)
 
     if not isinstance(cfg, dict):
         print(f"ERROR: конфиг не является словарём", file=sys.stderr)

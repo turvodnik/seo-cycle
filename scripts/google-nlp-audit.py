@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any
 
 import requests
-import yaml
 from bs4 import BeautifulSoup
 from google.auth.transport.requests import Request as AuthRequest
 from google.oauth2 import service_account
@@ -97,10 +96,12 @@ def load_config(project_root: Path, extra_env_files: list[str] | None = None) ->
 
 
 def load_policy(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
+    # T-090 (F-8): policy file, not the project's main config — tolerant
+    # load via the shared core (still the only allowed Loader entry point),
+    # without load_config()'s "must be the project config" semantics.
+    from seo_cycle_core.config import load_yaml_any
+    data = load_yaml_any(path)
+    return data if isinstance(data, dict) else {}
 
 
 def setdefault_str(config: dict[str, str], key: str, value: Any) -> None:

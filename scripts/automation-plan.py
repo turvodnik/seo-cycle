@@ -8,6 +8,8 @@ all local policy gates allow schedules and `--install-cron` is explicitly passed
 
 from __future__ import annotations
 
+from seo_cycle_core.config import load_config, require_section
+
 import argparse
 import json
 import os
@@ -17,12 +19,6 @@ import sys
 from dataclasses import dataclass
 from typing import Any
 from xml.sax.saxutils import escape
-
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
 
 
 CONFIG_SEARCH_PATHS = [
@@ -90,10 +86,13 @@ def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Pat
 
 
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
+    # T-090 (F-8): this used to call `yaml.safe_load` directly — one of ~32
+    # files across scripts/ bypassing seo_cycle_core's guarantees (no
+    # coordinate-bearing error on broken YAML, no UTF-8 check, no protection
+    # against a non-dict top level). Delegates to the shared core loader,
+    # which is now also the ONLY place in this tree allowed to construct a
+    # PyYAML Loader (see seo_cycle_core/config.py's runtime guard).
+    return load_config(path)
 
 
 def skill_root() -> pathlib.Path:
@@ -379,6 +378,10 @@ def main() -> int:
         return 2
 
     cfg = load_yaml(cfg_path)
+    # T-090 round 2 (F-7 class): "project" feeds the report header
+    # directly — validate now, before building tasks/policy, instead of
+    # silently rendering "Project: ? (?)" over an unconfigured project.
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     policy_path = automation_policy_path(cfg, project_root)
     policy = load_yaml(policy_path)

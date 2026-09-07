@@ -22,10 +22,7 @@ check-stop-words.py — детектор стоп-слов с поддержко
 from __future__ import annotations
 import argparse, pathlib, re, sys
 
-try:
-    import yaml
-except ImportError:
-    yaml = None
+from seo_cycle_core.config import yaml_available
 
 
 # Паттерны учитывают морфологию (русские прилагательные имеют падежи/род/число).
@@ -103,15 +100,17 @@ IGNORE_PATTERNS = [
 
 def load_extra(config_path: pathlib.Path) -> tuple[list[str], list[str]]:
     """Returns (extra_simple_words, extra_regex_patterns)."""
-    if not yaml or not config_path.exists():
+    if not yaml_available() or not config_path.exists():
         return [], []
     try:
-        cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        # T-090 (F-8): routed through the shared core loader.
+        from seo_cycle_core.config import load_yaml_any
+        cfg = load_yaml_any(config_path) or {}
         tone = cfg.get("tone", {})
         simple = tone.get("stop_words_extra", []) or []
         regex = tone.get("stop_words_regex_extra", []) or []
         return simple, regex
-    except Exception as e:
+    except (Exception, SystemExit) as e:
         print(f"⚠ failed to read config {config_path}: {e}", file=sys.stderr)
         return [], []
 
@@ -170,12 +169,13 @@ def main():
 
     # Определяем язык
     lang = args.lang
-    if lang == "auto" and cfg_path.exists() and yaml:
+    if lang == "auto" and cfg_path.exists() and yaml_available():
         try:
-            cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+            from seo_cycle_core.config import load_yaml_any
+            cfg = load_yaml_any(cfg_path) or {}
             cfg_lang = cfg.get("locale", {}).get("language", "ru")
             lang = cfg_lang
-        except Exception:
+        except (Exception, SystemExit):
             lang = "ru"
     if lang == "auto":
         lang = "ru"

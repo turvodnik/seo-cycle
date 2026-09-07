@@ -17,18 +17,17 @@ from research_package_repair_core import (
     write_text,
 )
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    yaml = None
+from seo_cycle_core.config import load_yaml_any, yaml_available
 
 
 def load_entity_map(path: pathlib.Path) -> dict[str, Any]:
-    if yaml is None:
+    if not yaml_available():
         raise SystemExit("ERROR: PyYAML is required for entity-map-sync.py")
     if not path.exists():
         return {"entities": []}
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    # T-090 (F-8): entity map, not the project's main config — tolerant
+    # load via the shared core (only allowed Loader entry point).
+    data = load_yaml_any(path)
     return data if isinstance(data, dict) else {"entities": []}
 
 

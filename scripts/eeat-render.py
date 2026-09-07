@@ -25,12 +25,6 @@ eeat-render.py — превращает fact_check_log из frontmatter публ
 from __future__ import annotations
 import argparse, html, pathlib, sys
 
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
-
 SHOW_VERDICTS = {"достоверно", "частично", "verified", "partial"}
 
 
@@ -40,7 +34,10 @@ def parse_frontmatter(text: str) -> dict:
     end = text.find("\n---", 3)
     if end == -1:
         return {}
-    return yaml.safe_load(text[3:end]) or {}
+    # T-090 (F-8): frontmatter is an in-memory YAML fragment, not a file —
+    # routed through the shared core's text-parsing entry point.
+    from seo_cycle_core.config import parse_yaml_text
+    return parse_yaml_text(text[3:end]) or {}
 
 
 def render(log: list, heading: str, intro: str) -> str:

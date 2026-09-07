@@ -20,29 +20,22 @@ import subprocess
 import sys
 from typing import Any
 
-try:
-    import yaml
-except ImportError:
-    print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
-    sys.exit(2)
-
-from seo_cycle_core.config import (  # noqa: E402
+from seo_cycle_core.config import (
+    dump_yaml,  # noqa: E402
     boolish,
     find_config,
+    load_config,
     load_yaml,
     numeric,
     policy_path,
     project_root_for,
+    require_section,
     skill_root,
     write_text,
 )
 
 
 from seo_cycle_core.tool_catalog import DECISION_ORDER, TOOL_CATALOG
-
-
-def dump_yaml(data: dict[str, Any]) -> str:
-    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
 
 
 def country(cfg: dict[str, Any], intake: dict[str, Any]) -> str:
@@ -387,7 +380,7 @@ def next_actions(report: dict[str, Any]) -> list[str]:
 
 def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
     project_root = project_root_for(cfg_path)
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)  # T-090 round 2: main project config, required
     cfg["_project_root_for_tool_stack"] = str(project_root)
     intake = load_yaml(policy_path(cfg, project_root, "project_intake", "seo/project-intake.yaml"))
     tool_budget = load_yaml(policy_path(cfg, project_root, "tool_budget", "seo/tool-budget.yaml"))
@@ -404,7 +397,9 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
         "config": str(cfg_path),
         "project_root": str(project_root),
-        "project": cfg.get("project", {}),
+        # T-090 round 2 (F-7 class): project name feeds the report
+        # header directly — must not silently render "Project: ? (?)".
+        "project": require_section(cfg, "project", cfg_path),
         "market": {
             "country": cty,
             "region_profile": cfg.get("region_profile"),
@@ -520,7 +515,7 @@ def write_reports(project_root: pathlib.Path, report: dict[str, Any]) -> None:
 
 
 def apply_overlay(cfg_path: pathlib.Path, report: dict[str, Any]) -> pathlib.Path:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)  # T-090 round 2: main project config, required
     cfg.pop("_project_root_for_tool_stack", None)
     sources = cfg.setdefault("sources", {})
     if not isinstance(sources, dict):

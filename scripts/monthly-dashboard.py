@@ -25,14 +25,9 @@ from __future__ import annotations
 import argparse, csv, json, pathlib, re, sys
 from datetime import date, timedelta
 
-from seo_cycle_core.config import config_section, require_config
+from seo_cycle_core.config import require_config, require_section, yaml_available
 from seo_cycle_core.monitoring import find_latest_snapshot as _find_latest_snapshot_file
 from seo_cycle_core.monitoring import monitoring_dir
-
-try:
-    import yaml
-except ImportError:
-    yaml = None
 
 
 # ----- Загрузчики --------------------------------------------------------
@@ -349,7 +344,7 @@ def main():
     # that plainly doesn't have one — the tool's own health/status commands
     # already refuse this (`seo_cycle_cli.cmd_status`), the dashboard just
     # never learned the rule.
-    if yaml is None:
+    if not yaml_available():
         print("ERROR: PyYAML не установлен — установи: pip3 install pyyaml", file=sys.stderr)
         sys.exit(2)
     # require_config() itself refuses (stderr + exit 2) when the path doesn't
@@ -357,7 +352,11 @@ def main():
     # it does — this command's whole output is meaningless without a real
     # project config, unlike a setup wizard's legitimate empty fallback.
     cfg = require_config(args.config if args.config.exists() else None, where=pathlib.Path.cwd())
-    project_name = config_section(cfg, "project").get("name") or "Project"
+    # T-090 (F-7): `config_section()` is a soft helper — `project: null`
+    # used to sail through it as a silent `{}`, same green "✓ Dashboard →
+    # ..." F-37/T-067 already fixed for a missing FILE, just reached via a
+    # present-but-null section instead. `require_section()` refuses.
+    project_name = require_section(cfg, "project", args.config).get("name") or "Project"
 
     # Путь мониторинга — из конфига (monitoring.path, T-052 R3: тот же ключ,
     # тем же способом, что pulse.py и doctor/status — seo_cycle_core.monitoring),
