@@ -23,7 +23,7 @@ areaServed, knowsAbout, sameAs — то, что связывает контен�
 from __future__ import annotations
 import argparse, json, pathlib, sys
 
-from seo_cycle_core.config import config_section
+from seo_cycle_core.config import config_section, load_config
 
 try:
     import yaml
@@ -123,8 +123,8 @@ def main() -> int:
     if not cfg_path or not cfg_path.exists():
         print("ERROR: seo-cycle.yaml не найден", file=sys.stderr)
         return 2
-    with cfg_path.open(encoding="utf-8") as f:
-        cfg = yaml.safe_load(f) or {}
+    # T-090 (F-8): routed through the shared core loader.
+    cfg = load_config(cfg_path)
 
     built = build_org(cfg)
 

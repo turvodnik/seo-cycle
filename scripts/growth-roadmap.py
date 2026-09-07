@@ -18,7 +18,7 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import numeric
+from seo_cycle_core.config import config_section, numeric, load_config
 
 try:
     import yaml
@@ -101,10 +101,13 @@ def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Pat
 
 
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
+    # T-090 (F-8): this used to call `yaml.safe_load` directly — one of ~32
+    # files across scripts/ bypassing seo_cycle_core's guarantees (no
+    # coordinate-bearing error on broken YAML, no UTF-8 check, no protection
+    # against a non-dict top level). Delegates to the shared core loader,
+    # which is now also the ONLY place in this tree allowed to construct a
+    # PyYAML Loader (see seo_cycle_core/config.py's runtime guard).
+    return load_config(path)
 
 
 def load_json(path: pathlib.Path) -> dict[str, Any]:
@@ -559,7 +562,9 @@ def build_report(cfg_path: pathlib.Path, max_actions: int = DEFAULT_MAX_ACTIONS)
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
         "config": str(cfg_path),
         "project_root": str(project_root),
-        "project": cfg.get("project", {}),
+        # T-090 (F-7): same class as governance-report.py — `project: null`
+        # must not pass through as `None`.
+        "project": config_section(cfg, "project"),
         "market": {
             "country": country(cfg, intake),
             "region_profile": cfg.get("region_profile"),

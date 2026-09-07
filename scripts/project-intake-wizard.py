@@ -125,10 +125,12 @@ def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Pat
 
 
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
+    # T-090 (F-8): intake wizard is a legitimate empty-config boundary
+    # (it exists to CREATE a project's config) — tolerant load via the
+    # shared core, not the strict project-config loader.
+    from seo_cycle_core.config import load_yaml_any
+    data = load_yaml_any(path)
+    return data if isinstance(data, dict) else {}
 
 
 def dump_yaml(data: dict[str, Any]) -> str:

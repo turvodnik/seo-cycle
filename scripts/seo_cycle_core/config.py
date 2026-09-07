@@ -1,4 +1,17 @@
-"""Config, path, and parsing helpers shared by seo-cycle scripts."""
+"""Config, path, and parsing helpers shared by seo-cycle scripts.
+
+T-090 (F-8/F-7/F-7b): this module is now the ONLY place in `scripts/` that
+is allowed to construct a PyYAML Loader. `_install_yaml_bypass_guard()`
+below wraps every Loader class's `__init__` so that any code outside this
+file that tries to build a Loader (directly, or transitively via
+`yaml.safe_load`/`yaml.load`/etc., which all just construct one of these
+classes internally) blows up with a clear `RuntimeError` instead of
+quietly parsing YAML the old, unguarded way. This is what makes a "33rd
+file" structurally impossible rather than merely against convention: a
+future `scripts/whatever.py` that writes `yaml.safe_load(...)` does not
+"forget a best practice" — it crashes the first time it runs, in dev, with
+a message that says exactly what to call instead.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +31,94 @@ CONFIG_SEARCH_PATHS = (
     "seo/seo-cycle.yaml",
     ".claude/seo-cycle.yaml",
 )
+
+
+_GUARD_INSTALLED = False
+_GUARD_ENABLED = True  # tests flip this off to construct Loaders directly
+
+
+def _this_file() -> str:
+    return pathlib.Path(__file__).resolve().as_posix()
+
+
+def _install_yaml_bypass_guard() -> None:
+    """Wrap PyYAML's Loader constructors so a Loader can only be built from
+    inside this module (or from inside the `yaml` package's own code, which
+    legitimately constructs Loaders as part of `yaml.load`/`safe_load`
+    themselves).
+
+    Uses `sys._getframe` (not `inspect.stack`, which stat()s source files
+    for every frame — too slow to run on every single YAML document parsed
+    across ~100 CLI entrypoints) to walk the call stack, skip frames that
+    belong to the `yaml` package itself, and look at the first frame
+    outside of it. If that frame isn't this file, someone is constructing a
+    Loader without going through `seo_cycle_core.config` — refuse.
+    """
+    if yaml is None:
+        return
+    global _GUARD_INSTALLED
+    if _GUARD_INSTALLED:
+        return
+    _GUARD_INSTALLED = True
+
+    this_file = _this_file()
+    # T-090 scope: the guard protects the `scripts/` tree this module ships
+    # in — the AST bypass test (`tests/test_no_yaml_bypass.py`) has the same
+    # scope. Code OUTSIDE `scripts/` (test fixtures under `tests/`, any
+    # other tooling on the machine) legitimately constructs YAML Loaders
+    # for its own reasons unrelated to "read the project's config" and is
+    # not this guard's concern — only a `scripts/*.py` file other than this
+    # one bypassing `seo_cycle_core.config` is.
+    scripts_dir = str(pathlib.Path(__file__).resolve().parent.parent) + "/"
+    try:
+        yaml_pkg_dir = str(pathlib.Path(yaml.__file__).resolve().parent)
+    except Exception:  # pragma: no cover - defensive
+        yaml_pkg_dir = ""
+
+    loader_names = ["SafeLoader", "Loader", "FullLoader", "UnsafeLoader", "BaseLoader"]
+    if getattr(yaml, "__with_libyaml__", False):
+        loader_names += ["CSafeLoader", "CLoader", "CFullLoader", "CUnsafeLoader", "CBaseLoader"]
+
+    for name in loader_names:
+        cls = getattr(yaml, name, None)
+        if cls is None:
+            continue
+        original_init = cls.__init__
+
+        def make_wrapped(original_init):
+            def wrapped_init(self, *args, **kwargs):
+                if _GUARD_ENABLED:
+                    frame = sys._getframe(1)
+                    depth = 0
+                    while frame is not None and depth < 50:
+                        filename = pathlib.Path(frame.f_code.co_filename).resolve().as_posix()
+                        if yaml_pkg_dir and filename.startswith(yaml_pkg_dir):
+                            frame = frame.f_back
+                            depth += 1
+                            continue
+                        if filename == this_file:
+                            break
+                        if not filename.startswith(scripts_dir):
+                            # Outside the protected tree entirely (tests/,
+                            # unrelated tooling) — not this guard's job.
+                            break
+                        raise RuntimeError(
+                            "seo-cycle: прямой вызов PyYAML Loader запрещён — "
+                            "читай YAML только через seo_cycle_core.config "
+                            "(load_config/load_yaml_any/parse_yaml_text), "
+                            f"а не напрямую (вызов из {filename}:{frame.f_lineno})"
+                        )
+                    # frame is None or depth exceeded: be conservative and
+                    # allow (better a missed edge case than a false crash
+                    # inside a legitimate deep call chain).
+                return original_init(self, *args, **kwargs)
+
+            return wrapped_init
+
+        cls.__init__ = make_wrapped(original_init)
+
+
+_install_yaml_bypass_guard()
 
 
 def skill_root(current_file: str | pathlib.Path | None = None) -> pathlib.Path:
@@ -142,6 +243,73 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
     return data
 
 
+def load_yaml_any(path: pathlib.Path) -> Any:
+    """Load ANY YAML file — not necessarily the project config, not
+    necessarily a dict (T-090, F-8). Same hard guarantees as `load_config`
+    (non-UTF-8 → clear error + exit(2); unparseable YAML → coordinate +
+    exit(2); a missing file → the caller's own "not found" branch, not this
+    function's problem), but deliberately WITHOUT `load_config`'s "top
+    level must be a dict" rule and WITHOUT any "this is the project's
+    config" semantics.
+
+    Use this for policy files, entity maps, manifests, triggers files,
+    stock-inventory, region-profiles — anything that is legitimately a
+    list, or legitimately absent-means-empty, at the top level. Forcing
+    those through `load_config`'s dict-or-die rule would be a regression
+    on healthy, working files — exactly the class of over-tightening T-090
+    is not allowed to introduce.
+    """
+    if yaml is None:
+        return None
+    if not path.exists() and not path.is_symlink():
+        return None
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        print(f"ERROR: {path}: не удалось прочитать файл: {exc}", file=sys.stderr)
+        sys.exit(2)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        print(
+            f"ERROR: {path}: файл не в кодировке UTF-8 "
+            f"(байт {exc.object[exc.start]:#04x} в позиции {exc.start}) — пересохрани в UTF-8",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    return parse_yaml_text(text, source=path)
+
+
+def parse_yaml_text(text: str, *, source: str | pathlib.Path = "<string>") -> Any:
+    """Parse a YAML DOCUMENT that is already in memory — not a file on disk
+    (T-090, F-8): frontmatter blocks (`eeat-render.py`), embedded YAML
+    fragments, etc. Same parse-error guarantee as `load_yaml_any` (a
+    `MarkedYAMLError`'s line/column reported, then `exit(2)`) but obviously
+    no file-read/encoding step, since there is no file.
+    """
+    if yaml is None:
+        return None
+    try:
+        return yaml.safe_load(text)
+    except yaml.MarkedYAMLError as exc:
+        mark = exc.problem_mark
+        where = f"строка {mark.line + 1}, столбец {mark.column + 1}" if mark else "неизвестное место"
+        problem = exc.problem or exc.context or str(exc)
+        print(f"ERROR: {source}: {where}: {problem}", file=sys.stderr)
+        sys.exit(2)
+    except yaml.YAMLError as exc:
+        print(f"ERROR: {source}: ошибка разбора YAML: {exc}", file=sys.stderr)
+        sys.exit(2)
+
+
+# T-090: `load_config` is the intention-revealing name for "parse the
+# project's seo-cycle.yaml, strictly". `load_yaml` is kept as an alias
+# (many of the ~100 existing call sites already spell it that way) rather
+# than renamed everywhere — one behavior, two names, during the
+# transition; new call sites should prefer `load_config`.
+load_config = load_yaml
+
+
 def config_section(cfg: dict[str, Any], key: str) -> dict[str, Any]:
     """The `X.get("section", {}) if isinstance(X.get("section"), dict) else {}`
     idiom already used at `db-sync.py:180` and `config.py`'s own
@@ -158,15 +326,17 @@ def config_section(cfg: dict[str, Any], key: str) -> dict[str, Any]:
     silently-ignored section, no signal at all). A warning to stderr naming
     the key and the shape found is the minimum the QA report asked for at
     `load_yaml` itself ("вместо тихого `{}` печатать в stderr")."""
-    value = cfg.get(key)
-    if value is not None and not isinstance(value, dict):
+    if key not in cfg:
+        return {}
+    value = cfg[key]
+    if not isinstance(value, dict):
         print(
             f"WARNING: конфиг: раздел {key!r} задан как {type(value).__name__}, "
             "ожидался блок (мэппинг) — использую пустой раздел",
             file=sys.stderr,
         )
         return {}
-    return value if isinstance(value, dict) else {}
+    return value
 
 
 def require_config(cfg_path: pathlib.Path | None, *, where: pathlib.Path | None = None) -> dict[str, Any]:
@@ -197,6 +367,33 @@ def require_config(cfg_path: pathlib.Path | None, *, where: pathlib.Path | None 
         print(f"ERROR: {cfg_path}: конфиг пуст — нечего использовать", file=sys.stderr)
         sys.exit(2)
     return cfg
+
+
+def require_section(cfg: dict[str, Any], key: str, cfg_path: pathlib.Path | str) -> dict[str, Any]:
+    """Like `require_config()`, one level down (T-090, F-7): a command that
+    cannot run without section `key` being a real, non-empty mapping.
+
+    Closes the exact gap `config_section()` deliberately leaves open:
+    `config_section()` is a soft helper (missing/wrong-shaped section →
+    `{}` + at most a warning) because MOST sections are optional with a
+    sane empty default. But `monthly-dashboard.py`/`db-sync.py` read
+    `project` to answer "which project is this a report for" — a `project:
+    null` config (or no `project:` key, or `project: "имя"` as a bare
+    string) makes their whole output meaningless, the same way a missing
+    config file does for `require_config()`. Before this, `config_section`
+    swallowed exactly that case silently (see its own docstring) and both
+    commands printed a green `✓ ...` for a project that doesn't exist.
+    """
+    value = cfg.get(key)
+    if not isinstance(value, dict) or not value:
+        shape = "null" if value is None else (type(value).__name__ if not isinstance(value, dict) else "пустой блок")
+        print(
+            f"ERROR: {cfg_path}: раздел '{key}' обязателен и не может быть пустым/null "
+            f"(получено: {shape})",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    return value
 
 
 def write_text(path: pathlib.Path, text: str) -> None:

@@ -8,6 +8,8 @@ or stores rejected secret-like values.
 
 from __future__ import annotations
 
+from seo_cycle_core.config import load_config
+
 import argparse
 import csv
 import datetime as dt
@@ -68,10 +70,13 @@ def rel_path(project_root: pathlib.Path, raw: str | pathlib.Path) -> pathlib.Pat
 
 
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return data or {}
+    # T-090 (F-8): this used to call `yaml.safe_load` directly — one of ~32
+    # files across scripts/ bypassing seo_cycle_core's guarantees (no
+    # coordinate-bearing error on broken YAML, no UTF-8 check, no protection
+    # against a non-dict top level). Delegates to the shared core loader,
+    # which is now also the ONLY place in this tree allowed to construct a
+    # PyYAML Loader (see seo_cycle_core/config.py's runtime guard).
+    return load_config(path)
 
 
 def policy_path(cfg: dict[str, Any], project_root: pathlib.Path, key: str, default: str) -> pathlib.Path:

@@ -93,9 +93,15 @@ if [[ -n "$CONFIG_FILE" ]]; then
     if command -v python3 >/dev/null 2>&1; then
         SCHED_CONTENT=$(python3 -c "
 import sys
+# T-090 (F-8): bash heredoc — no python-level Loader guard can reach code
+# that never imports seo_cycle_core, so this is a NAMED boundary (see
+# T-090 report): the fix is to make this heredoc go through the shared
+# core loader like every .py file now does, not to leave it hand-rolled.
+sys.path.insert(0, '$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)')
 try:
-    import yaml
-    cfg = yaml.safe_load(open('$CONFIG_FILE')) or {}
+    from seo_cycle_core.config import load_yaml_any
+    import pathlib
+    cfg = load_yaml_any(pathlib.Path('$CONFIG_FILE')) or {}
     sched = cfg.get('monthly_automation', {}).get('schedule', {}) or {}
     print(sched.get('content_writer', ''))
 except Exception:
@@ -106,10 +112,11 @@ except Exception:
             [[ -n "$dow" ]] && SCHEDULE_CONTENT_DOW=$dow
         fi
         SCHED_AUDIT=$(python3 -c "
-import sys
+import sys, pathlib
+sys.path.insert(0, '$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)')
 try:
-    import yaml
-    cfg = yaml.safe_load(open('$CONFIG_FILE')) or {}
+    from seo_cycle_core.config import load_yaml_any
+    cfg = load_yaml_any(pathlib.Path('$CONFIG_FILE')) or {}
     sched = cfg.get('monthly_automation', {}).get('schedule', {}) or {}
     print(sched.get('audit', ''))
 except Exception:
@@ -161,8 +168,10 @@ if [[ $ALL_MODE -eq 1 ]]; then
     [[ $FORCE -eq 1 ]] && FLAGS="$FLAGS --force"
     [[ -n "$WEEK_OVERRIDE" ]] && FLAGS="$FLAGS --week $WEEK_OVERRIDE"
     PROJECTS=$(python3 -c "
-import yaml
-d = yaml.safe_load(open('$REGISTRY')) or {}
+import sys, pathlib
+sys.path.insert(0, '$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)')
+from seo_cycle_core.config import load_yaml_any
+d = load_yaml_any(pathlib.Path('$REGISTRY')) or {}
 for p in d.get('projects', []):
     if p.get('status') == 'active' and p.get('monthly_automation'):
         print(p['path'])

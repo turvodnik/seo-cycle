@@ -29,6 +29,8 @@ except ImportError:
     print("ERROR: PyYAML не установлен. `pip3 install pyyaml`", file=sys.stderr)
     sys.exit(2)
 
+from seo_cycle_core.config import load_config
+
 CONFIG_SEARCH_PATHS = [
     "seo-cycle.yaml", ".seo-cycle.yaml",
     "seo/seo-cycle.yaml", ".claude/seo-cycle.yaml",
@@ -45,8 +47,10 @@ def find_config(start: pathlib.Path) -> pathlib.Path | None:
 
 
 def load_yaml(path: pathlib.Path) -> dict:
-    with path.open(encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    # T-090 (F-8): routed through the shared core loader — this file's own
+    # `with path.open() as f: yaml.safe_load(f)` was one of ~32 direct
+    # PyYAML call sites bypassing the encoding/parse/shape guarantees.
+    return load_config(path)
 
 
 def local_source_enabled(sources: dict, name: str):

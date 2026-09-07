@@ -54,9 +54,15 @@ def read_json(path: pathlib.Path) -> dict[str, Any]:
 def read_yaml(path: pathlib.Path) -> dict[str, Any]:
     if not path.exists() or yaml is None:
         return {}
+    # T-090 (F-8): routed through the shared core loader. It raises
+    # `SystemExit` on a parse error rather than returning — caught here
+    # too (wider than the original `except Exception`) to preserve this
+    # helper's original "never crash the caller, just hand back {}"
+    # contract.
+    from seo_cycle_core.config import load_yaml_any
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except Exception:
+        data = load_yaml_any(path)
+    except (Exception, SystemExit):
         return {}
     return data if isinstance(data, dict) else {}
 

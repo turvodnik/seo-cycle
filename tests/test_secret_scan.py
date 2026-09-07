@@ -352,7 +352,11 @@ class FalsePositiveLedgerTest(unittest.TestCase):
             with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
                 ss.load_ledger(unreadable)
             self.assertEqual(ctx.exception.code, 2)
-            self.assertIn("ERROR: реестр нечитаем", buf.getvalue())
+            # T-090: routed through seo_cycle_core.config.load_yaml_any,
+            # which reports an unreadable file with its own (still
+            # coordinate/reason-bearing) message text.
+            self.assertIn("ERROR", buf.getvalue())
+            self.assertIn("не удалось прочитать файл", buf.getvalue())
         finally:
             unreadable.chmod(0o644)  # иначе tempfile-cleanup не сможет удалить файл
 
@@ -364,7 +368,10 @@ class FalsePositiveLedgerTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
             ss.load_ledger(bad)
         self.assertEqual(ctx.exception.code, 2)
-        self.assertIn("ERROR: реестр нечитаем", buf.getvalue())
+        # T-090: message now comes from load_yaml_any's own parse-error
+        # reporting (coordinate-bearing, just different text).
+        self.assertIn("ERROR", buf.getvalue())
+        self.assertIn("столбец", buf.getvalue())
 
     def test_load_ledger_rejects_non_dict_top_level(self) -> None:
         """🟡№5: реестр — не объект верхнего уровня (список вместо dict)."""
@@ -432,7 +439,9 @@ class FalsePositiveLedgerTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
             ss.load_ledger(bad)
         self.assertEqual(ctx.exception.code, 2)
-        self.assertIn("ERROR: реестр нечитаем", buf.getvalue())
+        # T-090: message now comes from load_yaml_any's own UTF-8 check.
+        self.assertIn("ERROR", buf.getvalue())
+        self.assertIn("не в кодировке UTF-8", buf.getvalue())
 
     def test_duplicate_id_does_not_hide_the_dead_twin(self) -> None:
         """🟡 четвёртого гейта / Codex P3: двусторонняя сверка ключевалась по

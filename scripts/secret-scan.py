@@ -186,20 +186,19 @@ def load_ledger(path: pathlib.Path) -> list[dict]:
     используется тестами напрямую на списках без файла.
     """
     try:
-        import yaml
+        import yaml  # noqa: F401 - presence check only, parsing goes through core
     except ImportError:
         print("ERROR: для --ledger нужен PyYAML. `pip3 install pyyaml`", file=sys.stderr)
         raise SystemExit(2) from None
     if not path.exists():
         print(f"ERROR: реестр не найден: {path}", file=sys.stderr)
         raise SystemExit(2)
-    try:
-        # UnicodeDecodeError — подкласс ValueError, а не OSError: без него
-        # реестр в чужой кодировке давал голый traceback вместо ERROR/exit 2.
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
-        print(f"ERROR: реестр нечитаем: {path}: {exc}", file=sys.stderr)
-        raise SystemExit(2) from None
+    # T-090 (F-8): routed through the shared core loader (only allowed
+    # Loader entry point) — `load_yaml_any` already exits(2) with a
+    # coordinate-bearing message on unreadable/non-UTF-8/unparseable input,
+    # equivalent to this file's own try/except above.
+    from seo_cycle_core.config import load_yaml_any
+    raw = load_yaml_any(path)
     # Пустой/битый реестр НЕ считается пустым молча: «не смог прочитать» не
     # равно «прочитал, и там чисто». Легальная пустота записывается явно —
     # `entries: []`.

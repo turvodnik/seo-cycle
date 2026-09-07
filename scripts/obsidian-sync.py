@@ -398,7 +398,8 @@ def sync(project_root: pathlib.Path, vault_root: pathlib.Path, cfg: dict, args):
     entities: dict = {}
     if entities_path.exists():
         try:
-            raw = yaml.safe_load(entities_path.read_text(encoding="utf-8")) or {}
+            from seo_cycle_core.config import load_yaml_any
+            raw = load_yaml_any(entities_path) or {}
             if isinstance(raw, dict) and "entities" in raw:
                 raw = raw["entities"]
             if isinstance(raw, dict):
@@ -442,8 +443,9 @@ def sync(project_root: pathlib.Path, vault_root: pathlib.Path, cfg: dict, args):
     stock = {}
     if sp.exists():
         try:
-            stock = yaml.safe_load(sp.read_text(encoding="utf-8")) or {}
-        except Exception as e:
+            from seo_cycle_core.config import load_yaml_any
+            stock = load_yaml_any(sp) or {}
+        except (Exception, SystemExit) as e:
             print(f"⚠ stock-inventory.yaml: {e}", file=sys.stderr)
 
     entity_names = collect_entity_names(entities, stock)
@@ -639,7 +641,8 @@ def main():
             print(f"ERROR: seo-cycle.yaml не найден в {pathlib.Path.cwd()}", file=sys.stderr)
             sys.exit(2)
 
-    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    from seo_cycle_core.config import load_config
+    cfg = load_config(cfg_path)
     project_root = cfg_path.parent
     if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
         project_root = cfg_path.parent

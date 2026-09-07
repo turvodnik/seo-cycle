@@ -168,11 +168,12 @@ def main():
         print(f"ERROR: {path} не существует", file=sys.stderr)
         sys.exit(2)
 
-    try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError as e:
-        print(f"ERROR: YAML parse error: {e}", file=sys.stderr)
-        sys.exit(2)
+    # T-090 (F-8): routed through the shared core loader — it already
+    # prints a coordinate-bearing error and exit(2)s on unparseable YAML,
+    # equivalent to the try/except this replaces.
+    from seo_cycle_core.config import load_yaml_any
+    raw = load_yaml_any(path)
+    raw = raw if raw is not None else {}
 
     entities = flatten_entities(raw)
     if not entities:

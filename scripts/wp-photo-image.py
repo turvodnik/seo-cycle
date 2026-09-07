@@ -74,7 +74,13 @@ def load_config(path: str | None) -> dict[str, Any]:
     cfg_path = Path(path).expanduser() if path else find_config(Path.cwd())
     if not cfg_path:
         return {}
-    data = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    # T-090 (F-8): routed through the shared core loader instead of a local
+    # `yaml.safe_load` call. `_core_load_config` already exits(2) with a
+    # coordinate-bearing message on unparseable YAML/non-dict top level —
+    # this function's own `RuntimeError` on non-dict is now effectively
+    # unreachable but kept as defense in depth.
+    from seo_cycle_core.config import load_config as _core_load_config
+    data = _core_load_config(cfg_path)
     if not isinstance(data, dict):
         raise RuntimeError(f"Config is not a YAML object: {cfg_path}")
     return data

@@ -190,9 +190,17 @@ def read_json(path: pathlib.Path) -> dict[str, Any]:
 def read_yaml(path: pathlib.Path) -> dict[str, Any]:
     if not path.exists() or yaml is None:
         return {}
+    # T-090 (F-8): routed through the shared core loader (only allowed
+    # Loader entry point). `load_yaml_any` raises `SystemExit` on a parse
+    # error rather than returning — this scanner's whole point is to keep
+    # auditing OTHER packages even when one has a broken YAML file, so
+    # `SystemExit` is caught here too (deliberately wider than the original
+    # `except Exception`, which never had to think about this because the
+    # old code path returned instead of exiting).
+    from seo_cycle_core.config import load_yaml_any
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except Exception:
+        data = load_yaml_any(path)
+    except (Exception, SystemExit):
         return {"_yaml_error": True}
     return data if isinstance(data, dict) else {}
 
