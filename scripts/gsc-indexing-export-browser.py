@@ -18,7 +18,7 @@ from seo_cycle_core.technical_artifacts import write_technical_report
 
 
 DEFAULT_PROFILE_DIR = pathlib.Path.home() / ".codex" / "browser-profiles" / "gsc"
-DEFAULT_NODE_DEPS_DIR = pathlib.Path.home() / ".codex" / "vendor" / "seo-cycle-node"
+DEFAULT_NODE_DEPS_DIR = pathlib.Path.home() / ".seo-cycle" / "vendor" / "seo-cycle-node"
 DEFAULT_IMPORT_DIR = "seo/technical/gsc-indexing/imports"
 
 
@@ -31,8 +31,17 @@ def ensure_browser_runtime(args: argparse.Namespace) -> dict[str, Any]:
     package_path = deps_dir / "node_modules" / "playwright-core" / "package.json"
     if package_path.exists():
         return {"status": "ready", "node_modules": str(deps_dir / "node_modules"), "installed": False}
-    if args.skip_install_browser_runtime:
-        return {"status": "missing", "node_modules": str(deps_dir / "node_modules"), "installed": False}
+    if not args.install_browser_runtime:
+        # T-091 round 2 (F-18-class finding, 2026-09-07 review): a network
+        # npm install must be explicit opt-in, not a silent side effect of a
+        # normal run.
+        return {
+            "status": "missing",
+            "node_modules": str(deps_dir / "node_modules"),
+            "installed": False,
+            "error": "playwright-core is missing. Re-run with --install-browser-runtime to install it into "
+                     f"{deps_dir} (network access, one-time).",
+        }
     if not shutil.which("npm"):
         return {"status": "missing_npm", "node_modules": str(deps_dir / "node_modules"), "installed": False}
     deps_dir.mkdir(parents=True, exist_ok=True)
@@ -136,7 +145,17 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
     else:
         runtime = ensure_browser_runtime(args)
         if runtime.get("status") != "ready":
-            browser = {"status": "blocked", "error": runtime.get("status"), "downloads": [], "runtime": runtime}
+            # T-091 круг 3 (🟡, round-2 review §5): this used to set `error`
+            # to the bare status code ("missing"), throwing away
+            # ensure_browser_runtime()'s actual explanatory message ("Re-run
+            # with --install-browser-runtime to install it into ...") — the
+            # human saw only "browser_status: blocked" with no findings.
+            browser = {
+                "status": "blocked",
+                "error": runtime.get("error") or runtime.get("status"),
+                "downloads": [],
+                "runtime": runtime,
+            }
         else:
             import_dir.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(prefix="gsc-indexing-export-") as tmp:
@@ -176,6 +195,20 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
                 "evidence": {"issue_url": args.issue_url or "pages_index"},
             }
         )
+    if browser.get("status") == "blocked":
+        # T-091 круг 3 (🟡, round-2 review §5): without this, a blocked run
+        # (missing node, missing browser runtime, missing site_url) reached
+        # the report as bare "browser_status: blocked" with zero findings —
+        # the actual reason (e.g. "Re-run with --install-browser-runtime...")
+        # never surfaced anywhere a human would read it.
+        findings.append(
+            {
+                "id": "gsc_browser_blocked",
+                "severity": "medium",
+                "message": browser.get("error") or "Browser step was blocked for an unspecified reason.",
+                "evidence": {"status": browser.get("status")},
+            }
+        )
     distillate = {
         "summary": summary,
         "downloads": browser.get("downloads", []),
@@ -212,7 +245,7 @@ def main() -> int:
     parser.add_argument("--profile-dir", help=f"Persistent GSC browser profile. Default: {DEFAULT_PROFILE_DIR}")
     parser.add_argument("--browser-channel", default="chrome")
     parser.add_argument("--node-deps-dir", help=f"Shared Node dependency cache. Default: {DEFAULT_NODE_DEPS_DIR}")
-    parser.add_argument("--skip-install-browser-runtime", action="store_true")
+    parser.add_argument("--install-browser-runtime", action="store_true", help="Explicit opt-in: install playwright-core into the Node dependency cache (network access) if missing.")
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--keep-open", action="store_true")
     parser.add_argument("--timeout-seconds", type=int, default=90)

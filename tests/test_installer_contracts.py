@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import tempfile
@@ -102,6 +103,12 @@ class InstallerFixture(unittest.TestCase):
             "SEO_CYCLE_SHARED_DIR": str(self.shared),
             "SEO_CYCLE_CORE": str(self.core),
             "SEO_CYCLE_REPO": str(self.origin),
+            # T-091 (F-18): without this, ensure_python_deps() installed
+            # pyyaml/requests/pillow/beautifulsoup4/google-auth into the
+            # machine running the test suite (the SYSTEM python, with
+            # --break-system-packages on the third fallback) and made real
+            # PyPI network calls on every test that reaches ensure_store().
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
             **(env or {}),
         }
         _assert_sandboxed_home(full_env)
@@ -137,6 +144,36 @@ class InstallerFixture(unittest.TestCase):
             "SEO_CYCLE_SHARED_DIR": str(self.shared),
             "SEO_CYCLE_CORE": str(self.core),
             "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
+            **(env or {}),
+        }
+        _assert_sandboxed_home(full_env)
+        return subprocess.run(
+            ["bash", str(mutated_path), *args],
+            env=full_env, capture_output=True, text=True,
+        )
+
+    def run_install_with_injection(self, anchor: str, injected: str, *args: str,
+                                    env: dict | None = None) -> subprocess.CompletedProcess:
+        """T-091 round 3: the opposite of run_install_without() — INSERT
+        `injected` right before `anchor` in a real copy of install.sh on
+        disk, then run it exactly like a positive test would. Used to prove
+        the runtime git() choke-point guard (T-091 round 3) actually refuses
+        a bypass call placed in an unauthorised function, not just that a
+        text scan can see the bypass's source line."""
+        source = INSTALL.read_text(encoding="utf-8")
+        assert anchor in source, f"инъекция не нашла якорь: {anchor!r}"
+        mutated = source.replace(anchor, injected + anchor, 1)
+        assert mutated != source, "инъекция не применилась"
+        mutated_path = self.tmp / "install.injected.sh"
+        mutated_path.write_text(mutated, encoding="utf-8")
+        full_env = {
+            **os.environ,
+            "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
             **(env or {}),
         }
         _assert_sandboxed_home(full_env)
@@ -158,24 +195,44 @@ class TagNotOnOriginTest(InstallerFixture):
         self.assertFalse(self.lock_path().exists(), "лок не должен создаваться при отказе")
 
     def test_same_named_tag_pointing_at_a_different_commit_is_rejected(self) -> None:
-        """R6/D3: a tag existing on origin BY NAME is not enough — if the
-        local repo's same-named tag points at a different commit (stale
-        local clone, or the tag was re-pointed only locally), attaching it
-        must fail rather than silently accept an unverifiable commit."""
-        # Diverge local core's v1.0.0 from what's on origin, without ever
-        # pushing the change — origin still has the ORIGINAL commit under
-        # that tag name.
-        (self.core / "VERSION").write_text("1.0.0-local-drift\n", encoding="utf-8")
-        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
-        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local drift")
-        _git(self.core, "tag", "-f", "v1.0.0")  # local-only repoint, never pushed
-
-        proc = self.run_install(
+        """R6/D3, adapted for T-091: a tag existing on origin BY NAME is not
+        enough. T-091's force-fetch (F-12/13) now SELF-HEALS a local-only
+        repoint on every plain (non-`--sync`) attach — that fetch runs
+        before this scenario's pin is even resolved and force-rewrites the
+        local tag back to match origin, which is exactly the fix this
+        ticket exists to make (see UpdateStoreForceTagsTest for that path
+        tested directly). The surviving case where a diverged local tag is
+        NOT auto-corrected is `--sync`, which makes zero network calls by
+        design (F-14's whole reason for existing) — a local-only repoint of
+        an ALREADY-confirmed tag, done without a fresh fetch, must still be
+        rejected there rather than silently trusted from local `git tag`
+        state alone."""
+        # A real attach first — this fetches and confirms v1.0.0 against
+        # origin, writing the origin-tags manifest T-091 introduced.
+        proc0 = self.run_install(
             "--project", str(self.project), "--pin", "v1.0.0",
             "--skip-init", "--no-migrate-old-global",
         )
+        self.assertEqual(proc0.returncode, 0, proc0.stdout + proc0.stderr)
+        good_commit = self.read_lock()["external"]["seo-cycle"]["commit"]
+
+        # Diverge local core's v1.0.0 from what's on origin, without ever
+        # pushing the change or re-fetching — origin still has the
+        # ORIGINAL commit under that tag name, and so does the manifest.
+        (self.core / "VERSION").write_text("1.0.0-local-drift\n", encoding="utf-8")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local drift")
+        _git(self.core, "tag", "-f", "v1.0.0")  # local-only repoint, never pushed/fetched
+
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0", "--sync",
+            "--no-migrate-old-global",
+        )
         self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertFalse(self.lock_path().exists(), "лок не должен создаваться при расхождении SHA с origin")
+        self.assertEqual(
+            self.read_lock()["external"]["seo-cycle"]["commit"], good_commit,
+            "лок не должен быть переписан расходящимся с origin коммитом",
+        )
 
 
 class SnapshotSHAReconciliationTest(InstallerFixture):
@@ -289,6 +346,16 @@ class UpgradeAllHonestyTest(InstallerFixture):
     origin check in ensure_worktree()."""
 
     def test_upgrade_all_rejects_a_tag_diverged_from_origin(self) -> None:
+        """Adapted for T-091 (F-12/13): `--upgrade-all` runs `ensure_store`
+        FIRST, and ensure_store's fetch is now the same force+prune-tags
+        fetch as everywhere else — it self-heals a purely-local repoint of
+        v1.0.0 back to origin's commit before upgrade_all() ever resolves
+        the pin, instead of leaving the drift for ensure_worktree's
+        ls-remote check to catch (the old, narrower fix). The assertion
+        that actually matters is unchanged: the drifted commit must never
+        reach the lock — only now it's because it gets corrected upstream,
+        not rejected downstream, so upgrade-all is expected to SUCCEED with
+        the lock back at origin's true commit, not fail."""
         # A real attach registers the project (registry_update) and writes
         # the honest, origin-verified commit to the lock.
         proc = self.run_install(
@@ -307,14 +374,30 @@ class UpgradeAllHonestyTest(InstallerFixture):
         _git(self.core, "tag", "-f", "v1.0.0")
 
         proc2 = self.run_install("--upgrade-all", "--pin", "v1.0.0")
-        self.assertNotEqual(
+        self.assertEqual(
             proc2.returncode, 0,
-            "upgrade-all обязан отказать на разошедшемся с origin теге, а не "
-            f"переписать лок — stdout/stderr: {proc2.stdout + proc2.stderr!r}",
+            "upgrade-all обязан САМОСТОЯТЕЛЬНО исправить разошедшийся тег через "
+            f"force-fetch (T-091), а не остаться на локальном дрейфе — {proc2.stdout + proc2.stderr!r}",
         )
         self.assertEqual(
             self.read_lock()["external"]["seo-cycle"]["commit"], original_commit,
-            "upgrade-all не должен переписывать лок расходящимся с origin коммитом",
+            "upgrade-all не должен записывать в лок расходящийся с origin коммит "
+            "(должен либо исправить тег, либо отказать — но никогда не довериться дрейфу)",
+        )
+        # T-091 круг 3 (🟡, round-2 review §2): --upgrade-all reuses SYNC_ONLY=1
+        # internally but DID just make a real network call (ensure_store's
+        # fetch) — the "офлайн-проверка ... не подтверждение с сервера"
+        # wording from круг 2 was itself a lie in exactly this command,
+        # the one T-055 uses on four live sites. It must say the check WAS
+        # network-verified here, not claim an offline manifest check.
+        out = proc2.stdout + proc2.stderr
+        self.assertNotIn(
+            "офлайн-проверка", out,
+            f"--upgrade-all делал реальный сетевой fetch, но сообщение утверждает офлайн-проверку: {out!r}",
+        )
+        self.assertIn(
+            "сверено с origin", out,
+            f"--upgrade-all должен честно сказать, что проверка была сетевой: {out!r}",
         )
 
 
@@ -352,12 +435,19 @@ class UpgradeAllRejectsSyncTest(InstallerFixture):
         md5_after = hashlib.md5(self.lock_path().read_bytes()).hexdigest()
         self.assertEqual(md5_before, md5_after, "лок не должен быть переписан")
 
-    def test_reverting_the_guard_reintroduces_the_bug(self) -> None:
-        """Genuine mutation, not a string grep: run the SAME diverged-tag
-        scenario against install.sh with the O1 guard block physically
-        removed. If the guard is what's protecting the lock, its removal
-        must reproduce the original bug (exit 0, lock rewritten) — proving
-        this test class actually exercises the fix."""
+    def test_reverting_the_guard_alone_no_longer_reintroduces_the_bug(self) -> None:
+        """T-091 update: this used to be a single-mutation revert test ("O1
+        alone is the only thing protecting the lock"). It no longer is —
+        T-091's force-fetch (F-12/13) runs unconditionally inside
+        ensure_store() on EVERY --upgrade-all invocation (SYNC_ONLY/
+        NETWORK_ALLOWED don't gate it), so even with the O1 guard stripped
+        the locally-diverged tag gets healed back to origin's commit before
+        upgrade_all() ever reuses SYNC_ONLY. This is defense-in-depth, not a
+        broken test: it IS the "explicit failed bypass attempt" the ticket
+        asks for — proving O1 is no longer the only thing standing between
+        this combination and a corrupted lock. See the sibling test below
+        for the mutation that strips BOTH layers and does reproduce the
+        original incident."""
         proc = self.run_install(
             "--project", str(self.project), "--pin", "v1.0.0",
             "--skip-init", "--no-migrate-old-global",
@@ -378,13 +468,90 @@ class UpgradeAllRejectsSyncTest(InstallerFixture):
             'fi\n'
         )
         mutated_proc = self.run_install_without(guard, "--upgrade-all", "--sync", "--pin", "v1.0.0")
+        # Bypass ATTEMPT succeeds in the sense that O1 no longer blocks the
+        # combination outright — but the lock still ends up correct (either
+        # self-healed to origin's true commit, or untouched), never on the
+        # drifted one. That is the negative proof the ticket asks for: this
+        # specific single-guard bypass does NOT reach a corrupted lock.
+        self.assertEqual(
+            self.read_lock()["external"]["seo-cycle"]["commit"], original_commit,
+            f"обход одного лишь O1-guard'а не должен доходить до порчи лока (T-091 закрывает класс раньше) — {mutated_proc.stdout + mutated_proc.stderr!r}",
+        )
+
+    def test_reverting_all_three_guards_reintroduces_the_bug(self) -> None:
+        """The genuine multi-layer mutation: this combination is now
+        defended by THREE independent things — the O1 static guard, T-091's
+        force-fetch (which would otherwise just self-heal the drift before
+        anyone even asks), and T-091's origin-tags manifest check (F-14,
+        which would otherwise reject an explicit --pin whose commit doesn't
+        match the last confirmed fetch). Strip all three — O1's exit,
+        fetch_tags_or_report()'s force flags (back to a plain `--tags` that
+        genuinely fails to overwrite a diverged tag, per T-068's own
+        finding), its enforcement of that failure, AND the manifest check —
+        to simulate the exact world before any of these fixes existed. THAT
+        reproduces the original incident (exit 0, lock silently kept on a
+        commit that was never verified against origin), proving these
+        layers together, not any one of them, are what this combination
+        needs to defeat."""
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        original_commit = self.read_lock()["external"]["seo-cycle"]["commit"]
+
+        (self.core / "VERSION").write_text("1.0.0-mutation-drift-2\n", encoding="utf-8")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local drift")
+        _git(self.core, "tag", "-f", "v1.0.0")
+
+        source = INSTALL.read_text(encoding="utf-8")
+        guard = (
+            'if [ "$MODE" = "upgrade-all" ] && [ "$SYNC_ONLY" = "1" ]; then\n'
+            '    echo "ERROR: --upgrade-all не принимает --sync — эта комбинация обходит сверку origin/SHA (O1). '
+            'Используй install.sh --upgrade-all [--pin T]." >&2\n'
+            '    exit 2\n'
+            'fi\n'
+        )
+        force_fetch = 'fetch origin --tags --force --prune --prune-tags --quiet'
+        plain_fetch = 'fetch --tags --quiet'
+        store_gate = (
+            '        if ! fetch_tags_or_report "$dest" "$label"; then\n'
+            '            return 1\n'
+            '        fi\n'
+        )
+        store_gate_neutered = '        fetch_tags_or_report "$dest" "$label" || true\n'
+        manifest_check = 'verify_tag_against_manifest "$repo_dir" "$tag" "$tag_commit" || return 1'
+        manifest_check_neutered = 'verify_tag_against_manifest "$repo_dir" "$tag" "$tag_commit" || true'
+        for needle in (guard, force_fetch, store_gate, manifest_check):
+            assert needle in source, f"мутация не нашла фрагмент: {needle!r}"
+        mutated = (
+            source.replace(guard, "", 1)
+            .replace(force_fetch, plain_fetch, 1)
+            .replace(store_gate, store_gate_neutered, 1)
+            .replace(manifest_check, manifest_check_neutered, 1)
+        )
+        mutated_path = self.tmp / "install.mutated2.sh"
+        mutated_path.write_text(mutated, encoding="utf-8")
+        full_env = {
+            **os.environ, "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
+        }
+        _assert_sandboxed_home(full_env)
+        mutated_proc = subprocess.run(
+            ["bash", str(mutated_path), "--upgrade-all", "--sync", "--pin", "v1.0.0"],
+            env=full_env, capture_output=True, text=True,
+        )
         self.assertEqual(
             mutated_proc.returncode, 0,
-            f"без O1-guard'а комбинация должна была снова пройти (это и доказывает, что guard — единственная защита) — {mutated_proc.stdout + mutated_proc.stderr!r}",
+            f"со всеми тремя guard'ами снятыми комбинация должна была снова пройти — {mutated_proc.stdout + mutated_proc.stderr!r}",
         )
         self.assertNotEqual(
             self.read_lock()["external"]["seo-cycle"]["commit"], original_commit,
-            "без guard'а мутированный прогон обязан переписать лок расходящимся коммитом — иначе тест не проверяет то, что должен",
+            "со всеми тремя guard'ами снятыми мутированный прогон обязан переписать лок расходящимся коммитом — иначе тест не проверяет то, что должен",
         )
 
 
@@ -532,6 +699,7 @@ class WorktreeNotClonedOverTest(unittest.TestCase):
             "SEO_CYCLE_SHARED_DIR": str(self.shared),
             "SEO_CYCLE_CORE": str(self.core),
             "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
         }
         _assert_sandboxed_home(env)
         proc = subprocess.run(
@@ -597,6 +765,7 @@ class WorktreeNotClonedOverTest(unittest.TestCase):
             "SEO_CYCLE_SHARED_DIR": str(self.shared),
             "SEO_CYCLE_CORE": str(self.core),
             "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
         }
         _assert_sandboxed_home(env)
         proc = subprocess.run(
@@ -724,12 +893,17 @@ class UpgradeAllOfflineRefusesTest(InstallerFixture):
             "лок не должен быть переписан ни одним байтом при недоступном origin",
         )
 
-    def test_reverting_the_offline_guard_reintroduces_the_silent_success(self) -> None:
-        """Genuine mutation: strip the T-064 offline-refusal `return 1` out
-        of ensure_worktree() and re-run the exact same offline scenario. The
-        original incident (exit 0, lock rewritten from an unverified local
-        tag) must come back — proving this guard, not something else, is
-        what stops it."""
+    def test_reverting_the_offline_guard_alone_no_longer_reintroduces_the_bug(self) -> None:
+        """T-091 update: this used to prove the T-064 `return 1` in
+        ensure_worktree() was the ONLY thing standing between an offline
+        origin and a silently rewritten lock. It no longer is: T-091
+        (F-12/13) made ensure_store()'s own fetch (which --upgrade-all runs
+        BEFORE upgrade_all() ever reaches ensure_worktree()) fail loudly on
+        an unreachable origin too — so removing just the ensure_worktree
+        guard no longer reintroduces the incident; the earlier gate catches
+        it first. That is itself the "failed bypass attempt" this ticket
+        asks to demonstrate. See the sibling test below for the mutation
+        that strips BOTH layers and does reproduce the original bug."""
         source = INSTALL.read_text(encoding="utf-8")
         old = (
             '            # T-064: this second ls-remote also failing means origin is\n'
@@ -759,6 +933,73 @@ class UpgradeAllOfflineRefusesTest(InstallerFixture):
                 "SEO_CYCLE_SHARED_DIR": str(self.shared),
                 "SEO_CYCLE_CORE": str(self.core),
                 "SEO_CYCLE_REPO": str(self.origin),
+                "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
+            }
+            proc = subprocess.run(
+                ["bash", str(mutated_path), "--upgrade-all", "--pin", "v1.0.0"],
+                env=full_env, capture_output=True, text=True,
+            )
+        finally:
+            offline.rename(self.origin)
+
+        # Bypass attempt: the ensure_worktree guard is gone, but the run
+        # must still refuse (T-091's earlier gate) — not silently succeed.
+        self.assertNotEqual(
+            proc.returncode, 0,
+            f"обход одного лишь ensure_worktree-guard'а не должен доходить до тихого успеха (T-091 закрывает класс раньше) — {proc.stdout + proc.stderr!r}",
+        )
+        md5_after = hashlib.md5(self.lock_path().read_bytes()).hexdigest()
+        self.assertEqual(
+            md5_before, md5_after,
+            "лок не должен быть переписан ни при недоступном origin, ни при снятом ensure_worktree-guard'е",
+        )
+
+    def test_reverting_both_the_store_gate_and_the_offline_guard_reintroduces_the_bug(self) -> None:
+        """The genuine two-layer mutation: strip the T-064 ensure_worktree
+        guard AND neuter T-091's own ensure_store-level enforcement (make
+        the mandatory repo's fetch failure non-fatal, `|| true`, same as the
+        optional repo already is) — i.e. simulate the world before EITHER
+        fix existed. THAT reproduces the original incident (exit 0, lock
+        silently kept/rewritten from an unverified state) with origin
+        offline, proving both mutations together, not just one, are what
+        this scenario now needs to defeat."""
+        source = INSTALL.read_text(encoding="utf-8")
+        worktree_guard = (
+            '            # T-064: this second ls-remote also failing means origin is\n'
+            '            # unreachable, not just missing this tag. NETWORK_ALLOWED=1\n'
+            '            # means the caller (a real --sync sets it to 0 and returns\n'
+            '            # before this block) wants a network-verified pin — silently\n'
+            '            # trusting the local tag here let --upgrade-all re-pin all\n'
+            '            # registered projects onto an unverified tag with exit code 0\n'
+            '            # whenever the connection dropped mid-run (the incident this\n'
+            '            # SPEC exists to fix). Refuse instead of guessing.\n'
+            '            warn "origin недоступен, проверить тег $tag невозможно — перепин отменён (T-064)"\n'
+            '            return 1\n'
+        )
+        store_gate = (
+            '        if ! fetch_tags_or_report "$dest" "$label"; then\n'
+            '            return 1\n'
+            '        fi\n'
+        )
+        store_gate_neutered = '        fetch_tags_or_report "$dest" "$label" || true\n'
+        assert worktree_guard in source, "мутация не нашла T-064 offline-guard в ensure_worktree()"
+        assert store_gate in source, "мутация не нашла T-091 store-level enforcement в install_or_update_repo()"
+        mutated = source.replace(worktree_guard, "", 1).replace(store_gate, store_gate_neutered, 1)
+        mutated_path = self.tmp / "install.mutated3.sh"
+        mutated_path.write_text(mutated, encoding="utf-8")
+
+        import hashlib
+        md5_before = hashlib.md5(self.lock_path().read_bytes()).hexdigest()
+
+        offline = self.origin.with_name(self.origin.name + ".OFFLINE")
+        self.origin.rename(offline)
+        try:
+            full_env = {
+                **os.environ, "HOME": str(self.home),
+                "SEO_CYCLE_SHARED_DIR": str(self.shared),
+                "SEO_CYCLE_CORE": str(self.core),
+                "SEO_CYCLE_REPO": str(self.origin),
+                "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
             }
             proc = subprocess.run(
                 ["bash", str(mutated_path), "--upgrade-all", "--pin", "v1.0.0"],
@@ -769,13 +1010,13 @@ class UpgradeAllOfflineRefusesTest(InstallerFixture):
 
         self.assertEqual(
             proc.returncode, 0,
-            "без guard'а --upgrade-all с недоступным origin должен был снова "
+            "с обоими guard'ами снятыми --upgrade-all с недоступным origin должен был снова "
             f"'успешно' завершиться — {proc.stdout + proc.stderr!r}",
         )
         md5_after = hashlib.md5(self.lock_path().read_bytes()).hexdigest()
         self.assertNotEqual(
             md5_before, md5_after,
-            "без guard'а лок обязан был быть переписан — иначе мутация ничего не проверяет",
+            "с обоими guard'ами снятыми лок обязан был быть переписан — иначе мутация ничего не проверяет",
         )
 
 
@@ -906,6 +1147,7 @@ class UpgradeAllPartialFailureReportedTest(InstallerFixture):
             "SEO_CYCLE_SHARED_DIR": str(self.shared),
             "SEO_CYCLE_CORE": str(self.core),
             "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
         }
         _assert_sandboxed_home(full_env)
         return subprocess.run(
@@ -1076,6 +1318,7 @@ class OptionalKeywordsOutageDoesNotBlockSeoCycleTest(InstallerFixture):
                 "SEO_CYCLE_SHARED_DIR": str(self.shared),
                 "SEO_CYCLE_CORE": str(self.core),
                 "SEO_CYCLE_REPO": str(self.origin),
+                "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
                 "SEO_KEYWORDS_REPO": str(self.kw_origin),
             }
             proc2 = subprocess.run(
@@ -1149,6 +1392,7 @@ class OrphanedWorktreeRefusesTest(unittest.TestCase):
             "SEO_CYCLE_SHARED_DIR": str(self.shared),
             "SEO_CYCLE_CORE": str(self.core),
             "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
         }
         _assert_sandboxed_home(env)
         proc = subprocess.run(
@@ -1195,6 +1439,7 @@ class OrphanedWorktreeRefusesTest(unittest.TestCase):
             "SEO_CYCLE_SHARED_DIR": str(self.shared),
             "SEO_CYCLE_CORE": str(self.core),
             "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
         }
         _assert_sandboxed_home(env)
         proc = subprocess.run(
@@ -1406,11 +1651,18 @@ class UpdateStoreForceTagsTest(InstallerFixture):
         )
         self.assertIn("не найден", combined3, combined3)
 
-    def test_reverting_the_verify_guard_reintroduces_the_snapshot_destruction(self) -> None:
-        """Genuine mutation: strip `--verify -q` back out of ensure_worktree()
-        (the exact review-flagged line) and re-run the deleted-tag-then-sync
-        scenario above. The snapshot destruction must come back — proving
-        this guard, not something else, is what stops it."""
+    def test_reverting_the_verify_guard_alone_no_longer_reintroduces_the_snapshot_destruction(self) -> None:
+        """T-091 update: this used to prove the `--verify -q` fix alone was
+        the only thing standing between a locally-pruned tag and a
+        destroyed live snapshot under --sync. It no longer is: T-091's
+        origin-tags manifest (F-14) independently rejects an explicit --pin
+        whose commit doesn't match what the last confirmed fetch/clone saw
+        — the deleted tag's garbled `tag_commit` (this mutation's whole
+        point) simply fails that comparison instead of reaching the
+        destructive worktree-rebuild path at all. This IS the "failed
+        bypass attempt" the ticket asks for. See the sibling test below for
+        the mutation that strips BOTH guards and does reproduce the
+        original incident."""
         old_commit = _git(self.core, "rev-parse", "refs/tags/v1.0.0").stdout.strip()
         proc = self.run_install(
             "--project", str(self.project), "--pin", "v1.0.0",
@@ -1435,10 +1687,747 @@ class UpdateStoreForceTagsTest(InstallerFixture):
             "--project", str(self.project), "--pin", "v1.0.0",
             "--sync", "--no-migrate-old-global",
         )
+        self.assertTrue(
+            (snapshot / "VERSION").exists(),
+            f"обход одного лишь --verify -q не должен доходить до разрушения снапшота "
+            f"(T-091 закрывает класс раньше, через манифест F-14) — "
+            f"{proc3.stdout + proc3.stderr!r}, старый коммит был {old_commit[:8]}",
+        )
+
+    def test_reverting_both_the_manifest_check_and_the_verify_guard_reintroduces_the_snapshot_destruction(self) -> None:
+        """The genuine two-layer mutation: strip `--verify -q` back out of
+        ensure_worktree() AND neuter T-091's manifest check
+        (verify_tag_against_manifest call site) — i.e. simulate the world
+        before EITHER fix existed. THAT reproduces the original incident
+        (live snapshot destroyed by a bogus tag_commit under --sync),
+        proving both mutations together, not just one, are what this
+        scenario now needs to defeat."""
+        old_commit = _git(self.core, "rev-parse", "refs/tags/v1.0.0").stdout.strip()
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        snapshot = self.shared / "versions" / "seo-cycle" / "v1.0.0"
+        self.assertTrue((snapshot / "VERSION").exists())
+
+        _git(self.seed, "push", "-q", "origin", "--delete", "v1.0.0")
+        _git(self.core, "fetch", "origin", "--tags", "--force", "--prune", "--prune-tags", "--quiet")
+        self.assertNotEqual(
+            subprocess.run(
+                ["git", "-C", str(self.core), "rev-parse", "--verify", "-q", "refs/tags/v1.0.0"],
+                capture_output=True, text=True,
+            ).returncode,
+            0,
+        )
+
+        source = INSTALL.read_text(encoding="utf-8")
+        verify_needle = 'rev-parse --verify -q "refs/tags/$tag^{commit}"'
+        manifest_needle = 'verify_tag_against_manifest "$repo_dir" "$tag" "$tag_commit" || return 1'
+        assert verify_needle in source, "мутация не нашла --verify -q"
+        assert manifest_needle in source, "мутация не нашла вызов verify_tag_against_manifest"
+        mutated = source.replace(verify_needle, "", 1).replace(
+            manifest_needle, 'verify_tag_against_manifest "$repo_dir" "$tag" "$tag_commit" || true', 1,
+        )
+        mutated_path = self.tmp / "install.mutated4.sh"
+        mutated_path.write_text(mutated, encoding="utf-8")
+        full_env = {
+            **os.environ, "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
+        }
+        _assert_sandboxed_home(full_env)
+        proc3 = subprocess.run(
+            ["bash", str(mutated_path), "--project", str(self.project), "--pin", "v1.0.0",
+             "--sync", "--no-migrate-old-global"],
+            env=full_env, capture_output=True, text=True,
+        )
         self.assertFalse(
             (snapshot / "VERSION").exists(),
-            f"без --verify -q снапшот должен быть разрушен (воспроизводит инцидент) — "
+            f"с обоими guard'ами снятыми снапшот должен быть разрушен (воспроизводит инцидент) — "
             f"{proc3.stdout + proc3.stderr!r}, старый коммит был {old_commit[:8]}",
+        )
+
+
+class PlainAttachForceFetchTest(InstallerFixture):
+    """T-091 (F-12/F-13): update_store_only() was fixed by T-068, but
+    install_or_update_repo() — the function EVERY plain `install.sh` /
+    `--project` attach runs through ensure_store(), the most common
+    invocation and the one T-055 uses on four live sites — kept the exact
+    pre-T-068 construction (`fetch --tags`, no --force/--prune-tags, `||
+    warn "...(offline?)"` swallowing the real cause). These tests exercise
+    THAT path directly, not update_store_only()."""
+
+    def test_plain_attach_force_updates_a_moved_tag(self) -> None:
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+        # Move the tag on origin WITHOUT running install.sh at all — the
+        # local store's v1.0.0 stays exactly where it was.
+        (self.seed / "VERSION").write_text("1.0.1\n", encoding="utf-8")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "retag")
+        _git(self.seed, "tag", "-f", "v1.0.0")
+        _git(self.seed, "push", "-q", "-f", "origin", "main", "--tags")
+        stale_local = _git(self.core, "rev-parse", "v1.0.0").stdout.strip()
+        origin_now = _git(self.seed, "rev-parse", "v1.0.0").stdout.strip()
+        self.assertNotEqual(stale_local, origin_now)
+
+        # A PLAIN attach to a DIFFERENT project — no --update anywhere in
+        # this test. If install_or_update_repo() still used a bare
+        # `fetch --tags`, this would silently keep the stale tag (F-12).
+        project2 = self.tmp / "project2"
+        project2.mkdir()
+        proc2 = self.run_install(
+            "--project", str(project2), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc2.returncode, 0, proc2.stdout + proc2.stderr)
+        combined = proc2.stdout + proc2.stderr
+        self.assertIn("переехал", combined, combined)
+        self.assertIn(stale_local[:8], combined, combined)
+        self.assertIn(origin_now[:8], combined, combined)
+        new_local = _git(self.core, "rev-parse", "v1.0.0").stdout.strip()
+        self.assertEqual(new_local, origin_now, "тег в хранилище обязан обновиться на плейн-запуске, без --update")
+
+    def test_plain_attach_fetch_failure_prints_gits_real_error_not_only_a_guess(self) -> None:
+        """F-12's second half: the old code's `fetch --tags --quiet
+        2>/dev/null || warn "...(offline?)"` threw away git's own error line
+        AND printed a guessed cause in its place. This fetch is no longer
+        `2>/dev/null`'d — a real failure must still show git's own message
+        (whatever it actually is) alongside the `warn`, not instead of it."""
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+        offline = self.origin.with_name(self.origin.name + ".OFFLINE")
+        self.origin.rename(offline)
+        try:
+            proc2 = self.run_install(
+                "--project", str(self.tmp / "project3"), "--pin", "v1.0.0",
+                "--skip-init", "--no-migrate-old-global",
+            )
+        finally:
+            offline.rename(self.origin)
+        self.assertNotEqual(proc2.returncode, 0, proc2.stdout + proc2.stderr)
+        combined = proc2.stdout + proc2.stderr
+        self.assertIn("не удался", combined, combined)
+        # Git's own real cause (not suppressed) — this IS the genuinely
+        # offline/unreachable case, so "fatal:" from git itself is expected
+        # to be visible, not swallowed behind the hedged warn alone.
+        self.assertIn("fatal:", combined, combined)
+
+    def test_reverting_the_stderr_suppression_hides_gits_real_error(self) -> None:
+        """Genuine mutation: put `2>/dev/null` back on the fetch inside
+        fetch_tags_or_report() (the old code's own construction) and re-run
+        the same offline scenario. Git's real "fatal:" line must disappear,
+        leaving only the hedged warn — proving removing that suppression,
+        not something else, is what makes the real cause visible."""
+        source = INSTALL.read_text(encoding="utf-8")
+        needle = 'if git -C "$local_dir" fetch origin --tags --force --prune --prune-tags --quiet; then'
+        mutated_line = 'if git -C "$local_dir" fetch origin --tags --force --prune --prune-tags --quiet 2>/dev/null; then'
+        assert needle in source, "мутация не нашла fetch внутри fetch_tags_or_report()"
+        mutated_path = self.tmp / "install.mutated6.sh"
+        mutated_path.write_text(source.replace(needle, mutated_line, 1), encoding="utf-8")
+        full_env = {
+            **os.environ, "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
+        }
+        _assert_sandboxed_home(full_env)
+
+        offline = self.origin.with_name(self.origin.name + ".OFFLINE")
+        self.origin.rename(offline)
+        try:
+            proc = subprocess.run(
+                ["bash", str(mutated_path), "--project", str(self.tmp / "project3b"),
+                 "--pin", "v1.0.0", "--skip-init", "--no-migrate-old-global"],
+                env=full_env, capture_output=True, text=True,
+            )
+        finally:
+            offline.rename(self.origin)
+        combined = proc.stdout + proc.stderr
+        self.assertNotIn("fatal:", combined, combined)
+        self.assertIn("не удался", combined, combined)
+
+    def test_reverting_the_force_fetch_in_plain_attach_reintroduces_the_stale_tag(self) -> None:
+        """Genuine mutation: revert fetch_tags_or_report()'s fetch to the
+        pre-T-091 plain `--tags` and re-run the moved-tag scenario above
+        through a PLAIN attach (no --update). The stale tag must come back
+        — proving the shared choke point, not something else, is what
+        fixed install_or_update_repo() specifically."""
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+        (self.seed / "VERSION").write_text("1.0.1\n", encoding="utf-8")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "retag")
+        _git(self.seed, "tag", "-f", "v1.0.0")
+        _git(self.seed, "push", "-q", "-f", "origin", "main", "--tags")
+        stale_local = _git(self.core, "rev-parse", "v1.0.0").stdout.strip()
+
+        project2 = self.tmp / "project2-mutated"
+        project2.mkdir()
+        mutated_proc = self.run_install_without(
+            "--force --prune --prune-tags",
+            "--project", str(project2), "--pin", "v1.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        # Without --force, a plain `fetch --tags` refuses to overwrite —
+        # the local tag stays stale, exactly the F-12 incident.
+        new_local = _git(self.core, "rev-parse", "v1.0.0").stdout.strip()
+        self.assertEqual(
+            new_local, stale_local,
+            f"без --force тег обязан был остаться протухшим — {mutated_proc.stdout + mutated_proc.stderr!r}",
+        )
+
+
+class SyncManifestRejectsUnfetchedTagTest(InstallerFixture):
+    """T-091 (F-14): `--pin <tag> --sync` used to accept a tag that was
+    NEVER on origin at all — NETWORK_ALLOWED=0 (a real --sync) skipped
+    ensure_worktree()'s ls-remote check entirely, and a purely local `git
+    tag -f` is indistinguishable from a fetched one by `rev-parse` alone.
+    The fix is the origin-tags manifest: an explicit --pin under --sync is
+    now checked against what the most recent fetch/clone actually
+    confirmed, instead of being trusted from local git state alone."""
+
+    def test_pin_sync_rejects_a_tag_that_was_never_on_origin(self) -> None:
+        # Confirm v1.0.0 into the manifest first (a real --update), THEN
+        # create the never-pushed tag — this is the exact F-14 repro shape:
+        # a manifest exists, it just never saw THIS tag.
+        proc0 = self.run_install("--update")
+        self.assertEqual(proc0.returncode, 0, proc0.stdout + proc0.stderr)
+        _git(self.core, "tag", "-f", "v9.9.9", "HEAD")  # never pushed, ever
+
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v9.9.9", "--sync",
+            "--no-migrate-old-global",
+        )
+        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        combined = proc.stdout + proc.stderr
+        self.assertIn("F-14", combined, combined)
+        self.assertFalse(self.lock_path().exists(), "лок не должен создаваться при отказе")
+
+    def test_pin_sync_rejects_a_tag_with_no_manifest_at_all(self) -> None:
+        """The other half of the same defect: a store that has NEVER run a
+        fetch/clone through install.sh's own choke point (no manifest file
+        exists yet) must also refuse an explicit --pin under --sync, not
+        treat "no data" as "trusted"."""
+        _git(self.core, "tag", "-f", "v9.9.9", "HEAD")
+
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v9.9.9", "--sync",
+            "--no-migrate-old-global",
+        )
+        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertFalse(self.lock_path().exists(), "лок не должен создаваться при отказе")
+
+    def test_pin_sync_accepts_a_tag_confirmed_by_a_prior_update(self) -> None:
+        """The safe, documented two-step sequence (INSTALL.md) must keep
+        working: `--update` (network) confirms the tag into the manifest,
+        then `--pin ... --sync` (no network) trusts it."""
+        proc0 = self.run_install("--update")
+        self.assertEqual(proc0.returncode, 0, proc0.stdout + proc0.stderr)
+
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v1.0.0", "--sync",
+            "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        # T-091 круг 3: a REAL --sync (NETWORK_ALLOWED=0) must keep the
+        # offline-manifest wording — only --upgrade-all's internal SYNC_ONLY
+        # reuse (NETWORK_ALLOWED=1) gets the network-verified wording.
+        out = proc.stdout + proc.stderr
+        self.assertIn("офлайн-проверка", out, f"настоящий --sync должен назвать себя офлайн-проверкой: {out!r}")
+        self.assertNotIn("сверено с origin", out, f"настоящий --sync не делает сетевых вызовов: {out!r}")
+
+    def test_reverting_the_manifest_check_reintroduces_the_unverified_pin(self) -> None:
+        """Genuine mutation: neuter verify_tag_against_manifest()'s call
+        site and re-run the local-only-tag scenario above. The unverified
+        tag must sail through again (exit 0, lock written) — proving this
+        check, not something else, is what stops it."""
+        proc0 = self.run_install("--update")
+        self.assertEqual(proc0.returncode, 0, proc0.stdout + proc0.stderr)
+        _git(self.core, "tag", "-f", "v9.9.9", "HEAD")
+
+        source = INSTALL.read_text(encoding="utf-8")
+        needle = 'verify_tag_against_manifest "$repo_dir" "$tag" "$tag_commit" || return 1'
+        neutered = 'verify_tag_against_manifest "$repo_dir" "$tag" "$tag_commit" || true'
+        assert needle in source, "мутация не нашла вызов verify_tag_against_manifest"
+        mutated_path = self.tmp / "install.mutated5.sh"
+        mutated_path.write_text(source.replace(needle, neutered, 1), encoding="utf-8")
+        full_env = {
+            **os.environ, "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
+        }
+        _assert_sandboxed_home(full_env)
+        mutated_proc = subprocess.run(
+            ["bash", str(mutated_path), "--project", str(self.project), "--pin", "v9.9.9",
+             "--sync", "--no-migrate-old-global"],
+            env=full_env, capture_output=True, text=True,
+        )
+        self.assertEqual(
+            mutated_proc.returncode, 0,
+            f"без manifest-проверки тег должен был снова пройти — {mutated_proc.stdout + mutated_proc.stderr!r}",
+        )
+        self.assertTrue(self.lock_path().exists())
+
+
+class FetchChokePointStructuralGuardTest(unittest.TestCase):
+    """T-091 round 2 (2026-09-07 review, 🔴-1): the independent gate wrote
+    its OWN new function with a bare `git fetch --tags` + an unchecked
+    `ls-remote`, called from ensure_store() — a location the "single call
+    site" checks above never look at, because they assert about EXISTING
+    call sites, not about whether a NEW one could appear anywhere else.
+    That injection passed `bash -n`, `shellcheck -S error` and the whole
+    46-test suite in total silence: the ban on bypassing
+    fetch_tags_or_report()/the three known ls-remote sites was a comment
+    and a convention, not a mechanism.
+
+    This is deliberately NOT a behavioural test (you cannot behaviourally
+    test a call site that does not exist yet) and deliberately NOT a list
+    of known-good line numbers (T-068 already zeroed twice on "the known
+    addresses are fine" while a NEW address was open). It is a count over
+    the whole file: exactly one `git … fetch` line (inside
+    fetch_tags_or_report(), the choke point) and exactly three
+    `git … ls-remote` lines (inside latest_tag() and ensure_worktree(),
+    the two call sites T-064/T-068 already hardened). Add a fetch or
+    ls-remote call ANYWHERE else in the file — choke point or not,
+    ensure_store() or any other function — and the count changes and this
+    test goes red. The negative control below is the reviewer's own
+    injection, verbatim, and is asserted to fail this guard.
+    """
+
+    # Comment lines that merely discuss "git fetch"/"ls-remote" in prose
+    # (e.g. line 146's `# \`git fetch --tags\` REFUSES to overwrite ...`)
+    # are excluded — only executable lines count.
+    _FETCH_RE = re.compile(r'\bgit\b.*\bfetch\b')
+    _LSREMOTE_RE = re.compile(r'\bgit\b.*\bls-remote\b')
+    _FUNC_DEF_RE = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{')
+
+    # T-091 round 3 (2026-09-07 round-2 review, false positives): the round-2
+    # scan flagged a legitimate `warn "... run git fetch --tags by hand ..."`
+    # hint message and a legitimate heredoc-embedded help-text mention of
+    # `git fetch --tags` as if they were real invocations — it only knew how
+    # to skip `#`-comments. Both cases below are common, will recur, and the
+    # scan must not choke on them.
+    _MESSAGE_CALL_RE = re.compile(r'^(warn|log|die|echo|printf)\s')
+    _HEREDOC_START_RE = re.compile(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?\s*$")
+
+    @classmethod
+    def _executable_lines(cls, source: str) -> list[tuple[int, str]]:
+        """Lines that can plausibly EXECUTE a git invocation: not a `#`
+        comment, not the body of a heredoc (help text, embedded files —
+        anything between `<<TAG`/`<<'TAG'` and the matching closing `TAG`),
+        and not a call to one of the message-printing helpers (`warn`/`log`/
+        `die`/`echo`/`printf`), whose argument is a STRING to show a human,
+        never a command being run."""
+        out = []
+        in_heredoc = False
+        heredoc_tag = None
+        for i, line in enumerate(source.splitlines(), start=1):
+            if in_heredoc:
+                if line.strip() == heredoc_tag:
+                    in_heredoc = False
+                continue
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            m = cls._HEREDOC_START_RE.search(line)
+            if m:
+                in_heredoc = True
+                heredoc_tag = m.group(1)
+                continue
+            if cls._MESSAGE_CALL_RE.match(stripped):
+                continue
+            out.append((i, line))
+        return out
+
+    @classmethod
+    def _function_at_line(cls, source: str, lineno: int) -> str | None:
+        """Name of the function whose braces contain `lineno`, found by
+        walking top-level `name() {` definitions in file order (install.sh
+        has no nested top-level function defs, verified by inspection)."""
+        current = None
+        for i, line in enumerate(source.splitlines(), start=1):
+            m = cls._FUNC_DEF_RE.match(line)
+            if m:
+                current = m.group(1)
+            if i == lineno:
+                return current
+        return None
+
+    def _scan(self, source: str) -> tuple[list[int], list[int]]:
+        fetch_lines = [i for i, line in self._executable_lines(source) if self._FETCH_RE.search(line)]
+        lsremote_lines = [i for i, line in self._executable_lines(source) if self._LSREMOTE_RE.search(line)]
+        return fetch_lines, lsremote_lines
+
+    def test_exactly_one_git_fetch_call_and_it_is_the_choke_point(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        fetch_lines, _ = self._scan(source)
+        self.assertEqual(
+            len(fetch_lines), 1,
+            f"ожидалась ровно одна строка вида `git … fetch` во всём install.sh "
+            f"(единственная точка получения тегов) — найдено {len(fetch_lines)}: {fetch_lines}",
+        )
+        fn = self._function_at_line(source, fetch_lines[0])
+        self.assertEqual(
+            fn, "fetch_tags_or_report",
+            f"строка {fetch_lines[0]} с `git fetch` лежит в функции {fn!r}, "
+            f"а не в общей точке fetch_tags_or_report() — обход choke point",
+        )
+
+    def test_exactly_three_ls_remote_calls_in_the_two_known_functions(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        _, lsremote_lines = self._scan(source)
+        self.assertEqual(
+            len(lsremote_lines), 3,
+            f"ожидались ровно три строки вида `git … ls-remote` (latest_tag() "
+            f"+ ensure_worktree(), T-064/T-068) — найдено {len(lsremote_lines)}: {lsremote_lines}",
+        )
+        allowed = {"latest_tag", "ensure_worktree"}
+        for lineno in lsremote_lines:
+            fn = self._function_at_line(source, lineno)
+            self.assertIn(
+                fn, allowed,
+                f"строка {lineno} с `git ls-remote` лежит в функции {fn!r}, "
+                f"вне известных мест {sorted(allowed)} — новая точка обращения к серверу",
+            )
+
+    def test_negative_control_reviewers_bypass_injection_is_caught(self) -> None:
+        """Verbatim reproduction of the independent reviewer's 🔴-1 finding
+        (2026-09-07 report, §4): a brand-new function with a bare
+        `git fetch --tags` and an unchecked `git ls-remote`, wired into
+        ensure_store() — the exact injection that passed `bash -n`,
+        shellcheck and all 46 tests silently before this guard existed.
+        This guard MUST turn it red, or it is not doing its job."""
+        source = INSTALL.read_text(encoding="utf-8")
+        anchor = "ensure_store() {"
+        self.assertIn(anchor, source, "anchor `ensure_store() {` не найден — install.sh изменился структурно")
+
+        baseline_fetch, baseline_lsremote = self._scan(source)
+
+        injected_fn = (
+            "sneaky_bypass_fetch() {\n"
+            "    local d=\"$1\"\n"
+            "    git -C \"$d\" fetch --tags\n"
+            "    git -C \"$d\" ls-remote --tags origin 'refs/tags/v*'\n"
+            "}\n\n"
+        )
+        mutated = source.replace(anchor, injected_fn + anchor, 1)
+        self.assertNotEqual(mutated, source, "мутация не применилась")
+
+        fetch_lines, lsremote_lines = self._scan(mutated)
+        self.assertEqual(
+            len(fetch_lines), len(baseline_fetch) + 1,
+            "негативный контроль сломан: инъекция обхода не увеличила счётчик `fetch`",
+        )
+        self.assertEqual(
+            len(lsremote_lines), len(baseline_lsremote) + 1,
+            "негативный контроль сломан: инъекция обхода не увеличила счётчик `ls-remote`",
+        )
+        # And, run through the actual guard assertions on the mutated source:
+        # both must now fail exactly as they would in CI.
+        with self.assertRaises(AssertionError):
+            self.assertEqual(len(fetch_lines), 1)
+        with self.assertRaises(AssertionError):
+            self.assertEqual(len(lsremote_lines), 3)
+
+
+# T-091 round 3 (2026-09-07 round-2 independent gate,
+# optimize/reports/2026-09-07-review-T-091-round2.md). The round-2 guard was
+# a single regex over install.sh's TEXT — the reviewer wrote eight concrete
+# bypasses (A–H) and every one of them passed silently, while two perfectly
+# legitimate lines (a hint message, a help-text mention) tripped a false
+# positive. The reviewer's own conclusion, endorsed by the coordinator: "the
+# criterion, as worded ('a bypass must be IMPOSSIBLE'), is unfalsifiable in
+# bash — a wrapper is beaten by `command git`, a text scan is beaten by
+# indirection". The reformulated, checkable criterion: EVERY bypass in the
+# fixed list below (A–H, kept in sync with the round-2 report) must be
+# individually demonstrated to be caught where it CAN be caught, and where
+# it genuinely cannot (H), that is stated as a documented boundary, not
+# quietly ignored. See the task packet's "Граница защиты" section for the
+# same enumeration read as a spec rather than as tests.
+#
+# Defense in depth, two independent layers, deliberately NOT one shared
+# mechanism (round-2 report §1: "ни одна половина по отдельности не
+# закрывает перечень"):
+#   1. RUNTIME — install.sh's own `git()` function (defined near the top of
+#      the file) shadows every LITERAL invocation of the `git` command
+#      inside the script and refuses a tag-fetching subcommand called from
+#      outside its owning function. Catches A, C, D, E, F — proven here by
+#      actually RUNNING a mutated install.sh in the sandbox and asserting a
+#      non-zero exit with the wrapper's own message, not by reading source.
+#   2. TEXT — a scan (over install.sh, and separately over the rest of the
+#      repository) for the specific forms that are known to evade #1 by
+#      bash-language construction (`command git`, a new script file). Catches
+#      B and G.
+#   H (test code that calls git directly instead of exercising install.sh)
+#      is NOT caught by either layer and cannot be, by construction — no
+#      mechanism living inside install.sh or scanning script files can see
+#      what test code chooses to execute directly. Documented as an accepted
+#      periphery limit, compensated by PR code review, not by automation.
+class GitChokePointBypassEnumerationTest(InstallerFixture):
+
+    # --------------------------------------------------------------- A–F:
+    # runtime-catchable forms, each run for real against a live sandboxed
+    # install.sh. All six are injected at the very top of ensure_store()
+    # (the exact injection point the round-1 reviewer used), which runs
+    # unconditionally on a bare `install.sh` (MODE=store, the default).
+    _ANCHOR = 'ensure_store() {\n'
+
+    def _assert_bypass_refused_at_runtime(self, injected_body: str, label: str) -> None:
+        injected = "ensure_store() {\n" + injected_body + "\n"
+        # run_install_with_injection() replaces the FIRST occurrence of the
+        # anchor with injected+anchor, which would duplicate "ensure_store(){"
+        # — instead we replace the whole def line directly.
+        source = INSTALL.read_text(encoding="utf-8")
+        assert self._ANCHOR in source, "anchor `ensure_store() {` не найден — install.sh изменился структурно"
+        mutated = source.replace(self._ANCHOR, injected, 1)
+        assert mutated != source, f"{label}: инъекция не применилась"
+        mutated_path = self.tmp / f"install.bypass-{label}.sh"
+        mutated_path.write_text(mutated, encoding="utf-8")
+        full_env = {
+            **os.environ, "HOME": str(self.home),
+            "SEO_CYCLE_SHARED_DIR": str(self.shared),
+            "SEO_CYCLE_CORE": str(self.core),
+            "SEO_CYCLE_REPO": str(self.origin),
+            "SEO_CYCLE_SKIP_PYTHON_DEPS": "1",
+        }
+        _assert_sandboxed_home(full_env)
+        proc = subprocess.run(["bash", str(mutated_path)], env=full_env, capture_output=True, text=True)
+        self.assertNotEqual(
+            proc.returncode, 0,
+            f"обход {label} должен быть отклонён времени исполнения guard'ом, но install.sh завершился rc=0: "
+            f"{proc.stdout + proc.stderr}",
+        )
+        self.assertIn(
+            "круг 3", proc.stdout + proc.stderr,
+            f"обход {label}: install.sh упал, но не по причине guard'а T-091 круг 3 — "
+            f"{proc.stdout + proc.stderr}",
+        )
+
+    def test_bypass_a_subcommand_via_variable_indirection_is_refused(self) -> None:
+        # `"$GITBIN" fetch --tags` — bash resolves the function AFTER
+        # expanding the variable, so this hits the same shadowing `git()`.
+        self._assert_bypass_refused_at_runtime(
+            '    local GITBIN=git\n'
+            '    "$GITBIN" -C "$CORE" fetch --tags\n',
+            "A-variable-indirection",
+        )
+
+    def test_bypass_c_line_continuation_is_refused(self) -> None:
+        self._assert_bypass_refused_at_runtime(
+            '    git -C "$CORE" \\\n'
+            '        fetch --tags\n',
+            "C-line-continuation",
+        )
+
+    def test_bypass_d_git_remote_update_is_refused(self) -> None:
+        # No literal "fetch" anywhere — `git remote update` also pulls tags.
+        self._assert_bypass_refused_at_runtime(
+            '    git -C "$CORE" remote update --prune\n',
+            "D-remote-update",
+        )
+
+    def test_bypass_e_git_pull_tags_from_an_unauthorised_function_is_refused(self) -> None:
+        # `pull` IS legitimately used by install_or_update_repo()/
+        # install_or_update_optional_repo() — this proves it is refused when
+        # called from anywhere ELSE (ensure_store() is not on pull's
+        # allow-list either).
+        self._assert_bypass_refused_at_runtime(
+            '    git -C "$CORE" pull --tags origin main\n',
+            "E-pull-tags",
+        )
+
+    def test_bypass_f_subcommand_assembled_in_a_variable_is_refused(self) -> None:
+        self._assert_bypass_refused_at_runtime(
+            '    local sub=fetch\n'
+            '    git -C "$CORE" "$sub" --tags\n',
+            "F-subcommand-in-variable",
+        )
+
+    # ------------------------------------------------------------------ B:
+    # `command git` explicitly skips bash's function-lookup step — this is
+    # a language fact (verified below), so the RUNTIME wrapper cannot catch
+    # it by construction. The TEXT scan must.
+    _COMMAND_GIT_RE = re.compile(r'\bcommand\s+git\b.*\b(fetch|pull|ls-remote|remote)\b')
+    _BACKSLASH_GIT_RE = re.compile(r'(?:^|[^A-Za-z0-9_])\\git\b.*\b(fetch|pull|ls-remote|remote)\b')
+    _ABS_GIT_RE = re.compile(r'(/usr/bin/git|/usr/local/bin/git|/opt/homebrew/bin/git|\$\(\s*which\s+git\s*\)).*\b(fetch|pull|ls-remote|remote)\b')
+
+    def test_bypass_b_command_git_evades_the_runtime_wrapper_language_fact(self) -> None:
+        """Proves the CLAIM, not just cites it: define the same shadowing
+        `git()` this script uses, then show `command git` reaches the real
+        binary instead of the wrapper."""
+        proc = subprocess.run(
+            ["bash", "-c", 'git(){ echo WRAPPED; }; command git --version >/dev/null && echo REAL_GIT_RAN'],
+            capture_output=True, text=True,
+        )
+        self.assertIn("REAL_GIT_RAN", proc.stdout)
+        self.assertNotIn("WRAPPED", proc.stdout)
+
+    def test_bypass_b_command_git_is_caught_by_the_text_guard(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        anchor = "ensure_store() {\n"
+        injected = anchor + '    command git -C "$CORE" fetch --tags\n'
+        mutated = source.replace(anchor, injected, 1)
+        self.assertNotEqual(mutated, source, "инъекция B не применилась")
+        lines = FetchChokePointStructuralGuardTest._executable_lines(mutated)
+        hits = [i for i, line in lines if self._COMMAND_GIT_RE.search(line)]
+        self.assertTrue(hits, "текстовый гейт не поймал `command git ... fetch` — обход B прошёл бы молча")
+        # And baseline (unmutated) file has zero such hits — no existing
+        # false positive from this pattern.
+        baseline_hits = [i for i, line in FetchChokePointStructuralGuardTest._executable_lines(source)
+                          if self._COMMAND_GIT_RE.search(line)]
+        self.assertEqual(baseline_hits, [], f"ложное срабатывание на немутированном install.sh: {baseline_hits}")
+
+    def test_bypass_b_variants_absolute_path_and_backslash_are_caught_by_the_text_guard(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        anchor = "ensure_store() {\n"
+        for variant_line, pattern in (
+            ('    /usr/bin/git -C "$CORE" fetch --tags\n', self._ABS_GIT_RE),
+            ('    \\git -C "$CORE" fetch --tags\n', self._BACKSLASH_GIT_RE),
+        ):
+            mutated = source.replace(anchor, anchor + variant_line, 1)
+            self.assertNotEqual(mutated, source, f"инъекция не применилась: {variant_line!r}")
+            lines = FetchChokePointStructuralGuardTest._executable_lines(mutated)
+            hits = [i for i, line in lines if pattern.search(line)]
+            self.assertTrue(hits, f"текстовый гейт не поймал вариант: {variant_line!r}")
+
+    # ------------------------------------------------------------------ G:
+    # a brand-new script file elsewhere in the repository. install.sh's own
+    # scan (structural or textual) cannot see outside itself by
+    # construction — this needs a SEPARATE, repository-wide scan.
+    _REPO_WIDE_HIT_RE = re.compile(r'\bgit\b.*\b(fetch|ls-remote)\b|\bgit\b.*\bpull\b.*--tags\b|\bgit\b.*\bremote\b.*\bupdate\b')
+
+    @staticmethod
+    def _repo_wide_bypass_scan(root: pathlib.Path) -> list[tuple[str, int, str]]:
+        """Every *.sh/*.py file under `root` EXCEPT install.sh (covered by
+        its own dedicated scan above) and tests/ (test fixtures legitimately
+        call `git fetch`/`git tag -f` directly to SIMULATE what an external
+        actor did on origin — that is not a bypass of install.sh's own
+        behaviour, see the H boundary below) — checked for an unrouted
+        tag-fetching git call."""
+        hits: list[tuple[str, int, str]] = []
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() or path.suffix not in (".sh", ".py"):
+                continue
+            if path.name == "install.sh":
+                continue
+            try:
+                rel = path.relative_to(root)
+            except ValueError:
+                continue
+            if rel.parts and rel.parts[0] == "tests":
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            for i, line in enumerate(text.splitlines(), start=1):
+                if line.strip().startswith("#"):
+                    continue
+                if GitChokePointBypassEnumerationTest._REPO_WIDE_HIT_RE.search(line):
+                    hits.append((str(rel), i, line.strip()))
+        return hits
+
+    def test_bypass_g_real_repo_today_has_zero_ungated_fetches_outside_install_sh(self) -> None:
+        hits = self._repo_wide_bypass_scan(ROOT)
+        self.assertEqual(hits, [], f"обнаружены получения тегов вне install.sh/tests: {hits}")
+
+    def test_bypass_g_new_script_file_is_caught_by_the_repo_wide_scan(self) -> None:
+        scratch = self.tmp / "repo-copy"
+        (scratch / "scripts").mkdir(parents=True)
+        shutil.copy2(INSTALL, scratch / "install.sh")
+        rogue = scratch / "scripts" / "rev-sync-tags.sh"
+        rogue.write_text(
+            "#!/usr/bin/env bash\n"
+            'git -C "$1" fetch --tags --force\n',
+            encoding="utf-8",
+        )
+        hits = self._repo_wide_bypass_scan(scratch)
+        self.assertTrue(hits, "новый скрипт с прямым `git fetch` в repo не пойман repo-wide сканом")
+        self.assertTrue(any("rev-sync-tags.sh" in h[0] for h in hits), hits)
+
+    # ------------------------------------------------------------------ H:
+    # documented, not "caught". No guard living inside install.sh or
+    # scanning *.sh/*.py files can see what a test's own Python/subprocess
+    # code chooses to execute — that would require treating test code as
+    # hostile, which defeats the purpose of a test suite. This is a real,
+    # accepted boundary (round-2 report §1, "ни один текстовый линтер...
+    # не может видеть код теста"), stated honestly rather than claimed as
+    # solved. It is compensated by PR code review: a test whose name claims
+    # to exercise install.sh but instead calls `git fetch` directly is
+    # exactly the kind of thing a human reviewer would flag as testing the
+    # wrong thing.
+    def test_boundary_h_test_code_calling_git_directly_is_a_documented_non_goal(self) -> None:
+        """This test does not "catch" anything — it records, executably,
+        that this class of bypass is out of scope by construction, so the
+        claim is falsifiable (grep this file for the `_git(...)` helper
+        actually being used this way) rather than a bare assertion in prose."""
+        source = pathlib.Path(__file__).read_text(encoding="utf-8")
+        # The existing fixture helper `_git()` (top of this file) DOES call
+        # git directly, on purpose, in many places (to seed the fake origin,
+        # simulate a tag moving on the server, etc.) — that is legitimate
+        # test methodology, not a hole in install.sh. Confirms the boundary
+        # is real, not hypothetical.
+        self.assertIn('def _git(', source)
+        self.assertGreater(
+            source.count('_git(self.core, "fetch"') + source.count('_git(self.core, "tag"'), 0,
+            "фикстуры этого файла реально вызывают git напрямую в обход install.sh — "
+            "граница H не гипотетическая",
+        )
+
+    # ---------------------------------------------------- false positives:
+    # the two legitimate lines the round-2 reviewer used to show the guard
+    # cries wolf. Both must leave the guard GREEN.
+    def test_false_positive_hint_message_does_not_trip_the_guard(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        anchor = 'warn() { echo "⚠ $*" >&2; }\n'
+        injected = anchor + '\nwarn "не удалось; запусти git fetch --tags вручную"\n'
+        mutated = source.replace(anchor, injected, 1)
+        self.assertNotEqual(mutated, source, "инъекция ложного срабатывания #1 не применилась")
+        lines = FetchChokePointStructuralGuardTest._executable_lines(mutated)
+        fetch_hits = [i for i, line in lines if FetchChokePointStructuralGuardTest._FETCH_RE.search(line)]
+        # The injected hint line itself must not appear among the hits —
+        # any hit found must be the pre-existing real fetch call.
+        injected_lineno = mutated[:mutated.index('warn "не удалось')].count("\n") + 1
+        self.assertNotIn(
+            injected_lineno, fetch_hits,
+            f"ложное срабатывание: подсказка на строке {injected_lineno} посчитана как вызов fetch",
+        )
+
+    def test_false_positive_heredoc_help_text_does_not_trip_the_guard(self) -> None:
+        source = INSTALL.read_text(encoding="utf-8")
+        anchor = 'warn() { echo "⚠ $*" >&2; }\n'
+        injected = (
+            anchor
+            + "\ncat > /dev/null <<'HELPTAG'\n"
+            + "Update tags manually with: git fetch --tags origin\n"
+            + "HELPTAG\n"
+        )
+        mutated = source.replace(anchor, injected, 1)
+        self.assertNotEqual(mutated, source, "инъекция ложного срабатывания #2 не применилась")
+        lines = FetchChokePointStructuralGuardTest._executable_lines(mutated)
+        fetch_hits_text = [line for _, line in lines if FetchChokePointStructuralGuardTest._FETCH_RE.search(line)]
+        self.assertFalse(
+            any("Update tags manually" in line for line in fetch_hits_text),
+            "ложное срабатывание: текст справки внутри heredoc посчитан как вызов fetch",
         )
 
 

@@ -61,9 +61,15 @@ class ClientReportTest(unittest.TestCase):
         conn.close()
 
     def run_report(self, *args: str) -> subprocess.CompletedProcess:
+        # timeout=150 (T-091, F-18): --pdf drives a real headless Chrome
+        # subprocess (html_to_pdf() already caps THAT call at 120s), but
+        # this outer subprocess.run() itself had no cap of its own — the
+        # independent QA found the test suite as a whole able to hang
+        # rather than fail loud, same class as test_webapp_browser.py's
+        # timeout=120 on its own browser call.
         return subprocess.run(
             [sys.executable, str(SCRIPTS / "client-report.py"), "--period", "2026-07", *args],
-            cwd=self.tmp, text=True, capture_output=True, check=False,
+            cwd=self.tmp, text=True, capture_output=True, check=False, timeout=150,
         )
 
     def test_report_renders_sections_and_branding(self) -> None:
