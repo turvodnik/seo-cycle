@@ -53,6 +53,21 @@ class ProxyTunnelGateTest(unittest.TestCase):
         with self.assertRaises(sg.SpendNotArmedError):
             conn.set_tunnel("API.DATAFORSEO.COM.")
 
+    def test_explicit_port_does_not_evade_the_tunnel_check(self) -> None:
+        # T-094 round 2 (R-1): a URL that spells its port out
+        # (https://api.dataforseo.com:443/...) makes urllib pass
+        # "api.dataforseo.com:443" to set_tunnel — an independent gate
+        # reproduced this live and it slipped past PAID_HOSTS unstripped.
+        conn = http.client.HTTPConnection("127.0.0.1", 1)
+        with self.assertRaises(sg.SpendNotArmedError):
+            conn.set_tunnel("api.dataforseo.com:443")
+
+    def test_strip_port_handles_bracketed_ipv6_and_leaves_bare_ipv6_alone(self) -> None:
+        self.assertEqual(sg._strip_port("[::1]:443"), "::1")
+        self.assertEqual(sg._strip_port("::1"), "::1")
+        self.assertEqual(sg._strip_port("api.dataforseo.com:443"), "api.dataforseo.com")
+        self.assertEqual(sg._strip_port("api.dataforseo.com"), "api.dataforseo.com")
+
 
 if __name__ == "__main__":
     unittest.main()
