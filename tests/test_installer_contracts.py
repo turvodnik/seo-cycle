@@ -386,40 +386,6 @@ class SnapshotSHAReconciliationTest(InstallerFixture):
         )
 
 
-    def test_upgrade_all_self_heals_an_annotated_tag_diverged_from_origin(self) -> None:
-        """T-095, annotated companion to test_upgrade_all_rejects_a_tag_diverged_from_origin
-        above: same self-heal contract (--upgrade-all's ensure_store force-fetch
-        corrects a purely-local repoint before the pin is even resolved), run
-        against an ANNOTATED tag instead of a lightweight one — the form every
-        real release actually uses and the one this ticket's bug broke."""
-        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t",
-             "tag", "-a", "v2.0.0", "-m", "release")
-        _git(self.core, "push", "-q", "origin", "--tags")
-        proc = self.run_install(
-            "--project", str(self.project), "--pin", "v2.0.0",
-            "--skip-init", "--no-migrate-old-global",
-        )
-        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        original_commit = self.read_lock()["external"]["seo-cycle"]["commit"]
-
-        (self.core / "VERSION").write_text("2.0.0-upgrade-all-drift\n", encoding="utf-8")
-        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
-        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local drift")
-        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "tag", "-f", "-a", "v2.0.0", "-m", "local-only repoint")
-
-        proc2 = self.run_install("--upgrade-all", "--pin", "v2.0.0")
-        self.assertEqual(
-            proc2.returncode, 0,
-            "upgrade-all обязан исправить разошедшийся АННОТИРОВАННЫЙ тег через "
-            f"force-fetch, а не остаться на локальном дрейфе — {proc2.stdout + proc2.stderr!r}",
-        )
-        self.assertEqual(
-            self.read_lock()["external"]["seo-cycle"]["commit"], original_commit,
-            "upgrade-all не должен записывать в лок расходящийся с origin коммит "
-            "аннотированного тега",
-        )
-
-
 class DetachHonestTest(InstallerFixture):
     def test_detach_cleans_lock_and_does_not_create_missing_path(self) -> None:
         self.run_install(
@@ -550,6 +516,39 @@ class UpgradeAllHonestyTest(InstallerFixture):
         self.assertIn(
             "сверено с origin", out,
             f"--upgrade-all должен честно сказать, что проверка была сетевой: {out!r}",
+        )
+
+    def test_upgrade_all_self_heals_an_annotated_tag_diverged_from_origin(self) -> None:
+        """T-095, annotated companion to test_upgrade_all_rejects_a_tag_diverged_from_origin
+        above: same self-heal contract (--upgrade-all's ensure_store force-fetch
+        corrects a purely-local repoint before the pin is even resolved), run
+        against an ANNOTATED tag instead of a lightweight one — the form every
+        real release actually uses and the one this ticket's bug broke."""
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t",
+             "tag", "-a", "v2.0.0", "-m", "release")
+        _git(self.core, "push", "-q", "origin", "--tags")
+        proc = self.run_install(
+            "--project", str(self.project), "--pin", "v2.0.0",
+            "--skip-init", "--no-migrate-old-global",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        original_commit = self.read_lock()["external"]["seo-cycle"]["commit"]
+
+        (self.core / "VERSION").write_text("2.0.0-upgrade-all-drift\n", encoding="utf-8")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local drift")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "tag", "-f", "-a", "v2.0.0", "-m", "local-only repoint")
+
+        proc2 = self.run_install("--upgrade-all", "--pin", "v2.0.0")
+        self.assertEqual(
+            proc2.returncode, 0,
+            "upgrade-all обязан исправить разошедшийся АННОТИРОВАННЫЙ тег через "
+            f"force-fetch, а не остаться на локальном дрейфе — {proc2.stdout + proc2.stderr!r}",
+        )
+        self.assertEqual(
+            self.read_lock()["external"]["seo-cycle"]["commit"], original_commit,
+            "upgrade-all не должен записывать в лок расходящийся с origin коммит "
+            "аннотированного тега",
         )
 
 
