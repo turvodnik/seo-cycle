@@ -18,7 +18,9 @@ import urllib.request
 from typing import Any
 
 from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.spend_guard import armed_spend
 from seo_cycle_core.technical_artifacts import write_technical_report
+from seo_cycle_core.usage_ledger import bump_counter
 
 
 SERPSTAT_ENDPOINT = "https://api.serpstat.com/v4/"
@@ -103,9 +105,17 @@ def call_serpstat(token: str, method: str, params: dict[str, Any]) -> dict[str, 
     url = f"{SERPSTAT_ENDPOINT}?token={token}"
     body = json.dumps({"id": 1, "method": method, "params": params, "jsonrpc": "2.0"}, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+
+    # T-092: api.serpstat.com is a registered PAID_HOSTS member. Write-ahead
+    # counter before the call, same pattern as keyso-fetch.py/serpstat-fetch.py.
+    def _write_ahead() -> bool:
+        bump_counter(pathlib.Path("./seo/research/serpstat"))
+        return True
+
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.loads(response.read().decode("utf-8"))
+        with armed_spend(_write_ahead, hosts="api.serpstat.com"):
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         text = exc.read().decode("utf-8", errors="replace")
         try:

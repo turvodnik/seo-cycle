@@ -29,6 +29,9 @@ atp-fetch.py — AnswerThePublic Public API клиент для сбора во�
 from __future__ import annotations
 import argparse, json, os, pathlib, sys, time, urllib.parse, urllib.request
 
+from seo_cycle_core.spend_guard import armed_spend
+from seo_cycle_core.usage_ledger import bump_counter
+
 BASE = "https://api.answerthepublic.com/api/public/v1"
 
 
@@ -63,9 +66,24 @@ def _req(method: str, path: str, token: str, body=None, query=None) -> dict:
     if body:
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
+
+    # T-092: api.answerthepublic.com is a registered PAID_HOSTS member — a
+    # write-ahead counter runs BEFORE every call (same pattern as
+    # keyso-fetch.py). Only POST (a new search) actually spends a credit
+    # per the docstring above ("1 POST = ~1 credit"); GET (health check,
+    # polling an existing report, pulling an already-paid-for report) does
+    # not, so only POST bumps the counter — the write-ahead requirement is
+    # still "before the network call", it just records 0 for the free reads.
+    def _write_ahead() -> bool:
+        if method == "POST":
+            cnt = bump_counter(pathlib.Path("./seo/research/atp"), field="paid_searches")
+            print(f"  [atp usage: {cnt} платных поисков за месяц]", file=sys.stderr)
+        return True
+
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            return json.loads(r.read().decode())
+        with armed_spend(_write_ahead, hosts="api.answerthepublic.com"):
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         body = e.read().decode(errors="replace")
         try:
