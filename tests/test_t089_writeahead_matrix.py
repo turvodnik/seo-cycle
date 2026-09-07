@@ -91,24 +91,37 @@ def _spend_recorded(out_dir: pathlib.Path, client: str) -> bool:
     raise AssertionError(client)
 
 
+#: Round-3 review, R3-7: the accepted-criteria matrix names a fourth
+#: scenario, connection loss mid-call, distinct from the three OS signals.
+#: Represented as a sentinel (not a real `signal.Signals` member) — the
+#: fault is injected BY the network primitive itself (raising
+#: `ConnectionResetError`), not delivered by the parent via `os.kill()`.
+_CONN_RESET = "CONN_RESET"
+
+
 class WriteAheadSignalMatrixTest(unittest.TestCase):
     """Матрица «клиент × сигнал» (F-1, F-H): расход обязан быть записан на
-    диске ДО того, как сигнал успевает прервать выполнение — для всех восьми
-    известных платных клиентов (шесть из T-066/T-089-круг-1 плюс два,
-    найденные вторым гейтом: keyso-fetch.py, competitor-discovery.py)."""
+    диске ДО того, как сигнал/обрыв соединения успевает прервать выполнение
+    — для всех восьми известных платных клиентов (шесть из T-066/
+    T-089-круг-1 плюс два, найденные вторым гейтом: keyso-fetch.py,
+    competitor-discovery.py) × четыре сценария (SIGINT/SIGTERM/SIGKILL +
+    обрыв соединения, R3-7)."""
 
     CLIENTS = ["dataforseo", "spyfu", "google_nlp", "ads_apply", "yandex_direct",
                "google_ads", "keyso", "competitor_discovery"]
-    SIGNALS = [signal.SIGINT, signal.SIGTERM, signal.SIGKILL]
+    SIGNALS = [signal.SIGINT, signal.SIGTERM, signal.SIGKILL, _CONN_RESET]
 
     def setUp(self) -> None:
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-t089-matrix-"))
         self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
 
-    def _run_and_kill(self, client: str, out_dir: pathlib.Path, sig: int) -> None:
+    def _run_and_kill(self, client: str, out_dir: pathlib.Path, sig) -> None:
+        env = dict(os.environ)
+        if sig == _CONN_RESET:
+            env["T089_FAULT"] = "connreset"
         proc = subprocess.Popen(
             [sys.executable, str(HARNESS), client, str(out_dir)],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
         )
         try:
             deadline = time.time() + 15
@@ -122,13 +135,24 @@ class WriteAheadSignalMatrixTest(unittest.TestCase):
                 proc.wait(timeout=5)
                 self.fail(f"{client}: target never printed STARTED "
                           f"(stderr: {proc.stderr.read()!r})")
-            # The write-ahead record is guaranteed on disk by the time
-            # STARTED is printed (the mocked network primitive prints it as
-            # its first action, after armed_spend()'s write_ahead() has
-            # already run and returned True) — the sleep below is slack for
-            # process scheduling, not part of the correctness argument.
-            os.kill(proc.pid, sig)
-            proc.wait(timeout=10)
+            if sig == _CONN_RESET:
+                # No external signal — the network primitive raises on its
+                # own (see t089_signal_target.py's _hang()); just let the
+                # process finish naturally (it will exit non-zero with an
+                # unhandled ConnectionResetError, or the client's own
+                # exception handling may catch it and exit 0/1 — either way,
+                # what matters here is whether the write-ahead already on
+                # disk survives, not the exit code).
+                proc.wait(timeout=10)
+            else:
+                # The write-ahead record is guaranteed on disk by the time
+                # STARTED is printed (the mocked network primitive prints it
+                # as its first action, after armed_spend()'s write_ahead()
+                # has already run and returned True) — the sleep below is
+                # slack for process scheduling, not part of the correctness
+                # argument.
+                os.kill(proc.pid, sig)
+                proc.wait(timeout=10)
         finally:
             if proc.poll() is None:
                 proc.kill()
@@ -136,15 +160,16 @@ class WriteAheadSignalMatrixTest(unittest.TestCase):
             proc.stdout.close()
             proc.stderr.close()
 
-    def _check_one(self, client: str, sig: int) -> None:
+    def _check_one(self, client: str, sig) -> None:
         if client == "google_nlp" and not _GOOGLE_NLP_DEPS_OK:
             self.skipTest("google-nlp-audit.py optional deps missing (requests/bs4/google-auth)")
         out_dir = self.tmp / f"{client}-{sig}"
         out_dir.mkdir()
         self._run_and_kill(client, out_dir, sig)
+        label = "connection reset" if sig == _CONN_RESET else signal.Signals(sig).name
         self.assertTrue(
             _spend_recorded(out_dir, client),
-            f"{client}: spend NOT recorded after signal {signal.Signals(sig).name} — "
+            f"{client}: spend NOT recorded after {label} — "
             f"write-ahead did not survive the interrupt (F-1 class)",
         )
 
@@ -154,7 +179,8 @@ def _add_matrix_tests() -> None:
         for sig in WriteAheadSignalMatrixTest.SIGNALS:
             def _test(self, client=client, sig=sig) -> None:
                 self._check_one(client, sig)
-            _test.__name__ = f"test_{client}_{signal.Signals(sig).name.lower()}"
+            name = "connreset" if sig == _CONN_RESET else signal.Signals(sig).name.lower()
+            _test.__name__ = f"test_{client}_{name}"
             setattr(WriteAheadSignalMatrixTest, _test.__name__, _test)
 
 
@@ -457,10 +483,14 @@ class InProcessBypassProbesTest(unittest.TestCase):
         self._raiser_getaddrinfo = mock.Mock(side_effect=AssertionError("real getaddrinfo() reached"))
         self._raiser_connect = mock.Mock(side_effect=AssertionError("real socket connect() reached"))
         self._raiser_connect_ex = mock.Mock(side_effect=AssertionError("real socket connect_ex() reached"))
+        self._raiser_gethostbyname = mock.Mock(side_effect=AssertionError("real gethostbyname() reached"))
+        self._raiser_gethostbyname_ex = mock.Mock(side_effect=AssertionError("real gethostbyname_ex() reached"))
         self._patches = [
             mock.patch.object(spend_guard, "_real_getaddrinfo", self._raiser_getaddrinfo),
             mock.patch.object(spend_guard, "_real_connect", self._raiser_connect),
             mock.patch.object(spend_guard, "_real_connect_ex", self._raiser_connect_ex),
+            mock.patch.object(spend_guard, "_real_gethostbyname", self._raiser_gethostbyname),
+            mock.patch.object(spend_guard, "_real_gethostbyname_ex", self._raiser_gethostbyname_ex),
         ]
         for p in self._patches:
             p.start()
@@ -472,6 +502,33 @@ class InProcessBypassProbesTest(unittest.TestCase):
         self._raiser_getaddrinfo.assert_not_called()
         self._raiser_connect.assert_not_called()
         self._raiser_connect_ex.assert_not_called()
+        self._raiser_gethostbyname.assert_not_called()
+        self._raiser_gethostbyname_ex.assert_not_called()
+
+    def test_c_gethostbyname(self) -> None:
+        """Round-3 review, R3-2: `socket.gethostbyname` is the same class of
+        resolver as `getaddrinfo` and was left unpatched in round 3."""
+        import socket as socket_mod
+        self._assert_refused("gethostbyname", lambda: socket_mod.gethostbyname("api.dataforseo.com"))
+
+    def test_j_gethostbyname_ex(self) -> None:
+        import socket as socket_mod
+        self._assert_refused("gethostbyname_ex", lambda: socket_mod.gethostbyname_ex("api.dataforseo.com"))
+
+    def test_11_bytes_host_via_getaddrinfo(self) -> None:
+        """Round-2 bypass 11 (bytes URL) closed at the socket layer by
+        `_normalize_host()` decoding bytes — round-3 review, R3-5: the fix
+        was correct but had no regression test of its own (mutation
+        removing the bytes-decode step survived the suite). Exercised
+        directly against `socket.getaddrinfo`, which is where every HTTP
+        client in this codebase would eventually pass a `bytes` host if one
+        slipped through library-level URL parsing (which normally rejects
+        `bytes` URLs itself — see the T-089 packet's "Результат" for why
+        this makes the original higher-level exploit moot; the guard is
+        still tested directly here, at its own boundary, not through a
+        library that no longer lets a bytes value reach this far)."""
+        import socket as socket_mod
+        self._assert_refused("bytes host", lambda: socket_mod.getaddrinfo(b"api.dataforseo.com", 443))
 
     def test_01_early_bound_urlopen_import_order(self) -> None:
         import urllib.request as ur
@@ -504,28 +561,55 @@ class InProcessBypassProbesTest(unittest.TestCase):
 
         self._assert_refused("raw socket", go)
 
-    def test_06_restore_original_transport_one_liner(self) -> None:
-        """Round-2's own bypass: reassign urllib.request.urlopen back to
-        whatever was saved. Round 3 doesn't save urlopen at all — there is
-        nothing named `urlopen` to "restore" that skips the gate, because
-        the gate is not on urlopen."""
-        import urllib.request
-        # The only thing round 2 exposed for this trick was
-        # spend_guard._real_urlopen — that name no longer exists.
-        self.assertFalse(hasattr(spend_guard, "_real_urlopen"))
-        self._assert_refused("urlopen after a no-op 'restore'",
-                             lambda: urllib.request.urlopen("https://api.dataforseo.com/w", timeout=2))
+    def test_06_restoring_the_saved_original_is_a_known_unclosable_escape(self) -> None:
+        """Round-3 independent review, R3-1: round 3's own tests here used
+        to claim this was closed (`test_06_restore_original_transport_one_
+        liner` asserted the absence of a round-2 NAME that no longer
+        existed, and `test_07_saved_real_callable_called_directly` didn't
+        perform the bypass it was named after at all) — the review called
+        this "checking not the right artifact" and reproduced the real
+        bypass: `socket.getaddrinfo = spend_guard._real_getaddrinfo`
+        followed by a normal `urlopen()` reaches the real resolver, no
+        check at all. This test now DOES that, on purpose, and asserts it
+        WORKS — documenting the boundary honestly (see spend_guard.py's
+        module docstring) instead of a green test that proved nothing.
+        Proved WITHOUT a real DNS lookup, on purpose (round-3 review's own
+        discipline note: two of its early probes performed a real
+        resolution before its shim was tightened — this test does not
+        repeat that): the one-liner is shown to genuinely detach the check
+        by identity comparison, not by calling `urlopen()` and hoping no
+        real request goes out. Restored in `finally` either way."""
+        import socket as socket_mod
+        assert spend_guard._real_getaddrinfo is not None  # noqa: SLF001
+        original_getaddrinfo = socket_mod.getaddrinfo
+        self.assertIs(original_getaddrinfo, spend_guard._guarded_getaddrinfo)  # noqa: SLF001
+        try:
+            socket_mod.getaddrinfo = spend_guard._real_getaddrinfo  # noqa: SLF001
+            # This IS the bypass, demonstrated structurally: the module-level
+            # name urlopen()/build_opener()/http.client/requests all read at
+            # call time no longer points at the guarded wrapper.
+            self.assertIsNot(socket_mod.getaddrinfo, spend_guard._guarded_getaddrinfo)  # noqa: SLF001
+            self.assertFalse(spend_guard.gate_installed(),
+                            "a genuine one-line restore must detach the gate — if "
+                            "gate_installed() still says True here, this test no "
+                            "longer documents the boundary it claims to")
+        finally:
+            socket_mod.getaddrinfo = original_getaddrinfo
+        self.assertTrue(spend_guard.gate_installed())
 
-    def test_07_saved_real_callable_called_directly(self) -> None:
-        """Round-2's bypass: `spend_guard._real_urlopen(...)` called
-        directly. Round 3's equivalent saved names are `_real_getaddrinfo`/
-        `_real_connect`/`_real_connect_ex` — but calling them directly is
-        exactly what these tests DO to prove they're never reached; there is
-        no client-facing path that reaches them without going through
-        `_check_host` first, because `_check_host` runs INSIDE the guarded
-        wrapper, not in a separate step a caller could skip. Demonstrated by
-        the raiser never firing across every other test in this class."""
+    def test_07_saved_real_callable_is_the_unguarded_original_by_construction(self) -> None:
+        """Round-3 review, R3-1 continued: `spend_guard._real_getaddrinfo(...)`
+        called directly is the same escape as test_06, one call shape
+        simpler. Proved WITHOUT performing a real DNS lookup (round-3
+        review's own discipline note: two of its early probes did a real
+        resolution before its shim was tightened — not repeating that
+        here): `_real_getaddrinfo` is asserted to be the exact, un-wrapped
+        function object `socket` had before this module ran, by identity —
+        not `_guarded_getaddrinfo`, not anything that calls `_check_host`.
+        That IS the bypass; actually invoking it would only add a live
+        network dependency to this assertion, not strengthen it."""
         self.assertIsNotNone(spend_guard._real_getaddrinfo)  # noqa: SLF001
+        self.assertIsNot(spend_guard._real_getaddrinfo, spend_guard._guarded_getaddrinfo)  # noqa: SLF001
 
     def test_08_trailing_dot_host(self) -> None:
         import urllib.request

@@ -52,6 +52,15 @@ def _load(name: str, filename: str):
 
 def _hang(*_args, **_kwargs):
     print("STARTED", flush=True)
+    if os.environ.get("T089_FAULT") == "connreset":
+        # R3-7 (round-3 independent review): a fourth "signal" — the
+        # connection itself dropping mid-call — is not an OS signal the
+        # parent sends, it is the network primitive raising on its own.
+        # No external kill is needed here: the write-ahead already landed
+        # (printed above), and the client's own exception handling (or lack
+        # of it) determines what happens next — exactly what this scenario
+        # is checking.
+        raise ConnectionResetError("connection reset by peer (t089 fault injection)")
     time.sleep(60)
     raise AssertionError("hang() was not interrupted by the expected signal")
 
@@ -151,19 +160,13 @@ def run_google_ads(project_root: pathlib.Path) -> None:
     os.chdir(project_root)
     mod = _load("google_ads_fetch_t089", "google-ads-fetch.py")
     mod.oauth_access_token = lambda: "fake-token"
-    mod.urllib.request.urlopen = _hang_urlopen
+    mod.urllib.request.urlopen = _hang
     mod.env_status = lambda _platform: {"present": True, "missing": []}
     mod.ledger_preflight = lambda *_a, **_kw: (True, "ok")
     os.environ["GOOGLE_ADS_CUSTOMER_ID"] = "1234567890"
     os.environ["GOOGLE_ADS_DEVELOPER_TOKEN"] = "fake-dev-token"
     mod.sys.argv = ["google-ads-fetch.py", "--report", "campaigns", "--live"]
     mod.main()
-
-
-def _hang_urlopen(*_a, **_kw):
-    print("STARTED", flush=True)
-    time.sleep(60)
-    raise AssertionError("hang() was not interrupted by the expected signal")
 
 
 def run_keyso(out_dir: pathlib.Path) -> None:
@@ -173,7 +176,7 @@ def run_keyso(out_dir: pathlib.Path) -> None:
     clients' out_dir contract."""
     os.chdir(out_dir)
     mod = _load("keyso_fetch_t089", "keyso-fetch.py")
-    mod.urllib.request.urlopen = _hang_urlopen
+    mod.urllib.request.urlopen = _hang
     mod.call("fake-token", "/report/simple/keyword_dashboard", {"keyword": "x", "base": "msk"})
 
 
@@ -182,7 +185,7 @@ def run_competitor_discovery(out_dir: pathlib.Path) -> None:
     same hardcoded `./seo/research/keyso` cache dir."""
     os.chdir(out_dir)
     mod = _load("competitor_discovery_t089", "competitor-discovery.py")
-    mod.urllib.request.urlopen = _hang_urlopen
+    mod.urllib.request.urlopen = _hang
     mod.fetch_top("fake-token", "minvata", "msk", 60)
 
 

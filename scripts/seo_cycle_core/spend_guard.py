@@ -51,11 +51,11 @@ happens once here, not once per library-specific URL-parsing helper.
 Buys:
   - Every network client in this codebase (urllib-based or requests-based,
     directly or via `build_opener`/redirects/raw `http.client`/raw
-    `socket`) that runs IN A PROCESS WHERE THIS MODULE WAS IMPORTED cannot
-    reach a `PAID_HOSTS` member without an active `armed_spend()` for that
-    exact host. There is no per-client wrapper left anywhere to unwrap,
-    restore, or call around — the two patched names ARE the only path to
-    the network these libraries have.
+    `socket`/`socket.gethostbyname`/`gethostbyname_ex`) that runs IN A
+    PROCESS WHERE THIS MODULE WAS IMPORTED cannot reach a `PAID_HOSTS`
+    member without an active `armed_spend()` for that exact host, AS LONG
+    AS IT WENT THROUGH ONE OF THE PATCHED NAMES (see the next bullet for
+    the one that doesn't).
   - A client reusing an ALREADY-REGISTERED host needs zero code of its own
     referencing this module to be protected, AS LONG AS its own process
     imported anything from the `seo_cycle_core` package (see below —
@@ -69,12 +69,31 @@ just this docstring:
     `seo_cycle_core` helpers (config, usage_ledger, ads) for reasons that
     have nothing to do with this ticket, so today this is not a live gap —
     but it is not a theorem either. The compensating control for this case
-    is NOT runtime: it is `tests/test_t089_closed_world_hosts.py`, which
-    fails CI the moment a script mentions a `PAID_HOSTS` (or any
-    unclassified) hostname without importing `seo_cycle_core` and without
-    calling `armed_spend(` — a static, review-time check, not a
-    runtime one. It cannot stop a call the day unreviewed code ships; it
-    can stop it from being merged unnoticed.
+    is NOT runtime: `tests/test_t089_closed_world_hosts.py` fails CI when a
+    script contains a `PAID_HOSTS` hostname (or any unclassified one)
+    written as ONE WHOLE STRING LITERAL, without importing `seo_cycle_core`
+    and without the text `armed_spend(` anywhere in the file — a static,
+    review-time check, not a runtime one, and textual, not semantic (it
+    cannot verify `armed_spend(` is used correctly, or even that it isn't
+    just a comment). Round-3 independent review (R3-3) found the actual
+    limit narrower than this docstring previously claimed: a hostname
+    assembled from pieces — string concatenation, an environment variable,
+    `.format()`/an f-string built from a separate constant — is invisible
+    to this scan for the SAME reason a whole new unclassified host already
+    was (documented in that test's own docstring) — the regex only sees
+    literal `http(s)://host` text. Combined with no `seo_cycle_core`
+    import, such a file is caught by NEITHER half of this mechanism: not
+    the runtime gate (never imported), not the static scan (no whole
+    literal to match). Closing this fully would mean either full
+    control-flow/string-flow static analysis (not attempted — expensive
+    and still evadable one layer further) or truly universal runtime
+    activation independent of what a file imports (attempted via
+    `sitecustomize.py`-style auto-loading and abandoned — see the T-089
+    packet's "Результат" for why: it only auto-activates when `PYTHONPATH`
+    already includes the scripts directory at interpreter start, which is
+    not how any of the ~97 commands here are actually invoked). This
+    specific combination — split/constructed literal AND no shared import —
+    is accepted as an open gap, not a closed one.
   - **A subprocess started via `subprocess`/`os.system`/a shell script**
     (this repo already has one: `scripts/nw-cli.sh` calls `curl` directly)
     is a separate OS process with its own Python interpreter or no
@@ -89,6 +108,33 @@ just this docstring:
     a hostname-based list in general) can close this without shipping an
     IP-range registry instead, which was not asked for and brings its own
     staleness problem (cloud IPs rotate). Accepted as out of scope.
+  - **`_socket.getaddrinfo` and other names on the C `_socket` extension
+    module itself** (as opposed to the pure-Python `socket` module's
+    re-exports, which ARE patched above) are not intercepted. Patching a
+    C-extension module's own attributes is a different, more fragile kind
+    of monkeypatch than reassigning a Python-level name, and no code in
+    this repository calls `_socket.*` directly today — named as a boundary
+    rather than closed (round-3 independent review, R3-2).
+  - **Restoring the saved originals and calling them, or the un-patched
+    primitive, directly.** `_real_getaddrinfo`/`_real_connect`/
+    `_real_connect_ex`/`_real_gethostbyname`/`_real_gethostbyname_ex` are
+    deliberately public module attributes (tests need to mock them, see
+    their own docstring) — `socket.getaddrinfo =
+    spend_guard._real_getaddrinfo` followed by a normal `urlopen()` call
+    reaches the real resolver with no check at all (round-3 independent
+    review, R3-1: this was claimed closed here in round 3 and was not —
+    two of the review's probes did exactly this and reached a real DNS
+    lookup for `api.dataforseo.com`, no further, before the review's own
+    shim caught the egress). This is NOT fixable by hiding the names
+    better: any code with write access to this module's namespace (or to
+    `socket`'s) can equally do `importlib.reload(socket)` to get a
+    completely fresh, unpatched module — undoing an in-process monkeypatch
+    from within the same process is fundamentally not preventable by a
+    monkeypatch, in this or any other shape. The actual boundary this
+    module enforces is: code that does NOT deliberately try to undo the
+    patch is gated; code that deliberately reaches for the saved original
+    or reloads `socket` is a supply-chain/code-review question (would this
+    line survive review?), not a runtime one this mechanism can answer.
   - **A browser-driven flow, an external binary that does its own network
     I/O (curl, another language's HTTP client), or `-S`/isolated Python
     interpreters that skip normal import machinery** are, by construction,
@@ -204,13 +250,15 @@ def armed_spend(write_ahead: Callable[[], bool], hosts: str | Iterable[str]) -> 
 def gate_installed() -> bool:
     """True iff both patches below are the currently active implementation
     of their target — used by tests to fail fast and loud (round-2 finding
-    R2-5: a mutated/未installed gate must not silently let the test suite's
+    R2-5: a mutated/uninstalled gate must not silently let the test suite's
     own real network calls through; asserting this in setUp turns that into
     an immediate, obvious failure instead of a live DNS lookup)."""
     return (
         socket.getaddrinfo is _guarded_getaddrinfo
         and socket.socket.connect is _guarded_connect
         and socket.socket.connect_ex is _guarded_connect_ex
+        and socket.gethostbyname is _guarded_gethostbyname
+        and socket.gethostbyname_ex is _guarded_gethostbyname_ex
     )
 
 
@@ -229,6 +277,8 @@ def gate_installed() -> bool:
 _real_getaddrinfo: Callable[..., Any] | None = None
 _real_connect: Callable[..., Any] | None = None
 _real_connect_ex: Callable[..., Any] | None = None
+_real_gethostbyname: Callable[..., Any] | None = None
+_real_gethostbyname_ex: Callable[..., Any] | None = None
 
 
 def _host_from_address(address: Any) -> str:
@@ -257,8 +307,27 @@ def _guarded_connect_ex(self: "socket.socket", address: Any) -> Any:
     return _real_connect_ex(self, address)
 
 
+def _guarded_gethostbyname(host: Any) -> Any:
+    # R3-2 (round-3 independent gate): `socket.gethostbyname`/`_ex` are the
+    # same class of resolver as `getaddrinfo` — a hostname is present in the
+    # call, and round 3 left it unpatched even though the same `_check_host`
+    # already applies cleanly. `_socket.getaddrinfo` (the C extension module
+    # underlying all of these) is NOT patched here — see the module
+    # docstring's boundary statement for why that one is named, not closed.
+    _check_host(_normalize_host(host))
+    assert _real_gethostbyname is not None
+    return _real_gethostbyname(host)
+
+
+def _guarded_gethostbyname_ex(host: Any) -> Any:
+    _check_host(_normalize_host(host))
+    assert _real_gethostbyname_ex is not None
+    return _real_gethostbyname_ex(host)
+
+
 def _install() -> None:
     global _real_getaddrinfo, _real_connect, _real_connect_ex
+    global _real_gethostbyname, _real_gethostbyname_ex
     if socket.getaddrinfo is not _guarded_getaddrinfo:
         _real_getaddrinfo = socket.getaddrinfo
         socket.getaddrinfo = _guarded_getaddrinfo
@@ -268,6 +337,12 @@ def _install() -> None:
     if socket.socket.connect_ex is not _guarded_connect_ex:
         _real_connect_ex = socket.socket.connect_ex
         socket.socket.connect_ex = _guarded_connect_ex  # type: ignore[method-assign,assignment]
+    if socket.gethostbyname is not _guarded_gethostbyname:
+        _real_gethostbyname = socket.gethostbyname
+        socket.gethostbyname = _guarded_gethostbyname
+    if socket.gethostbyname_ex is not _guarded_gethostbyname_ex:
+        _real_gethostbyname_ex = socket.gethostbyname_ex
+        socket.gethostbyname_ex = _guarded_gethostbyname_ex
 
 
 _install()
