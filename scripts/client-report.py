@@ -282,6 +282,20 @@ def main() -> int:
     # empty/comment-only file writing a full report over nothing.
     cfg = require_config(cfg_path)
     require_section(cfg, "project", cfg_path)
+    # T-094 (F-3): require_section only checks that `project` is a non-empty
+    # mapping — `project: {name: null}` passes it. Without this check,
+    # build_report()'s `config_section(cfg, "project").get("name") or
+    # project_root.name` fallback silently substitutes the CWD's directory
+    # name for the client name in a document meant to go to a human, and
+    # main() returned 0 doing it. This is a client-facing report, not an
+    # internal dashboard — refuse instead of guessing who it is for.
+    if not config_section(cfg, "project").get("name"):
+        print(
+            f"ERROR: {cfg_path}: раздел 'project' не задаёт 'name' — "
+            "клиентский отчёт без названия проекта не пишется",
+            file=sys.stderr,
+        )
+        return 2
     project_root = project_root_for(cfg_path)
     global log
     log = setup_logging("client-report", project_root, cfg)

@@ -61,9 +61,62 @@ Buys:
     imported anything from the `seo_cycle_core` package (see below —
     `seo_cycle_core/__init__.py` imports this module as a side effect of
     package import, not as something each client has to remember).
+  - T-094 (F-2, the QA report's FOURTH independent run), PARTIALLY — read
+    the next bullet in "Does NOT buy" too, this one overstated itself in
+    round 1 and an independent gate caught it live: a `HTTP_PROXY`/
+    `HTTPS_PROXY` env var set in the process, for an **HTTPS** target
+    (`urllib`/`requests` both build a CONNECT tunnel for HTTPS-through-
+    proxy). Previously a live gap, not named anywhere: with a proxy
+    configured, `socket.getaddrinfo`/`socket.socket.connect` above only
+    ever see the PROXY's host — the paid hostname travels inside the
+    CONNECT tunnel request, built by `http.client.HTTPConnection.
+    set_tunnel(host, ...)`. Not theoretical: `config/region-profiles/
+    ru.yaml` recommends proxying DataForSEO for the RU region.
+    `http.client.HTTPConnection.set_tunnel` is now patched the same way as
+    the resolver functions above — `urllib.request` (`AbstractHTTPHandler.
+    do_open` calls `h.set_tunnel(req._tunnel_host, ...)` directly) and
+    `requests`/`urllib3` (`HTTPSConnectionPool._prepare_proxy` calls
+    `conn.set_tunnel(...)`, whose own override ends in `super().
+    set_tunnel(host, ...)` — the same patched base-class name) both funnel
+    through this one function. T-094 round 2 (R-1, independent gate,
+    2026-09-07): round 1 also missed that `req._tunnel_host`/the tunnel
+    host arrive WITH an explicit port when the target URL spells one out
+    (`https://api.dataforseo.com:443/...`) — `"api.dataforseo.com:443" in
+    PAID_HOSTS` never matched the bare name. `_normalize_host` now strips
+    a trailing `:port` (`_strip_port`, IPv6-bracket-aware) before the
+    `PAID_HOSTS` comparison, closing that specific escape too — reproduced
+    against a live local listener (no external byte), confirmed refused
+    after the fix with the same harness.
 
 Does NOT buy — this is the boundary, stated for the release notes, not
 just this docstring:
+  - **A `HTTP_PROXY`/`HTTPS_PROXY`-configured proxy AND a plain (unencrypted)
+    `http://` target.** T-094 round 2 (R-1, independent gate, 2026-09-07):
+    an HTTPS target through a proxy builds a CONNECT tunnel (gated above —
+    `_guarded_set_tunnel`). A PLAIN `http://` target through a proxy does
+    NOT: `urllib`/`requests` rewrite the request into an absolute-URI GET
+    sent directly to the proxy (`GET http://api.dataforseo.com/v3/x
+    HTTP/1.1`) — no `set_tunnel()` call happens at all, and
+    `socket.getaddrinfo`/`connect` only ever see the proxy's own address.
+    Reproduced live against a local listener (no external byte): the paid
+    hostname arrived in the request line, unmatched by any patched call.
+    Closing this would mean intercepting `http.client.HTTPConnection.
+    putrequest`/the URI-rewrite step itself, a different (and larger)
+    change than this ticket's one-line budget — not attempted here, named
+    instead of silently left implied-closed by the CONNECT-tunnel fix
+    above. Why this is 🟡, not 🔴, for THIS codebase specifically: every
+    paid client shipped here (`dataforseo-fetch.py`, `spyfu-fetch.py`,
+    `serpstat-fetch.py`, `serpstat-audit.py`, `keyso-save.py`,
+    `yandex-direct-fetch.py`, `atp-fetch.py`) hardcodes an `https://` base
+    URL with no port, and none of them read a proxy setting out of config
+    (`grep -rn "proxies=\\|ProxyHandler\\|set_proxy" scripts/` minus this
+    module — empty) — reaching this gap from code already in this repo
+    would require a NEW client written to use plain HTTP for a paid host,
+    which `tests/test_t089_closed_world_hosts.py` would catch as an
+    unclassified/unguarded literal the moment it's written as one whole
+    string. The risk is real for a proxy configured via environment
+    variables on a hand-written or future ad hoc script, not for the
+    shipped client set.
   - **A process that never imports anything from `seo_cycle_core` at all**
     is not gated at runtime. T-092 (F-2, the QA report's THIRD independent
     run to catch this claim overstating itself): this docstring used to say
@@ -206,6 +259,7 @@ just this docstring:
 from __future__ import annotations
 
 import contextvars
+import http.client
 import socket
 from contextlib import contextmanager
 from typing import Any, Callable, Iterable, Iterator
@@ -275,12 +329,41 @@ class SpendNotArmedError(RuntimeError):
     or raw socket connect, whichever happens first)."""
 
 
+def _strip_port(host: str) -> str:
+    """T-094 round 2 (R-1): `_guarded_set_tunnel` below can receive
+    `req._tunnel_host` WITH an explicit port attached
+    (`api.dataforseo.com:443`, from a URL that spells the port out —
+    `AbstractHTTPHandler.do_open` passes `req._tunnel_host` as-is, it does
+    not split it) — `"api.dataforseo.com:443" in PAID_HOSTS` never matches
+    the bare hostname, an independent gate reproduced this live against a
+    local listener. The socket-layer callers (`getaddrinfo`/`connect`/
+    `connect_ex`/`gethostbyname*`) never pass a combined `host:port` string
+    (address tuples always carry host and port as separate elements), so
+    this only ever fires for the tunnel path in practice — kept host-only
+    (no guessing a default port), applied unconditionally because it is a
+    no-op for anything that isn't `host:port` shaped.
+
+    IPv6-aware: a bracketed `[::1]:443` strips to `::1`; a bare `::1`
+    (multiple colons, no brackets — never has a port attached, brackets are
+    mandatory for that) is left untouched; the single-colon `host:port`
+    shape is the only one stripped."""
+    if host.startswith("[") and "]" in host:
+        return host[1:host.index("]")]
+    if host.count(":") == 1:
+        left, _, maybe_port = host.rpartition(":")
+        if maybe_port.isdigit():
+            return left
+    return host
+
+
 def _normalize_host(host: Any) -> str:
     """`bytes`/`bytearray` (round-2 bypass 11: `_host_of()` used to `str()`
     a bytes URL and get `"b'https://...'"`, hostname `""`, silent pass) and
     a trailing dot (bypass 08: `api.dataforseo.com.` is a valid absolute DNS
     name PAID_HOSTS didn't match) are normalized once, here — the one place
-    every caller (getaddrinfo, connect, connect_ex) goes through."""
+    every caller (getaddrinfo, connect, connect_ex, gethostbyname*, the
+    proxy tunnel) goes through. A trailing `:port` (T-094 round 2, R-1 —
+    see `_strip_port`) is normalized here too, same reasoning."""
     if host is None:
         return ""
     if isinstance(host, (bytes, bytearray)):
@@ -288,7 +371,15 @@ def _normalize_host(host: Any) -> str:
             host = host.decode("idna")
         except (UnicodeError, UnicodeDecodeError):
             host = host.decode("utf-8", "replace")
-    return str(host).strip().lower().rstrip(".")
+    # T-094 round 3 (R2-1, independent gate): order matters. Stripping the
+    # trailing dot BEFORE the port turned `api.dataforseo.com.:443` into
+    # `api.dataforseo.com.` (dot still there, port gone) — `.rstrip(".")`
+    # only strips from the very end of the string, and `:443` was still
+    # sitting after that dot, so it never fired. Reproduced live against a
+    # local listener (no external byte) by the gate. Port first, dot after:
+    # `_strip_port` on `api.dataforseo.com.:443` correctly returns
+    # `api.dataforseo.com.`, and THEN `.rstrip(".")` reaches the dot.
+    return _strip_port(str(host).strip().lower()).rstrip(".")
 
 
 def _check_host(host: str) -> None:
@@ -338,6 +429,7 @@ def gate_installed() -> bool:
         and socket.socket.connect_ex is _guarded_connect_ex
         and socket.gethostbyname is _guarded_gethostbyname
         and socket.gethostbyname_ex is _guarded_gethostbyname_ex
+        and http.client.HTTPConnection.set_tunnel is _guarded_set_tunnel
     )
 
 
@@ -358,6 +450,7 @@ _real_connect: Callable[..., Any] | None = None
 _real_connect_ex: Callable[..., Any] | None = None
 _real_gethostbyname: Callable[..., Any] | None = None
 _real_gethostbyname_ex: Callable[..., Any] | None = None
+_real_set_tunnel: Callable[..., Any] | None = None
 
 
 def _host_from_address(address: Any) -> str:
@@ -404,9 +497,30 @@ def _guarded_gethostbyname_ex(host: Any) -> Any:
     return _real_gethostbyname_ex(host)
 
 
+def _guarded_set_tunnel(
+    self: "http.client.HTTPConnection", host: str, *args: Any, **kwargs: Any
+) -> Any:
+    # T-094 (F-2): the CONNECT-tunnel path. With an HTTP(S)_PROXY env var
+    # set, socket.getaddrinfo/connect above only ever see the PROXY's host —
+    # the paid hostname travels inside the CONNECT request's Host header,
+    # built here by http.client.HTTPConnection.set_tunnel(host, ...), which
+    # every proxied caller in this codebase's dependency tree funnels
+    # through: urllib.request.AbstractHTTPHandler.do_open calls
+    # `h.set_tunnel(req._tunnel_host, ...)` directly; urllib3's (requests')
+    # HTTPSConnectionPool._prepare_proxy calls `conn.set_tunnel(...)`, whose
+    # own set_tunnel override ends in `super().set_tunnel(host, ...)` —
+    # i.e. THIS function, once patched on the base class. Checked here,
+    # before the CONNECT request is written, closes the gap named in
+    # CHANGELOG.md's money boundary section: a paid host reached only
+    # through a set proxy env var used to bypass the gate entirely.
+    _check_host(_normalize_host(host))
+    assert _real_set_tunnel is not None
+    return _real_set_tunnel(self, host, *args, **kwargs)
+
+
 def _install() -> None:
     global _real_getaddrinfo, _real_connect, _real_connect_ex
-    global _real_gethostbyname, _real_gethostbyname_ex
+    global _real_gethostbyname, _real_gethostbyname_ex, _real_set_tunnel
     if socket.getaddrinfo is not _guarded_getaddrinfo:
         _real_getaddrinfo = socket.getaddrinfo
         socket.getaddrinfo = _guarded_getaddrinfo
@@ -422,6 +536,9 @@ def _install() -> None:
     if socket.gethostbyname_ex is not _guarded_gethostbyname_ex:
         _real_gethostbyname_ex = socket.gethostbyname_ex
         socket.gethostbyname_ex = _guarded_gethostbyname_ex
+    if http.client.HTTPConnection.set_tunnel is not _guarded_set_tunnel:
+        _real_set_tunnel = http.client.HTTPConnection.set_tunnel
+        http.client.HTTPConnection.set_tunnel = _guarded_set_tunnel  # type: ignore[method-assign,assignment]
 
 
 _install()
