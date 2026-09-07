@@ -24,7 +24,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, project_root_for
+from seo_cycle_core.config import find_config, load_yaml, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("geo-citation-log")
@@ -114,6 +114,16 @@ def main(argv: list[str] | None = None) -> int:
     if not cfg_path:
         print("ERROR: seo-cycle.yaml not found", file=sys.stderr)
         return 2
+    # T-092 (F-3/B2): this script only checked that a config FILE exists at
+    # that path, never that its content parses — a broken/non-UTF-8
+    # seo-cycle.yaml (`{{{`, garbled bytes) walked straight past every
+    # check here and produced a green log/report anyway (QA report F-3:
+    # "geo-citation-log.py зелёный вообще на всём"). This module genuinely
+    # does not need any FIELD from the config (it only reads/writes its own
+    # ledger under project_root), but "a config file is present" is not the
+    # same claim as "the config is not garbage" — validate it parses, even
+    # though the parsed value itself is unused below.
+    load_yaml(cfg_path)
     project_root = project_root_for(cfg_path)
     now = dt.datetime.now().isoformat(timespec="seconds")
 

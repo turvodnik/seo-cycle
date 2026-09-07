@@ -18,7 +18,7 @@ import re
 import sys
 from typing import Any
 
-from seo_cycle_core.config import boolish, find_config, load_yaml, nested_get, policy_path, project_root_for, rel_path, require_config, write_text  # noqa: F401 -- load_yaml re-exported for ai-bot-access-check.py's `from vnext_audit_core import ...`
+from seo_cycle_core.config import boolish, find_config, load_yaml, nested_get, policy_path, project_root_for, rel_path, require_config, require_section, write_text  # noqa: F401 -- load_yaml re-exported for ai-bot-access-check.py's `from vnext_audit_core import ...`
 
 
 SOURCES = [
@@ -494,6 +494,16 @@ def build_report(audit_id: str, cfg_path: pathlib.Path, args: argparse.Namespace
     # fix here covers all of them) — an empty/missing config used to write
     # a full "report" over nothing instead of refusing.
     cfg = require_config(cfg_path)
+    # T-092 (F-3/B2): require_config() only checked the FILE parses to a
+    # dict — `project: null` (a real, present, valid-YAML dict with that
+    # key set to None) sailed straight through it. project_summary() below
+    # then read `cfg.get("project", {})` softly, and this function printed
+    # a full green report with "Project: None (None)" and wrote 4 files to
+    # disk for it (reproduced live: `ai-brand-audit.py --write` on
+    # `project: null`, exit 0, empty stderr — the QA report's F-3 repro).
+    # This is the one place all 14 vnext-audit scripts build their report,
+    # so the fix belongs here, not per-script.
+    require_section(cfg, "project", cfg_path)
     paths = output_paths(spec, cfg, project_root)
     cfg_status = config_status(cfg, spec)
     evidence = specialized_evidence(audit_id, args)
