@@ -61,6 +61,20 @@ Buys:
     imported anything from the `seo_cycle_core` package (see below —
     `seo_cycle_core/__init__.py` imports this module as a side effect of
     package import, not as something each client has to remember).
+  - T-094 (F-2, the QA report's FOURTH independent run): a `HTTP_PROXY`/
+    `HTTPS_PROXY` env var set in the process. Previously a live gap, not
+    named anywhere: with a proxy configured, `socket.getaddrinfo`/
+    `socket.socket.connect` above only ever see the PROXY's host — the
+    paid hostname travels inside the CONNECT tunnel request, built by
+    `http.client.HTTPConnection.set_tunnel(host, ...)`. Not theoretical:
+    `config/region-profiles/ru.yaml` recommends proxying DataForSEO for
+    the RU region. `http.client.HTTPConnection.set_tunnel` is now patched
+    the same way as the resolver functions above — `urllib.request`
+    (`AbstractHTTPHandler.do_open` calls `h.set_tunnel(req._tunnel_host,
+    ...)` directly) and `requests`/`urllib3` (`HTTPSConnectionPool.
+    _prepare_proxy` calls `conn.set_tunnel(...)`, whose own override ends
+    in `super().set_tunnel(host, ...)` — the same patched base-class name)
+    both funnel through this one function.
 
 Does NOT buy — this is the boundary, stated for the release notes, not
 just this docstring:
@@ -206,6 +220,7 @@ just this docstring:
 from __future__ import annotations
 
 import contextvars
+import http.client
 import socket
 from contextlib import contextmanager
 from typing import Any, Callable, Iterable, Iterator
@@ -338,6 +353,7 @@ def gate_installed() -> bool:
         and socket.socket.connect_ex is _guarded_connect_ex
         and socket.gethostbyname is _guarded_gethostbyname
         and socket.gethostbyname_ex is _guarded_gethostbyname_ex
+        and http.client.HTTPConnection.set_tunnel is _guarded_set_tunnel
     )
 
 
@@ -358,6 +374,7 @@ _real_connect: Callable[..., Any] | None = None
 _real_connect_ex: Callable[..., Any] | None = None
 _real_gethostbyname: Callable[..., Any] | None = None
 _real_gethostbyname_ex: Callable[..., Any] | None = None
+_real_set_tunnel: Callable[..., Any] | None = None
 
 
 def _host_from_address(address: Any) -> str:
@@ -404,9 +421,30 @@ def _guarded_gethostbyname_ex(host: Any) -> Any:
     return _real_gethostbyname_ex(host)
 
 
+def _guarded_set_tunnel(
+    self: "http.client.HTTPConnection", host: str, *args: Any, **kwargs: Any
+) -> Any:
+    # T-094 (F-2): the CONNECT-tunnel path. With an HTTP(S)_PROXY env var
+    # set, socket.getaddrinfo/connect above only ever see the PROXY's host —
+    # the paid hostname travels inside the CONNECT request's Host header,
+    # built here by http.client.HTTPConnection.set_tunnel(host, ...), which
+    # every proxied caller in this codebase's dependency tree funnels
+    # through: urllib.request.AbstractHTTPHandler.do_open calls
+    # `h.set_tunnel(req._tunnel_host, ...)` directly; urllib3's (requests')
+    # HTTPSConnectionPool._prepare_proxy calls `conn.set_tunnel(...)`, whose
+    # own set_tunnel override ends in `super().set_tunnel(host, ...)` —
+    # i.e. THIS function, once patched on the base class. Checked here,
+    # before the CONNECT request is written, closes the gap named in
+    # CHANGELOG.md's money boundary section: a paid host reached only
+    # through a set proxy env var used to bypass the gate entirely.
+    _check_host(_normalize_host(host))
+    assert _real_set_tunnel is not None
+    return _real_set_tunnel(self, host, *args, **kwargs)
+
+
 def _install() -> None:
     global _real_getaddrinfo, _real_connect, _real_connect_ex
-    global _real_gethostbyname, _real_gethostbyname_ex
+    global _real_gethostbyname, _real_gethostbyname_ex, _real_set_tunnel
     if socket.getaddrinfo is not _guarded_getaddrinfo:
         _real_getaddrinfo = socket.getaddrinfo
         socket.getaddrinfo = _guarded_getaddrinfo
@@ -422,6 +460,9 @@ def _install() -> None:
     if socket.gethostbyname_ex is not _guarded_gethostbyname_ex:
         _real_gethostbyname_ex = socket.gethostbyname_ex
         socket.gethostbyname_ex = _guarded_gethostbyname_ex
+    if http.client.HTTPConnection.set_tunnel is not _guarded_set_tunnel:
+        _real_set_tunnel = http.client.HTTPConnection.set_tunnel
+        http.client.HTTPConnection.set_tunnel = _guarded_set_tunnel  # type: ignore[method-assign,assignment]
 
 
 _install()
