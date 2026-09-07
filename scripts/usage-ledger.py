@@ -17,7 +17,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import config_section, find_config, load_yaml, numeric, policy_path, project_root_for, rel_path, require_config
+from seo_cycle_core.config import config_section, find_config, load_yaml, numeric, policy_path, project_root_for, rel_path, require_config, require_section
 from seo_cycle_core.spend_guard import PAID_SERVICE_HOSTS, PAID_SERVICES_WITHOUT_HOST_GATE
 from seo_cycle_core.usage_ledger import MONTH_RE, finite_nonneg, nonneg_finite_arg, usage_lock
 
@@ -696,6 +696,14 @@ def main(argv: list[str] | None = None) -> int:
     if not cfg_path.exists():
         print(f"ERROR: {cfg_path} не найден", file=sys.stderr)
         return 2
+    # T-093 круг 2 (R-2): moved out of `load_state()` itself — that
+    # function is also called directly by `tests/test_usage_ledger_script.py`
+    # to exercise pure budget-cap math against a config that legitimately
+    # has no `project:` section at all (the test's own concern is
+    # `governance.budget_policy`, not project identity). Gating at the CLI
+    # entrypoint instead keeps that internal reuse valid while still
+    # closing the `ledger` subcommand's `project: null` gap (R-2, F-3).
+    require_section(require_config(cfg_path), "project", cfg_path)
 
     state = load_state(cfg_path, args.month)
 

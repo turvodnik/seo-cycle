@@ -14,7 +14,7 @@ import json
 import pathlib
 from typing import Any
 
-from seo_cycle_core.config import write_text
+from seo_cycle_core.config import load_config, write_text
 
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
@@ -527,13 +527,13 @@ def batch_payload(outlines: list[dict[str, Any]]) -> dict[str, Any]:
 def attach_rag_passages(package: pathlib.Path, outlines: list[dict[str, Any]]) -> None:
     """Best-effort: enrich outlines with related passages from the local RAG index."""
     try:
-        from seo_cycle_core.config import find_config, load_yaml, package_project_root
+        from seo_cycle_core.config import find_config, package_project_root
         from seo_cycle_core.rag import open_db, rag_db_path, search
     except ImportError:
         return
     project_root = package_project_root(package)
     cfg_path = find_config(project_root)
-    cfg = load_yaml(cfg_path) if cfg_path else {}
+    cfg = load_config(cfg_path) if cfg_path else {}
     db_path = rag_db_path(project_root, cfg)
     if not db_path.exists():
         return

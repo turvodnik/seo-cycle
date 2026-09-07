@@ -8,7 +8,7 @@ import datetime as dt
 import pathlib
 from typing import Any
 
-from seo_cycle_core.config import load_yaml, policy_path, project_root_for
+from seo_cycle_core.config import load_config, policy_path, project_root_for, require_section
 from seo_cycle_core.health import HealthSpec, run_health
 from seo_cycle_core.providers import perplexity_health
 
@@ -23,7 +23,8 @@ def output_paths(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, p
 
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     app_paths = [pathlib.Path(path).expanduser() for path in args.app_path] if args.app_path else None
     health = perplexity_health(app_paths=app_paths, browser_available=args.browser_available)

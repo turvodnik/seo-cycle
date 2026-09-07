@@ -13,7 +13,7 @@ import sys
 import tempfile
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, rel_display, rel_path
+from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, rel_display, rel_path
 from seo_cycle_core.technical_artifacts import write_technical_report
 
 
@@ -127,7 +127,7 @@ def build_queue(cfg_path: pathlib.Path, downloads: list[str], args: argparse.Nam
 
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
     project_root = project_root_for(cfg_path)
     domain = nested_get(cfg, "project.domain") or ""
     site_url = args.site_url or os.environ.get("GSC_SITE_URL") or (f"sc-domain:{domain}" if domain else "")

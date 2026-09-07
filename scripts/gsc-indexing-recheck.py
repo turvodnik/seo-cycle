@@ -18,7 +18,7 @@ import sys
 import urllib.parse
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, rel_display, rel_path
+from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, rel_display, rel_path, require_section
 from seo_cycle_core.technical_artifacts import write_technical_report
 
 
@@ -125,7 +125,8 @@ def load_submitted(path: pathlib.Path) -> list[dict[str, Any]]:
 
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     submitted_path = rel_path(project_root, args.submitted_log)
     submitted = load_submitted(submitted_path)

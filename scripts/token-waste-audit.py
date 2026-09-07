@@ -10,7 +10,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import coerce_int, find_config, load_config, policy_path, project_root_for, rel_path
+from seo_cycle_core.config import coerce_int, find_config, load_config, policy_path, project_root_for, rel_path, require_section
 from seo_cycle_core.reports import write_report_bundle
 
 
@@ -113,6 +113,7 @@ def scan_project(project_root: pathlib.Path, policy: dict[str, Any]) -> list[dic
 
 def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
     cfg = load_config(cfg_path)  # T-090 round 2: main project config, required
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     policy = token_policy(cfg)
     findings = scan_project(project_root, policy)

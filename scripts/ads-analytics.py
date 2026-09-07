@@ -29,7 +29,7 @@ import sys
 from typing import Any
 
 from seo_cycle_core.ads import ads_config, load_latest_raw
-from seo_cycle_core.config import coerce_float, find_config, load_yaml, nested_get, project_root_for, write_text
+from seo_cycle_core.config import coerce_float, find_config, load_config, nested_get, project_root_for, require_section, write_text
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
 
@@ -293,7 +293,8 @@ def main() -> int:
     if not cfg_path or not cfg_path.exists():
         print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
         return 2
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     global log
     log = setup_logging("ads-analytics", project_root, cfg)

@@ -26,7 +26,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import coerce_float, coerce_int, find_config, nested_get, numeric, project_root_for, require_config
+from seo_cycle_core.config import coerce_float, coerce_int, find_config, nested_get, numeric, project_root_for, require_config, require_section
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
 
@@ -225,6 +225,7 @@ def main() -> int:
     # exactly the one thing that check didn't cover: an EXISTING but
     # empty/comment-only file writing a full report over nothing.
     cfg = require_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     global log
     log = setup_logging("budget-mix-planner", project_root, cfg)

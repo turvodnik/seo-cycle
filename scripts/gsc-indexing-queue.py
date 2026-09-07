@@ -22,7 +22,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, rel_display, rel_path
+from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, rel_display, rel_path, require_section
 from seo_cycle_core.technical_artifacts import write_technical_report
 
 
@@ -402,7 +402,8 @@ def score_candidate(candidate: dict[str, Any]) -> tuple[int, str]:
 
 
 def build_candidates(cfg_path: pathlib.Path, args: argparse.Namespace) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     sitemap_urls = load_sitemap(args, cfg, project_root)
     sitemap_keys = {canonical_key(url) for url in sitemap_urls}

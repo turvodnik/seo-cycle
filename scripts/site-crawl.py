@@ -34,7 +34,7 @@ import urllib.request
 import urllib.robotparser
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, write_text
+from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, write_text
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("site-crawl")
@@ -258,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg_path = find_config(pathlib.Path.cwd())
     project_root = project_root_for(cfg_path) if cfg_path else pathlib.Path.cwd()
-    cfg = load_yaml(cfg_path) if cfg_path else {}
+    cfg = load_config(cfg_path) if cfg_path else {}
     global log
     log = setup_logging("site-crawl", project_root, cfg)
 

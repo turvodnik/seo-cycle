@@ -19,7 +19,7 @@ import sys
 import time
 from typing import Any
 
-from seo_cycle_core.config import config_section, coerce_int, find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import coerce_int, config_section, find_config, load_config, load_yaml, nested_get, project_root_for
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.monitoring import find_latest_snapshot, monitoring_dir
@@ -167,7 +167,7 @@ def cmd_doctor(args: list[str], project: pathlib.Path) -> int:
     able to say whether they are actually available (T-052).
     """
     cfg_path = find_config(project)
-    cfg = load_yaml(cfg_path) if cfg_path else {}
+    cfg = load_config(cfg_path) if cfg_path else {}
     max_age = coerce_int(
         nested_get(cfg, "monitoring.snapshot_max_age_days", DEFAULT_SNAPSHOT_MAX_AGE_DAYS),
         DEFAULT_SNAPSHOT_MAX_AGE_DAYS,
@@ -238,7 +238,7 @@ def cmd_status(args: list[str], project: pathlib.Path) -> int:
         # реальное состояние, а не как «конфига вообще нет».
         print(f"ERROR: seo-cycle.yaml not found in {project}", file=sys.stderr)
         return 2
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
     name = config_section(cfg, "project").get("name")
     print(f"# seo-cycle status · {name or project.name}\n")
     snap, age = newest_snapshot(project, cfg)
@@ -451,7 +451,7 @@ def main(argv: list[str] | None = None) -> int:
     global log
     cfg_path = find_config(project)
     if cfg_path:
-        log = setup_logging("cli", project_root_for(cfg_path), load_yaml(cfg_path))
+        log = setup_logging("cli", project_root_for(cfg_path), load_config(cfg_path))
 
     passthrough = list(args.args)
     if passthrough and passthrough[0] == "--":

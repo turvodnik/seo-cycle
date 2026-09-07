@@ -9,7 +9,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, write_text
+from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, require_section, write_text
 
 
 BEGIN = "# BEGIN seo-cycle managed project MCP"
@@ -116,7 +116,8 @@ def ensure_gitignore(project_root: pathlib.Path) -> bool:
 
 
 def build_report(cfg_path: pathlib.Path, write: bool, server_name: str) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     local_config = project_root / ".codex" / "config.toml"
     enabled = is_wordpress_project(cfg)

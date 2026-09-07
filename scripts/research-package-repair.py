@@ -11,7 +11,7 @@ import sys
 from typing import Any
 
 from research_package_repair_core import print_report, resolve_package, write_json, write_text
-from seo_cycle_core.config import find_config, load_yaml, package_project_root
+from seo_cycle_core.config import find_config, load_config, package_project_root
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("research-package-repair")
@@ -166,7 +166,7 @@ def main() -> int:
     project_root = package_project_root(package)
     cfg_path = find_config(project_root)
     global log
-    log = setup_logging("research-package-repair", project_root, load_yaml(cfg_path) if cfg_path else {})
+    log = setup_logging("research-package-repair", project_root, load_config(cfg_path) if cfg_path else {})
     report = build_report(package, args.write)
     if args.write:
         write_outputs(package, report)

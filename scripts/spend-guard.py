@@ -17,7 +17,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import dump_yaml, coerce_int, config_section, require_config, load_config
+from seo_cycle_core.config import coerce_int, config_section, dump_yaml, load_config, require_config, require_section
 
 
 CONFIG_SEARCH_PATHS = [
@@ -470,6 +470,7 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
     # OTHER paths it's used for (tool_budget, policy files) — out of this
     # ticket's F-39 boundary.
     cfg = require_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     tool_budget = load_yaml(policy_path(cfg, project_root, "tool_budget", "seo/tool-budget.yaml"))
     tool_stack = load_policy_json(cfg, project_root, "tool_stack_report", "seo/setup/tool-stack-report.json")
     month = current_month()

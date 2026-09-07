@@ -24,7 +24,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, project_root_for
+from seo_cycle_core.config import find_config, load_config, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("geo-citation-log")
@@ -123,7 +123,14 @@ def main(argv: list[str] | None = None) -> int:
     # ledger under project_root), but "a config file is present" is not the
     # same claim as "the config is not garbage" — validate it parses, even
     # though the parsed value itself is unused below.
-    load_yaml(cfg_path)
+    #
+    # T-093 (Б2 remainder): T-092's `load_yaml()` here caught unparseable
+    # YAML but was still LENIENT on an empty/comment-only file (returns
+    # `{}` silently, same as a missing file) — `--record`/`--import-audit`
+    # still ran and wrote to the ledger over a config that exists but is
+    # empty. `load_config()` closes that gap too (same validation-only
+    # call, return still discarded).
+    load_config(cfg_path)
     project_root = project_root_for(cfg_path)
     now = dt.datetime.now().isoformat(timespec="seconds")
 

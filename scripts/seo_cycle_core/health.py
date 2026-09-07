@@ -44,7 +44,7 @@ import pathlib
 import sys
 from typing import Any, Callable, Sequence
 
-from .config import find_config, load_yaml, project_root_for
+from .config import find_config, load_config, project_root_for, require_section
 from .reports import write_report_bundle
 
 MISSING_CONFIG_MSG = "ERROR: seo-cycle.yaml not found in {cwd}"
@@ -124,7 +124,14 @@ def _run_simple(spec: HealthSpec) -> int:
     if not cfg_path or not cfg_path.exists():
         print(MISSING_CONFIG_MSG.format(cwd=pathlib.Path.cwd()), file=sys.stderr)
         return 2
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    # T-093 круг 2 (R-3, независимый гейт): все `style="simple"` вызывающие
+    # (`gbp-health.py`, `google-ads-health.py`, `merchant-health.py`,
+    # `yandex-business-health.py`, `yandex-direct-health.py`) кладут
+    # `cfg.get("project", {})` прямо в отчёт без проверки формы — на
+    # `project: null` печатали заголовок отчёта с пустой идентичностью и
+    # `rc=0`. Один вызов здесь закрывает класс для всех пяти разом.
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     report = spec.build_report(cfg)
     if args.write:
@@ -161,7 +168,7 @@ def _run_policy(spec: HealthSpec) -> int:
 
     report = spec.build_report(cfg_path, args)
     if args.write:
-        paths = spec.output_paths(load_yaml(cfg_path), project_root_for(cfg_path))
+        paths = spec.output_paths(load_config(cfg_path), project_root_for(cfg_path))
         write_report_bundle(paths, spec.render_markdown(report), report)
         print(f"Wrote {paths['markdown']}")
     elif args.format == "json":

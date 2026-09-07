@@ -212,14 +212,31 @@ class CliSectionAccessTest(unittest.TestCase):
         # still complete (its output doesn't otherwise depend on `project`
         # being well-formed) but it must NOT do so silently — `config_section`
         # is required to name the offending key in stderr.
+        #
+        # T-093 круг 2 (independent gate, R-2, 2026-09-07): `cmd_status`'s
+        # OWN sections (снапшот/triggers/loops) stay soft on purpose — they
+        # print above unconditionally, proven below — but its FINAL section
+        # delegates to `project-journey.py` (`return
+        # run_script("project-journey.py", args, project)`), which круг 2
+        # gave a real `require_section(cfg, "project", cfg_path)` (R-2: it
+        # was writing files with a fake identity, `rc=0`, no test locking
+        # that in as a decision — a bug, not a contract). `status` composing
+        # a hard-failing sub-command now correctly surfaces that failure
+        # instead of masking it — `rc=0` here would be the ORIGINAL Б2/F-3
+        # symptom this whole ticket exists to close, one level up. The
+        # partial-output half of the original claim ("does not silently
+        # swallow") still holds and is asserted below.
         proc = run_cli(["status"], cwd=self.root)
         self.assertNotIn("Traceback", proc.stdout + proc.stderr)
         self.assertNotIn("AttributeError", proc.stdout + proc.stderr)
-        self.assertEqual(proc.returncode, 0)
+        self.assertNotEqual(proc.returncode, 0)
         # T-067 round 3 (second gate, §7): a bare `assertIn("str", stderr)`
         # is too loose — "str" is a substring of plenty of unrelated
         # messages. Assert the exact warning prefix `config_section` prints.
         self.assertIn("WARNING: конфиг: раздел 'project' задан как str", proc.stderr)
+        # The command's own sections ran and printed before the delegated
+        # failure — not a silent, immediate exit(2).
+        self.assertIn("снапшот:", proc.stdout)
 
     def test_validate_on_project_as_string_reports_error_not_traceback(self) -> None:
         proc = run_cli(["validate"], cwd=self.root)

@@ -23,7 +23,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, project_root_for
+from seo_cycle_core.config import find_config, load_config, project_root_for, require_section
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.reports import write_report_bundle
 
@@ -205,7 +205,8 @@ def main() -> int:
     if not cfg_path or not cfg_path.exists():
         print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
         return 2
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     global log
     log = setup_logging("yml-feed-audit", project_root, cfg)

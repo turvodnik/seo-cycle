@@ -25,7 +25,7 @@ import sys
 from typing import Any
 
 from seo_cycle_core.ads import ledger_preflight, ledger_record  # generic ledger helpers
-from seo_cycle_core.config import config_section, find_config, load_yaml, nested_get, project_root_for, skill_root
+from seo_cycle_core.config import config_section, find_config, load_config, load_yaml, nested_get, project_root_for, require_section, skill_root
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.rag import GLOBAL_DB, embedding_env, index_project, index_stats, open_db, rag_db_path
 from seo_cycle_core.registry import registry_path
@@ -102,7 +102,8 @@ def main() -> int:
         if not cfg_path or not cfg_path.exists():
             print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
             return 2
-        cfg = load_yaml(cfg_path)
+        cfg = load_config(cfg_path)
+        require_section(cfg, "project", cfg_path)
         report_root = project_root_for(cfg_path)
         global log
         log = setup_logging("rag-index", report_root, cfg)

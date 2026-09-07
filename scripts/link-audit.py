@@ -12,7 +12,7 @@ import sys
 import urllib.parse
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, require_section
 from seo_cycle_core.technical_artifacts import write_technical_report
 
 
@@ -187,7 +187,8 @@ def summarize(rows: list[dict[str, Any]], target_url: str | None) -> tuple[dict[
 
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     target_url = args.url or f"https://{nested_get(cfg, 'project.domain') or ''}/"
     raw_payload = load_json(args.input_json)
