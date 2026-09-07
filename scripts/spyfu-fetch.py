@@ -61,6 +61,10 @@ cpm_arg = nonneg_finite_arg("--cpm")
 ttl_arg = nonneg_finite_arg("--ttl")
 
 API_BASE = "https://api.spyfu.com/apis"
+# R4-1 (независимый гейт, круг 4→5): этот список больше не решает, какие
+# поля защищены — `usage_ledger.load_usage()` проверяет каждое числовое
+# поле файла по типу значения, а не по имени. Список только заполняет нули
+# для пустого файла (см. dataforseo-fetch.py для полного объяснения).
 USAGE_FIELDS = ("spent_usd", "rows")
 RATE_DELAY = 0.5
 
@@ -105,8 +109,9 @@ def usage_file(out_dir: pathlib.Path) -> pathlib.Path:
 
 
 def load_usage(out_dir: pathlib.Path) -> dict:
-    """Месячный учёт трат. Нечитаемый/повреждённый файл (включая NaN/Infinity/
-    отрицательный spent_usd или rows, испорченный month) поднимает
+    """Месячный учёт трат. Нечитаемый/повреждённый файл, ЛЮБОЕ числовое
+    поле (не только spent_usd/rows — по типу значения, R4-1) с
+    NaN/Infinity/отрицательным значением, испорченный month — поднимает
     UsageLedgerError вместо тихого «потрачено 0» (F-12)."""
     return _shared_load_usage(out_dir, USAGE_FIELDS)
 

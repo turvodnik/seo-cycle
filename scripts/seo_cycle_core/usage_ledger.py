@@ -98,9 +98,32 @@ def load_usage(
     A missing file, or a file whose stored month is not the current one, is
     a legitimate empty state: `{"month": <current>, <field>: 0.0, ...}`.
 
-    A PRESENT file that is unreadable, not a JSON object, has a garbled
-    `month`, or any of `numeric_fields` failing `finite_nonneg` raises
-    `UsageLedgerError` — never a silent zero.
+    A PRESENT file that is unreadable, not a JSON object, or has a garbled
+    `month` raises `UsageLedgerError` — never a silent zero. Two layers of
+    numeric validation, both raising the same error:
+
+    1. `numeric_fields` — the caller's KNOWN counters (declared by name,
+       since the caller does untyped arithmetic on them like `u["calls"] +
+       1` and needs them to exist as numbers, not just be finite/non-negative
+       numbers). A wrong TYPE here (a string/list/etc. where a number
+       belongs) is rejected, same as a bad value.
+    2. T-066 R4-1 (independent gate, round 4→5): EVERY OTHER field in the
+       file whose JSON value already IS a number (`int`/`float`, not `bool`)
+       is checked for `finite_nonneg` too, regardless of whether the caller
+       declared it in `numeric_fields`. Round 4 added a brand-new stop
+       (`cost_unknown_calls`) without adding it to that list — the exact
+       class of bug this module exists to prevent (F-11) recurred on a line
+       written to fix F-11's descendant, because the OLD version of this
+       function validated ONLY `numeric_fields`. A list a human must
+       remember to extend for every new stop is not a defence, it is a
+       to-do item that will eventually be missed again. Layer 2 makes that
+       impossible: recognition is "looks like money/quota arithmetic" (the
+       value's own Python type), not "somebody enumerated it by name" — a
+       future seventh stop is covered automatically, by construction, the
+       moment its value lands in this file, with no list to remember. A
+       non-numeric field (`month`, or any future free-text/note field) is
+       exempt by the same rule: it is simply not a number, so it can never
+       have silently opted out of a check that never applied to it.
     """
     f = usage_file(out_dir, name)
     month = current_month()
@@ -113,9 +136,26 @@ def load_usage(
         raise UsageLedgerError(f"{f}: {e}") from e
     if not isinstance(data, dict):
         raise UsageLedgerError(f"{f}: ожидался JSON-объект, получено {type(data).__name__}")
+    # `numeric_fields` are the caller's KNOWN counters: for those, a wrong
+    # TYPE (a string/list/etc. where a number belongs) is rejected too, not
+    # just a bad value — a caller relies on these existing and being numbers
+    # to do arithmetic (`u["calls"] + 1`) without a type check of its own.
     for field in numeric_fields:
-        if field in data and not finite_nonneg(data[field]):
+        if field in data and (not isinstance(data[field], (int, float)) or isinstance(data[field], bool)
+                               or not finite_nonneg(data[field])):
             raise UsageLedgerError(f"{f}: {field} непригоден для арифметики ({data[field]!r})")
+    # Everything else: no caller declared it, so there is no expected type to
+    # enforce — but ANY field whose value already IS a number (int/float, not
+    # bool) is checked for finite_nonneg regardless of its name. This is the
+    # R4-1 fix: a field nobody remembered to add to `numeric_fields` (a new
+    # stop introduced later, in this codebase or a fork of it) still cannot
+    # poison arithmetic silently — recognition is by the value's own type,
+    # not by an enumerated name a human had to remember to extend.
+    for field, value in data.items():
+        if field == "month" or field in numeric_fields:
+            continue
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and not finite_nonneg(value):
+            raise UsageLedgerError(f"{f}: {field} непригоден для арифметики ({value!r})")
     stored_month = data.get("month")
     if not isinstance(stored_month, str) or not MONTH_RE.match(stored_month):
         raise UsageLedgerError(f"{f}: поле month испорчено ({stored_month!r})")

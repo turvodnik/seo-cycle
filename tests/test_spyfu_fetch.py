@@ -321,6 +321,75 @@ class LedgerCorruptionTest(unittest.TestCase):
         self.assertAlmostEqual(usage["spent_usd"], 1 / 1000.0 * 0.50)
 
 
+class PoisonedCostUnknownCallsTest(unittest.TestCase):
+    """R4-1/R4-2 (независимый гейт, круг 4→5): у `spyfu-fetch.py` этот стоп
+    был единственным во всём диффе круга 4, не покрытым НИ ОДНИМ из 832
+    тестов (гейт круга 4 показал: удалить строку целиком — ничего не
+    краснеет). `cost_unknown_calls` не входит в `USAGE_FIELDS =
+    ("spent_usd", "rows")`, поэтому старая `load_usage()` (проверка только по
+    имени из списка) пропускала его отравленное значение молча — F-11 в
+    шестой раз. Свой тест на КАЖДОГО клиента отдельно (не «раз соседа
+    покрыли — и этот защищён»): дыра здесь была именно потому, что покрытие
+    жило только у dataforseo."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-spyfu-cuc-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.args = argparse_namespace(out=str(self.tmp), budget=40.0, ttl=30.0, force=False)
+
+    def _write(self, **fields) -> None:
+        payload = {"month": spyfu.current_month(), "spent_usd": 0.0, "rows": 0}
+        payload.update(fields)
+        (self.tmp / "_usage.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    def test_negative_cost_unknown_calls_blocks_paid_call(self) -> None:
+        """Самое опасное значение: `-5 + 1 - 1 = -5`, стоп `> 0` не
+        сработает больше НИКОГДА (самоподдерживающаяся дыра, R4-1)."""
+        self._write(cost_unknown_calls=-5)
+        with mock.patch.object(spyfu, "call") as called:
+            with self.assertRaises(SystemExit):
+                spyfu.run("b64", "some/path", 0.50, {"domain": "x"}, self.args, lambda r: None)
+            called.assert_not_called()
+
+    def test_nan_cost_unknown_calls_blocks_paid_call(self) -> None:
+        (self.tmp / "_usage.json").write_text(
+            '{"month": "%s", "spent_usd": 0.0, "rows": 0, "cost_unknown_calls": NaN}'
+            % spyfu.current_month(), encoding="utf-8")
+        with mock.patch.object(spyfu, "call") as called:
+            with self.assertRaises(SystemExit):
+                spyfu.run("b64", "some/path", 0.50, {"domain": "x"}, self.args, lambda r: None)
+            called.assert_not_called()
+
+    def test_infinity_failed_calls_is_treated_as_corrupt(self) -> None:
+        """`failed_calls` — второй новый счётчик круга 4, тоже вне
+        `USAGE_FIELDS`. Не сам по себе денежный стоп, но проходит через ту же
+        `load_usage()` — если бы проверка осталась по имени из списка, эта
+        отрава читалась бы молча в память процесса вместе со `spent_usd`."""
+        (self.tmp / "_usage.json").write_text(
+            '{"month": "%s", "spent_usd": 0.0, "rows": 0, "failed_calls": Infinity}'
+            % spyfu.current_month(), encoding="utf-8")
+        with self.assertRaises(spyfu.UsageLedgerError):
+            spyfu.load_usage(self.tmp)
+
+    def test_legitimate_positive_value_still_blocks_as_designed(self) -> None:
+        """Положительный контроль: значение 1 обязано блокировать (сам стоп
+        R3-1 не сломан этим фиксом)."""
+        self._write(cost_unknown_calls=1)
+        with mock.patch.object(spyfu, "call") as called:
+            with self.assertRaises(SystemExit):
+                spyfu.run("b64", "some/path", 0.50, {"domain": "x"}, self.args, lambda r: None)
+            called.assert_not_called()
+
+    def test_zero_value_lets_the_paid_call_through(self) -> None:
+        """Контроль в другую сторону: легитимный ноль обязан пропускать
+        вызов — иначе стенд ловит сломанный тест, не дыру."""
+        self._write(cost_unknown_calls=0)
+        with mock.patch.object(spyfu, "call", return_value=domain_stats_response(1)):
+            spyfu.run("b64", "some/path", 0.50, {"domain": "x"}, self.args, lambda r: None)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["cost_unknown_calls"], 0)
+
+
 class SaveUsageAtomicityTest(unittest.TestCase):
     """F-12: старая запись была `write_text` напрямую в целевой файл — обрыв
     процесса на середине записи оставляет полуфайл. Теперь — общий модуль

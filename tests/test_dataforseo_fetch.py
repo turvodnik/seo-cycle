@@ -474,6 +474,78 @@ class LedgerCorruptionTest(unittest.TestCase):
             called.assert_not_called()
 
 
+class PoisonedCostUnknownCallsTest(unittest.TestCase):
+    """R4-1 (независимый гейт, круг 4→5): `cost_unknown_calls` — стоп,
+    введённый write-ahead'ом круга 4, — не входит в `USAGE_FIELDS`
+    (`("spent_usd", "calls")`), поэтому старая версия `load_usage()`
+    (проверявшая только перечисленные по имени поля) пропускала его
+    NaN/Infinity/отрицательное значение без единой проверки — F-11 в шестой
+    раз, на строке, написанной, чтобы обрыв ловился лучше, а не хуже. Фикс:
+    `usage_ledger.load_usage()` проверяет каждое числовое поле по ТИПУ
+    значения, а не по имени из списка — этот тест ловит именно эту дыру у
+    `dataforseo-fetch.py`, отдельно от `spyfu-fetch.py` (R4-2 круга 4:
+    покрытие соседа не защищает этот клиент)."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-dfs-cuc-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.args = dfs.build_parser().parse_args(["--out", str(self.tmp), "volume", "vata"])
+
+    def _write(self, cost_unknown_calls) -> None:
+        # Текущий месяц, не "2099-01": для НЕотравленных значений (1, 0)
+        # файл обязан пройти проверку month == current и остаться как есть —
+        # "2099-01" из соседних тестов класса LedgerCorruptionTest годится
+        # только когда значение само по себе отравлено и падает ДО сверки
+        # месяца.
+        (self.tmp / "_usage.json").write_text(
+            json.dumps({"month": dfs.datetime.date.today().strftime("%Y-%m"), "spent_usd": 0.0,
+                        "calls": 0, "cost_unknown_calls": cost_unknown_calls}), encoding="utf-8")
+
+    def test_nan_cost_unknown_calls_is_treated_as_corrupt(self) -> None:
+        (self.tmp / "_usage.json").write_text(
+            '{"month": "2099-01", "spent_usd": 0.0, "calls": 0, "cost_unknown_calls": NaN}',
+            encoding="utf-8")
+        with self.assertRaises(dfs.UsageLedgerError):
+            dfs.load_usage(self.tmp)
+
+    def test_negative_cost_unknown_calls_blocks_paid_call(self) -> None:
+        """Отрицательное значение — самое опасное: `-5 + 1 - 1 = -5`, стоп
+        `> 0` не сработает больше НИКОГДА (самоподдерживающаяся дыра, R4-1)."""
+        self._write(-5)
+        with mock.patch.object(dfs, "call") as called:
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "some/path", {"k": 1}, self.args)
+            called.assert_not_called()
+
+    def test_infinity_cost_unknown_calls_blocks_paid_call(self) -> None:
+        (self.tmp / "_usage.json").write_text(
+            '{"month": "2099-01", "spent_usd": 0.0, "calls": 0, "cost_unknown_calls": Infinity}',
+            encoding="utf-8")
+        with mock.patch.object(dfs, "call") as called:
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "some/path", {"k": 1}, self.args)
+            called.assert_not_called()
+
+    def test_legitimate_positive_value_still_blocks_as_designed(self) -> None:
+        """Положительный контроль: значение 1 обязано блокировать (это и есть
+        стоп R2-3/R3-1), стенд не сломан — R4-1 закрывает ТОЛЬКО отравленные
+        значения, не сам стоп."""
+        self._write(1)
+        with mock.patch.object(dfs, "call") as called:
+            with self.assertRaises(SystemExit):
+                dfs.fetch("b64", "some/path", {"k": 1}, self.args)
+            called.assert_not_called()
+
+    def test_zero_value_lets_the_paid_call_through(self) -> None:
+        """Положительный контроль в другую сторону: легитимный ноль обязан
+        пропускать вызов — иначе стенд ловит не дыру, а сломанный тест."""
+        self._write(0)
+        with mock.patch.object(dfs, "call", return_value=volume_response(0.01)):
+            dfs.fetch("b64", "some/path", {"k": 1}, self.args)
+        usage = json.loads((self.tmp / "_usage.json").read_text(encoding="utf-8"))
+        self.assertEqual(usage["cost_unknown_calls"], 0)
+
+
 class SaveUsageAtomicityTest(unittest.TestCase):
     """T-059: атомарность (temp-файл + os.replace) не была покрыта ни одним тестом —
     единственная из мутаций ревью, которая ничего не уронила. Проверяем поведение,
