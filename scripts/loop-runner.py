@@ -24,7 +24,7 @@ import subprocess
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, package_project_root, write_text
+from seo_cycle_core.config import find_config, load_config, package_project_root, write_text
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.loop import (
     TARGETS,
@@ -237,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
 
     project_root = package_project_root(path if path.is_dir() else path.parent)
     cfg_path = find_config(project_root)
-    cfg = load_yaml(cfg_path) if cfg_path else {}
+    cfg = load_config(cfg_path) if cfg_path else {}
     global log
     log = setup_logging("loop-runner", project_root, cfg)
 

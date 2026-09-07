@@ -27,7 +27,7 @@ import sys
 from typing import Any
 
 from seo_cycle_core.ads import primary_platform
-from seo_cycle_core.config import config_section, find_config, load_yaml, nested_get, package_project_root, write_text
+from seo_cycle_core.config import config_section, find_config, load_config, nested_get, package_project_root, write_text
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("ads-draft-builder")
@@ -272,7 +272,7 @@ def main() -> int:
         return 2
     project_root = package_project_root(package)
     cfg_path = find_config(project_root)
-    cfg = load_yaml(cfg_path) if cfg_path else {}
+    cfg = load_config(cfg_path) if cfg_path else {}
     global log
     log = setup_logging("ads-draft-builder", project_root, cfg)
 

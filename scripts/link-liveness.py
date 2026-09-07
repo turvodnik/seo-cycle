@@ -29,7 +29,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, write_text
+from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, require_section, write_text
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("link-liveness")
@@ -97,7 +97,8 @@ def main(argv: list[str] | None = None) -> int:
         print("ERROR: seo-cycle.yaml not found", file=sys.stderr)
         return 2
     project_root = project_root_for(cfg_path)
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     global log
     log = setup_logging("link-liveness", project_root, cfg)
     own_domain = re.sub(r"^https?://", "", str(nested_get(cfg, "project.domain", "") or "")).strip("/")

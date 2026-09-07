@@ -17,7 +17,7 @@ import json
 import pathlib
 import sys
 
-from seo_cycle_core.config import find_config, load_yaml, project_root_for
+from seo_cycle_core.config import find_config, load_config, project_root_for
 from seo_cycle_core.rag import GLOBAL_DB, open_db, rag_db_path, search
 
 SOURCE_TYPES = ("source_pack", "triplet", "distillate", "draft", "mirror")
@@ -43,7 +43,7 @@ def main() -> int:
         if not cfg_path:
             print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
             return 2
-        db_path = rag_db_path(project_root_for(cfg_path), load_yaml(cfg_path))
+        db_path = rag_db_path(project_root_for(cfg_path), load_config(cfg_path))
 
     if not db_path.exists():
         print(f"RAG index not found at {db_path} — run `seo-cycle run script rag-index --write` first.",

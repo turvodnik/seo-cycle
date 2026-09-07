@@ -19,7 +19,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, rel_display, rel_path
+from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, rel_display, rel_path, require_section
 from seo_cycle_core.technical_artifacts import write_technical_report
 
 
@@ -150,7 +150,8 @@ def write_submission_csv(project_root: pathlib.Path, rows: list[dict[str, Any]],
 
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     domain = nested_get(cfg, "project.domain") or ""
     targets = urls_from_queue(project_root, args)

@@ -19,7 +19,7 @@ import shutil
 import sys
 from typing import Any
 
-from seo_cycle_core.config import dump_yaml, find_config, load_yaml, project_root_for, write_text
+from seo_cycle_core.config import dump_yaml, find_config, load_config, load_yaml, project_root_for, require_section, write_text
 
 
 YES_ANSWERS = {"yes", "y", "true", "1", "да", "д", "yes_report_only", "yes_for_codex_projects"}
@@ -131,7 +131,8 @@ def build_report(
     apply: bool = False,
 ) -> dict[str, Any]:
     project_root = project_root_for(cfg_path)
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     template_policy = template_policy_files()
     q_path = questionnaire_path(project_root, answers)
     rows = read_questionnaire(q_path)

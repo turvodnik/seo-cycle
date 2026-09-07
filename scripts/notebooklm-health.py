@@ -8,7 +8,7 @@ import datetime as dt
 import pathlib
 from typing import Any
 
-from seo_cycle_core.config import load_yaml, nested_get, policy_path, project_root_for
+from seo_cycle_core.config import load_config, nested_get, policy_path, project_root_for, require_section
 from seo_cycle_core.health import HealthSpec, run_health
 from seo_cycle_core.providers import notebooklm_health
 
@@ -23,7 +23,8 @@ def output_paths(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, p
 
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     notebook_url = args.notebook_url or nested_get(cfg, "expert_sources.notebooklm_url")
     health = notebooklm_health(

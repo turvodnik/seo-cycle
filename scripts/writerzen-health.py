@@ -10,7 +10,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, policy_path, project_root_for, rel_path
+from seo_cycle_core.config import find_config, load_config, nested_get, policy_path, project_root_for, rel_path, require_section
 from seo_cycle_core.reports import write_report_bundle
 
 
@@ -50,7 +50,8 @@ def export_files(import_dir: pathlib.Path) -> list[pathlib.Path]:
 
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     provider_cfg = cfg.get("writerzen_provider", {}) if isinstance(cfg.get("writerzen_provider"), dict) else {}
     configured_import_dir = provider_cfg.get("import_dir") or DEFAULT_IMPORT_DIR
@@ -164,7 +165,8 @@ def main() -> int:
     if not cfg_path or not cfg_path.exists():
         print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
         return 2
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     report = build_report(cfg_path, args)
     if args.write:

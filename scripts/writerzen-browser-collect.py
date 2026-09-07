@@ -14,7 +14,7 @@ import sys
 import tempfile
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, rel_path, write_text
+from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, rel_path, write_text
 
 
 PROVIDER = "writerzen"
@@ -51,7 +51,7 @@ def run_command(command: list[str], cwd: pathlib.Path) -> dict[str, Any]:
 
 
 def build_plan(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
     project_root = project_root_for(cfg_path)
     provider_cfg = cfg.get("writerzen_provider", {}) if isinstance(cfg.get("writerzen_provider"), dict) else {}
     topic = args.topic or nested_get(cfg, "project.name") or nested_get(cfg, "project.domain") or "writerzen"

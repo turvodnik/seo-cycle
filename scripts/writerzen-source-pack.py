@@ -14,7 +14,7 @@ import sys
 from collections import Counter
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for, rel_path
+from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, rel_path, require_section
 from seo_cycle_core.source_artifacts import (
     compact_text,
     make_vector_record,
@@ -312,7 +312,8 @@ def render_markdown(distillate: dict[str, Any]) -> str:
 
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     region = args.region or nested_get(cfg, "locale.country") or nested_get(cfg, "locale.region") or "global"
     topic = args.topic or nested_get(cfg, "project.name") or nested_get(cfg, "project.domain") or "writerzen"

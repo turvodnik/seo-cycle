@@ -9,7 +9,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, require_section
 from seo_cycle_core.providers import notebooklm_health
 from seo_cycle_core.source_artifacts import (
     compact_text,
@@ -42,7 +42,8 @@ def heading_lines(text: str, limit: int = 20) -> list[str]:
 
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     notebook_url = args.notebook_url or nested_get(cfg, "expert_sources.notebooklm_url") or "notebooklm"
     topic = args.topic or args.source_id or "expert-source-pack"

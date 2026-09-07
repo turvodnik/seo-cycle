@@ -22,7 +22,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from vnext_audit_core import find_config, load_yaml, policy_path, project_root_for, rel_path, write_text
+from vnext_audit_core import find_config, load_config, policy_path, project_root_for, rel_path, write_text
 
 
 BOT_CATALOG: list[dict[str, str]] = [
@@ -337,7 +337,7 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
     project_root = project_root_for(cfg_path)
     project = cfg.get("project", {}) if isinstance(cfg.get("project"), dict) else {}
     target_seed = args.url or args.domain or project.get("domain")

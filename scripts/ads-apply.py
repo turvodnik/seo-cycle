@@ -36,7 +36,7 @@ from seo_cycle_core.ads import (
     require_enabled,
 )
 from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend
-from seo_cycle_core.config import coerce_float, coerce_int, find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import coerce_float, coerce_int, find_config, load_config, nested_get, project_root_for
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("ads-apply")
@@ -203,7 +203,7 @@ def main() -> int:
     if not cfg_path:
         print(f"ERROR: seo-cycle.yaml not found in {pathlib.Path.cwd()}", file=sys.stderr)
         return 2
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
     project_root = project_root_for(cfg_path)
     global log
     log = setup_logging("ads-apply", project_root, cfg)

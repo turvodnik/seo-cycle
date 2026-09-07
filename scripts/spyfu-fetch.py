@@ -39,7 +39,7 @@ Auth: Basic base64(API_SpyFu_ID:API_SpyFu_secret_key) — собирается �
 from __future__ import annotations
 import argparse, base64, hashlib, json, os, pathlib, sys, time, urllib.error, urllib.parse, urllib.request
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get
+from seo_cycle_core.config import find_config, load_config, nested_get
 from seo_cycle_core.spend_guard import SpendNotArmedError, armed_spend
 from seo_cycle_core.usage_ledger import (
     ApiCallError,
@@ -125,7 +125,7 @@ def effective_budget(args) -> float:
     if cfg_path is None:
         return args.budget
     try:
-        cfg = load_yaml(cfg_path)
+        cfg = load_config(cfg_path)
     except Exception as e:
         sys.exit(f"ERROR: {cfg_path} не парсится как YAML ({e}). Почини конфиг или "
                  f"убери секцию governance.subscriptions.spyfu, чтобы работать "

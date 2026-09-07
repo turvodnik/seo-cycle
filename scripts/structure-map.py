@@ -21,7 +21,7 @@ import sys
 import urllib.parse
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, project_root_for, write_text
+from seo_cycle_core.config import find_config, load_config, project_root_for, write_text
 from seo_cycle_core.html_report import html_page
 from seo_cycle_core.logging_setup import setup_logging
 
@@ -134,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg_path = find_config(pathlib.Path.cwd())
     project_root = project_root_for(cfg_path) if cfg_path else pathlib.Path.cwd()
     global log
-    log = setup_logging("structure-map", project_root, load_yaml(cfg_path) if cfg_path else {})
+    log = setup_logging("structure-map", project_root, load_config(cfg_path) if cfg_path else {})
 
     urls: list[dict[str, Any]] = []
     source = args.source
