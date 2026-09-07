@@ -76,6 +76,23 @@ PROJECT_REQUIRED_SCRIPTS = [
     "writerzen-browser-collect", "writerzen-health", "writerzen-source-pack",
     "xmlriver-health", "yandex-direct-fetch", "yandex-recrawl-submit",
     "yml-feed-audit",
+    # Круг 2 (независимый гейт, R-2/R-3, 2026-09-07): класс был закрыт
+    # перечнем, не по всем файлам — reviewer нашёл serpstat-audit.py (grep
+    # исполнителя сам его находил, но файл не тронули) и 8 подкоманд CLI
+    # (`seo-cycle context|report|kpi|spend|ledger|forecast|journey`,
+    # `geo-log` — легитимное исключение, см. NO_PROJECT_NEEDED_SCRIPTS),
+    # которые всё ещё писали файлы на `project: null` через "мягкую
+    # деградацию" `config_section()` без единого теста, закрепляющего это
+    # как решение (значит это был баг, не контракт).
+    "automation-recommender", "budget-mix-planner", "client-report",
+    "context-pack", "kpi-contract", "position-progress", "project-journey",
+    "redirect-map-audit", "resolve-sources", "seo-forecast",
+    "serpstat-audit", "setup-gap-audit", "spend-guard", "token-waste-audit",
+    "usage-ledger",
+    # Общий модуль `seo_cycle_core/health.py` (`style="simple"`, R-3) —
+    # один общий фикс закрывает все пять разом.
+    "gbp-health", "google-ads-health", "merchant-health",
+    "yandex-business-health", "yandex-direct-health",
 ]
 # ^ 35 of these got `require_section()` added by THIS ticket (see the
 # module docstring, part A). The other 8 (ads-apply, ads-draft-builder,
@@ -97,7 +114,13 @@ PROJECT_REQUIRED_SCRIPTS = [
 #     LOCATION, never reads a field out of it.
 #   - redirect-map-audit.py / rag-query.py: same pattern — `load_config`
 #     is either validation-only or feeds an unrelated `data_store.*` key.
-NO_PROJECT_NEEDED_SCRIPTS = ["geo-citation-log", "redirect-map-audit", "rag-query"]
+NO_PROJECT_NEEDED_SCRIPTS = ["geo-citation-log", "rag-query"]
+# ^ redirect-map-audit.py moved to PROJECT_REQUIRED_SCRIPTS in круг 2: it
+# still never reads `project.*` for its own content, but the packet's
+# acceptance criterion is "zero files created" unconditionally, and it
+# wrote 10 files on `project: null` (reviewer 🟡, круг 2 closed it via
+# `require_section` even though the value itself stays unused — same
+# validation-only pattern as `geo-citation-log.py`).
 
 # Extra CLI args a script needs before it will even reach its config read.
 EXTRA_ARGS = {
@@ -124,6 +147,12 @@ WRITE_FLAG_SCRIPTS = {
     "link-liveness", "merchant-fetch", "technical-site-audit",
     "woo-yml-feed", "wp-content-pull", "writerzen-source-pack",
     "yandex-direct-fetch", "yandex-recrawl-submit", "yml-feed-audit",
+    # Круг 2: the 17-writing-scripts finding (R-2) — these only reveal the
+    # file-creation half of the bug with `--write` passed.
+    "automation-recommender", "budget-mix-planner", "client-report",
+    "context-pack", "kpi-contract", "position-progress", "project-journey",
+    "redirect-map-audit", "seo-forecast", "serpstat-audit",
+    "setup-gap-audit", "spend-guard", "token-waste-audit", "usage-ledger",
 }
 
 # The 49+3 scripts touched by part B (load_yaml -> load_config) — used to
@@ -266,27 +295,75 @@ class LegitNoConfigExceptionsTest(_TempProjectMixin, unittest.TestCase):
 
 
 class RequireSectionRegressionGuardTest(unittest.TestCase):
-    """The regression this ticket introduced and reverted mid-flight: a
-    shared `load_config()`-level check broke `status`/`validate` and 4
-    other commands that are DESIGNED to degrade gracefully on a malformed
-    `project:` (soft `config_section()`, not a hard exit). This test
-    pins that contract so a future re-introduction of a global check is
-    caught immediately, not three QA rounds later."""
+    """The regression this ticket introduced and reverted mid-flight in
+    круг 1: a shared `load_config()`-level project-shape check broke
+    `status`/`validate` and several other commands that were, AT THAT
+    TIME, designed to degrade gracefully on a malformed `project:` (soft
+    `config_section()`, not a hard exit).
 
-    def test_cli_status_tolerates_project_as_string(self) -> None:
+    круг 2 (independent gate, R-2) then found that "designed to degrade
+    gracefully" was true for some of those commands only by ACCIDENT — no
+    test anywhere locked it in as a decision, and several (`automation-
+    recommender.py`, `context-pack.py`, and `status`'s own delegation to
+    `project-journey.py`) were simply unfixed files, not a contract. Круг
+    2 added `require_section()` to them too. As of круг 2, EVERY command
+    from круг 1's list is intentionally strict again — so the invariant
+    left worth pinning is narrower and more precise than "these five
+    commands stay soft forever": `load_config()` ITSELF must never gain a
+    global project-shape check again — only a per-call-site
+    `require_section()` may. Proven here the way круг 1 broke it: a
+    script that legitimately never reads `project.*`
+    (`geo-citation-log.py`, in `NO_PROJECT_NEEDED_SCRIPTS`) must still
+    tolerate a malformed `project:` section, because nothing in ITS code
+    calls `require_section` for it — if `load_config()` grew a global
+    check again, this specific script would start refusing too, exactly
+    the круг-1 regression, caught here without relying on any command's
+    UI-level soft/hard product decision."""
+
+    def test_load_config_itself_tolerates_project_as_string_when_caller_never_checks_it(self) -> None:
         d = pathlib.Path(tempfile.mkdtemp(prefix="t093-regguard-"))
         self.addCleanup(lambda: shutil.rmtree(d, ignore_errors=True))
         (d / "seo-cycle.yaml").write_text('project: "just a string"\n', encoding="utf-8")
         proc = subprocess.run(
-            [sys.executable, str(SCRIPTS / "seo_cycle_cli.py"), "status"],
+            [sys.executable, str(SCRIPTS / "geo-citation-log.py")],
             cwd=d, capture_output=True, text=True, timeout=30,
         )
         self.assertEqual(
             proc.returncode, 0,
-            f"seo_cycle_cli.py status must still soft-degrade on project-as-string (design predates this "
-            f"ticket, see test_config_robustness.py), got rc={proc.returncode}\n"
-            f"stdout: {proc.stdout[:400]}\nstderr: {proc.stderr[:400]}",
+            "geo-citation-log.py never reads project.* and calls no require_section — "
+            "load_config() must stay tolerant of a malformed project: section for it, "
+            "or the круг-1 global-check regression is back. "
+            f"got rc={proc.returncode}\nstdout: {proc.stdout[:400]}\nstderr: {proc.stderr[:400]}",
         )
+
+
+class SetupWizardExceptionsTest(unittest.TestCase):
+    """Круг 2 (R-2/R-3 full-repository sweep, `/private/tmp/full_sweep_r2.py`
+    — every `scripts/*.py` against `empty`/`project: null` with `--write`):
+    only 2 of 166 scripts still write files on a malformed config —
+    `project-intake-wizard.py` and `setup-onboarding.py`. Both are legitimate
+    by construction (T-090's own docstring: "intake wizard is a legitimate
+    empty-config boundary — it exists to CREATE a project's config"),
+    proven here rather than trusted from memory: their OUTPUT is exactly a
+    fresh config/onboarding artifact, not a fake report claiming an
+    established project's identity."""
+
+    def _assert_wizard_creates_config(self, script: str, created_marker: str) -> None:
+        d = pathlib.Path(tempfile.mkdtemp(prefix="t093-wizard-"))
+        self.addCleanup(lambda: shutil.rmtree(d, ignore_errors=True))
+        (d / "seo-cycle.yaml").write_text("project: null\n", encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / f"{script}.py"), "--write"],
+            cwd=d, capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(proc.returncode, 0, f"{script}.py --write should succeed as a setup wizard, got rc={proc.returncode}")
+        self.assertIn(created_marker, proc.stdout + proc.stderr + "\n".join(str(p) for p in d.rglob("*")))
+
+    def test_project_intake_wizard_creates_intake_not_a_fake_report(self) -> None:
+        self._assert_wizard_creates_config("project-intake-wizard", "project-intake")
+
+    def test_setup_onboarding_creates_playbook_not_a_fake_report(self) -> None:
+        self._assert_wizard_creates_config("setup-onboarding", "onboarding")
 
 
 if __name__ == "__main__":

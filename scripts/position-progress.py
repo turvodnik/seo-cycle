@@ -28,7 +28,7 @@ import sqlite3
 import sys
 from typing import Any
 
-from seo_cycle_core.config import config_section, find_config, load_yaml, nested_get, project_root_for, require_config, write_text
+from seo_cycle_core.config import config_section, find_config, load_yaml, nested_get, project_root_for, require_config, require_section, write_text
 from seo_cycle_core.html_report import bar, html_page, markdown_to_html_body
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.registry import registry_path
@@ -381,6 +381,7 @@ def main(argv: list[str] | None = None) -> int:
     # exists — require_config() additionally refuses an existing-but-empty
     # project config instead of writing a progress report over nothing.
     cfg = require_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     global log
     log = setup_logging("position-progress", project_root, cfg)
 

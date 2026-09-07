@@ -13,7 +13,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_config, project_root_for
+from seo_cycle_core.config import find_config, load_config, project_root_for, require_section
 from seo_cycle_core.technical_artifacts import write_technical_report
 
 
@@ -143,7 +143,7 @@ def analyze(rows: list[dict[str, str]], *, live: bool = False, timeout: float = 
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
     project_root = project_root_for(cfg_path)
-    load_config(cfg_path)
+    require_section(load_config(cfg_path), "project", cfg_path)
     if args.input:
         rows = read_redirects(pathlib.Path(args.input).expanduser(), args.base_url)
         summary, findings, raw = analyze(rows, live=args.live, timeout=args.timeout)

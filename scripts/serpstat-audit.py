@@ -17,7 +17,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from seo_cycle_core.config import find_config, load_yaml, nested_get, project_root_for
+from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, require_section
 from seo_cycle_core.spend_guard import armed_spend
 from seo_cycle_core.technical_artifacts import write_technical_report
 from seo_cycle_core.usage_ledger import bump_counter
@@ -206,7 +206,8 @@ def distill_serpstat(payload: dict[str, Any], action: str) -> tuple[dict[str, An
 
 
 def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, Any]:
-    cfg = load_yaml(cfg_path)
+    cfg = load_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     request = planned_request(args, cfg)
     warnings = request_warnings(request, args.action)

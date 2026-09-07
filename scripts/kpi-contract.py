@@ -33,10 +33,11 @@ from typing import Any
 from seo_cycle_core.config import (
     coerce_float,
     find_config,
-    require_config,
     nested_get,
     numeric,
     project_root_for,
+    require_config,
+    require_section,
     safe_round,
 )
 from seo_cycle_core.logging_setup import setup_logging
@@ -320,6 +321,7 @@ def main() -> int:
     # exactly the one thing that check didn't cover: an EXISTING but
     # empty/comment-only file writing a full report over nothing.
     cfg = require_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     global log
     log = setup_logging("kpi-contract", project_root, cfg)

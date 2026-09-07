@@ -10,7 +10,7 @@ unless `--allow-schedules` is explicitly passed.
 
 from __future__ import annotations
 
-from seo_cycle_core.config import dump_yaml, load_config
+from seo_cycle_core.config import require_section, dump_yaml, load_config
 
 import argparse
 import copy
@@ -497,6 +497,7 @@ def main() -> int:
         return 2
 
     cfg = load_yaml(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     intake = load_yaml(policy_path(cfg, project_root, "project_intake", "seo/project-intake.yaml"))
     automation_path = policy_path(cfg, project_root, "automation_policy", "seo/automation-policy.yaml")

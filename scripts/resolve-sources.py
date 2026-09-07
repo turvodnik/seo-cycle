@@ -23,7 +23,7 @@ resolve-sources.py — разворачивает региональный пр�
 from __future__ import annotations
 import argparse, datetime, json, pathlib, sys
 
-from seo_cycle_core.config import load_config
+from seo_cycle_core.config import require_section, load_config
 
 CONFIG_SEARCH_PATHS = [
     "seo-cycle.yaml", ".seo-cycle.yaml",
@@ -109,6 +109,7 @@ def main() -> int:
         return 2
     project_root = cfg_path.parent if cfg_path.parent.name != "seo" and cfg_path.parent.name != ".claude" else cfg_path.parent.parent
     cfg = load_yaml(cfg_path)
+    require_section(cfg, "project", cfg_path)
 
     profile_id = cfg.get("region_profile")
     legacy = profile_id is None

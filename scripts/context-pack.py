@@ -26,6 +26,7 @@ from seo_cycle_core.config import (
     project_root_for,
     rel_display,
     require_config,
+    require_section,
     skill_root,
 )
 from seo_cycle_core.context import build_context_manifest
@@ -285,6 +286,7 @@ def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route:
     # keep going): require_config() refuses (stderr + exit 2) instead of
     # writing a report over nothing.
     cfg = require_config(cfg_path)
+    require_section(cfg, "project", cfg_path)
     project_root = project_root_for(cfg_path)
     if task and refresh_route:
         run_task_router(cfg_path, project_root, task)

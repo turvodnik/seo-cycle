@@ -19,7 +19,7 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import coerce_float, load_config
+from seo_cycle_core.config import require_section, coerce_float, load_config
 
 
 CONFIG_SEARCH_PATHS = [
@@ -250,6 +250,7 @@ def build_questionnaire(gaps: list[dict[str, Any]]) -> dict[str, Any]:
 def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
     project_root = project_root_for(cfg_path)
     cfg = load_yaml(cfg_path)
+    require_section(cfg, "project", cfg_path)
     intake = load_yaml(policy_path(cfg, project_root, "project_intake", "seo/project-intake.yaml"))
     tool_stack = load_policy_json(cfg, project_root, "tool_stack_report", "seo/setup/tool-stack-report.md")
     spend_guard = load_policy_json(cfg, project_root, "spend_guard_report", "seo/setup/spend-guard.md")
