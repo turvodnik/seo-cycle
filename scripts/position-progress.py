@@ -31,6 +31,7 @@ from typing import Any
 from seo_cycle_core.config import config_section, find_config, load_yaml, nested_get, project_root_for, require_config, require_section, write_text
 from seo_cycle_core.html_report import bar, html_page, markdown_to_html_body
 from seo_cycle_core.logging_setup import setup_logging
+from seo_cycle_core.monitoring import sample_line, snapshot_sample
 from seo_cycle_core.registry import registry_path
 
 log = setup_logging("position-progress")
@@ -152,6 +153,34 @@ def delta_block(latest: dict[str, Any], reference: dict[str, Any] | None) -> dic
     return delta
 
 
+def overlap_block(prev: dict[str, float], curr: dict[str, float]) -> dict[str, Any]:
+    """Top-N buckets compared ONLY inside the intersection of two samples (T-096).
+
+    Each snapshot is a top-N sample by impressions, so its composition
+    changes between pulls: a query that left the top-N was never "lost from
+    the SERP" and its absence is not a top-10 loss. Raw bucket arithmetic
+    (`delta_block`) counts exactly that as a drop — live: «топ-10 −8» on
+    gsse.ru 2026-08-28 was composition, not positions. This block is the
+    only comparison alerts and headline deltas may use.
+    """
+    shared = prev.keys() & curr.keys()
+    block: dict[str, Any] = {
+        "queries": len(shared),
+        "prev_only": len(prev.keys() - curr.keys()),
+        "curr_only": len(curr.keys() - prev.keys()),
+    }
+    for name, limit in (("top3", 3), ("top10", 10), ("top30", 30)):
+        before = sum(1 for q in shared if prev[q] <= limit)
+        after = sum(1 for q in shared if curr[q] <= limit)
+        block[f"prev_{name}"] = before
+        block[f"{name}"] = after
+        block[f"delta_{name}"] = after - before
+    if shared:
+        block["delta_avg_position"] = round(
+            sum(curr[q] for q in shared) / len(shared) - sum(prev[q] for q in shared) / len(shared), 1)
+    return block
+
+
 def collect_project(project_root: pathlib.Path, cfg: dict[str, Any], *, engine: str | None,
                     limit_movers: int, include_queries: bool = False) -> dict[str, Any]:
     report: dict[str, Any] = {
@@ -186,8 +215,15 @@ def collect_project(project_root: pathlib.Path, cfg: dict[str, Any], *, engine: 
             "delta_vs_previous": delta_block(latest, previous),
             "delta_vs_first": delta_block(latest, first),
         })
+        report["sample"] = snapshot_sample(cfg, project_root, latest["date"], engine)
+        report["sample_line"] = sample_line(report["sample"], latest["queries"])
         if previous:
             report["movers"] = movers(conn, previous["date"], latest["date"], engine, limit_movers)
+            report["overlap_vs_previous"] = overlap_block(
+                query_positions(conn, previous["date"], engine), query_positions(conn, latest["date"], engine))
+        if first:
+            report["overlap_vs_first"] = overlap_block(
+                query_positions(conn, first["date"], engine), query_positions(conn, latest["date"], engine))
         if include_queries:
             report["top_queries"] = {
                 query: position for query, position in
@@ -215,17 +251,30 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"_Данных нет: {hint.get(report.get('status'), report.get('status'))}_")
         return "\n".join(lines) + "\n"
     latest, prev_delta, first_delta = report["latest"], report.get("delta_vs_previous") or {}, report.get("delta_vs_first") or {}
+    overlap = report.get("overlap_vs_previous") or {}
+    overlap_first = report.get("overlap_vs_first") or {}
+    # T-096: headline deltas are computed inside the intersection of the two
+    # samples; raw bucket arithmetic across different compositions is shown
+    # separately and labelled as composition change, never as a loss.
     lines.extend([
         f"- Срез: {latest['date']} · поисковик: {report['engine']} · запросов отслеживается: {latest['queries']}",
-        f"- **Топ-3: {latest['top3']}{fmt_delta(prev_delta.get('top3'))}** · "
-        f"**Топ-10: {latest['top10']}{fmt_delta(prev_delta.get('top10'))}** · "
-        f"Топ-30: {latest['top30']}{fmt_delta(prev_delta.get('top30'))}",
-        f"- Средняя позиция: {latest['avg_position']}{fmt_delta(prev_delta.get('avg_position'), invert=True)}"
+        f"- {report.get('sample_line') or sample_line(None, latest['queries'])}",
+        f"- **Топ-3: {latest['top3']}{fmt_delta(overlap.get('delta_top3'))}** · "
+        f"**Топ-10: {latest['top10']}{fmt_delta(overlap.get('delta_top10'))}** · "
+        f"Топ-30: {latest['top30']}{fmt_delta(overlap.get('delta_top30'))}"
+        + (f" — дельты по пересечению выборок: {overlap['queries']} запросов" if overlap else ""),
+        f"- Средняя позиция: {latest['avg_position']}{fmt_delta(overlap.get('delta_avg_position'), invert=True)}"
         f" · клики: {latest['clicks']}{fmt_delta(prev_delta.get('clicks'))}"
         f" · показы: {latest['impressions']}{fmt_delta(prev_delta.get('impressions'))}",
     ])
+    if overlap:
+        lines.append(
+            f"- Смена состава выборки vs {report['previous']['date']}: выбыло {overlap['prev_only']},"
+            f" вошло {overlap['curr_only']} · сырая разница топ-10 {prev_delta.get('top10', 0):+d}"
+            " (состав выборки, не позиции)")
     if first_delta:
-        lines.append(f"- С первого среза ({report['first']['date']}): топ-10 {fmt_delta(first_delta.get('top10')) or '+0'},"
+        lines.append(f"- С первого среза ({report['first']['date']}): топ-10 по пересечению"
+                     f" ({overlap_first.get('queries', 0)} запросов){fmt_delta(overlap_first.get('delta_top10')) or ' (+0)'},"
                      f" клики {fmt_delta(first_delta.get('clicks')) or '+0'}")
     if len(report.get("snapshots", [])) > 1:
         lines.extend(["", "## Динамика по срезам", "", "| Срез | Топ-3 | Топ-10 | Топ-30 | Ср. позиция | Клики |", "|---|---:|---:|---:|---:|---:|"])
@@ -239,9 +288,10 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.extend(f"- {arrow} «{row['query']}»: {row['from']:g} → {row['to']:g}" for row in rows)
     movers_data = report.get("movers") or {}
     if movers_data.get("new") or movers_data.get("lost"):
-        lines.extend(["", f"## Новые в выдаче: {movers_data['counts']['new']} · выпали: {movers_data['counts']['lost']}", ""])
-        lines.extend(f"- new «{row['query']}» → {row['to']:g}" for row in movers_data.get("new", [])[:5])
-        lines.extend(f"- lost «{row['query']}» (была {row['from']:g})" for row in movers_data.get("lost", [])[:5])
+        lines.extend(["", f"## Вошли в выборку: {movers_data['counts']['new']} · выбыли из выборки: {movers_data['counts']['lost']}", "",
+                      "_Выборка — топ-N по показам; запрос вне выборки не потерял позицию, он просто не попал в срез._", ""])
+        lines.extend(f"- вошёл «{row['query']}» → {row['to']:g}" for row in movers_data.get("new", [])[:5])
+        lines.extend(f"- выбыл из выборки «{row['query']}» (была {row['from']:g})" for row in movers_data.get("lost", [])[:5])
     loops = report.get("loops") or {}
     if loops.get("loops"):
         lines.extend(["", "## Циклы качества", "",
@@ -295,7 +345,7 @@ def collect_portfolio(registry_path: pathlib.Path, *, engine: str | None, limit_
             totals["top3"] += report["latest"]["top3"]
             totals["top10"] += report["latest"]["top10"]
             totals["clicks"] += report["latest"]["clicks"]
-            totals["delta_top10"] += (report.get("delta_vs_previous") or {}).get("top10", 0) or 0
+            totals["delta_top10"] += (report.get("overlap_vs_previous") or {}).get("delta_top10", 0) or 0
             totals["delta_clicks"] += (report.get("delta_vs_previous") or {}).get("clicks", 0) or 0
         totals["findings_resolved"] += (report.get("loops") or {}).get("findings_resolved", 0)
 
@@ -321,6 +371,7 @@ def render_portfolio_markdown(portfolio: dict[str, Any]) -> str:
              f" · суммарно топ-10: **{totals['top10']}{fmt_delta(totals['delta_top10'])}**"
              f" · клики: {totals['clicks']}{fmt_delta(totals['delta_clicks'])}",
              f"- Findings устранено циклами качества: {totals['findings_resolved']}",
+             "- Δ топ-10 — по пересечению выборок соседних срезов (T-096), не по сырой разнице составов",
              "", "| Проект | Срез | Топ-3 | Топ-10 | Клики | Δ топ-10 | Циклы (resolved) |",
              "|---|---|---:|---:|---:|---:|---:|"]
     for report in portfolio["projects"]:
@@ -328,7 +379,7 @@ def render_portfolio_markdown(portfolio: dict[str, Any]) -> str:
             lines.append(f"| {report.get('project', '?')} | — | — | — | — | — | {report.get('status')} |")
             continue
         latest = report["latest"]
-        delta = (report.get("delta_vs_previous") or {}).get("top10")
+        delta = (report.get("overlap_vs_previous") or {}).get("delta_top10")
         loops = report.get("loops") or {}
         lines.append(f"| {report['project']} | {latest['date']} | {latest['top3']} | {latest['top10']}"
                      f" | {latest['clicks']} | {f'{delta:+d}' if isinstance(delta, int) else '—'}"

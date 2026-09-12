@@ -598,7 +598,7 @@ async function renderOverview(){
   </div><h2>Проекты</h2><table><tr><th>Проект</th><th>Срез</th><th>Топ-3</th><th>Топ-10</th><th>Клики</th><th>Δ топ-10</th><th>Статус</th></tr>`;
   for(const r of p.projects){
     if(r.status!=="ok"){html+=`<tr><td>${esc(r.project||"?")}</td><td colspan="5" class="muted">${esc(r.status||"нет данных")}</td><td></td></tr>`;continue;}
-    const d=(r.delta_vs_previous||{}).top10;
+    const d=(r.overlap_vs_previous||{}).delta_top10; // T-096: intersection only, never raw composition delta
     html+=`<tr class="click" onclick="openProject('${esc(r.project)}')"><td>${esc(r.project)}</td>
       <td class="muted">${esc(r.latest.date)}</td><td>${r.latest.top3}</td><td><b>${r.latest.top10}</b></td>
       <td>${r.latest.clicks}</td><td>${fmtDelta(d)||"—"}</td>
@@ -630,12 +630,16 @@ async function renderProject(){
   }
   if(pr.error||pr.status!=="ok"){html+=`<h2>Позиции</h2><p class="muted">${esc(pr.error||pr.status||"нет данных")} — запустите db-sync и снапшоты мониторинга</p>`;}
   else{
-    const l=pr.latest,d=pr.delta_vs_previous||{};
-    html+=`<h2>Позиции (${esc(pr.engine)}, срез ${esc(l.date)}) ${freshBadge(l.date)}</h2><div class="grid cards">
-      <div class="card"><div class="num">${l.top3}${fmtDelta(d.top3)}</div><div class="label">топ-3</div></div>
-      <div class="card"><div class="num">${l.top10}${fmtDelta(d.top10)}</div><div class="label">топ-10</div></div>
-      <div class="card"><div class="num">${l.top30}${fmtDelta(d.top30)}</div><div class="label">топ-30</div></div>
-      <div class="card"><div class="num">${l.avg_position??"—"}${fmtDelta(d.avg_position,true)}</div><div class="label">средняя позиция</div></div>
+    // T-096: bucket deltas come from the intersection of the two samples
+    // (overlap_vs_previous); the raw delta_vs_previous moves with the top-N
+    // composition and is not a ranking change. Clicks stay raw (a sum, not a bucket).
+    const l=pr.latest,d=pr.delta_vs_previous||{},o=pr.overlap_vs_previous||{};
+    html+=`<h2>Позиции (${esc(pr.engine)}, срез ${esc(l.date)}) ${freshBadge(l.date)}</h2>
+      <p class="muted">${esc(pr.sample_line||"")}${o.queries!=null?` · дельты по пересечению выборок: ${o.queries} запросов`:""}</p><div class="grid cards">
+      <div class="card"><div class="num">${l.top3}${fmtDelta(o.delta_top3)}</div><div class="label">топ-3</div></div>
+      <div class="card"><div class="num">${l.top10}${fmtDelta(o.delta_top10)}</div><div class="label">топ-10</div></div>
+      <div class="card"><div class="num">${l.top30}${fmtDelta(o.delta_top30)}</div><div class="label">топ-30</div></div>
+      <div class="card"><div class="num">${l.avg_position??"—"}${fmtDelta(o.delta_avg_position,true)}</div><div class="label">средняя позиция</div></div>
       <div class="card"><div class="num">${l.clicks}${fmtDelta(d.clicks)}</div><div class="label">клики</div></div>
     </div>`;
     const snaps=pr.snapshots||[];

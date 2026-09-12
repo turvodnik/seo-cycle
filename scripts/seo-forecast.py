@@ -38,6 +38,7 @@ from seo_cycle_core.config import (
     safe_round,
 )
 from seo_cycle_core.logging_setup import setup_logging
+from seo_cycle_core.monitoring import sample_line, snapshot_sample
 from seo_cycle_core.reports import write_report_bundle
 from seo_cycle_core.textmatch import build_query_index, match_position
 
@@ -128,6 +129,28 @@ def load_positions(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str,
     except sqlite3.Error:
         return {}
     return {" ".join(str(query).lower().split()): float(position) for query, position in rows if position}
+
+
+def positions_sample(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, Any]:
+    """Sample boundary of the latest snapshot the tracked positions come from (T-096)."""
+    db_rel = nested_get(cfg, "data_store.path", "seo/seo.db") or "seo/seo.db"
+    db_path = project_root / db_rel
+    if not db_path.exists():
+        return {}
+    try:
+        conn = sqlite3.connect(db_path)
+        latest = conn.execute("SELECT MAX(snapshot_date) FROM positions").fetchone()[0]
+        tracked = conn.execute(
+            "SELECT COUNT(DISTINCT query) FROM positions WHERE snapshot_date = ?", (latest,)
+        ).fetchone()[0] if latest else 0
+        conn.close()
+    except sqlite3.Error:
+        return {}
+    if not latest:
+        return {}
+    sample = snapshot_sample(cfg, project_root, str(latest))
+    return {"snapshot_date": str(latest), "metric_scope": "query_sample",
+            **sample, "line": sample_line(sample, int(tracked or 0))}
 
 
 def resolve_positions(core: list[dict[str, Any]],
@@ -256,6 +279,7 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, A
             "ranked_exact": match_stats["exact"],
             "ranked_fuzzy": match_stats["stem"] + match_stats["subset"],
             "positions_tracked": len(tracked),
+            "positions_sample": positions_sample(project_root, cfg),
         },
         "scenarios": scenarios,
         "cluster_upside_top10": cluster_upside[:10],
@@ -272,6 +296,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         f" ({report['inputs']['keywords_ranked']} ranked:"
         f" {report['inputs'].get('ranked_exact', 0)} exact + {report['inputs'].get('ranked_fuzzy', 0)} fuzzy,"
         f" {report['inputs']['positions_tracked']} tracked positions)",
+        *([f"- Граница выборки: {report['inputs']['positions_sample']['line']}"
+           " — позиции взяты из среза топ-N по показам, ключи вне выборки считаются unranked"]
+          if (report["inputs"].get("positions_sample") or {}).get("line") else []),
         "",
         "## Scenarios (monthly)",
         "",

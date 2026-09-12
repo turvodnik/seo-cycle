@@ -19,6 +19,17 @@ Config (всё опционально):
     days: 14              # окно выборки Вебмастера
     stale_after_days: 3   # срез старше → warning (старше 7 → error)
     drop_alert_pct: 5     # относительное падение топ-10 → critical + notify
+  monitoring:
+    sample:
+      size: 500           # топ-N запросов по показам в срезе (T-096): --limit
+                          # Вебмастера (API max 500); GSC получает --row-limit
+                          # только если ключ задан явно (его дефолт 5000 строк
+                          # query×page — не менять молча)
+
+Граница выборки (T-096): срез — это топ-N запросов ПО ПОКАЗАМ, не сайт.
+Отчёт печатает «выборка N из M запросов сайта» (M — из сводки источника,
+иначе «M неизвестно»), а просадка топ-10 считается только внутри
+пересечения двух срезов: запрос, выпавший из топ-N, — не потеря позиции.
 
 Usage:
   python3 scripts/pulse.py [--days 14] [--skip-fetch] [--format md|json]
@@ -40,7 +51,7 @@ from seo_cycle_core.config import coerce_float, coerce_int, find_config, load_ya
 from seo_cycle_core.engines import engine_names
 from seo_cycle_core.env_profile import env_chain
 from seo_cycle_core.logging_setup import setup_logging
-from seo_cycle_core.monitoring import monitoring_dir
+from seo_cycle_core.monitoring import monitoring_dir, sample_line
 from seo_cycle_core.registry import registry_path
 from seo_cycle_core.scorecard import score_from_findings, write_scorecard
 
@@ -76,28 +87,56 @@ def gsc_ready(env: dict[str, str]) -> bool:
     return bool(first_env(env, GSC_CRED_VARS)) and bool(first_env(env, GSC_SITE_VARS))
 
 
+DEFAULT_SAMPLE_SIZE = 500
+
+
+def sample_size(cfg: dict[str, Any]) -> tuple[int, bool]:
+    """(top-N per snapshot, explicitly configured?) from `monitoring.sample.size`.
+
+    T-096: the sample size used to be an implicit `--limit 500` buried in
+    webmaster-fetch; now it is a named config knob with the same default.
+    """
+    raw = nested_get(cfg, "monitoring.sample.size", None)
+    explicit = raw is not None
+    size = coerce_int(raw, DEFAULT_SAMPLE_SIZE, name="monitoring.sample.size")
+    if size <= 0:
+        log.warning("monitoring.sample.size=%r — не положительное, беру %s", raw, DEFAULT_SAMPLE_SIZE)
+        size = DEFAULT_SAMPLE_SIZE
+    return size, explicit
+
+
 def configured_sources(env: dict[str, str], domain: str, days: int,
-                       engines: list[str] | None = None) -> list[tuple[str, str, list[str]]]:
+                       engines: list[str] | None = None,
+                       sample: tuple[int, bool] | None = None) -> list[tuple[str, str, list[str]]]:
     """(source, fetch-скрипт, args) для каждого настроенного источника позиций.
 
     `engines` — список движков проекта из конфига. Источник берётся, только если
     его движок включён: глобальный токен агентства не должен тянуть Яндекс-Вебмастер
     в проект, который на Яндексе не продвигается (регресс кросс-проектной утечки
     2026-07-12). Пустой/None = ограничения нет (обратная совместимость).
+
+    `sample` — (size, explicit) из `sample_size()`. Вебмастер получает
+    `--limit size` всегда (дефолт 500 = прежнее поведение, API max 500); GSC
+    получает `--row-limit size` только при явно заданном ключе — его строки
+    это query×page, и молча урезать дефолтные 5000 до 500 нельзя (T-096).
     """
     allowed = {e.lower() for e in (engines or [])}
 
     def engine_on(name: str) -> bool:
         return not allowed or name in allowed
 
+    size, explicit = sample or (DEFAULT_SAMPLE_SIZE, False)
     sources: list[tuple[str, str, list[str]]] = []
     if webmaster_ready(env) and engine_on("yandex"):
-        args = ["--days", str(days)]
+        args = ["--days", str(days), "--limit", str(size)]
         if domain:
             args += ["--domain", domain]
         sources.append(("webmaster", "webmaster-fetch.py", args))
     if gsc_ready(env) and engine_on("google"):
-        sources.append(("gsc", "gsc-fetch.py", ["--days", str(days)]))
+        args = ["--days", str(days)]
+        if explicit:
+            args += ["--row-limit", str(size)]
+        sources.append(("gsc", "gsc-fetch.py", args))
     return sources
 
 
@@ -138,19 +177,28 @@ def freshness_findings(latest_date: str, today: dt.date, stale_after: int) -> li
 
 
 def drop_finding(progress: dict[str, Any], drop_pct: float) -> dict[str, Any] | None:
-    latest = progress.get("latest") or {}
-    delta = progress.get("delta_vs_previous") or {}
-    top10_delta = delta.get("top10")
-    if top10_delta is None:
+    """Top-10 drop alert — ONLY inside the intersection of the two samples (T-096).
+
+    `overlap_vs_previous` (position-progress) counts top-10 among queries
+    present in BOTH snapshots; the raw `delta_vs_previous.top10` also moves
+    when the top-N composition changes, which is not a ranking loss and must
+    never page anyone (gsse.ru 2026-08-28: «топ-10 −8» was composition).
+    A progress report without the overlap block (pre-T-096 json) yields no
+    alert rather than a false one.
+    """
+    overlap = progress.get("overlap_vs_previous") or {}
+    top10_delta = overlap.get("delta_top10")
+    previous_top10 = overlap.get("prev_top10")
+    if top10_delta is None or previous_top10 is None:
         return None
-    previous_top10 = (latest.get("top10") or 0) - top10_delta
     if previous_top10 <= 0 or top10_delta >= 0:
         return None
     dropped_pct = -top10_delta / previous_top10 * 100
     if dropped_pct < drop_pct:
         return None
     return {"id": "top10_drop", "severity": "critical",
-            "message": f"топ-10 просел на {top10_delta} запросов ({dropped_pct:.1f}% от {previous_top10})"}
+            "message": f"топ-10 просел на {-top10_delta} запросов из {previous_top10}"
+                       f" ({dropped_pct:.1f}%) по пересечению выборок ({overlap.get('queries')} запросов)"}
 
 
 def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
@@ -170,7 +218,7 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
         note("fetch", True, "пропущен (--skip-fetch)")
     else:
         domain = str(nested_get(cfg, "project.domain", "") or "")
-        sources = configured_sources(env, domain, days, engine_names(cfg))
+        sources = configured_sources(env, domain, days, engine_names(cfg), sample_size(cfg))
         sources_total = len(sources)
         mon_dir = monitoring_dir(cfg, root)  # T-052 R3: тот же ключ, что читают doctor/status/dashboard
         if not sources:
@@ -272,6 +320,9 @@ def build_pulse(root: pathlib.Path, cfg: dict[str, Any], env: dict[str, str],
         "latest_snapshot": latest_date or None,
         "latest": progress.get("latest") or {},
         "delta_vs_previous": progress.get("delta_vs_previous") or {},
+        "overlap_vs_previous": progress.get("overlap_vs_previous") or {},
+        "sample": progress.get("sample") or {},
+        "sample_line": progress.get("sample_line") or "",
         "score": score,
         "degraded": degraded,
         "total_failure": total_failure,
@@ -289,11 +340,13 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- {mark} {step['step']}: {step['note']}")
     latest = report.get("latest") or {}
     if latest:
-        delta = report.get("delta_vs_previous") or {}
-        top10_delta = delta.get("top10")
-        delta_note = f" ({'+' if top10_delta > 0 else ''}{top10_delta} vs prev)" if top10_delta else ""
+        overlap = report.get("overlap_vs_previous") or {}
+        top10_delta = overlap.get("delta_top10")
+        delta_note = (f" ({'+' if top10_delta > 0 else ''}{top10_delta} по пересечению {overlap.get('queries')} запросов)"
+                      if top10_delta else "")
         lines.append(f"- срез {report.get('latest_snapshot')}: топ-10 **{latest.get('top10')}**{delta_note}"
                      f" · клики {latest.get('clicks')}")
+        lines.append(f"- {report.get('sample_line') or sample_line(report.get('sample'), latest.get('queries'))}")
     if report["findings"]:
         lines.append("")
         for finding in report["findings"]:
