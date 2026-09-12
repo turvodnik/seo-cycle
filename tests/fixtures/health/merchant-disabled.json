@@ -1,0 +1,12 @@
+{
+  "checked": false,
+  "config_key": "sources.google_merchant.enabled",
+  "generated_at": "<TS>",
+  "project": {
+    "domain": "provider.test",
+    "name": "Provider Test"
+  },
+  "provider": "merchant",
+  "status": "disabled_in_config",
+  "status_note": "Провайдер выключен в конфиге проекта (sources.google_merchant.enabled: false) — health-проверка не запускалась: переменные окружения не читались, сеть и локальные приложения не опрашивались. Это ожидаемое состояние, не ошибка. Чтобы проверять провайдера, поставь sources.google_merchant.enabled: true или убери ключ."
+}

@@ -93,6 +93,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 SPEC = HealthSpec(
     slug="google-ads",
+    enabled_key="ads.google_ads.enabled",  # T-062: off in config → not probed
     style="simple",
     description=__doc__,
     write_help="Write seo/setup/google-ads-health.* artifacts.",

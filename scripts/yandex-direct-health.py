@@ -75,6 +75,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 SPEC = HealthSpec(
     slug="yandex-direct",
+    enabled_key="ads.yandex_direct.enabled",  # T-062: off in config → not probed
     style="simple",
     description=__doc__,
     write_help="Write seo/setup/yandex-direct-health.* artifacts.",

@@ -1,0 +1,12 @@
+{
+  "provider": "notebooklm",
+  "generated_at": "<TS>",
+  "project": {
+    "name": "Provider Test",
+    "domain": "provider.test"
+  },
+  "status": "disabled_in_config",
+  "config_key": "notebooklm_provider.enabled",
+  "status_note": "Провайдер выключен в конфиге проекта (notebooklm_provider.enabled: false) — health-проверка не запускалась: переменные окружения не читались, сеть и локальные приложения не опрашивались. Это ожидаемое состояние, не ошибка. Чтобы проверять провайдера, поставь notebooklm_provider.enabled: true или убери ключ.",
+  "checked": false
+}

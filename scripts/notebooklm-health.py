@@ -77,6 +77,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 SPEC = HealthSpec(
     slug="notebooklm",
+    enabled_key="notebooklm_provider.enabled",  # T-062: off in config → not probed
     style="policy",
     write_help="Write seo/setup/notebooklm-health.* artifacts.",
     build_report=build_report,

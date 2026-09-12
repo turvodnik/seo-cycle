@@ -34,21 +34,41 @@ against the pre-refactor originals, `tests/fixtures/health/`):
 A `HealthSpec` never guesses at these differences — every field that
 differs between the two families is explicit, so a reviewer can see the
 divergence instead of it hiding in copy-paste drift.
+
+T-062 — the one BEHAVIOUR change layered on top of the T-053 refactor: a
+provider switched off in the project config (`enabled_key`, e.g.
+`sources.google_merchant.enabled` or `ads.google_ads.enabled`) is not
+probed at all. The wrapper's `build_report` is never called — no env
+lookup, no app/browser detection, no network — and a short report with
+status `disabled_in_config` is printed/written instead (exit 0: a report
+was produced, same rung as `partner_limited`/`needs_credentials`). The
+switch semantics mirror `pulse.py` → `engines.engine_names()` (`if
+enabled`: a falsy flag means "skip"): the key must be PRESENT and falsy;
+a missing key is "no signal" and the wrapper runs exactly as before,
+which is what keeps the pre-T-062 goldens byte-identical.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import pathlib
 import sys
 from typing import Any, Callable, Sequence
 
-from .config import find_config, load_config, project_root_for, require_section
+from .config import find_config, load_config, nested_get, project_root_for, require_section
 from .reports import write_report_bundle
 
 MISSING_CONFIG_MSG = "ERROR: seo-cycle.yaml not found in {cwd}"
 CONFIG_PATH_MISSING_MSG = "ERROR: {cfg_path} not found"
+DISABLED_STATUS = "disabled_in_config"
+DISABLED_NOTE = (
+    "Провайдер выключен в конфиге проекта ({key}: false) — health-проверка не запускалась: "
+    "переменные окружения не читались, сеть и локальные приложения не опрашивались. "
+    "Это ожидаемое состояние, не ошибка. Чтобы проверять провайдера, поставь {key}: true "
+    "или убери ключ."
+)
 
 # `build_report` has two incompatible call shapes depending on `style`
 # (`(cfg)` for "simple", `(cfg_path, args)` for "policy") — a Union of the
@@ -76,6 +96,7 @@ class HealthSpec:
         description: str | None = None,
         output_paths: OutputPaths | None = None,
         extra_arguments: Sequence[dict[str, Any]] = (),
+        enabled_key: str | None = None,
     ) -> None:
         if style not in ("simple", "policy"):
             raise ValueError(f"unknown health spec style: {style!r}")
@@ -87,6 +108,9 @@ class HealthSpec:
         self.description = description
         self.output_paths = output_paths or (lambda cfg, project_root: default_output_paths(project_root, slug))
         self.extra_arguments = extra_arguments
+        # Dotted path of the provider's on/off switch in seo-cycle.yaml
+        # (T-062). None = this provider has no switch and is always probed.
+        self.enabled_key = enabled_key
 
 
 def default_output_paths(project_root: pathlib.Path, slug: str) -> dict[str, pathlib.Path]:
@@ -113,6 +137,67 @@ def render_sections(sections: Sequence[tuple[str, Sequence[str]]]) -> list[str]:
     return lines
 
 
+def disabled_config_key(cfg: dict[str, Any], enabled_key: str | None) -> str | None:
+    """Returns the switch key when the provider is explicitly OFF in `cfg`,
+    else None. Present-and-falsy only — the same reading `pulse.py` gives
+    an engine flag via `engines.engine_names()` (`if enabled`); an absent
+    key is not a signal, so a config that never mentions the provider
+    behaves exactly as before T-062."""
+    if not enabled_key:
+        return None
+    sentinel = object()
+    value = nested_get(cfg, enabled_key, sentinel)
+    if value is sentinel or value:
+        return None
+    return enabled_key
+
+
+def disabled_report(spec: HealthSpec, cfg: dict[str, Any], key: str) -> dict[str, Any]:
+    return {
+        "provider": spec.slug,
+        "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "project": cfg.get("project", {}),
+        "status": DISABLED_STATUS,
+        "config_key": key,
+        "status_note": DISABLED_NOTE.format(key=key),
+        "checked": False,
+    }
+
+
+def render_disabled_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        f"# Provider Health: {report['provider']}",
+        "",
+        f"- Generated: {report['generated_at']}",
+        f"- Status: `{report['status']}`",
+        f"- Config key: `{report['config_key']}`",
+        f"- Note: {report['status_note']}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _emit_disabled(spec: HealthSpec, cfg: dict[str, Any], cfg_path: pathlib.Path, key: str,
+                   args: argparse.Namespace) -> int:
+    """Print/write the disabled report along the SAME output path the
+    provider's family uses (simple: write AND print, sorted JSON; policy:
+    write → only `Wrote …`, JSON in build order), so a dashboard or a human
+    reading `seo/setup/<slug>-health.*` sees the state where they always
+    looked. Exit 0: a report was produced."""
+    report = disabled_report(spec, cfg, key)
+    markdown = render_disabled_markdown(report)
+    if args.write:
+        paths = spec.output_paths(cfg, project_root_for(cfg_path))
+        write_report_bundle(paths, markdown, report)
+        if spec.style == "policy":
+            print(f"Wrote {paths['markdown']}")
+            return 0
+    if args.format == "json":
+        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=spec.style == "simple"))
+    else:
+        print(markdown, end="")
+    return 0
+
+
 def _run_simple(spec: HealthSpec) -> int:
     parser = argparse.ArgumentParser(description=spec.description)
     parser.add_argument("config", nargs="?", help="Path to seo-cycle.yaml")
@@ -132,6 +217,9 @@ def _run_simple(spec: HealthSpec) -> int:
     # `project: null` печатали заголовок отчёта с пустой идентичностью и
     # `rc=0`. Один вызов здесь закрывает класс для всех пяти разом.
     require_section(cfg, "project", cfg_path)
+    disabled_key = disabled_config_key(cfg, spec.enabled_key)
+    if disabled_key:
+        return _emit_disabled(spec, cfg, cfg_path, disabled_key, args)
     project_root = project_root_for(cfg_path)
     report = spec.build_report(cfg)
     if args.write:
@@ -165,6 +253,16 @@ def _run_policy(spec: HealthSpec) -> int:
     if not cfg_path.exists():
         print(CONFIG_PATH_MISSING_MSG.format(cfg_path=cfg_path), file=sys.stderr)
         return 2
+
+    # T-062: the gate runs BEFORE the provider's own `build_report`, which
+    # for this family is where env/app/browser probing happens. Loading the
+    # config here (the wrapper loads it again on the enabled path — cheap,
+    # and keeps the enabled path byte-identical to pre-T-062).
+    cfg = load_config(cfg_path)
+    disabled_key = disabled_config_key(cfg, spec.enabled_key)
+    if disabled_key:
+        require_section(cfg, "project", cfg_path)
+        return _emit_disabled(spec, cfg, cfg_path, disabled_key, args)
 
     report = spec.build_report(cfg_path, args)
     if args.write:
