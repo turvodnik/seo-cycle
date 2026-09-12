@@ -56,9 +56,14 @@ pifagorlab.com 21.08). Теперь: размер выборки — явный 
 (yandex-direct), `notebooklm_provider.enabled`, `perplexity_provider.enabled`.
 Семантика та же, что у `pulse.py` → `engines.engine_names()` (ложный флаг
 = пропустить); отсутствующий ключ — не сигнал. Внимание: шаблон
-`config/project.template.yaml` ставит `enabled: false` для GBP, Merchant,
-обеих рекламных платформ и `sources.perplexity` — на проектах, скопировавших
-шаблон без правок, статус этих отчётов сменится на `disabled_in_config`.
+`config/project.template.yaml` ставит `enabled: false` для
+`sources.google_business_profile`, `sources.google_merchant`,
+`sources.yandex_business_maps`, `ads.yandex_direct` и `ads.google_ads` — на
+проектах, скопировавших шаблон без правок, отчёты GBP, Merchant,
+Yandex Business и обеих рекламных платформ сменят статус на
+`disabled_in_config`. NotebookLM и Perplexity в шаблоне включены
+(`*_provider.enabled: true`); `sources.perplexity.enabled` (источник
+исследований для `resolve-sources.py`) health-скрипт не читает.
 
 Код возврата выключенного провайдера — `0` (шкала прежняя: 0 = отчёт собран,
 как и при `partner_limited`/`needs_credentials`; 2 = конфиг не найден или
