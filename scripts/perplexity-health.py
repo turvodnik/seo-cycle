@@ -82,6 +82,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 SPEC = HealthSpec(
     slug="perplexity",
     enabled_key="perplexity_provider.enabled",  # T-062: off in config → not probed
+    provider="perplexity",  # same id as build_report's `provider`
     style="policy",
     write_help="Write seo/setup/perplexity-health.* artifacts.",
     build_report=build_report,

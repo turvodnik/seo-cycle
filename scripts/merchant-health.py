@@ -85,6 +85,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 SPEC = HealthSpec(
     slug="merchant",
     enabled_key="sources.google_merchant.enabled",  # T-062: off in config → not probed
+    provider="google_merchant",  # same id as build_report's `provider`
     style="simple",
     description=__doc__,
     write_help="Write seo/setup/merchant-health.* artifacts.",

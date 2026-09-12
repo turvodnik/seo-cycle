@@ -1,4 +1,4 @@
-# Provider Health: yandex-business
+# Provider Health: yandex_business
 
 - Generated: <TS>
 - Status: `disabled_in_config`

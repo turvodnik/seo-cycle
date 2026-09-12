@@ -1,4 +1,4 @@
-# Provider Health: merchant
+# Provider Health: google_merchant
 
 - Generated: <TS>
 - Status: `disabled_in_config`

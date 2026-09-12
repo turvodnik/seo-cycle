@@ -1,4 +1,4 @@
-# Provider Health: gbp
+# Provider Health: google_business_profile
 
 - Generated: <TS>
 - Status: `disabled_in_config`

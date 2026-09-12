@@ -208,6 +208,23 @@ class DisabledProviderTest(unittest.TestCase):
                                  DISABLED_STATUS)
                 shutil.rmtree(setup_dir, ignore_errors=True)
 
+    def test_provider_id_does_not_change_with_state(self) -> None:
+        """Round 1 (🟡-1): `seo/setup/<slug>-health.json` must carry ONE
+        provider id regardless of state — the disabled report used to write
+        `spec.slug` (`gbp`) where the wrapper writes `google_business_profile`."""
+        for script, (slug, _key, snippet) in DISABLED_CASES.items():
+            with self.subTest(script=script):
+                project = self.root / f"{slug}-on"
+                project.mkdir(exist_ok=True)
+                cfg = project / "seo-cycle.yaml"
+                cfg.write_text(BASE_CFG_RU + snippet.replace("enabled: false", "enabled: true"), encoding="utf-8")
+                extra = ["--app-path", str(project / "Missing.app")] if slug == "perplexity" else []
+                rc, out_on, err = run_script(script, [str(cfg), *extra, "--format", "json"], project, clean_env())
+                self.assertEqual(rc, 0, err)
+                _rc, out_off, _err = self._run(script, ["--format", "json"])
+                self.assertNotIn(DISABLED_STATUS, out_on)
+                self.assertEqual(json.loads(out_on)["provider"], json.loads(out_off)["provider"])
+
     def test_disabled_goldens(self) -> None:
         """Pins the exact disabled-state output (md, json, --write bundle,
         stdout of --write) per provider, normalized like the T-053 goldens."""

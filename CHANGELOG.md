@@ -72,7 +72,17 @@ Yandex Business и обеих рекламных платформ сменят �
 новый статус в «сломано» не превращается. Тесты: +4 (21 подпроцессный
 сценарий, эталоны `tests/fixtures/health/*-disabled.*`, негативный контроль
 «гейт убран из ядра → маркер исчезает у всех семи»); ветка
-`fix/t-062-health-disabled`.
+`fix/t-062-health-disabled`. Поле `provider` в отключённом отчёте — тот же
+идентификатор, что пишет обёртка при включённом (`google_business_profile`,
+`google_ads`, …), а не slug скрипта.
+
+Известные ловушки (не чинятся здесь): у Perplexity два переключателя с
+разными дефолтами (`perplexity_provider.enabled` — читает health,
+`sources.perplexity.enabled` — читает `resolve-sources.py`);
+`yandex-business-health.py` гейтится по `sources.yandex_business_maps`, а
+env берёт из `sources.yandex_merchant` (`YANDEX_MERCHANT_BUSINESS_ID`);
+`enabled: "false"` строкой — истинное значение, провайдер считается
+включённым (как и в `engines.engine_names()`).
 
 ## [2.2.1] — 2026-09-07
 

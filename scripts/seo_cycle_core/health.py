@@ -97,6 +97,7 @@ class HealthSpec:
         output_paths: OutputPaths | None = None,
         extra_arguments: Sequence[dict[str, Any]] = (),
         enabled_key: str | None = None,
+        provider: str | None = None,
     ) -> None:
         if style not in ("simple", "policy"):
             raise ValueError(f"unknown health spec style: {style!r}")
@@ -111,6 +112,11 @@ class HealthSpec:
         # Dotted path of the provider's on/off switch in seo-cycle.yaml
         # (T-062). None = this provider has no switch and is always probed.
         self.enabled_key = enabled_key
+        # Identifier written to the `provider` field of the disabled report
+        # (T-062 round 1): the SAME value the wrapper's own `build_report`
+        # emits, so `seo/setup/<slug>-health.json` carries one provider id
+        # regardless of state. Defaults to `slug` for specs that set none.
+        self.provider = provider or slug
 
 
 def default_output_paths(project_root: pathlib.Path, slug: str) -> dict[str, pathlib.Path]:
@@ -154,7 +160,7 @@ def disabled_config_key(cfg: dict[str, Any], enabled_key: str | None) -> str | N
 
 def disabled_report(spec: HealthSpec, cfg: dict[str, Any], key: str) -> dict[str, Any]:
     return {
-        "provider": spec.slug,
+        "provider": spec.provider,
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "project": cfg.get("project", {}),
         "status": DISABLED_STATUS,

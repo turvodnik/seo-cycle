@@ -1,4 +1,4 @@
-# Provider Health: yandex-direct
+# Provider Health: yandex_direct
 
 - Generated: <TS>
 - Status: `disabled_in_config`

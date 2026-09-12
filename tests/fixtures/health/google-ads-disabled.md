@@ -1,4 +1,4 @@
-# Provider Health: google-ads
+# Provider Health: google_ads
 
 - Generated: <TS>
 - Status: `disabled_in_config`

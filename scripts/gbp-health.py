@@ -90,6 +90,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 SPEC = HealthSpec(
     slug="gbp",
     enabled_key="sources.google_business_profile.enabled",  # T-062: off in config → not probed
+    provider="google_business_profile",  # same id as build_report's `provider`
     style="simple",
     description=__doc__,
     write_help="Write seo/setup/gbp-health.* artifacts.",
