@@ -20,6 +20,14 @@ Positions covered (the packet's table):
   * gsc-request-indexing-browser.py — record of clicks actually made (from
     the runner's `actions`; `--auto-click` was already the consent gate);
   * usage_ledger.finite_nonneg — R5-1, a 400-digit int no longer raises.
+
+Fix round 1 (gate 2026-09-13, F-1/F-2 — the class grew a sixth time because
+the executor's grep was not recursive and did not walk the sink's callers):
+  * page-outline-v3.py --rag — the THIRD caller of `rag.search()` (one paid
+    embedding per MVP page), now the same preflight/record as the other two;
+  * scripts/knowledge/graphify-refresh.sh — LLM CLI probe + extraction, or
+    `graphify extract` on API keys, with no flag at all; now `--live` +
+    write-ahead like llm-cli-collect.sh.
 """
 
 from __future__ import annotations
@@ -90,8 +98,8 @@ class FiniteNonnegOverflowTest(unittest.TestCase):
         self.assertFalse(finite_nonneg(float("nan")))
 
 
-class RagEmbeddingSymmetryTest(unittest.TestCase):
-    """rag-index.py and rag-query.py on the same paid call."""
+class _RagFixture(unittest.TestCase):
+    """A project with one source pack and a local fake `/embeddings` server."""
 
     def setUp(self) -> None:
         try:
@@ -134,6 +142,10 @@ class RagEmbeddingSymmetryTest(unittest.TestCase):
                    embeddings: bool = True) -> subprocess.CompletedProcess:
         return subprocess.run([sys.executable, str(SCRIPTS / script), *args], cwd=cwd or self.project,
                               env=self.env(embeddings), text=True, capture_output=True, check=False)
+
+
+class RagEmbeddingSymmetryTest(_RagFixture):
+    """rag-index.py and rag-query.py on the same paid call."""
 
     def test_index_then_query_hit_the_endpoint_and_both_land_in_the_ledger(self) -> None:
         index = self.run_script("rag-index.py", "--write", "--format", "json")
@@ -206,6 +218,60 @@ class RagEmbeddingSymmetryTest(unittest.TestCase):
         self.assertEqual(_FakeEmbeddings.hits, before, "no project → no accounting → no paid call")
 
 
+class PageOutlineRagTest(_RagFixture):
+    """F-1: `page-outline-v3.py --all-mvp --rag` — one paid embedding per
+    MVP page, same contract as rag-query/rag-index."""
+
+    PACKAGE = pathlib.Path("seo") / "research-package"
+
+    def setUp(self) -> None:
+        super().setUp()
+        pkg = self.project / self.PACKAGE
+        pkg.mkdir(parents=True)
+        (pkg / "semantic-architecture-final.json").write_text(json.dumps({"clusters": [
+            {"id": "vagonka", "name": "Вагонка из кедра", "primary_keyword": "вагонка кедр", "mvp": True,
+             "intent": "commercial", "url": "/catalog/vagonka/", "page_type": "category"},
+            {"id": "osina", "name": "Вагонка из осины", "primary_keyword": "вагонка осина", "mvp": True,
+             "intent": "commercial", "url": "/catalog/osina/", "page_type": "category"},
+        ]}, ensure_ascii=False), encoding="utf-8")
+        self.assertEqual(self.run_script("rag-index.py", "--write").returncode, 0)
+        self.base_rows = len(_ledger_lines(self.project))  # rag-index's own record
+
+    def outline(self, *extra: str, embeddings: bool = True) -> subprocess.CompletedProcess:
+        return self.run_script("page-outline-v3.py", str(self.PACKAGE), "--all-mvp", "--rag", "--format", "json",
+                               *extra, embeddings=embeddings)
+
+    def test_rag_flag_embeds_one_call_per_page_and_records_them(self) -> None:
+        before = _FakeEmbeddings.hits
+        proc = self.outline()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["count"], 2)
+        self.assertTrue(all(o.get("related_passages") for o in payload["outlines"]), "passages attached")
+        self.assertEqual(_FakeEmbeddings.hits, before + 2, "one paid call per MVP page")
+        rows = _ledger_lines(self.project)
+        self.assertEqual(len(rows), self.base_rows + 1, rows)
+        self.assertEqual((rows[-1]["service"], rows[-1]["category"], rows[-1]["metrics"]),
+                         ("embedding_api", "llm", {"requests": 2.0}))
+        self.assertIn("page-outline-v3", rows[-1]["note"])
+
+    def test_negative_control_cap_blocks_rag_before_any_byte(self) -> None:
+        self.write_config(cap=1)  # rag-index already used 1 → 2 more pages project 3 > 1
+        before = _FakeEmbeddings.hits
+        proc = self.outline()
+        self.assertEqual(proc.returncode, 2, proc.stdout[:200])
+        self.assertIn("preflight blocked", proc.stderr)
+        self.assertEqual(_FakeEmbeddings.hits, before)
+        self.assertEqual(len(_ledger_lines(self.project)), self.base_rows)
+
+    def test_without_embeddings_env_rag_is_free_and_unrecorded(self) -> None:
+        before = _FakeEmbeddings.hits
+        proc = self.outline(embeddings=False)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(_FakeEmbeddings.hits, before)
+        self.assertEqual(len(_ledger_lines(self.project)), self.base_rows)
+
+
 class _ShellFixture(unittest.TestCase):
     """A project dir plus a bin dir first on PATH with logging fakes."""
 
@@ -227,7 +293,9 @@ class _ShellFixture(unittest.TestCase):
         _write_exe(self.bin / name, f'printf \'%s %q\\n\' "{name}" "$*" >> "{self.log}"\n' + body)
 
     def calls(self) -> list[str]:
-        return self.log.read_text(encoding="utf-8").splitlines() if self.log.exists() else []
+        # errors="replace": bash's %q under a C locale may emit raw bytes for
+        # a non-ASCII prompt; only the leading command word matters here.
+        return self.log.read_text(encoding="utf-8", errors="replace").splitlines() if self.log.exists() else []
 
     def run_cmd(self, *cmd: str, env_extra: dict[str, str] | None = None) -> subprocess.CompletedProcess:
         env = dict(os.environ)
@@ -331,6 +399,79 @@ class ImgGenerateTest(_ShellFixture):
         self.assertEqual(second.returncode, 1, second.stdout + second.stderr)
         self.assertEqual(len(self.calls()), 1, "second run must not reach codex")
         self.assertEqual(len(_ledger_lines(self.project)), 1)
+
+
+class GraphifyRefreshTest(_ShellFixture):
+    """F-2: `scripts/knowledge/graphify-refresh.sh` — LLM CLI probe/extract or
+    `graphify extract` on API keys must not start without --live."""
+
+    SCRIPT = str(SCRIPTS / "knowledge" / "graphify-refresh.sh")
+
+    def setUp(self) -> None:
+        super().setUp()
+        # graphify present (so the LLM branch is reachable); agy present and
+        # "healthy"; both log every invocation. `graphify` itself is a fake
+        # python-shebang script so graphify_python() resolves to sys.executable.
+        (self.bin / "graphify").write_text(
+            f"#!{sys.executable}\nimport sys\nopen({str(self.log)!r}, 'a').write('graphify ' + ' '.join(sys.argv[1:]) + '\\n')\n",
+            encoding="utf-8")
+        (self.bin / "graphify").chmod(0o755)
+        self.fake("agy", 'echo "готов"\n')
+        # Keep the corpus/wiki stage cheap: point the wiki root inside the project.
+        self.env_base = {"SEO_CYCLE_PROJECT_ROOT": str(self.project), "GRAPHIFY_GEMINI_CLI": "0"}
+        for key in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY", "KIMI_API_KEY",
+                    "GRAPHIFY_BACKEND", "GRAPHIFY_LIVE"):
+            os.environ.pop(key, None)
+
+    def llm_calls(self) -> list[str]:
+        return [line for line in self.calls() if line.startswith(("agy", "graphify extract"))]
+
+    def test_plain_run_with_llm_path_reachable_exits_3_without_any_llm_call(self) -> None:
+        proc = self.run_cmd("bash", self.SCRIPT, env_extra=self.env_base)
+        self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+        self.assertIn("--live", proc.stderr)
+        self.assertEqual(self.llm_calls(), [], self.calls())
+        self.assertEqual(_ledger_lines(self.project), [])
+
+    def test_api_key_backend_is_also_gated(self) -> None:
+        # No CLI requested at all; an API key alone makes `graphify extract` reachable.
+        env = {**self.env_base, "GRAPHIFY_ANTIGRAVITY_CLI": "0", "OPENAI_API_KEY": "fake-not-real"}
+        proc = self.run_cmd("bash", self.SCRIPT, env_extra=env)
+        self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+        self.assertEqual(self.llm_calls(), [])
+
+    def test_live_writes_ahead_then_probes_and_builds(self) -> None:
+        proc = self.run_cmd("bash", self.SCRIPT, "--live", env_extra=self.env_base)
+        # The build itself needs the real `graphify` Python package (not a
+        # test dependency): what is under test is that the gate opened, the
+        # write-ahead landed and the CLI probe ran — not the graph outcome.
+        self.assertNotEqual(proc.returncode, 3, proc.stderr)
+        agy = [line for line in self.calls() if line.startswith("agy")]
+        self.assertGreaterEqual(len(agy), 1, self.calls())
+        rows = _ledger_lines(self.project)
+        self.assertEqual(len(rows), 1, rows)
+        self.assertEqual((rows[0]["service"], rows[0]["category"], rows[0]["metrics"]),
+                         ("graphify", "llm", {"requests": 1.0}))
+
+    def test_negative_control_ledger_block_stops_before_probe(self) -> None:
+        self.set_cap("governance:\n  subscriptions:\n    graphify:\n      monthly_request_cap: 1\n")
+        first = self.run_cmd("bash", self.SCRIPT, "--live", env_extra=self.env_base)
+        self.assertNotEqual(first.returncode, 3, first.stderr)
+        self.assertEqual(len(_ledger_lines(self.project)), 1)
+        n = len(self.llm_calls())
+        self.assertGreaterEqual(n, 1)
+        second = self.run_cmd("bash", self.SCRIPT, "--live", env_extra=self.env_base)
+        self.assertEqual(second.returncode, 1, second.stdout + second.stderr)
+        self.assertEqual(len(self.llm_calls()), n, "blocked run must not probe the CLI")
+
+    def test_local_fallback_without_llm_path_needs_no_flag(self) -> None:
+        env = {**self.env_base, "GRAPHIFY_ANTIGRAVITY_CLI": "0"}
+        proc = self.run_cmd("bash", self.SCRIPT, env_extra=env)
+        # Not gated (rc 3) — the local graph itself needs the real `graphify`
+        # package, whose absence is not what this test is about.
+        self.assertNotEqual(proc.returncode, 3, proc.stderr)
+        self.assertEqual(self.llm_calls(), [])
+        self.assertEqual(_ledger_lines(self.project), [])
 
 
 @unittest.skipUnless(shutil.which("jq") and shutil.which("curl"), "nw-cli.sh needs jq and curl")

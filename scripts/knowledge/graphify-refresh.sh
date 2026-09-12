@@ -1,8 +1,26 @@
 #!/usr/bin/env bash
+# graphify-refresh.sh — rebuild the wiki corpus and the Graphify knowledge graph.
+#
+# Money (T-069 fix round 1, gate F-2): the semantic graph is built either by an
+# LLM CLI (`agy`/`gemini` — subscription tokens; a live health probe first, then
+# up to --max-files files) or by `graphify extract --backend <api>` on API keys
+# from env (per-token billing). Any of those needs explicit consent:
+#   graphify-refresh.sh --live      (or GRAPHIFY_LIVE=1)
+# Without it, when an LLM path is reachable, the script prints the plan and
+# exits 3 — no CLI probe, no extract. Before the first LLM call one
+# write-ahead line goes to usage-ledger (`--service graphify --category llm
+# --requests 1 --fail-on-block`); a cap, a broken ledger, or no seo-cycle.yaml
+# in the project root stops the run (exit 1). The wiki refresh, the corpus
+# build and the local (no-LLM) fallback graph are free and need no flag.
 set -euo pipefail
 
 ROOT="${SEO_CYCLE_PROJECT_ROOT:-$(pwd)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LEDGER_SCRIPT="$SCRIPT_DIR/../usage-ledger.py"
+LIVE="${GRAPHIFY_LIVE:-0}"
+for arg in "$@"; do
+  [[ "$arg" == "--live" ]] && LIVE=1
+done
 cd "$ROOT"
 
 paths_json="$(PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" python3 - <<'PY'
@@ -89,6 +107,31 @@ if ! command -v graphify >/dev/null 2>&1; then
   status_json "degraded" "graphify is not installed." "Install with: uv tool install graphifyy, then rerun graphify-refresh.sh."
   echo "graphify is not installed. Install with: uv tool install graphifyy" >&2
   exit 0
+fi
+
+# T-069: decide whether an LLM (paid) path is reachable BEFORE probing any CLI.
+paid_paths=()
+if [[ -n "$BACKEND" ]]; then
+  paid_paths+=("backend=$BACKEND")
+else
+  if cli_requested "$ANTIGRAVITY_CLI" && command -v agy >/dev/null 2>&1; then paid_paths+=("cli=agy"); fi
+  if cli_requested "$GEMINI_CLI" && command -v gemini >/dev/null 2>&1; then paid_paths+=("cli=gemini"); fi
+  if [[ -n "${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}" ]]; then paid_paths+=("backend=gemini(api-key)"); fi
+  if [[ -n "${OPENAI_API_KEY:-}" ]]; then paid_paths+=("backend=openai(api-key)"); fi
+  if [[ -n "${DEEPSEEK_API_KEY:-}" ]]; then paid_paths+=("backend=deepseek(api-key)"); fi
+  if [[ -n "${KIMI_API_KEY:-}" ]]; then paid_paths+=("backend=kimi(api-key)"); fi
+fi
+if [[ ${#paid_paths[@]} -gt 0 ]]; then
+  if [[ "$LIVE" != "1" ]]; then
+    echo "⛔ Нужно --live (или GRAPHIFY_LIVE=1): построение графа пойдёт через LLM (${paid_paths[*]}) — токены подписки или API-ключа." >&2
+    echo "   Повтори с --live, чтобы согласиться на расход. Бесплатный путь без LLM: GRAPHIFY_AUTO_CLI=0 без API-ключей в env (локальный граф)." >&2
+    exit 3
+  fi
+  if ! python3 "$LEDGER_SCRIPT" record --service graphify --category llm --requests 1 --fail-on-block \
+        --task "graphify-refresh" --note "graphify-refresh ${paid_paths[*]}" >/dev/null; then
+    echo "⛔ usage-ledger отказал в записи расхода (потолок, битый журнал или нет seo-cycle.yaml в $ROOT) — граф не строится." >&2
+    exit 1
+  fi
 fi
 
 if [[ -z "$BACKEND" ]]; then

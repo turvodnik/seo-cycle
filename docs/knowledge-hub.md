@@ -19,7 +19,7 @@ Knowledge Hub превращает набор SEO-артефактов прое�
 ```bash
 bash ~/.codex/vendor/seo-cycle/install.sh --project "$(pwd)"
 bash ./.codex/skills/seo-cycle/scripts/knowledge/wiki-refresh-all.sh
-bash ./.codex/skills/seo-cycle/scripts/knowledge/graphify-refresh.sh
+bash ./.codex/skills/seo-cycle/scripts/knowledge/graphify-refresh.sh --live   # --live — согласие на расход LLM (T-069)
 ```
 
 Bootstrap ставит только локальные entrypoints проекта. Общий core лежит в
@@ -63,7 +63,7 @@ python3 ./.codex/skills/seo-cycle/scripts/knowledge/wiki-context-pack.py \
   --write
 
 # Graphify: semantic graph через Antigravity/Gemini CLI/API или degraded status
-bash ./.codex/skills/seo-cycle/scripts/knowledge/graphify-refresh.sh
+bash ./.codex/skills/seo-cycle/scripts/knowledge/graphify-refresh.sh --live   # --live — согласие на расход LLM (T-069)
 
 # Поиск по wiki/vector через SQLite FTS, zvec-ready output
 python3 ./.codex/skills/seo-cycle/scripts/knowledge/zvec-hybrid-index.py \
@@ -124,7 +124,12 @@ Core не должен содержать темы конкретного сай
 3. zvec или SQLite FTS — быстрый локальный поиск по wiki/vector.
 
 `graphify-refresh.sh` сначала пробует Antigravity CLI (`agy`) через OAuth, потом
-Gemini CLI, затем API backend из env, затем local fallback. Если `graphify` не
+Gemini CLI, затем API backend из env, затем local fallback. Любой из LLM-путей
+(CLI или API-ключ) — расход токенов, поэтому нужен `--live` (или `GRAPHIFY_LIVE=1`):
+без него при доступном LLM-пути скрипт печатает план и выходит с кодом 3, перед
+первым LLM-вызовом пишет write-ahead строку в usage-ledger (`graphify`/`llm`),
+отказ леджера — код 1 (T-069). Local fallback и сборка корпуса бесплатны и флага
+не требуют (`GRAPHIFY_AUTO_CLI=0` без ключей в env). Если `graphify` не
 установлен, команда не ломает upgrade: пишет `graphify-status.json` со статусом
 `degraded` и next step.
 
