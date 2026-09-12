@@ -60,17 +60,52 @@ class PulseUnitTest(unittest.TestCase):
         self.assertEqual([f["id"] for f in empty], ["no_snapshots"])
 
     def test_drop_finding_threshold(self) -> None:
-        report = {"latest": {"top10": 90}, "delta_vs_previous": {"top10": -10}}
-        finding = pulse.drop_finding(report, 5.0)
+        # T-096: the alert reads ONLY the intersection block of position-progress
+        def report(prev_top10: int, delta: int, raw_delta: int | None = None) -> dict:
+            return {"latest": {"top10": prev_top10 + delta},
+                    "delta_vs_previous": {"top10": raw_delta if raw_delta is not None else delta},
+                    "overlap_vs_previous": {"queries": 480, "prev_top10": prev_top10,
+                                            "top10": prev_top10 + delta, "delta_top10": delta}}
+        finding = pulse.drop_finding(report(100, -10), 5.0)
         self.assertIsNotNone(finding)
         self.assertEqual(finding["severity"], "critical")
         self.assertIn("10.0%", finding["message"])
-        small = {"latest": {"top10": 98}, "delta_vs_previous": {"top10": -2}}
-        self.assertIsNone(pulse.drop_finding(small, 5.0))
-        growth = {"latest": {"top10": 105}, "delta_vs_previous": {"top10": 5}}
-        self.assertIsNone(pulse.drop_finding(growth, 5.0))
+        self.assertIn("по пересечению выборок (480 запросов)", finding["message"])
+        self.assertIsNone(pulse.drop_finding(report(100, -2), 5.0))
+        self.assertIsNone(pulse.drop_finding(report(100, 5), 5.0))
         first_snapshot = {"latest": {"top10": 100}, "delta_vs_previous": {}}
         self.assertIsNone(pulse.drop_finding(first_snapshot, 5.0))
+
+    def test_drop_finding_ignores_sample_composition_change(self) -> None:
+        # gsse.ru 2026-08-28: raw top-10 −8 was queries leaving the top-500 by
+        # impressions, positions inside the intersection did not move → no alert
+        composition_only = {"latest": {"top10": 92},
+                            "delta_vs_previous": {"top10": -8},
+                            "overlap_vs_previous": {"queries": 470, "prev_top10": 90,
+                                                    "top10": 90, "delta_top10": 0}}
+        self.assertIsNone(pulse.drop_finding(composition_only, 5.0))
+        # a pre-T-096 progress.json (no overlap block) must not page either
+        legacy = {"latest": {"top10": 90}, "delta_vs_previous": {"top10": -10}}
+        self.assertIsNone(pulse.drop_finding(legacy, 5.0))
+
+    def test_sample_size_from_config_reaches_fetchers(self) -> None:
+        env = {"YANDEX_OAUTH_TOKEN": "t",
+               "GOOGLE_APPLICATION_CREDENTIALS": "/sa.json", "GSC_SITE_URL": "sc-domain:x.eu"}
+        # default: webmaster gets the explicit 500, gsc keeps its own row-limit
+        self.assertEqual(pulse.sample_size({}), (500, False))
+        default = pulse.configured_sources(env, "x.ru", 14, None, pulse.sample_size({}))
+        self.assertIn("--limit", default[0][2])
+        self.assertEqual(default[0][2][default[0][2].index("--limit") + 1], "500")
+        self.assertNotIn("--row-limit", default[1][2])
+        # explicit config: both fetchers obey it
+        cfg = {"monitoring": {"sample": {"size": 300}}}
+        self.assertEqual(pulse.sample_size(cfg), (300, True))
+        explicit = pulse.configured_sources(env, "x.ru", 14, None, pulse.sample_size(cfg))
+        self.assertEqual(explicit[0][2][explicit[0][2].index("--limit") + 1], "300")
+        self.assertEqual(explicit[1][2][explicit[1][2].index("--row-limit") + 1], "300")
+        # garbage falls back to the default, never to 0
+        self.assertEqual(pulse.sample_size({"monitoring": {"sample": {"size": "loose"}}})[0], 500)
+        self.assertEqual(pulse.sample_size({"monitoring": {"sample": {"size": -5}}})[0], 500)
 
 
 class PulseE2ETest(unittest.TestCase):

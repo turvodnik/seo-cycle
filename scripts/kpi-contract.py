@@ -41,6 +41,7 @@ from seo_cycle_core.config import (
     safe_round,
 )
 from seo_cycle_core.logging_setup import setup_logging
+from seo_cycle_core.monitoring import sample_line, snapshot_sample
 from seo_cycle_core.reports import write_report_bundle
 
 log = setup_logging("kpi-contract")
@@ -114,13 +115,22 @@ def load_facts(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[str, Any
                 "SELECT COUNT(DISTINCT query) FROM positions WHERE snapshot_date = ?"
                 " AND position > 0 AND position <= 10", (latest,)
             ).fetchone()[0]
+            tracked = conn.execute(
+                "SELECT COUNT(DISTINCT query) FROM positions WHERE snapshot_date = ?", (latest,)
+            ).fetchone()[0]
             window = snapshot_window_days(project_root, latest)
             monthly = float(clicks or 0)
             if window:
                 monthly = round(monthly * 30.0 / window, 1)
+            # T-096: clicks and top-10 are summed over the SAMPLE (top-N by
+            # impressions), not the site — the report says so next to them.
+            sample = snapshot_sample(cfg, project_root, latest)
             facts.update({"monthly_organic_clicks": monthly,
                           "keywords_in_top10": int(top10 or 0),
-                          "snapshot_date": latest, "window_days": window})
+                          "snapshot_date": latest, "window_days": window,
+                          "metric_scope": "query_sample",
+                          "sample": sample,
+                          "sample_line": sample_line(sample, int(tracked or 0))})
         conn.close()
     except sqlite3.Error:
         pass
@@ -270,11 +280,14 @@ def render_markdown(report: dict[str, Any]) -> str:
         f" · month: {contract['month']} · tolerance: ±{contract['tolerance_pct']}%",
         f"- Facts snapshot: {facts.get('snapshot_date') or 'no seo.db positions yet'}",
         *([window_line] if window_line else []),
+        *([f"- Граница выборки: {facts['sample_line']} — факты `monthly_organic_clicks` и"
+           " `keywords_in_top10` считаны по выборке топ-N по показам, не по всему сайту"]
+          if facts.get("sample_line") else []),
         f"- **Overall status: `{report['overall_status']}`**",
         "",
         "## Goals",
         "",
-        "| Goal | Target | Plan (this month) | Fact | Δ% | Status |",
+        "| Goal | Target | Plan (this month) | Fact (по выборке топ-N) | Δ% | Status |",
         "|---|---:|---:|---:|---:|---|",
     ]
     for row in report["goals"]:

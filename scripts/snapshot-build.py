@@ -70,8 +70,19 @@ def _empty_snapshot(args) -> dict:
 
 def from_gsc(raw: dict) -> dict:
     """GSC выгрузка: rows c keys [query, page], clicks, impressions, ctr, position"""
-    out = {"engine": "google", "source": "gsc", "queries": [], "pages": []}
     rows = raw.get("rows") or raw.get("data") or []
+    out = {
+        "engine": "google",
+        "source": "gsc",
+        # T-096: a GSC pull is `--row-limit` rows of query×page, not the
+        # site; the API reports no total, so `available_rows` is unknown
+        # by construction and consumers print «M неизвестно».
+        "metric_scope": "query_sample",
+        "sitewide": False,
+        "sample": {"loaded_rows": len(rows), "available_rows": None},
+        "queries": [],
+        "pages": [],
+    }
     seen_pages: dict[str, dict] = {}
     for r in rows:
         keys = r.get("keys", [])

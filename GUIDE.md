@@ -404,7 +404,7 @@ CloakBrowser/CloakMCP и другие stealth/anti-bot инструменты н
 | `psi-fetch.py` | PageSpeed Insights / CrUX (Core Web Vitals) | `python3 psi-fetch.py <url>` |
 | `webmaster-fetch.py` | Яндекс.Вебмастер запросы; при `--domain` игнорирует унаследованный env-host, сверяет exact domain с token-visible hosts и пишет `_identity` | `python3 webmaster-fetch.py --domain example.ru ...` |
 | `metrika-fetch.py` | Яндекс.Метрика | `python3 metrika-fetch.py ...` |
-| `snapshot-build.py` | Сводит источники в единый snapshot; Webmaster popular queries помечает как `query_sample`, не sitewide KPI; `db-sync.py` исключает пути `quarantine`/`invalid` | `python3 snapshot-build.py ...` → `*-snapshot.json` |
+| `snapshot-build.py` | Сводит источники в единый snapshot; Webmaster popular queries и GSC помечает как `query_sample` (`sample.loaded_rows`/`available_rows`), не sitewide KPI; `db-sync.py` исключает пути `quarantine`/`invalid`. Отчёты pulse/progress/kpi/forecast печатают «выборка N из M запросов сайта», дельты топ-10 — только по пересечению срезов (T-096) | `python3 snapshot-build.py ...` → `*-snapshot.json` |
 | `lost-keywords.py` | Потерянные/просевшие ключи между двумя снапшотами | `python3 lost-keywords.py --old O.json --new N.json` |
 | `competitor-benchmark.py` | Медианный бенчмарк по конкурентам (где мы ниже) | `python3 competitor-benchmark.py bench.csv --md` |
 
@@ -939,7 +939,7 @@ Mandatory rule: a full cycle's semantic collection and Entity Map are not comple
 | `psi-fetch.py` | PageSpeed Insights / CrUX (Core Web Vitals) | `python3 psi-fetch.py <url>` |
 | `webmaster-fetch.py` | Yandex.Webmaster queries; with `--domain`, ignores inherited env host, exact-matches token-visible hosts, and emits `_identity` | `python3 webmaster-fetch.py --domain example.ru ...` |
 | `metrika-fetch.py` | Yandex.Metrika | `python3 metrika-fetch.py ...` |
-| `snapshot-build.py` | Merges sources; labels Webmaster popular queries as `query_sample`, never a sitewide KPI; `db-sync.py` excludes `quarantine`/`invalid` paths | `python3 snapshot-build.py ...` → `*-snapshot.json` |
+| `snapshot-build.py` | Merges sources; labels Webmaster popular queries and GSC as `query_sample` (`sample.loaded_rows`/`available_rows`), never a sitewide KPI; `db-sync.py` excludes `quarantine`/`invalid` paths. pulse/progress/kpi/forecast print «sample N of M site queries», top-10 deltas only inside the intersection of two snapshots (T-096) | `python3 snapshot-build.py ...` → `*-snapshot.json` |
 | `lost-keywords.py` | Lost/dropped keywords between two snapshots | `python3 lost-keywords.py --old O.json --new N.json` |
 | `competitor-benchmark.py` | Median benchmark vs competitors (where you're below) | `python3 competitor-benchmark.py bench.csv --md` |
 
