@@ -73,7 +73,7 @@ Format: clean markdown with '## Long-Tail Queries' and '## Related Entities'.
 
 ## Workflow с двумя CLI параллельно
 
-Используй `scripts/llm-cli-collect.sh "<тема>"` — он:
+Используй `scripts/llm-cli-collect.sh --live "<тема>"` (`--live` — явное согласие на расход токенов подписок; без флага скрипт печатает план и выходит с кодом 3) — он:
 1. Подставляет плейсхолдеры (читает из `seo-cycle.yaml` если есть)
 2. Запускает agy + codex параллельно
 3. Сохраняет результаты в `<research_root>/llm-cli/results/`

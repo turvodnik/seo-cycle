@@ -362,7 +362,7 @@ WriterZen подключается как browser/export provider: API-ключ 
    ```
 3. Запусти автоматический сбор по теме. Скрипт откроет WriterZen, создаст нужные отчёты, скачает CSV/XLSX в `seo/research/writerzen/imports/` и сразу импортирует:
    ```bash
-   seo-cycle run script writerzen-browser-collect --topic "Плита ОСП" --force-new-report --manual-fallback-seconds 120 --write
+   seo-cycle run script writerzen-browser-collect --topic "Плита ОСП" --force-new-report --manual-fallback-seconds 120 --live --write
    ```
 4. По умолчанию он создаёт/скачивает:
    - Topic Discovery — ширина темы и related topics.
@@ -371,7 +371,7 @@ WriterZen подключается как browser/export provider: API-ключ 
    - Domain Focus — конкуренты, domain/DA-like evidence, ranking windows.
 5. Если UI изменился, включи supervised fallback: скрипт откроет страницу и будет ждать ручного клика Export, а download всё равно поймает и импортирует:
    ```bash
-   seo-cycle run script writerzen-browser-collect --topic "Плита ОСП" --manual-fallback-seconds 180 --write
+   seo-cycle run script writerzen-browser-collect --topic "Плита ОСП" --manual-fallback-seconds 180 --live --write
    ```
 6. Если экспорт уже скачан вручную, импортируй его напрямую:
    ```bash

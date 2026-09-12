@@ -6,7 +6,16 @@
 # заданный через переменную окружения LLMCLI_OUTPUT_DIR.
 #
 # Использование:
-#   ./llm-cli-collect.sh "<тема>" [<сегмент>] [<контекст>] [<язык>] [<регион>]
+#   ./llm-cli-collect.sh --live "<тема>" [<сегмент>] [<контекст>] [<язык>] [<регион>]
+#
+# --live (T-069) — обязательное согласие на трату: каждый живой вызов `agy` /
+#   `codex exec` расходует токены подписок Gemini/Codex. Без --live скрипт
+#   печатает план (какие CLI будут вызваны, что взято из кэша) и выходит с
+#   кодом 3, ничего не запуская. Свежий кэш (<TTL) не требует --live — трат
+#   нет. Перед живым вызовом пишется write-ahead строка в usage-ledger
+#   (`--service llm_cli --category llm --requests N --fail-on-block`):
+#   блок по потолку/битому журналу или отсутствие seo-cycle.yaml в текущем
+#   каталоге — стоп, ничего не запускается.
 #
 # Параметры адаптации под проект:
 #   LLMCLI_OUTPUT_DIR   — куда сохранять (default: ./seo/research/llm-cli/results)
@@ -18,8 +27,23 @@
 
 set -e
 
-if [[ -z "$1" ]]; then
-    echo "Usage: $0 \"<topic>\" [<segment>] [<categories>] [<lang>] [<region-text>]"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LEDGER_SCRIPT="$SCRIPT_DIR/usage-ledger.py"
+
+# T-069: --live may appear anywhere; everything else stays positional.
+LIVE=0
+POSITIONAL=()
+for arg in "$@"; do
+    if [[ "$arg" == "--live" ]]; then
+        LIVE=1
+    else
+        POSITIONAL+=("$arg")
+    fi
+done
+set -- "${POSITIONAL[@]+"${POSITIONAL[@]}"}"
+
+if [[ -z "${1:-}" ]]; then
+    echo "Usage: $0 --live \"<topic>\" [<segment>] [<categories>] [<lang>] [<region-text>]"
     echo "Example:"
     echo "  $0 \"минеральная вата для каркасного дома\" \"B2C+B2B\" \"минвата, пароизоляция\""
     echo "  $0 \"sneaker resale market\" \"B2C\" \"streetwear, fashion\" en \"United States\""
@@ -159,19 +183,53 @@ HAS_CODEX=0
 command -v agy >/dev/null 2>&1 && HAS_AGY=1
 command -v codex >/dev/null 2>&1 && HAS_CODEX=1
 
+# T-069: decide what would be a LIVE (token-spending) call BEFORE launching
+# anything — cache hits cost nothing and need no consent, live calls do.
+RUN_AGY=0
+RUN_CODEX=0
 if [[ $HAS_AGY -eq 1 ]]; then
     if HIT=$(cache_hit antigravity); then
         echo "↩ Antigravity: свежий кэш (<${CACHE_TTL}д) → $HIT — пропускаем сбор"
         ANTIGRAVITY_OUT="$HIT"
         HAS_AGY=2   # 2 = взято из кэша
     else
-        write_header "antigravity" "$ANTIGRAVITY_OUT"
-        echo "▶ Antigravity (~40-60 сек)..."
-        (agy --print "$PROMPT" >> "$ANTIGRAVITY_OUT" 2>&1; echo "  ✓ Antigravity done") &
-        AGY_PID=$!
+        RUN_AGY=1
     fi
 else
     echo "⚠ Antigravity (agy) не установлен — пропускаем"
+fi
+if [[ "$RUNTIME" != "codex" && $HAS_CODEX -eq 1 ]]; then
+    if HIT=$(cache_hit codex); then
+        echo "↩ Codex: свежий кэш (<${CACHE_TTL}д) → $HIT — пропускаем сбор"
+        CODEX_OUT="$HIT"
+        HAS_CODEX=2
+    else
+        RUN_CODEX=1
+    fi
+fi
+
+LIVE_CALLS=$((RUN_AGY + RUN_CODEX))
+if [[ $LIVE_CALLS -gt 0 ]]; then
+    if [[ $LIVE -ne 1 ]]; then
+        echo "⛔ Нужно --live: будет $LIVE_CALLS живых вызова(ов) (agy=$RUN_AGY, codex=$RUN_CODEX) — это токены подписок." >&2
+        echo "   Повтори с --live, чтобы согласиться на расход; кэш (<${CACHE_TTL}д) --live не требует." >&2
+        exit 3
+    fi
+    # Write-ahead ledger record (same contract as the paid Python clients):
+    # rc≠0 — cap/ledger block (1) or no project config (2) — nothing runs.
+    if ! python3 "$LEDGER_SCRIPT" record --service llm_cli --category llm \
+            --requests "$LIVE_CALLS" --fail-on-block \
+            --task "llm-cli-collect" --note "llm-cli-collect $SLUG agy=$RUN_AGY codex=$RUN_CODEX" >/dev/null; then
+        echo "⛔ usage-ledger отказал в записи расхода (потолок, битый журнал или нет seo-cycle.yaml в $PWD) — сбор не запущен." >&2
+        exit 1
+    fi
+fi
+
+if [[ $RUN_AGY -eq 1 ]]; then
+    write_header "antigravity" "$ANTIGRAVITY_OUT"
+    echo "▶ Antigravity (~40-60 сек)..."
+    (agy --print "$PROMPT" >> "$ANTIGRAVITY_OUT" 2>&1; echo "  ✓ Antigravity done") &
+    AGY_PID=$!
 fi
 
 if [[ "$RUNTIME" == "codex" ]]; then
@@ -185,22 +243,18 @@ if [[ "$RUNTIME" == "codex" ]]; then
     echo "  --- ПРОМПТ ДЛЯ НАТИВНОГО СБОРА ---"
     printf '%s\n' "$PROMPT"
     echo "  --- /ПРОМПТ ---"
-elif [[ $HAS_CODEX -eq 1 ]]; then
-    if HIT=$(cache_hit codex); then
-        echo "↩ Codex: свежий кэш (<${CACHE_TTL}д) → $HIT — пропускаем сбор"
-        CODEX_OUT="$HIT"
-        HAS_CODEX=2
-    else
-        write_header "codex" "$CODEX_OUT"
-        echo "▶ Codex CLI (~2-4 мин, deep reasoning + live web search)..."
-        # Флаги deep reasoning + live web search прописаны явно — скрипт самодостаточен
-        # и не зависит от глобального ~/.codex/config.toml при переносе на другую машину.
-        (codex exec --skip-git-repo-check \
-            -c model_reasoning_effort="xhigh" \
-            -c web_search="live" \
-            "$PROMPT" >> "$CODEX_OUT" 2>&1; echo "  ✓ Codex done") &
-        CODEX_PID=$!
-    fi
+elif [[ $RUN_CODEX -eq 1 ]]; then
+    write_header "codex" "$CODEX_OUT"
+    echo "▶ Codex CLI (~2-4 мин, deep reasoning + live web search)..."
+    # Флаги deep reasoning + live web search прописаны явно — скрипт самодостаточен
+    # и не зависит от глобального ~/.codex/config.toml при переносе на другую машину.
+    (codex exec --skip-git-repo-check \
+        -c model_reasoning_effort="xhigh" \
+        -c web_search="live" \
+        "$PROMPT" >> "$CODEX_OUT" 2>&1; echo "  ✓ Codex done") &
+    CODEX_PID=$!
+elif [[ $HAS_CODEX -eq 2 ]]; then
+    :   # cache hit, reported above
 else
     echo "⚠ Codex CLI не установлен — пропускаем"
 fi

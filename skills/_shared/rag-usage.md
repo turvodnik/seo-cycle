@@ -9,3 +9,5 @@ seo-cycle run script page-outline-v3 <pkg> --all-mvp --rag --write   # бриф�
 ```
 
 Индекс обновляй `seo-cycle rag index --write` после новых distillates/drafts (инкрементально, дёшево). Кросс-проектный: `rag index --global` по машинному реестру проектов.
+
+Деньги (T-069): если настроен платный провайдер эмбеддингов (`EMBEDDING_API_*`), и `rag index --write`, и `rag query` (гибридный режим) делают один и тот же платный вызов `/embeddings` — оба проходят предполётную проверку usage-ledger (`embedding_api`, категория `llm`; блок → код 2) и пишут расход после вызова. `rag query --global` вне проекта (нет `seo-cycle.yaml` в текущем каталоге) учесть расход не может: `--mode auto` откатывается на BM25 с пометкой, явный `--mode hybrid` — код 2. Без `EMBEDDING_API_*` всё офлайн и бесплатно.

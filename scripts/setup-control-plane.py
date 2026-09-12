@@ -198,7 +198,7 @@ def next_actions(
         actions.append("XMLRiver is available as a cheap Google/Yandex/Wordstat source, but needs `XMLRIVER_USER_ID` and `XMLRIVER_API_KEY` before live paid requests.")
 
     if writerzen_health.get("status") == "browser_login_required":
-        actions.append("WriterZen is browser/export-only; log in once, then run `writerzen-browser-collect.py --topic \"<seed>\" --force-new-report --manual-fallback-seconds 120 --write` to create reports, download CSV/XLSX and import distillates.")
+        actions.append("WriterZen is browser/export-only; log in once, then run `writerzen-browser-collect.py --topic \"<seed>\" --force-new-report --manual-fallback-seconds 120 --live --write` (--live = consent to spend credits, T-069) to create reports, download CSV/XLSX and import distillates.")
 
     missing_artifacts = [row["key"] for row in artifacts if not row.get("exists")]
     if missing_artifacts:

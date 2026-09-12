@@ -319,7 +319,12 @@ def fts_query(query: str) -> str:
 
 def search(conn: sqlite3.Connection, query: str, *, top_k: int = 8,
            source_types: list[str] | None = None, project: str | None = None,
-           mode: str = "auto") -> list[dict[str, Any]]:
+           mode: str = "auto", stats: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Hybrid search. `stats` (optional out-parameter, T-069) receives
+    `embedding_calls` — how many times `embed_texts()` (a paid call when a
+    paid provider is configured) was actually made for this query, so the
+    caller can write the usage-ledger record only for a spend that
+    happened, exactly the way `rag-index.py` records `embedded_chunks`."""
     filters = []
     params: list[Any] = []
     if source_types:
@@ -354,6 +359,8 @@ def search(conn: sqlite3.Connection, query: str, *, top_k: int = 8,
 
     use_embeddings = mode in ("auto", "hybrid") and embedding_env() is not None
     if use_embeddings and any(item["_embedding"] for item in results):
+        if stats is not None:
+            stats["embedding_calls"] = int(stats.get("embedding_calls", 0)) + 1
         query_vectors = embed_texts([query])
         if query_vectors:
             for item in results:

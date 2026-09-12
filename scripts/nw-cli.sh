@@ -4,13 +4,23 @@
 # Usage:
 #   nw-cli projects                              List all NeuronWriter projects
 #   nw-cli queries PROJECT_ID [STATUS]           List queries (status: waiting|in progress|ready)
-#   nw-cli new PROJECT KEYWORD [ENGINE] [LANG] [MODE]
-#                                                Create query (defaults: google.com, English, top-intent)
+#   nw-cli --live new PROJECT KEYWORD [ENGINE] [LANG] [MODE]
+#                                                Create query (defaults: google.com, English, top-intent) — spends 1 analysis, needs --live
 #   nw-cli get QUERY_ID                          Get analysis result (polls until ready, max ~2.5 min)
 #   nw-cli content QUERY_ID                      Get last saved content
 #   nw-cli evaluate QUERY_ID HTML_FILE           Score content without saving
 #   nw-cli import QUERY_ID HTML_FILE             Save content and score
-#   nw-cli plagiarism QUERY_ID [HTML_FILE]       Run account-specific plagiarism API call only when NW_PLAGIARISM_PATH is set
+#   nw-cli --live plagiarism QUERY_ID [HTML_FILE] Run account-specific plagiarism API call only when NW_PLAGIARISM_PATH is set — spends 1 check, needs --live
+#
+# Spending commands need explicit consent (T-069): `new` consumes one
+# content-writer analysis of the subscription, `plagiarism` one plagiarism
+# check. Both require `--live` (`nw-cli --live new ...`); without it the
+# command prints what it would do and exits 3, nothing is sent. Before the
+# call a write-ahead record goes to usage-ledger (`--service neuronwriter
+# --content-writer 1` / `--plagiarism-checks 1`, `--fail-on-block`): a cap
+# hit, a broken ledger, or no seo-cycle.yaml in the current directory stops
+# the command. Read-only commands (projects, queries, get, content,
+# evaluate, import) spend nothing and need no flag.
 #
 # Reads NEURON_API_KEY from env or from .env in current/parent dirs (up to 3 levels).
 # Defaults можно переопределить через env: NW_DEFAULT_ENGINE, NW_DEFAULT_LANGUAGE, NW_DEFAULT_MODE.
@@ -21,6 +31,20 @@
 
 set -euo pipefail
 NW_BASE="https://app.neuronwriter.com/neuron-api/0.5/writer"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LEDGER_SCRIPT="$SCRIPT_DIR/usage-ledger.py"
+
+# T-069: --live may appear anywhere; everything else stays positional.
+LIVE=0
+POSITIONAL=()
+for arg in "$@"; do
+  if [[ "$arg" == "--live" ]]; then
+    LIVE=1
+  else
+    POSITIONAL+=("$arg")
+  fi
+done
+set -- "${POSITIONAL[@]+"${POSITIONAL[@]}"}"
 
 # Defaults (для русскоязычных проектов переопредели через env или передавай явно)
 DEFAULT_ENGINE="${NW_DEFAULT_ENGINE:-google.com}"
@@ -76,6 +100,23 @@ req() {
 
 cmd="${1:-}"; shift || true
 
+# T-069: consent + write-ahead ledger record for the two spending commands.
+# $1 = ledger metric flag, $2 = note. Exit 3 without --live (nothing sent),
+# exit 1 when the ledger refuses (cap, broken journal, no project config).
+require_spend_consent() {
+  local metric_flag="$1" note="$2"
+  if [ "$LIVE" -ne 1 ]; then
+    echo "⛔ Нужно --live: 'nw-cli $cmd' тратит квоту подписки NeuronWriter ($note)." >&2
+    echo "   Повтори как 'nw-cli --live $cmd ...', чтобы согласиться на расход. Ничего не отправлено." >&2
+    exit 3
+  fi
+  if ! python3 "$LEDGER_SCRIPT" record --service neuronwriter --category paid_api \
+        "$metric_flag" 1 --fail-on-block --task "nw-cli $cmd" --note "$note" >/dev/null; then
+    echo "⛔ usage-ledger отказал в записи расхода (потолок, битый журнал или нет seo-cycle.yaml в $PWD) — запрос не отправлен." >&2
+    exit 1
+  fi
+}
+
 case "$cmd" in
   projects)
     req /list-projects -d '{}' | jq .
@@ -98,6 +139,7 @@ case "$cmd" in
     mode="${5:-$DEFAULT_MODE}"
     body=$(jq -nc --arg p "$project" --arg k "$keyword" --arg e "$engine" --arg l "$lang" --arg m "$mode" \
       '{project:$p, keyword:$k, engine:$e, language:$l, competitors_mode:$m}')
+    require_spend_consent --content-writer "new-query '$keyword' (1 content-writer analysis)"
     req /new-query -d "$body" | jq .
     ;;
   get)
@@ -166,6 +208,7 @@ EOF
     else
       body=$(jq -nc --arg q "$qid" '{query:$q}')
     fi
+    require_spend_consent --plagiarism-checks "plagiarism check for query $qid"
     req "$PLAGIARISM_PATH" -d "$body" | jq .
     ;;
   ""|-h|--help|help)

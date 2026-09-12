@@ -76,7 +76,19 @@ def finite_nonneg(x: object) -> bool:
     so they pass a type check but poison every comparison and addition that
     follows (`nan >= budget` is always False, `nan + cost` is `nan` forever).
     """
-    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) and x >= 0
+    if not isinstance(x, (int, float)) or isinstance(x, bool):
+        return False
+    try:
+        return math.isfinite(x) and x >= 0
+    except OverflowError:
+        # T-069 (R5-1, T-066 round-5 gate): `math.isfinite()` converts an
+        # int to a C double first, and a 400-digit integer (a legal JSON
+        # value, `json.loads("1" + "0" * 400)` is just a Python int) raises
+        # OverflowError instead of answering — the finiteness check itself
+        # blew up, which surfaced as a traceback rather than the intended
+        # UsageLedgerError. Such a value is not usable for money/quota
+        # arithmetic either way; answer "no" instead of crashing.
+        return False
 
 
 def current_month() -> str:

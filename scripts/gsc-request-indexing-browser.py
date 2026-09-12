@@ -5,6 +5,26 @@ Google does not expose a general API to request indexing for ordinary pages.
 This helper opens the URL Inspection UI with a persistent browser profile and
 optionally clicks the visible "Request indexing" button for a small reviewed
 queue. It never stores passwords or tokens.
+
+Quota accounting (T-069). A click spends the property's daily "request
+indexing" quota (~10 URLs/day) in the BROWSER — no file ledger, no socket
+gate, no API call this process could see. What this wrapper can do honestly:
+  * consent — a click happens only with `--auto-click` (default run opens the
+    inspection page and stops with `manual_action_required`); `--max` caps
+    the queue;
+  * accounting AFTER the fact — the runner reports per-URL `actions`, and an
+    entry starting with `request` means the button was actually clicked
+    (`submitted_or_requested` alone is NOT a click: it is also set when the
+    page says the URL was already submitted). Those clicks are written to
+    the usage ledger as `--service gsc_request_indexing --category browser
+    --requests N`. Not write-ahead: the number of clicks is only known from
+    the runner's result, and a pessimistic pre-record of `min(targets,
+    --max)` would over-count a daily quota the ledger has no cap for anyway.
+    The record is an audit line, not a stop — the stop for this quota is
+    Google's own `quota_hit`, mirrored in the report.
+  * what is lost — a runner killed between the click and its `finally` that
+    writes the result file (SIGKILL of node) leaves that click unrecorded.
+    Named, not closed: nothing on this side of the browser can see it.
 """
 
 from __future__ import annotations
@@ -20,6 +40,7 @@ import sys
 import tempfile
 from typing import Any
 
+from seo_cycle_core.ads import ledger_record  # generic ledger helper
 from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, rel_display, rel_path
 from seo_cycle_core.technical_artifacts import write_technical_report
 
@@ -144,6 +165,20 @@ def runner_command(args: argparse.Namespace, site_url: str, input_file: pathlib.
     return command
 
 
+def count_clicks(browser: dict[str, Any]) -> int:
+    """Number of URLs where the runner actually clicked "Request indexing"
+    (an `actions` entry starting with `request`) — the only observable of a
+    browser-side quota spend this process has (T-069). A row that was
+    already submitted carries `submitted_or_requested` without a
+    `request*` action and is not counted."""
+    clicks = 0
+    for row in browser.get("results") or []:
+        actions = row.get("actions") or []
+        if any(str(item).startswith("request") for item in actions):
+            clicks += 1
+    return clicks
+
+
 def summarize_results(browser: dict[str, Any]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for row in browser.get("results") or []:
@@ -207,6 +242,16 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
                 browser["exit_code"] = proc.returncode
                 browser["stderr"] = proc.stderr[-3000:]
                 browser["command"] = command
+                clicks = count_clicks(browser)
+                browser["quota_clicks"] = clicks
+                if clicks:
+                    # After-the-fact (the spend already happened in the
+                    # browser); a failed write is a bookkeeping loss, not a
+                    # reason to hide the run — ledger_record() prints the
+                    # warning, the report keeps the flag.
+                    browser["quota_clicks_recorded"] = ledger_record(
+                        project_root, "gsc_request_indexing", requests=clicks, category="browser",
+                        note=f"gsc-request-indexing-browser clicked Request indexing for {clicks} URL(s)")
     counts = summarize_results(browser)
     status = "planned" if args.dry_run else "ready" if browser.get("status") in {"finished", "manual_action_required"} else "blocked"
     summary = {
@@ -220,6 +265,8 @@ def build_report(cfg_path: pathlib.Path, args: argparse.Namespace) -> dict[str, 
         "manual_action_required": counts.get("manual_action_required", 0),
         "quota_hit": counts.get("quota_hit", 0),
         "request_button_not_found": counts.get("request_button_not_found", 0),
+        "quota_clicks": int(browser.get("quota_clicks") or 0),
+        "quota_clicks_recorded": bool(browser.get("quota_clicks_recorded", False)),
     }
     findings: list[dict[str, Any]] = []
     if browser.get("status") == "blocked":
