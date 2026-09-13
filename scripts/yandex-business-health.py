@@ -77,6 +77,8 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 SPEC = HealthSpec(
     slug="yandex-business",
+    enabled_key="sources.yandex_business_maps.enabled",  # T-062: off in config → not probed
+    provider="yandex_business",  # same id as build_report's `provider`
     style="simple",
     description=__doc__,
     write_help="Write seo/setup/yandex-business-health.* artifacts.",

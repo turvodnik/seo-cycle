@@ -114,6 +114,59 @@ pifagorlab.com 21.08). Теперь: размер выборки — явный 
   вызова неизвестна), решение R5-2 о поведении force-флага — за Vladimir.
 
 
+### T-062
+
+#### Изменение поведения: health-проверка выключенного провайдера больше не опрашивает его
+
+Семь `scripts/*-health.py` (`gbp`, `google-ads`, `merchant`, `yandex-direct`,
+`yandex-business`, `notebooklm`, `perplexity`) через общее ядро
+`scripts/seo_cycle_core/health.py` (T-053) теперь читают переключатель
+провайдера в `seo-cycle.yaml`. Если ключ **присутствует и ложен** — сборка
+отчёта провайдера не вызывается вовсе: переменные окружения не читаются,
+локальные приложения/браузер не ищутся, сеть не трогается (доказано шпионом
+`git`/`curl`/`socket` в `tests/test_health_disabled_provider.py`). Вместо
+этого пишется короткий отчёт со статусом `disabled_in_config`, ключом и
+объяснением для человека. **Отчёты выключенных провайдеров теперь выглядят
+иначе** — `seo/setup/<провайдер>-health.md|json` (и `latest-*`) содержат
+только `provider`, `generated_at`, `project`, `status`, `config_key`,
+`status_note`, `checked: false`. Обёртки без ключа (или с `enabled: true`)
+ведут себя побайтно как прежде — 24 эталона T-053 не изменились.
+
+Ключи (один на провайдера): `sources.google_business_profile.enabled` (gbp),
+`sources.google_merchant.enabled` (merchant),
+`sources.yandex_business_maps.enabled` (yandex-business),
+`ads.google_ads.enabled` (google-ads), `ads.yandex_direct.enabled`
+(yandex-direct), `notebooklm_provider.enabled`, `perplexity_provider.enabled`.
+Семантика та же, что у `pulse.py` → `engines.engine_names()` (ложный флаг
+= пропустить); отсутствующий ключ — не сигнал. Внимание: шаблон
+`config/project.template.yaml` ставит `enabled: false` для
+`sources.google_business_profile`, `sources.google_merchant`,
+`sources.yandex_business_maps`, `ads.yandex_direct` и `ads.google_ads` — на
+проектах, скопировавших шаблон без правок, отчёты GBP, Merchant,
+Yandex Business и обеих рекламных платформ сменят статус на
+`disabled_in_config`. NotebookLM и Perplexity в шаблоне включены
+(`*_provider.enabled: true`); `sources.perplexity.enabled` (источник
+исследований для `resolve-sources.py`) health-скрипт не читает.
+
+Код возврата выключенного провайдера — `0` (шкала прежняя: 0 = отчёт собран,
+как и при `partner_limited`/`needs_credentials`; 2 = конфиг не найден или
+пуст). Потребители статусов (`setup-control-plane.py`,
+`project-journey.py`) сравнивают только с конкретными «плохими» значениями —
+новый статус в «сломано» не превращается. Тесты: +4 (21 подпроцессный
+сценарий, эталоны `tests/fixtures/health/*-disabled.*`, негативный контроль
+«гейт убран из ядра → маркер исчезает у всех семи»); ветка
+`fix/t-062-health-disabled`. Поле `provider` в отключённом отчёте — тот же
+идентификатор, что пишет обёртка при включённом (`google_business_profile`,
+`google_ads`, …), а не slug скрипта.
+
+Известные ловушки (не чинятся здесь): у Perplexity два переключателя с
+разными дефолтами (`perplexity_provider.enabled` — читает health,
+`sources.perplexity.enabled` — читает `resolve-sources.py`);
+`yandex-business-health.py` гейтится по `sources.yandex_business_maps`, а
+env берёт из `sources.yandex_merchant` (`YANDEX_MERCHANT_BUSINESS_ID`);
+`enabled: "false"` строкой — истинное значение, провайдер считается
+включённым (как и в `engines.engine_names()`).
+
 ## [2.2.1] — 2026-09-07
 
 ### Fix: аннотированный тег ломал перепин на origin (T-095)
