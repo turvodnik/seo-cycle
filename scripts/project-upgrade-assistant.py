@@ -153,7 +153,7 @@ FEATURES: list[dict[str, Any]] = [
         ],
         "question": "Enable the project Knowledge Hub that turns WordPress inventory, reports, rules, decisions, Graphify links and hybrid search into a low-token source of truth?",
         "default_answer": "yes_report_only",
-        "command": "SEO_CYCLE_PROJECT_ROOT=$(pwd) seo-cycle run script knowledge/wiki-refresh-all.sh && SEO_CYCLE_PROJECT_ROOT=$(pwd) seo-cycle run script knowledge/graphify-refresh.sh",
+        "command": "SEO_CYCLE_PROJECT_ROOT=$(pwd) seo-cycle run script knowledge/wiki-refresh-all.sh && SEO_CYCLE_PROJECT_ROOT=$(pwd) seo-cycle run script knowledge/graphify-refresh.sh --live",
         "notes": "Report-only by default. It stores distillates and project memory, does not store secrets, does not publish, does not submit indexing and does not call paid APIs. For project-specific review/comparison pages, add `seo/knowledge/review-cluster-seeds.json`; otherwise seeds are generated from real inventory.",
     },
     {

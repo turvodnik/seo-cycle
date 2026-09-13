@@ -316,14 +316,14 @@ CloakBrowser/CloakMCP и другие stealth/anti-bot инструменты н
 | `knowledge/wiki-refresh-all.sh` | Обновляет project-local Knowledge Hub: WordPress inventory, правила, статьи, категории, бренды, товары, internal links, API catalog, review-cluster plan, latest wiki context pack и hybrid index | `bash ./.codex/skills/seo-cycle/scripts/knowledge/wiki-refresh-all.sh` | `seo/knowledge/wiki/**`, `seo/knowledge/zvec/zvec-status.json`, `seo/knowledge/wiki/context/latest-context-pack.md` |
 | `knowledge/wiki-preflight.py` | Проверяет страницу/черновик перед правкой: дубли slug/intent, правила проекта, служебные слова, raw URLs, связанные статьи/категории/товары | `python3 ./.codex/skills/seo-cycle/scripts/knowledge/wiki-preflight.py --url "<url>" --draft draft.md --write` | `seo/knowledge/wiki/preflight/wiki-preflight.md/json` + history JSON |
 | `knowledge/content-taste-gate.py` | Проверяет публичный текст на человеческий стиль: без "интент", "SEO-текст", raw URL, служебных примечаний, claims про наличие и неподтверждённых сравнений | `python3 ./.codex/skills/seo-cycle/scripts/knowledge/content-taste-gate.py draft.md --write` | `seo/knowledge/wiki/reports/content-taste-gate.md/json` |
-| `knowledge/graphify-refresh.sh` | Собирает curated corpus и строит Graphify-граф через Antigravity/Gemini CLI/API; если Graphify не установлен, пишет degraded status без падения upgrade | `bash ./.codex/skills/seo-cycle/scripts/knowledge/graphify-refresh.sh` | `seo/knowledge/graph/graphify-status.json`, optional `graphify-out/graph.json`, `GRAPH_REPORT.md`, `GRAPH_TREE.html` |
+| `knowledge/graphify-refresh.sh` | Собирает curated corpus и строит Graphify-граф через Antigravity/Gemini CLI/API; если Graphify не установлен, пишет degraded status без падения upgrade | `bash ./.codex/skills/seo-cycle/scripts/knowledge/graphify-refresh.sh --live` (`--live` — согласие на расход LLM; без него при доступном LLM-пути код 3, T-069) | `seo/knowledge/graph/graphify-status.json`, optional `graphify-out/graph.json`, `GRAPH_REPORT.md`, `GRAPH_TREE.html` |
 | `knowledge/zvec-hybrid-index.py` | Строит SQLite FTS/zvec-ready hybrid index по wiki и vector records для поиска похожих интентов, ссылок, товаров и сущностей | `python3 ./.codex/skills/seo-cycle/scripts/knowledge/zvec-hybrid-index.py --build --write` / `--query "Изоспан"` | `seo/knowledge/zvec/index.jsonl`, `hybrid.sqlite`, `zvec-status.json` |
 | `token-waste-audit.py` | Находит raw/large artifacts и oversized distillates, которые зря тратят context | `python3 token-waste-audit.py --write` | `seo/setup/token-waste-audit.md/json`, latest copies |
 | `perplexity-health.py` | Проверяет Perplexity persistent app/browser/API optional режим без хранения паролей | `python3 perplexity-health.py --write` | `seo/setup/perplexity-health.md/json`, latest copies |
 | `notebooklm-health.py` | Проверяет NotebookLM MCP/tools и fallback browser/manual export | `python3 notebooklm-health.py --write` | `seo/setup/notebooklm-health.md/json`, latest copies |
 | `xmlriver-health.py` | Проверяет XMLRiver readiness, env names, цены и capabilities без live paid API | `python3 xmlriver-health.py --write` | `seo/setup/xmlriver-health.md/json`, latest copies |
 | `writerzen-health.py` | Проверяет WriterZen browser/export readiness без хранения паролей | `python3 writerzen-health.py --browser-available --write` | `seo/setup/writerzen-health.md/json`, latest copies |
-| `writerzen-browser-collect.py` | Открывает WriterZen в persistent browser profile, создаёт нужные отчёты, скачивает CSV/XLSX в `seo/research/writerzen/imports/` и запускает importer одной командой | `python3 writerzen-browser-collect.py --topic "Плита ОСП" --force-new-report --manual-fallback-seconds 120 --write` | `seo/setup/writerzen-browser-collect.md/json` + WriterZen raw/distillate/vector |
+| `writerzen-browser-collect.py` | Открывает WriterZen в persistent browser profile, создаёт нужные отчёты, скачивает CSV/XLSX в `seo/research/writerzen/imports/` и запускает importer одной командой | `python3 writerzen-browser-collect.py --topic "Плита ОСП" --force-new-report --manual-fallback-seconds 120 --live --write` (`--live` — согласие на расход кредитов; без него код 3, T-069) | `seo/setup/writerzen-browser-collect.md/json` + WriterZen raw/distillate/vector |
 | `perplexity-collect.py` | Кэширует Perplexity export/raw response, пишет bounded distillate с citations и vector record; API paid disabled by default | `python3 perplexity-collect.py --topic "Плита ОСП" --raw-file response.md --write` | `seo/research/raw/perplexity/*.json`, `seo/research/distillates/perplexity/*.md/json`, `seo/research/vector/source_pack.jsonl` |
 | `notebooklm-source-pack.py` | Ингестит NotebookLM MCP/browser/manual export как curated expert evidence, не как ranking signal | `python3 notebooklm-source-pack.py --topic "SEO" --export-file notebook.md --write` | `seo/research/raw/notebooklm/*.json`, `seo/research/distillates/notebooklm/*.md/json`, `seo/research/vector/source_pack.jsonl` |
 | `xmlriver-source-pack.py` | Guarded XMLRiver adapter: Google/Yandex SERP XML, Wordstat New JSON, ads/shopping/maps/suggest/AI Overview request plans; live только `--live --allow-paid` | `python3 xmlriver-source-pack.py --query "Плита ОСП" --engine yandex --input-file serp.xml --write` | `seo/research/raw/xmlriver/*.json`, `seo/research/distillates/xmlriver/*.md/json`, `seo/research/vector/source_pack.jsonl` |
@@ -388,8 +388,8 @@ CloakBrowser/CloakMCP и другие stealth/anti-bot инструменты н
 | `spyfu-fetch.py` | Competitor/PPC US/UK/EU (не РФ) | `python3 spyfu-fetch.py domain-stats <domain> --cc US` | md-таблица; usage-трекер $-бюджета |
 | `dataforseo-fetch.py` | **DataForSEO**: SERP, частотность Google Ads, Labs (идеи/связанные/ranked/конкуренты), бэклинки, onpage. Мировые данные, кроме РФ и Белоруссии (исключены из всех API DataForSEO с марта 2022) | `ai-secret run global -- python3 dataforseo-fetch.py volume "<ключ>" --location 2840 --md` | md-таблица; кэш 30д; учёт трат по полю `cost` (`_usage.json`) + стоп по `--budget`. В диалоге те же данные даёт MCP-сервер `dataforseo` |
 | `atp-fetch.py` | Шаблоны вопросов AnswerThePublic (en/us) | `python3 atp-fetch.py "<en keyword>" --live` | md с questions/prepositions/comparisons |
-| `nw-cli.sh` | NeuronWriter: SERP terms/entities/score | `bash nw-cli.sh get <query_id>` | terms, entities, competitors, target score |
-| `llm-cli-collect.sh` | Параллельный сбор Antigravity + Codex (RUNTIME-aware, deep-режим); Antigravity обязателен для семантики/интентов/сущностей | `bash llm-cli-collect.sh "<тема>"` | 2 файла сырья + подсказка merge |
+| `nw-cli.sh` | NeuronWriter: SERP terms/entities/score | `bash nw-cli.sh get <query_id>`; `new`/`plagiarism` тратят квоту подписки и требуют `--live` (`bash nw-cli.sh --live new <project> "<keyword>"`, T-069) | terms, entities, competitors, target score |
+| `llm-cli-collect.sh` | Параллельный сбор Antigravity + Codex (RUNTIME-aware, deep-режим); Antigravity обязателен для семантики/интентов/сущностей | `bash llm-cli-collect.sh --live "<тема>"` (`--live` — согласие на расход токенов, T-069) | 2 файла сырья + подсказка merge |
 | `llm-cli-merge.py` | Слияние+дедуп результатов LLM-CLI | `python3 llm-cli-merge.py a.md b.md -o merged.md` | `*-merged-*.md` (дистиллят) |
 | `research-cache.py` | TTL-кэш дорогого сбора | `python3 research-cache.py check --dir ... --slug ... --source ... --ttl 14` | путь к свежему кэшу (HIT) или код 1 (MISS) |
 | `google-nlp-audit.py` | Guarded Google Cloud NLP entity/category/syntax audit с кэшем и unit caps | `python3 google-nlp-audit.py --project-root . --url https://example.com/ --dry-run` | JSON plan/cache/API results; без публикации и без обхода лимитов |
@@ -424,7 +424,7 @@ CloakBrowser/CloakMCP и другие stealth/anti-bot инструменты н
 ### 7.5 Публикация (CMS)
 | Скрипт | Что делает |
 |---|---|
-| `img-generate.sh` | Генерация изображения (RUNTIME-aware: codex exec / нативный image-skill) |
+| `img-generate.sh` | Генерация изображения (RUNTIME-aware: codex exec / нативный image-skill); в claude-режиме обязателен `--live` (расход кредитов, T-069) |
 | `wp-photo-image.py` | Детерминированное фото: локальный файл/URL → crop по `images.aspect_ratios.*` → WebP → WordPress upload через SSH/WP-CLI → alt/caption/featured |
 | (в проекте) `wp-*-publish.py` | Публикация постов/категорий/страниц |
 
@@ -520,7 +520,7 @@ python3 resolve-sources.py                        # активные источ�
 python3 serpstat-fetch.py stats                   # остаток кредитов Serpstat
 python3 serpstat-fetch.py keywords-info "X" --se g_ru
 python3 spyfu-fetch.py usage                      # расход $ SpyFu
-bash llm-cli-collect.sh "тема"                    # сбор Antigravity+Codex
+bash llm-cli-collect.sh --live "тема"             # сбор Antigravity+Codex (--live — согласие на расход)
 python3 yandex-suggest.py "X" --region 213 --depth 2
 python3 link-audit.py --input-json linkinator.json --url https://example.com/ --write
 python3 redirect-map-audit.py --input redirects.csv --base-url https://example.com --write
@@ -859,7 +859,7 @@ CloakBrowser/CloakMCP and other stealth/anti-bot tools are not part of the stand
 | `notebooklm-health.py` | Checks NotebookLM MCP/tools and browser/manual export fallback | `python3 notebooklm-health.py --write` | `seo/setup/notebooklm-health.md/json`, latest copies |
 | `xmlriver-health.py` | Checks XMLRiver readiness, env names, prices and capabilities without live paid API | `python3 xmlriver-health.py --write` | `seo/setup/xmlriver-health.md/json`, latest copies |
 | `writerzen-health.py` | Checks WriterZen browser/export readiness without password storage | `python3 writerzen-health.py --browser-available --write` | `seo/setup/writerzen-health.md/json`, latest copies |
-| `writerzen-browser-collect.py` | Opens WriterZen in a persistent browser profile, creates the required reports, downloads CSV/XLSX into `seo/research/writerzen/imports/`, then runs the importer in one command | `python3 writerzen-browser-collect.py --topic "OSB board" --force-new-report --manual-fallback-seconds 120 --write` | `seo/setup/writerzen-browser-collect.md/json` + WriterZen raw/distillate/vector |
+| `writerzen-browser-collect.py` | Opens WriterZen in a persistent browser profile, creates the required reports, downloads CSV/XLSX into `seo/research/writerzen/imports/`, then runs the importer in one command | `python3 writerzen-browser-collect.py --topic "OSB board" --force-new-report --manual-fallback-seconds 120 --live --write` (`--live` = consent to spend credits; without it exit 3, T-069) | `seo/setup/writerzen-browser-collect.md/json` + WriterZen raw/distillate/vector |
 | `perplexity-collect.py` | Caches Perplexity export/raw response, writes bounded distillate with citations and a vector record; paid API disabled by default | `python3 perplexity-collect.py --topic "OSB board" --raw-file response.md --write` | `seo/research/raw/perplexity/*.json`, `seo/research/distillates/perplexity/*.md/json`, `seo/research/vector/source_pack.jsonl` |
 | `notebooklm-source-pack.py` | Ingests NotebookLM MCP/browser/manual export as curated expert evidence, not as a ranking signal | `python3 notebooklm-source-pack.py --topic "SEO" --export-file notebook.md --write` | `seo/research/raw/notebooklm/*.json`, `seo/research/distillates/notebooklm/*.md/json`, `seo/research/vector/source_pack.jsonl` |
 | `xmlriver-source-pack.py` | Guarded XMLRiver adapter: Google/Yandex SERP XML, Wordstat New JSON, ads/shopping/maps/suggest/AI Overview request plans; live only with `--live --allow-paid` | `python3 xmlriver-source-pack.py --query "OSB board" --engine google --input-file serp.xml --write` | `seo/research/raw/xmlriver/*.json`, `seo/research/distillates/xmlriver/*.md/json`, `seo/research/vector/source_pack.jsonl` |
@@ -923,8 +923,8 @@ CloakBrowser/CloakMCP and other stealth/anti-bot tools are not part of the stand
 | `spyfu-fetch.py` | Competitor/PPC US/UK/EU (not RU) | `python3 spyfu-fetch.py domain-stats <domain> --cc US` | md table; $-budget tracker |
 | `dataforseo-fetch.py` | **DataForSEO**: SERP, Google Ads volume, Labs (ideas/related/ranked/competitors), backlinks, onpage. Worldwide except RU and Belarus (excluded from all DataForSEO APIs since March 2022) | `ai-secret run global -- python3 dataforseo-fetch.py volume "<kw>" --location 2840 --md` | md table; 30d cache; real spend from API `cost` (`_usage.json`) + `--budget` stop. Same data in chat via the `dataforseo` MCP server |
 | `atp-fetch.py` | AnswerThePublic question templates (en/us) | `python3 atp-fetch.py "<en keyword>" --live` | md questions/prepositions/comparisons |
-| `nw-cli.sh` | NeuronWriter: SERP terms/entities/score | `bash nw-cli.sh get <query_id>` | terms, entities, competitors, target score |
-| `llm-cli-collect.sh` | Parallel Antigravity + Codex (RUNTIME-aware, deep mode); Antigravity is mandatory for semantics/intents/entities | `bash llm-cli-collect.sh "<topic>"` | 2 raw files + merge hint |
+| `nw-cli.sh` | NeuronWriter: SERP terms/entities/score | `bash nw-cli.sh get <query_id>`; `new`/`plagiarism` spend subscription quota and require `--live` (`bash nw-cli.sh --live new <project> "<keyword>"`, T-069) | terms, entities, competitors, target score |
+| `llm-cli-collect.sh` | Parallel Antigravity + Codex (RUNTIME-aware, deep mode); Antigravity is mandatory for semantics/intents/entities | `bash llm-cli-collect.sh --live "<topic>"` (`--live` = consent to spend tokens, T-069) | 2 raw files + merge hint |
 | `llm-cli-merge.py` | Merge+dedup LLM-CLI results | `python3 llm-cli-merge.py a.md b.md -o merged.md` | `*-merged-*.md` (distilled) |
 | `research-cache.py` | TTL cache for expensive collection | `python3 research-cache.py check --dir ... --slug ... --source ... --ttl 14` | path to fresh cache (HIT) or exit 1 (MISS) |
 | `google-nlp-audit.py` | Guarded Google Cloud NLP entity/category/syntax audit with cache and unit caps | `python3 google-nlp-audit.py --project-root . --url https://example.com/ --dry-run` | JSON plan/cache/API results; no publishing and no guard bypass |
@@ -959,7 +959,7 @@ Mandatory rule: a full cycle's semantic collection and Entity Map are not comple
 ### 7.5 Publishing (CMS)
 | Script | What |
 |---|---|
-| `img-generate.sh` | Image generation (RUNTIME-aware: codex exec / native image-skill) |
+| `img-generate.sh` | Image generation (RUNTIME-aware: codex exec / native image-skill); claude mode requires `--live` (spends credits, T-069) |
 | `wp-photo-image.py` | Deterministic photo pipeline: local file/URL → crop by `images.aspect_ratios.*` → WebP → WordPress upload through SSH/WP-CLI → alt/caption/featured |
 | (project) `wp-*-publish.py` | Publish posts/categories/pages |
 
@@ -1055,7 +1055,7 @@ python3 resolve-sources.py
 python3 serpstat-fetch.py stats
 python3 serpstat-fetch.py keywords-info "X" --se g_ru
 python3 spyfu-fetch.py usage
-bash llm-cli-collect.sh "topic"
+bash llm-cli-collect.sh --live "topic"
 python3 yandex-suggest.py "X" --region 213 --depth 2
 python3 link-audit.py --input-json linkinator.json --url https://example.com/ --write
 python3 redirect-map-audit.py --input redirects.csv --base-url https://example.com --write

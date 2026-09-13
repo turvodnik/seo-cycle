@@ -1,5 +1,24 @@
 #!/usr/bin/env python3
-"""Collect WriterZen reports through a persistent browser profile, then import exports."""
+"""Collect WriterZen reports through a persistent browser profile, then import exports.
+
+Credits (T-069). Creating/starting a WriterZen report spends subscription
+credits by a CLICK in the browser (a separate Node/Playwright process) — the
+Python-level socket gate cannot see it, and no API reports the price. What
+this wrapper does instead:
+  * consent — a real run needs `--live` (T-069); `--dry-run` prints the plan
+    as before, and a run with neither flag exits 3 with status
+    `consent_required` and opens nothing;
+  * preflight — `usage-ledger.py check --service writerzen --category
+    paid_api --requests <reports> --fail-on-block` before the browser is
+    launched (a cap in `governance.subscriptions.writerzen`, or a broken
+    ledger, blocks the run);
+  * accounting AFTER the fact — each per-report result whose `actions`
+    contain `report_started` is one started report; recorded as `--service
+    writerzen --requests N`. A reused existing report spends nothing and is
+    not counted. Not write-ahead: how many reports actually start is known
+    only from the runner's result file. A runner killed before writing that
+    file loses the count — named, not closed.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +33,7 @@ import sys
 import tempfile
 from typing import Any
 
+from seo_cycle_core.ads import ledger_preflight, ledger_record  # generic ledger helpers
 from seo_cycle_core.config import find_config, load_config, nested_get, project_root_for, rel_path, write_text
 
 
@@ -200,6 +220,16 @@ def import_downloads(cfg_path: pathlib.Path, plan: dict[str, Any], downloads: li
     }
 
 
+def count_started_reports(browser_payload: dict[str, Any]) -> int:
+    """Reports the runner actually STARTED (`report_started` in `actions`) —
+    the only observable of a credit spend this process has (T-069)."""
+    started = 0
+    for item in browser_payload.get("results") or []:
+        if "report_started" in (item.get("actions") or []):
+            started += 1
+    return started
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     plan = report["plan"]
     browser = report.get("browser", {})
@@ -268,6 +298,9 @@ def main() -> int:
     parser.add_argument("--result-wait-seconds", type=int, default=15)
     parser.add_argument("--no-import-after", action="store_true", help="Collect downloads but do not run writerzen-source-pack.py.")
     parser.add_argument("--dry-run", action="store_true", help="Write/print the browser plan without opening WriterZen.")
+    parser.add_argument("--live", action="store_true",
+                        help="Explicit consent to open WriterZen and create/start reports (spends subscription credits). "
+                             "Without --live and without --dry-run nothing is opened (exit 3).")
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--format", choices=("md", "json"), default="md")
     args = parser.parse_args()
@@ -290,10 +323,28 @@ def main() -> int:
         "next_actions": [],
     }
 
+    if not args.dry_run and not args.live:
+        # T-069: a normal run used to open the browser and start reports —
+        # credits spent with no consent flag at all. Refuse, show the plan.
+        report["status"] = "consent_required"
+        report["browser"] = {"status": "consent_required"}
+        report["browser_command"] = browser_command(plan, pathlib.Path("<result-file.json>"), args)
+        report["next_actions"] = [
+            "Re-run with --live to open WriterZen and create/start reports (spends subscription credits), "
+            "or with --dry-run to only print the plan.",
+        ]
+        if args.write:
+            write_report(project_root, report)
+        if args.format == "json":
+            print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+        else:
+            print(render_markdown(report), end="")
+        return 3
+
     if args.dry_run:
         report["browser_command"] = browser_command(plan, pathlib.Path("<result-file.json>"), args)
         report["next_actions"] = [
-            "Run without --dry-run to open WriterZen in a persistent browser profile.",
+            "Run with --live to open WriterZen in a persistent browser profile (spends credits).",
             "For first run, keep headed mode and log in manually; the profile is outside the project repo.",
             "If WriterZen UI changes, rerun with --manual-fallback-seconds 120 and export manually while the script watches downloads.",
         ]
@@ -321,6 +372,18 @@ def main() -> int:
                 else:
                     print(render_markdown(report), end="")
                 return 1
+            ok, message = ledger_preflight(project_root, PROVIDER, requests=len(plan["reports"]), category="paid_api")
+            if not ok:
+                report["status"] = "blocked"
+                report["browser"] = {"status": "ledger_blocked", "error": message}
+                report["next_actions"].append(f"usage-ledger preflight blocked WriterZen: {message}")
+                if args.write:
+                    write_report(project_root, report)
+                if args.format == "json":
+                    print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+                else:
+                    print(render_markdown(report), end="")
+                return 1
             with tempfile.TemporaryDirectory(prefix="writerzen-browser-") as tmp:
                 result_file = pathlib.Path(tmp) / "writerzen-browser-result.json"
                 command = browser_command(plan, result_file, args)
@@ -338,6 +401,15 @@ def main() -> int:
                 browser_payload.setdefault("status", "failed" if browser_proc["exit_code"] else "done")
                 browser_payload["exit_code"] = browser_proc["exit_code"]
                 browser_payload["stderr"] = browser_proc["stderr"][-3000:]
+                started = count_started_reports(browser_payload)
+                browser_payload["credits_reports_started"] = started
+                if started:
+                    # After the fact: the credits are already spent in the
+                    # browser; a failed write is a bookkeeping loss
+                    # (ledger_record() warns), not a reason to hide the run.
+                    browser_payload["credits_recorded"] = ledger_record(
+                        project_root, PROVIDER, requests=started, category="paid_api",
+                        note=f"writerzen-browser-collect started {started} report(s)")
                 report["browser"] = browser_payload
                 downloads = [str(path) for path in browser_payload.get("downloads", [])]
                 report["importer"] = import_downloads(cfg_path, plan, downloads, args)

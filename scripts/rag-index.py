@@ -125,7 +125,13 @@ def main() -> int:
             cfg = load_yaml(entry_cfg_path) if entry_cfg_path else {}
         mode = embed_mode or str(nested_get(cfg, "rag.embedding.mode", "auto") or "auto")
         if mode != "off" and embedding_env() is not None and args.write:
-            ok, message = ledger_preflight(entry["path"], "embedding_api", category="llm")
+            # T-069: `usage-ledger.py check` refuses a call with no estimate
+            # metric at all (rc=2, "check requires at least one estimate
+            # metric") — without `requests=1` this preflight was ALWAYS
+            # "blocked", so indexing with a configured embedding provider
+            # never ran (fail-closed, but dead). Same call shape as
+            # rag-query.py now, on purpose: the two must behave alike.
+            ok, message = ledger_preflight(entry["path"], "embedding_api", requests=1, category="llm")
             if not ok:
                 print(f"ERROR: usage-ledger preflight blocked embeddings: {message}", file=sys.stderr)
                 return 2

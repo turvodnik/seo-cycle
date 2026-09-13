@@ -293,10 +293,14 @@ PAID_SERVICE_HOSTS: "dict[str, frozenset[str]]" = {
 # derives from this + PAID_SERVICE_HOSTS) but whose calls this Python-level
 # socket gate cannot see, by construction — not an oversight, a documented
 # known exception (path (b), T-092):
-#   neuronwriter — no Python API client exists in scripts/*.py at all; usage
-#     is imported from a manually-maintained seo/neuronwriter-limits.yaml
-#     (see usage-ledger.py:imported_neuronwriter_limits), not a live call
-#     this repo's process makes.
+#   neuronwriter — no Python API client exists in scripts/*.py; the only
+#     client is the shell helper scripts/nw-cli.sh (curl in its own process,
+#     invisible to this gate). T-069: that helper carries its own consent
+#     flag (`--live` for `new`/`plagiarism`) and writes a write-ahead
+#     usage-ledger line (`--content-writer 1` / `--plagiarism-checks 1`)
+#     before the call; UI-side spend is still imported from the
+#     manually-maintained seo/neuronwriter-limits.yaml
+#     (see usage-ledger.py:imported_neuronwriter_limits).
 #   writerzen    — scripts/writerzen-browser-collect.py drives a *separate*
 #     Node.js subprocess (writerzen-browser-runner.mjs, Playwright) that
 #     makes its own outbound HTTPS connections in ITS OWN process; this

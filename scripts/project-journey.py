@@ -519,7 +519,7 @@ def content_draft_stage(package: dict[str, Any]) -> dict[str, Any]:
             f"Create or revise draft markdown under {package_dir}/drafts/ from {package_dir}/copywriter-ready/*.md, copywriting_playbook, writer_prompt_packet and source slots.",
             f"seo-cycle loop draft {package_dir}/drafts/<slug>.md --outline {package_dir}/page-outlines-v3/<slug>.json",
             "seo-cycle run script nw-cli.sh evaluate <query_id> <draft.html>",
-            "seo-cycle run script nw-cli.sh plagiarism <query_id> <draft.html>",
+            "seo-cycle run script nw-cli.sh --live plagiarism <query_id> <draft.html>",
             "seo-cycle ledger record --service neuronwriter --category paid_api --plagiarism-checks 1 --task \"final plagiarism check\" --write",
             "seo-cycle journey --write",
         ],

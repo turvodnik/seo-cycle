@@ -80,7 +80,7 @@ seo-cycle run script resolve-sources
 |---|---|---|
 | **Antigravity** (`agy`) | CLI | Обязательно для семантики, интентов, сущностей и альтернативных формулировок |
 | **Codex** (`codex exec`) | CLI | С URL для fact-check, web search |
-| **Параллельный запуск + merge** | script | `scripts/llm-cli-collect.sh "<тема>"` |
+| **Параллельный запуск + merge** | script | `scripts/llm-cli-collect.sh --live "<тема>"` (`--live` — согласие на расход токенов; без него — план и код 3, T-069) |
 
 #### Group E — Public APIs
 | Источник | Тип | Когда |

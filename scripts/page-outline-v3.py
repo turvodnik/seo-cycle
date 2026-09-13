@@ -12,6 +12,7 @@ import argparse
 import importlib.util
 import json
 import pathlib
+import sys
 from typing import Any
 
 from seo_cycle_core.config import load_config, write_text
@@ -524,31 +525,60 @@ def batch_payload(outlines: list[dict[str, Any]]) -> dict[str, Any]:
     return {"outline_id": "page_outline_v3_batch", "version": "v3", "generated_at": V2.utc_now(), "count": len(outlines), "outlines": outlines}
 
 
-def attach_rag_passages(package: pathlib.Path, outlines: list[dict[str, Any]]) -> None:
-    """Best-effort: enrich outlines with related passages from the local RAG index."""
+def attach_rag_passages(package: pathlib.Path, outlines: list[dict[str, Any]]) -> bool:
+    """Best-effort: enrich outlines with related passages from the local RAG index.
+
+    Money (T-069 fix round 1, gate F-1): with `EMBEDDING_API_*` configured
+    every `search()` here embeds the page keyword — the SAME paid call
+    `rag-index.py`/`rag-query.py` make, one per outline. Same contract as
+    those two: one usage-ledger preflight (`embedding_api`, `llm`,
+    `requests=<pages>`) BEFORE the first call, a record of the calls actually
+    made after. A blocked preflight returns False (the caller exits 2, no
+    byte sent). No `seo-cycle.yaml` to account against → BM25 only.
+    Returns True when nothing was blocked (including the no-index no-op)."""
     try:
+        from seo_cycle_core.ads import ledger_preflight, ledger_record
         from seo_cycle_core.config import find_config, package_project_root
-        from seo_cycle_core.rag import open_db, rag_db_path, search
+        from seo_cycle_core.rag import embedding_env, open_db, rag_db_path, search
     except ImportError:
-        return
+        return True
     project_root = package_project_root(package)
     cfg_path = find_config(project_root)
     cfg = load_config(cfg_path) if cfg_path else {}
     db_path = rag_db_path(project_root, cfg)
     if not db_path.exists():
-        return
+        return True
+    keywords = [str((outline.get("page") or {}).get("primary_keyword") or "").strip() for outline in outlines]
+    mode = "auto"
+    if embedding_env() is not None and any(keywords):
+        if not cfg_path:
+            print("NOTE: embeddings configured but no seo-cycle.yaml for this package — "
+                  "usage cannot be accounted, RAG passages use BM25 only.", file=sys.stderr)
+            mode = "bm25"
+        else:
+            ok, message = ledger_preflight(project_root, "embedding_api", requests=sum(1 for k in keywords if k),
+                                           category="llm")
+            if not ok:
+                print(f"ERROR: usage-ledger preflight blocked embeddings for --rag: {message}", file=sys.stderr)
+                return False
     conn = open_db(db_path)
-    for outline in outlines:
-        keyword = str((outline.get("page") or {}).get("primary_keyword") or "").strip()
+    stats: dict[str, Any] = {}
+    for outline, keyword in zip(outlines, keywords, strict=True):
         if not keyword:
             continue
-        hits = search(conn, keyword, top_k=3, source_types=["source_pack", "distillate", "triplet"])
+        hits = search(conn, keyword, top_k=3, source_types=["source_pack", "distillate", "triplet"],
+                      mode=mode, stats=stats)
         outline["related_passages"] = [
             {"source_type": hit["source_type"], "path": hit["path"], "score": hit["score"],
              "text": hit["text"][:500], "meta": hit.get("meta", {})}
             for hit in hits
         ]
     conn.close()
+    calls = int(stats.get("embedding_calls", 0))
+    if calls:
+        ledger_record(project_root, "embedding_api", requests=calls, category="llm",
+                      note=f"page-outline-v3 --rag embedded {calls} page keyword(s)")
+    return True
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -574,8 +604,8 @@ def main(argv: list[str] | None = None) -> int:
         priorities=args.priority,
         expert_author=args.expert_author,
     )
-    if args.rag:
-        attach_rag_passages(package, outlines)
+    if args.rag and not attach_rag_passages(package, outlines):
+        return 2
     if args.write:
         output_dir = pathlib.Path(args.output_dir).expanduser().resolve() if args.output_dir else None
         for outline in outlines:
