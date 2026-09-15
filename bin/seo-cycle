@@ -10,12 +10,14 @@ found and different from this launcher's own root, re-execs that project's
 own bin/seo-cycle instead. A guard env var prevents infinite recursion.
 
 Secrets (T-108, policy §5): key values live in the macOS Keychain and reach
-a process only through `ai-secret run <scope> -- <command>`. For commands
-that fetch provider data (SECRET_COMMANDS) this launcher checks whether the
+a process only through `ai-secret run <scope> -- <command>`. For the
+pulse-family commands (SECRET_COMMANDS) this launcher checks whether the
 pulse keys are already in the environment; if not and `ai-secret` is on
 PATH, it re-executes itself under `ai-secret run <scope>` (scope =
 `project.brand_name_technical`), otherwise it prints ONE warning line to
-stderr and continues — a run on stale data is never silent (I-061).
+stderr and continues — a run on stale data is never silent (I-061). Keys
+already exported by hand are never overridden (`ai-secret run` would put
+the Keychain values on top of them, so the check comes BEFORE the re-exec).
 """
 
 import os
@@ -63,9 +65,13 @@ sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 from seo_cycle_cli import main  # noqa: E402
 
-# Commands that call provider APIs and therefore need key values in the
-# environment. Everything else (gates, reports, status, auth) runs as is.
-SECRET_COMMANDS = frozenset({"pulse", "doctor", "sync", "ads", "feed", "cohorts", "notify"})
+# Commands whose fresh data depends on the PULSE keys (Webmaster / GSC):
+# only for these is "no key in the environment" a reliable sign that the run
+# would silently degrade to the previous snapshot (I-061). Other fetching
+# commands (sync, ads, feed, notify) use provider-specific keys the launcher
+# cannot judge without overriding hand-exported values — they are run as
+# `ai-secret run <scope> -- seo-cycle <cmd>` or with the variables exported.
+SECRET_COMMANDS = frozenset({"pulse", "doctor", "cohorts"})
 
 
 def _first_command(argv: list[str]) -> str | None:

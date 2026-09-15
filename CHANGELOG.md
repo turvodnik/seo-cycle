@@ -53,14 +53,16 @@ JSON-форма не изменилась (дашборд перебирает �
 единственный оставшийся вызов `upsert_env_var` в `scripts/`, функция
 документирована как «только не-секретные маркеры». `auth login gbp` гоняет
 helper под `ai-secret run <scope>`. Лончер `bin/seo-cycle` (пункт 3
-тикета, выбран вариант «перезапуск себя»): для `pulse`/`doctor`/`sync`/
-`ads`/`feed`/`cohorts`/`notify` без ключей pulse в окружении — `execve`
+тикета, выбран вариант «перезапуск себя»): для семейства pulse
+(`pulse`/`doctor`/`cohorts`) без ключей pulse в окружении — `execve`
 через `ai-secret run <scope> -- …` (маркер `SEO_CYCLE_SECRETS_INJECTED=1`
 только от зацикливания; уже экспортированные ключи никогда не
 перекрываются — `ai-secret run` кладёт Keychain поверх окружения, поэтому
 проверка «ключи уже есть» стоит ДО перезапуска); без `ai-secret` или без
 scope — одна строка `⚠ seo-cycle <cmd>: …` в stderr, прогон на старом срезе
-не молчит. WordPress: провайдер `wordpress` = REST-семейство
+не молчит. `sync`/`ads`/`feed`/`notify` лончер не перезапускает: их ключи
+провайдер-специфичны, по именам pulse их не оценить, а перезапуск перекрыл
+бы экспортированное руками значение — они идут под `ai-secret run` руками. WordPress: провайдер `wordpress` = REST-семейство
 `WP_BASE_URL`/`WP_USER`/`WP_APP_PASSWORD` (то, что ждут публикация,
 `wp-content-pull.py`, `wiki_common.py`); Novomira MCP — отдельный провайдер
 `wordpress-mcp` (`WP_API_URL`/`WP_API_USERNAME`/`WP_API_PASSWORD`,

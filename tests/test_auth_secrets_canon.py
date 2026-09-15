@@ -287,6 +287,22 @@ class LauncherSecretsTest(_Base):
         self.assertNotIn("Traceback", proc.stderr)
         self.assertEqual(stub_log(self.stub_dir), "")
 
+    def test_provider_specific_commands_are_not_reexeced(self) -> None:
+        # `notify`/`sync`/`ads`/`feed` need keys the launcher cannot judge by the
+        # pulse names — re-exec there could override a hand-exported WP/Telegram
+        # value, so they stay on the manual `ai-secret run` path (documented).
+        self.write_config()
+        proc = self.launcher("notify", "probe", with_stub=True, extra={"TELEGRAM_BOT_TOKEN": "exported"})
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertEqual(stub_log(self.stub_dir), "")
+
+    def test_broken_yaml_gets_the_cli_error_not_a_traceback(self) -> None:
+        (self.project / "seo-cycle.yaml").write_text("project: [unclosed\n", encoding="utf-8")
+        proc = self.launcher("pulse", "--skip-fetch", with_stub=True)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertIn("ERROR", proc.stderr)
+        self.assertEqual(stub_log(self.stub_dir), "")
+
 
 class GbpHelperTest(_Base):
     def test_store_scope_requires_ai_secret_before_the_oauth_dance(self) -> None:
