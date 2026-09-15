@@ -151,32 +151,49 @@ seo-cycle report --write --pdf 2>&1 | grep -i pdf   # покажет "PDF skippe
 
 Симптом: `ai-secret run <scope> -- ...` подтверждает, что ключ провайдера
 существует и валиден (в macOS Keychain, по глобальной политике секретов
-§5 из `AGENTS.md`), но `seo-cycle auth list` печатает переменную с меткой
-`[—]` (не найдена ни в одном источнике), и `pulse` не может забрать свежие
-данные.
+§5 из `AGENTS.md`), но `pulse` не может забрать свежие данные, а
+`seo-cycle auth list` печатает переменную с меткой `[—]`.
 
-Причина: `seo-cycle` не читает Keychain напрямую — он берёт переменные
-окружения по своей собственной цепочке (`scripts/seo_cycle_core/env_profile.py`,
-старшинство сверху вниз): переменная процесса → `.env` проекта →
-`~/.seo-cycle/env.global`. Значение, которое лежит только в Keychain,
-инструмент увидит ТОЛЬКО если сам процесс `seo-cycle` запущен через
-`ai-secret run <scope> -- ...` (тогда токен приходит переменной процесса —
-верхний уровень цепочки, ничего дописывать в файлы не нужно и не следует:
-глобальная политика секретов §5 из `AGENTS.md` запрещает класть реальные
-значения в `.env`).
+Канон один (T-108): значения ключей живут ТОЛЬКО в Keychain, `seo-cycle
+auth login`/`auth set` пишут их туда через `ai-secret set` (скрытый ввод,
+значение уходит по stdin — не в файл и не в аргументы). В `.env` — только
+имена (`.env.example`); старые `.env`/`~/.seo-cycle/env.global` со
+значениями инструмент по-прежнему ЧИТАЕТ (legacy, чтобы ничего не сломать
+до переноса), но никогда в них не пишет.
+
+Как ключ попадает в процесс: `seo-cycle` не читает Keychain напрямую — ему
+нужна переменная окружения. Для команд, которые ходят к провайдерам
+(`pulse`, `doctor`, `sync`, `ads`, `feed`, `cohorts`, `notify`), лончер
+`bin/seo-cycle` сам проверяет, есть ли ключи pulse
+(`YANDEX_OAUTH_TOKEN`/`YANDEX_WEBMASTER_OAUTH_TOKEN`/`GOOGLE_APPLICATION_CREDENTIALS`)
+в окружении, и если нет — перезапускает себя под `ai-secret run <scope>`
+(scope = `project.brand_name_technical` из `seo-cycle.yaml`). Если ключи уже
+экспортированы руками — не трогает их. Если `ai-secret` не найден или
+scope не определён — печатает ОДНУ строку `⚠ seo-cycle pulse: …` в stderr и
+идёт дальше: тихого прогона на старом срезе больше нет.
 
 ```bash
-seo-cycle auth list                        # источник по каждой переменной: [env]/[project]/[global]/[—]
-ai-secret run <scope> -- seo-cycle pulse    # ручной прогон с ключом из Keychain — без .env
+seo-cycle auth list                        # источник по каждой переменной: [keychain:<scope>] / [keychain:global] / [env] / [.env legacy] / [—]
+seo-cycle pulse                            # сам перезапустится под ai-secret run <scope>
+ai-secret run <scope> -- seo-cycle pulse   # ручной эквивалент (ключ приходит переменной процесса)
+ai-secret import <scope> .env && rm .env   # разовый перенос legacy-значений в Keychain
 ```
 
-Тот же I-061 (`_tools/SOLUTIONS.md`): для расписания (launchd/cron) обёртка
-`ai-secret run <scope> -- <команда>` должна быть зашита прямо в сам job
-(`ProgramArguments` плиста), а не запускаться руками один раз — иначе
-плановый прогон снова тянет `pulse` без переменных процесса и молча
-деградирует на старом срезе, хотя ключ в Keychain валиден. Проверять
-поведением: `launchctl kickstart -k <label>` → `LastExitStatus = 0` и
-свежий артефакт в логе, не фактом загрузки плиста.
+Если `auth list` показывает `[—]`, а `ai-secret list <scope>` имя видит —
+проверь, что scope совпадает: `project.brand_name_technical` в конфиге
+должен быть тем же слагом, что и scope в Keychain (`--scope <slug>` у
+`auth` переопределяет).
+
+Известная граница: `pulse --all` по реестру проектов обходит несколько
+scope, а один `ai-secret run <scope>` покрывает только один — для
+портфельного прогона делай `ai-secret run <scope> -- seo-cycle pulse` на
+каждый проект. Тот же I-061 (`_tools/SOLUTIONS.md`): для расписания
+(launchd/cron) обёртка `ai-secret run <scope> -- <команда>` должна быть
+зашита прямо в сам job (`ProgramArguments` плиста), а не запускаться руками
+один раз — лончер под launchd тоже перезапустится сам, но только если
+`ai-secret` виден в его PATH; проверять поведением: `launchctl kickstart -k
+<label>` → `LastExitStatus = 0` и свежий артефакт в логе, не фактом
+загрузки плиста.
 
 Не читай и не печатай значение секрета руками при диагностике — только
 `ai-secret run` (§5).
