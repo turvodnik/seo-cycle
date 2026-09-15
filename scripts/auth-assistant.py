@@ -54,6 +54,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "optional": ["YANDEX_METRIKA_COUNTER_ID", "YANDEX_WEBMASTER_HOST_ID", "YANDEX_USER_ID"],
         "url": "https://oauth.yandex.ru/",
         "hint": "Создайте приложение с правами Метрики/Вебмастера → «Получить OAuth-токен вручную» → вставьте токен",
+        "tier": "minimum",
     },
     "yandex-direct": {
         "title": "Яндекс.Директ API",
@@ -68,6 +69,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "optional": ["GSC_SITE_URL", "GA4_PROPERTY_ID", "GOOGLE_MERCHANT_ACCOUNT_ID"],
         "url": "https://console.cloud.google.com/iam-admin/serviceaccounts",
         "hint": "Значение — ПУТЬ к JSON-ключу сервис-аккаунта (не сам ключ); докиньте доступы в GSC/GA4",
+        "tier": "minimum",
     },
     "google-ads": {
         "title": "Google Ads API",
@@ -209,7 +211,7 @@ def cmd_list(args: argparse.Namespace, project_root: pathlib.Path | None) -> int
     report = {}
     for alias, spec in PROVIDERS.items():
         status = provider_status(project_root, spec)
-        report[alias] = {"title": spec["title"], **status}
+        report[alias] = {"title": spec["title"], "tier": spec.get("tier", "extra"), **status}
     warning = gbp_token_age_warning(project_root)
     if warning:
         report["gbp"]["warning"] = warning
@@ -217,11 +219,14 @@ def cmd_list(args: argparse.Namespace, project_root: pathlib.Path | None) -> int
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
     print("# Провайдеры: кто настроен и откуда\n")
+    print("Для ежедневного среза достаточно: Яндекс.Вебмастер **или** Google Search Console.\n")
     print(f"- project .env: {project_env_path(project_root) if project_root else '— (запустите из проекта)'}")
     print(f"- global env:  {global_env_path()}\n")
     icons = {"ready": "✅", "partial": "🟡", "not_configured": "▫️"}
+    tier_labels = {"minimum": "минимум для pulse", "extra": "дополнительно"}
     for alias, data in report.items():
-        print(f"{icons[data['state']]} {alias:<14} {data['title']}")
+        tier = tier_labels[PROVIDERS[alias].get("tier", "extra")]
+        print(f"{icons[data['state']]} {alias:<14} {data['title']} — {tier}")
         if data.get("warning"):
             print(f"    ⚠️  {data['warning']}")
         for row in data["vars"]:

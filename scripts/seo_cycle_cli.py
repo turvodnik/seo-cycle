@@ -32,10 +32,10 @@ SKILL_ROOT = SCRIPTS_DIR.parent
 
 # command -> wrapped script (+ optional prepended args). Passthrough args follow.
 COMMANDS: dict[str, dict[str, Any]] = {
-    "init": {"script": "init-project.sh", "help": "Bootstrap a new project (wizard, config, policies)"},
-    "intake": {"script": "project-intake-wizard.py", "help": "Detailed project intake wizard"},
+    "init": {"script": "init-project.sh", "help": "Bootstrap a new project (wizard, config, policies)", "group": "setup"},
+    "intake": {"script": "project-intake-wizard.py", "help": "Detailed project intake wizard", "group": "setup"},
     "journey": {"script": "project-journey.py", "help": "Current stage, blockers, and next commands"},
-    "loop": {"script": "loop-runner.py", "help": "Bounded quality loop: check -> repair -> re-check"},
+    "loop": {"script": "loop-runner.py", "help": "Bounded quality loop: check -> repair -> re-check", "group": "content"},
     "triggers": {"script": "triggers-eval.py", "help": "Phase 10 action list from a snapshot (ranked by potential)"},
     "snapshot": {"script": "snapshot-build.py", "help": "Normalize fetched data into snapshot.json"},
     "cannibalization": {"script": "cannibalization-audit.py", "help": "Query→multiple-URL conflicts report"},
@@ -43,29 +43,29 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "ice": {"script": "ice-score.py", "help": "ICE prioritization (Impact x Confidence x Ease)"},
     "attribution": {"script": "source-attribution.py", "help": "Which keyword sources actually rank (Phase 10)"},
     "secret-scan": {"script": "secret-scan.py", "help": "Scan the project tree for leaked secret values"},
-    "repair": {"script": "research-package-repair.py", "help": "Run the research-package repair layer"},
-    "approvals": {"script": "approval-gate.py", "prepend": ["list"], "help": "List approval tickets"},
-    "approve": {"script": "approval-gate.py", "prepend": ["approve"], "help": "Approve a ticket by id"},
-    "reject": {"script": "approval-gate.py", "prepend": ["reject"], "help": "Reject a ticket by id"},
+    "repair": {"script": "research-package-repair.py", "help": "Run the research-package repair layer", "group": "content"},
+    "approvals": {"script": "approval-gate.py", "prepend": ["list"], "help": "List approval tickets", "group": "client"},
+    "approve": {"script": "approval-gate.py", "prepend": ["approve"], "help": "Approve a ticket by id", "group": "client"},
+    "reject": {"script": "approval-gate.py", "prepend": ["reject"], "help": "Reject a ticket by id", "group": "client"},
     "queue": {"script": "keyword-queue.py", "help": "Keyword queue operations"},
     "db": {"script": "db-sync.py", "help": "Sync CSV/JSON artifacts into seo.db"},
-    "dashboard": {"script": "monthly-dashboard.py", "help": "Monthly status dashboard"},
-    "ledger": {"script": "usage-ledger.py", "help": "Token/budget usage ledger (report/check/record)"},
-    "spend": {"script": "spend-guard.py", "help": "Paid service allow/approval/block report"},
-    "validate": {"script": "validate-config.py", "help": "Validate seo-cycle.yaml"},
+    "dashboard": {"script": "monthly-dashboard.py", "help": "Monthly status dashboard", "group": "client"},
+    "ledger": {"script": "usage-ledger.py", "help": "Token/budget usage ledger (report/check/record)", "group": "money"},
+    "spend": {"script": "spend-guard.py", "help": "Paid service allow/approval/block report", "group": "money"},
+    "validate": {"script": "validate-config.py", "help": "Validate seo-cycle.yaml", "group": "setup"},
     "control-plane": {"script": "setup-control-plane.py", "help": "Full setup/readiness control plane"},
     "context": {"script": "context-pack.py", "help": "Low-token context pack for a task"},
     "notify": {"script": "notify.py", "help": "Send a Telegram notification"},
     "cycle": {"script": "cycle-state.py", "help": "Phase DAG state (init/next/show/set/gate)"},
     "forecast": {"script": "seo-forecast.py", "help": "Traffic/lead forecast from core + positions"},
-    "kpi": {"script": "kpi-contract.py", "help": "KPI contract check: plan vs fact, escalation"},
-    "budget": {"script": "budget-mix-planner.py", "help": "SEO+PPC budget mix by leads per unit"},
-    "report": {"script": "client-report.py", "help": "White-label client report (md + HTML)"},
+    "kpi": {"script": "kpi-contract.py", "help": "KPI contract check: plan vs fact, escalation", "group": "money"},
+    "budget": {"script": "budget-mix-planner.py", "help": "SEO+PPC budget mix by leads per unit", "group": "money"},
+    "report": {"script": "client-report.py", "help": "White-label client report (md + HTML)", "group": "client"},
     "score": {"script": "scorecard.py", "help": "Self-assessment scorecards: record/show 0-10 grades"},
     "progress": {"script": "position-progress.py", "help": "Ranking progress per project or --global portfolio"},
-    "pulse": {"script": "pulse.py", "help": "Daily pulse: fetch fresh positions -> snapshot -> db -> progress + alerts"},
-    "auth": {"script": "auth-assistant.py", "help": "Provider logins: list | login <provider> [--global] | set VAR"},
-    "web": {"script": "webapp.py", "help": "Visual agency dashboard in the browser (web --open)"},
+    "pulse": {"script": "pulse.py", "help": "Daily pulse: fetch fresh positions -> snapshot -> db -> progress + alerts", "group": "today"},
+    "auth": {"script": "auth-assistant.py", "help": "Provider logins: list | login <provider> [--global] | set VAR", "group": "setup"},
+    "web": {"script": "webapp.py", "help": "Visual agency dashboard in the browser (web --open)", "group": "today"},
     "crawl": {"script": "site-crawl.py", "help": "Own site crawler: --live BFS with findings"},
     "structure": {"script": "structure-map.py", "help": "Visual site-structure tree (crawl/mirror/sitemap)"},
     "intel": {"script": "serp-intel.py", "help": "SERP overlap clusters, features, entity candidates (offline)"},
@@ -75,6 +75,45 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "geo-log": {"script": "geo-citation-log.py", "help": "Brand citations in AI answers: record/import/trend"},
     "feed": {"script": "woo-yml-feed.py", "help": "YML feed from WooCommerce (--live) or a products export"},
 }
+
+# Display groups for `--help` (T-100 "operator morning" facade). Order here is
+# the print order; "today" always leads with the three daily-check commands.
+GROUPS: tuple[tuple[str, str], ...] = (
+    ("today", "Сегодня"),
+    ("content", "Контент"),
+    ("money", "Деньги"),
+    ("client", "Клиенты"),
+    ("setup", "Настройка"),
+    ("other", "Прочее"),
+)
+GROUP_KEYS = {key for key, _ in GROUPS}
+TODAY_ORDER = {"pulse": 0, "status": 1, "web": 2}
+
+# Commands handled by dedicated branches in main() rather than the generic
+# COMMANDS-driven dispatch, but still listed in `--help` grouped overview.
+EXTRA_COMMANDS: tuple[tuple[str, str, str], ...] = (
+    ("gate", "Quality gates: gate research-package|outline|draft [...]", "content"),
+    ("ads", "Paid ads: ads health|fetch|analytics|draft|apply [...]", "other"),
+    ("rag", "Local RAG: rag index [--write|--global] | rag query \"<вопрос>\" [...]", "other"),
+    ("sync", "Site→local mirror via the publishing.cms adapter (wordpress|tilda|bitrix)", "other"),
+    ("run", "run monthly [...] | run script <name> [...] | run <task words>", "other"),
+    (
+        "status",
+        "Dashboard: snapshot age, triggers, escalations + journey"
+        " (exit 2 if seo-cycle.yaml is missing — no header printed)",
+        "today",
+    ),
+    ("resume", "Continue an interrupted quality loop (= loop ... --resume)", "content"),
+    (
+        "doctor",
+        "Read-only aggregated health: providers, agy/perplexity-key presence,"
+        " snapshot freshness (threshold: monitoring.snapshot_max_age_days in seo-cycle.yaml,"
+        " default 7 days). Exit 1 on a missing check or a snapshot past the threshold.",
+        "setup",
+    ),
+    ("menu", "Interactive menu (double-click entrypoint; picks a project from the registry)", "other"),
+    ("version", "Print skill version", "other"),
+)
 
 SYNC_ADAPTERS = {
     "wordpress": "wp-content-pull.py",
@@ -401,24 +440,38 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def command_overview() -> str:
+    """Grouped `--help` command list (T-100). "Сегодня" (pulse/status/web) leads,
+    so the three commands an operator needs daily are not buried among 57
+    alphabetical entries. Every command must resolve to a known group — an
+    unrecognized `group` value is a bug in COMMANDS/EXTRA_COMMANDS, not a
+    silent fallthrough into "Прочее". Deliberate: this is called from
+    build_parser() on every invocation (it feeds argparse's epilog), so a
+    bad `group` value fails loudly on ANY `seo-cycle` command, not just
+    `--help` — caught earlier by test_every_command_has_a_valid_group."""
+    by_group: dict[str, list[tuple[str, str]]] = {key: [] for key, _ in GROUPS}
+
+    for name, spec in COMMANDS.items():
+        group = spec.get("group", "other")
+        if group not in GROUP_KEYS:
+            raise ValueError(f"COMMANDS['{name}']: unknown group '{group}' (valid: {sorted(GROUP_KEYS)})")
+        by_group[group].append((name, spec["help"]))
+
+    for name, help_text, group in EXTRA_COMMANDS:
+        if group not in GROUP_KEYS:
+            raise ValueError(f"EXTRA_COMMANDS['{name}']: unknown group '{group}' (valid: {sorted(GROUP_KEYS)})")
+        by_group[group].append((name, help_text))
+
     lines = ["commands:"]
-    for name, spec in sorted(COMMANDS.items()):
-        lines.append(f"  {name:<14} {spec['help']}")
+    for key, label in GROUPS:
+        entries = by_group[key]
+        if not entries:
+            continue
+        entries = sorted(entries, key=lambda item: TODAY_ORDER[item[0]]) if key == "today" else sorted(entries)
+        lines.append(f"{label}:")
+        for name, help_text in entries:
+            lines.append(f"  {name:<14} {help_text}")
     lines.extend(
         [
-            "  gate           Quality gates: gate research-package|outline|draft [...]",
-            "  ads            Paid ads: ads health|fetch|analytics|draft|apply [...]",
-            "  rag            Local RAG: rag index [--write|--global] | rag query \"<вопрос>\" [...]",
-            "  sync           Site→local mirror via the publishing.cms adapter (wordpress|tilda|bitrix)",
-            "  run            run monthly [...] | run script <name> [...] | run <task words>",
-            "  status         Dashboard: snapshot age, triggers, escalations + journey"
-            " (exit 2 if seo-cycle.yaml is missing — no header printed)",
-            "  resume         Continue an interrupted quality loop (= loop ... --resume)",
-            "  doctor         Read-only aggregated health: providers, agy/perplexity-key presence,"
-            " snapshot freshness (threshold: monitoring.snapshot_max_age_days in seo-cycle.yaml,"
-            " default 7 days). Exit 1 on a missing check or a snapshot past the threshold.",
-            "  menu           Interactive menu (double-click entrypoint; picks a project from the registry)",
-            "  version        Print skill version",
             "",
             "Every command forwards remaining args to the wrapped script:",
             "  seo-cycle loop research-package seo/research-package",
