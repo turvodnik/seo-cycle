@@ -371,7 +371,7 @@ def _status_header_lines(
             )
     except (Exception, SystemExit) as exc:
         print(
-            f"WARNING: status header skipped ({exc.__class__.__name__}) — falling back to the legacy header",
+            f"WARNING: шапка status не построена ({exc.__class__.__name__}) — печатаю прежнюю шапку",
             file=sys.stderr,
         )
         return None

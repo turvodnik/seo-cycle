@@ -512,9 +512,11 @@ class StatusHeaderTest(unittest.TestCase):
         self.assertEqual(
             header_title, body_title, f"header and body disagree: {stage_line!r} vs {body_line!r}"
         )
-        # Negative control on the assertion itself: a fresh project (no
-        # --research-package) starts at setup_foundation, not the quality
-        # gate — if this failed too, the test would be vacuously true.
+        # Negative control on the assertion itself: with the six required
+        # files present (via the external --research-package dir) the
+        # journey is past stage 1 — if it were still "Основа проекта" the
+        # equality check above would be vacuously true (both header and
+        # body stuck at the same early stage for an unrelated reason).
         self.assertNotEqual(header_title, "Основа проекта")
 
 
