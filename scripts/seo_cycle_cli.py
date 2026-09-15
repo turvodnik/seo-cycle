@@ -43,15 +43,15 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "ice": {"script": "ice-score.py", "help": "ICE prioritization (Impact x Confidence x Ease)"},
     "attribution": {"script": "source-attribution.py", "help": "Which keyword sources actually rank (Phase 10)"},
     "secret-scan": {"script": "secret-scan.py", "help": "Scan the project tree for leaked secret values"},
-    "repair": {"script": "research-package-repair.py", "help": "Run the research-package repair layer"},
+    "repair": {"script": "research-package-repair.py", "help": "Run the research-package repair layer", "group": "content"},
     "approvals": {"script": "approval-gate.py", "prepend": ["list"], "help": "List approval tickets", "group": "client"},
-    "approve": {"script": "approval-gate.py", "prepend": ["approve"], "help": "Approve a ticket by id"},
-    "reject": {"script": "approval-gate.py", "prepend": ["reject"], "help": "Reject a ticket by id"},
+    "approve": {"script": "approval-gate.py", "prepend": ["approve"], "help": "Approve a ticket by id", "group": "client"},
+    "reject": {"script": "approval-gate.py", "prepend": ["reject"], "help": "Reject a ticket by id", "group": "client"},
     "queue": {"script": "keyword-queue.py", "help": "Keyword queue operations"},
     "db": {"script": "db-sync.py", "help": "Sync CSV/JSON artifacts into seo.db"},
     "dashboard": {"script": "monthly-dashboard.py", "help": "Monthly status dashboard", "group": "client"},
     "ledger": {"script": "usage-ledger.py", "help": "Token/budget usage ledger (report/check/record)", "group": "money"},
-    "spend": {"script": "spend-guard.py", "help": "Paid service allow/approval/block report"},
+    "spend": {"script": "spend-guard.py", "help": "Paid service allow/approval/block report", "group": "money"},
     "validate": {"script": "validate-config.py", "help": "Validate seo-cycle.yaml", "group": "setup"},
     "control-plane": {"script": "setup-control-plane.py", "help": "Full setup/readiness control plane"},
     "context": {"script": "context-pack.py", "help": "Low-token context pack for a task"},
@@ -103,7 +103,7 @@ EXTRA_COMMANDS: tuple[tuple[str, str, str], ...] = (
         " (exit 2 if seo-cycle.yaml is missing — no header printed)",
         "today",
     ),
-    ("resume", "Continue an interrupted quality loop (= loop ... --resume)", "other"),
+    ("resume", "Continue an interrupted quality loop (= loop ... --resume)", "content"),
     (
         "doctor",
         "Read-only aggregated health: providers, agy/perplexity-key presence,"
@@ -444,7 +444,10 @@ def command_overview() -> str:
     so the three commands an operator needs daily are not buried among 57
     alphabetical entries. Every command must resolve to a known group — an
     unrecognized `group` value is a bug in COMMANDS/EXTRA_COMMANDS, not a
-    silent fallthrough into "Прочее"."""
+    silent fallthrough into "Прочее". Deliberate: this is called from
+    build_parser() on every invocation (it feeds argparse's epilog), so a
+    bad `group` value fails loudly on ANY `seo-cycle` command, not just
+    `--help` — caught earlier by test_every_command_has_a_valid_group."""
     by_group: dict[str, list[tuple[str, str]]] = {key: [] for key, _ in GROUPS}
 
     for name, spec in COMMANDS.items():

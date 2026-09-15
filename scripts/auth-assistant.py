@@ -211,7 +211,7 @@ def cmd_list(args: argparse.Namespace, project_root: pathlib.Path | None) -> int
     report = {}
     for alias, spec in PROVIDERS.items():
         status = provider_status(project_root, spec)
-        report[alias] = {"title": spec["title"], **status}
+        report[alias] = {"title": spec["title"], "tier": spec.get("tier", "extra"), **status}
     warning = gbp_token_age_warning(project_root)
     if warning:
         report["gbp"]["warning"] = warning

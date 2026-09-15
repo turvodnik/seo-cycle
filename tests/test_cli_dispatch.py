@@ -25,6 +25,7 @@ from seo_cycle_cli import (  # noqa: E402
     EXTRA_COMMANDS,
     GATE_SCRIPTS,
     GROUP_KEYS,
+    GROUPS,
     TODAY_ORDER,
     command_overview,
 )
@@ -122,10 +123,10 @@ class CliDispatchTest(unittest.TestCase):
             if line.startswith("  ") and line.strip() and not line.strip().endswith(":")
         ][:3]
         self.assertEqual(commands_after, ["pulse", "status", "web"])
-        # nothing that looks like another command's group header appears before it
-        header_lines_before = [line for line in lines[:today_index] if line.endswith(":") and not line.startswith(" ")]
-        self.assertNotIn("Контент:", header_lines_before)
-        self.assertNotIn("Прочее:", header_lines_before)
+        # "Сегодня" is the FIRST group header of all — no other group precedes it.
+        other_labels = {label for key, label in GROUPS if key != "today"}
+        group_headers_before = [line.rstrip(":") for line in lines[:today_index] if line.rstrip(":") in other_labels]
+        self.assertEqual(group_headers_before, [])
 
     def test_version_matches_version_file(self) -> None:
         proc = self.run_cli("version")
