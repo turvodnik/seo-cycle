@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -220,9 +221,15 @@ class AuthAssistantListTest(unittest.TestCase):
         self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
 
     def run_list(self) -> subprocess.CompletedProcess:
+        # Isolated PATH: `auth list` asks `ai-secret list` for key NAMES when the
+        # broker is present — the suite must never reach the machine's real
+        # Keychain (T-108), so the broker is simply absent here.
+        env = {k: v for k, v in os.environ.items() if k != "PATH"}
+        env["PATH"] = "/usr/bin:/bin"
         return subprocess.run(
             [sys.executable, str(SCRIPTS / "auth-assistant.py"), "list"],
             cwd=self.tmp,
+            env=env,
             text=True,
             capture_output=True,
             check=False,

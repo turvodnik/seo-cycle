@@ -30,6 +30,63 @@ read-only / HTTP GET / HEAD), но реально ходят в сеть, поэ
 embedding-провайдере (usage-ledger preflight уже гейтит расход — см.
 `rag-index.py`). Новый тест `tests/test_webapp_command_whitelist.py`
 проверяет, что группировка и докстринг не разойдутся с реальностью снова.
+### Change: auth пишет секреты только в Keychain через ai-secret; .env — только имена (T-108, H2)
+
+Было два канона: INSTALL/SKILL учили «значения в Keychain через
+`ai-secret`, `.env` запрещён», а `auth login`/`auth set` писали значения в
+`.env` проекта или `~/.seo-cycle/env.global` (`env_profile.upsert_env_var`)
+и ни разу не звали `ai-secret` — отсюда I-061 «ключи есть, срез старый».
+Теперь канон один (политика §5): `scripts/auth-assistant.py` берёт scope из
+`project.brand_name_technical` (`--global` → scope `global`, `--scope <slug>`
+— явно), читает значение скрытым вводом (на не-tty — одной строкой из
+stdin) и передаёт его в `ai-secret set <scope> <ИМЯ>` по stdin — не через
+argv (попадал бы в `ps` и лог диспетчера; флаг `--value` удалён) и не в
+файл. Без `ai-secret` в PATH `login`/`set` — rc 3 и «секреты не подключены:
+установи ai-secret или экспортируй переменные в окружение сессии», без
+тихой записи куда-то слабее. `auth list` показывает источник
+`keychain:<scope>` / `keychain:global` (имена через `ai-secret list`,
+значения не читаются) / `env` / `.env legacy` / `env.global legacy` / `—`;
+JSON-форма не изменилась (дашборд перебирает ключи как провайдеров), meta
+брокера — строкой в stderr. `gbp-oauth-helper.py`: `--write-env <path>` →
+`--store-scope <scope>` (+ `--minted-env`): refresh token уходит в
+`ai-secret set`, в файл пишется только дата `GBP_TOKEN_MINTED_AT` — это
+единственный оставшийся вызов `upsert_env_var` в `scripts/`, функция
+документирована как «только не-секретные маркеры». `auth login gbp` гоняет
+helper под `ai-secret run <scope>`. Лончер `bin/seo-cycle` (пункт 3
+тикета, выбран вариант «перезапуск себя»): для семейства pulse
+(`pulse`/`doctor`/`cohorts`) без ключей pulse в окружении — `execve`
+через `ai-secret run <scope> -- …` (маркер `SEO_CYCLE_SECRETS_INJECTED=1`
+только от зацикливания; уже экспортированные ключи никогда не
+перекрываются — `ai-secret run` кладёт Keychain поверх окружения, поэтому
+проверка «ключи уже есть» стоит ДО перезапуска); без `ai-secret` или без
+scope — одна строка `⚠ seo-cycle <cmd>: …` в stderr, прогон на старом срезе
+не молчит; если после перезапуска ключи pulse так и не пришли (scope есть,
+но ключи лежат под другим scope — I-061), дочерний процесс печатает `⚠ … в
+Keychain scope \`X\` нет ключей pulse …` с подсказкой `auth login`. `sync`/`ads`/`feed`/`notify` лончер не перезапускает: их ключи
+провайдер-специфичны, по именам pulse их не оценить, а перезапуск перекрыл
+бы экспортированное руками значение — они идут под `ai-secret run` руками. WordPress: провайдер `wordpress` = REST-семейство
+`WP_BASE_URL`/`WP_USER`/`WP_APP_PASSWORD` (то, что ждут публикация,
+`wp-content-pull.py`, `wiki_common.py`); Novomira MCP — отдельный провайдер
+`wordpress-mcp` (`WP_API_URL`/`WP_API_USERNAME`/`WP_API_PASSWORD`,
+`project-mcp-config.py`). Read-side цепочка `env_chain` (process → legacy
+`.env` → legacy `env.global`) сохранена: старые файлы читаются до переноса
+(`ai-secret import <scope> .env`), но не пишутся. Докум.: INSTALL.md шаг 4,
+`docs/agency-playbook.md`, `docs/troubleshooting.md` сюжет 6 (T-101).
+Тесты: `tests/test_auth_secrets_canon.py` (28) на заглушке брокера
+`tests/helpers/ai_secret_stub.py` в изолированном PATH — настоящий
+Keychain набор не трогает; `tests/test_env_profile.py` — старые тесты
+записи в `.env` удалены; `AuthAssistantListTest`/`TokenAgeTest` переведены
+на изолированный PATH.
+
+**Ломающие изменения.** Кто хранил значения в `.env`/`env.global` через
+`auth set`/`auth login`: записывать туда больше нельзя (`--value` удалён,
+`gbp-oauth-helper --write-env` удалён); чтение legacy-файлов работает, но
+`auth list` помечает их `legacy` — перенос: `ai-secret import <scope> .env
+&& rm .env`. Без установленного `ai-secret` `auth login`/`auth set` не
+работают (rc 3) — экспортируй переменные в окружение сессии. Провайдер
+`wordpress` теперь спрашивает `WP_BASE_URL`/`WP_USER`/`WP_APP_PASSWORD`;
+для MCP — `auth login wordpress-mcp`. Требуется
+`project.brand_name_technical` в `seo-cycle.yaml` (или `--scope`).
 
 ### Fix: одна CTR-кривая — seo-forecast.py берёт её из seo_cycle_core.ctr (T-103)
 

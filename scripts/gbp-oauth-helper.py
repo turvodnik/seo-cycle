@@ -8,13 +8,18 @@ this helper performs the standard authorization-code dance locally:
 
   1. prints the authorization URL (offline access, business.manage scope);
   2. catches the redirect on http://localhost:<port> with a tiny stdlib server;
-  3. exchanges the code and prints the REFRESH TOKEN to stderr once — copy it
-     into .env as GBP_OAUTH_REFRESH_TOKEN yourself; nothing is written to disk
-     unless you pass --write-env <path>, which upserts the variable into that
-     env file (0600) and never displays the value.
+  3. exchanges the code and, with --store-scope <scope>, hands the REFRESH
+     TOKEN to `ai-secret set <scope> GBP_OAUTH_REFRESH_TOKEN` over stdin (the
+     Keychain canon, T-108 / policy §5) — the value is never displayed and
+     never written to a file. The mint DATE (not a secret) goes to the env
+     file named by --minted-env as GBP_TOKEN_MINTED_AT so `auth list` can
+     warn about the 7-day Testing-mode expiry. Without --store-scope the
+     token is printed to stderr once for a manual `ai-secret set`.
 
 Requires GBP_OAUTH_CLIENT_ID and GBP_OAUTH_CLIENT_SECRET in the environment
-(create a "Desktop app" or "Web" client with http://localhost redirect).
+(create a "Desktop app" or "Web" client with http://localhost redirect) —
+run it as `ai-secret run <scope> -- python3 scripts/gbp-oauth-helper.py ...`,
+which is exactly what `seo-cycle auth login gbp` does.
 """
 
 from __future__ import annotations
@@ -29,7 +34,7 @@ import threading
 import urllib.parse
 import urllib.request
 
-from seo_cycle_core.env_profile import upsert_env_var
+from seo_cycle_core.env_profile import AI_SECRET_MISSING, find_ai_secret, store_secret, upsert_env_var
 
 SCOPE = "https://www.googleapis.com/auth/business.manage"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -74,9 +79,17 @@ def main() -> int:
     parser.add_argument("--print-url-only", action="store_true",
                         help="Only print the authorization URL (paste the redirect URL manually)")
     parser.add_argument("--redirect-url", help="With --print-url-only: paste the full redirect URL here to finish")
-    parser.add_argument("--write-env", metavar="PATH",
-                        help="Save GBP_OAUTH_REFRESH_TOKEN into this env file (0600) instead of displaying it")
+    parser.add_argument("--store-scope", metavar="SCOPE",
+                        help="Store GBP_OAUTH_REFRESH_TOKEN in the Keychain scope via `ai-secret set` "
+                             "instead of displaying it")
+    parser.add_argument("--minted-env", metavar="PATH",
+                        help="With --store-scope: env file that receives the non-secret marker "
+                             "GBP_TOKEN_MINTED_AT=<date> (default: ./.env)")
     args = parser.parse_args()
+
+    if args.store_scope and find_ai_secret() is None:
+        print(f"ERROR: {AI_SECRET_MISSING}", file=sys.stderr)
+        return 3
 
     client_id = os.environ.get("GBP_OAUTH_CLIENT_ID", "")
     client_secret = os.environ.get("GBP_OAUTH_CLIENT_SECRET", "")
@@ -133,20 +146,28 @@ def main() -> int:
         print("ERROR: no refresh_token in the response (re-run with prompt=consent; "
               "check that access_type=offline was preserved)", file=sys.stderr)
         return 1
-    if args.write_env:
+    if args.store_scope:
         import datetime as dt
 
-        target = upsert_env_var(pathlib.Path(args.write_env).expanduser(), "GBP_OAUTH_REFRESH_TOKEN", refresh)
-        upsert_env_var(target, "GBP_TOKEN_MINTED_AT", dt.date.today().isoformat())
-        print(f"\n✓ GBP_OAUTH_REFRESH_TOKEN сохранён в {target} (0600); значение не показывается.\n"
-              "Дата минта записана в GBP_TOKEN_MINTED_AT (в Testing-режиме токен живёт 7 дней).\n"
-              "Проверка: python3 scripts/gbp-health.py && python3 scripts/gbp-fetch.py --report locations --live",
+        binary = find_ai_secret()
+        assert binary is not None  # checked before the OAuth dance
+        rc, message = store_secret(binary, args.store_scope, "GBP_OAUTH_REFRESH_TOKEN", refresh)
+        if rc != 0:
+            print(f"ERROR: ai-secret set rc={rc} {message}", file=sys.stderr)
+            return rc or 1
+        # Non-secret marker only (date); the token itself never touches a file.
+        target = upsert_env_var(pathlib.Path(args.minted_env or ".env").expanduser(),
+                                "GBP_TOKEN_MINTED_AT", dt.date.today().isoformat())
+        print(f"\n✓ GBP_OAUTH_REFRESH_TOKEN сохранён в Keychain (scope `{args.store_scope}`); "
+              "значение не показывается.\n"
+              f"Дата минта записана в {target} как GBP_TOKEN_MINTED_AT (в Testing-режиме токен живёт 7 дней).\n"
+              f"Проверка: ai-secret run {args.store_scope} -- python3 scripts/gbp-health.py",
               file=sys.stderr)
         return 0
     print("\n✓ REFRESH TOKEN (показывается один раз, никуда не сохранён):\n", file=sys.stderr)
     print(refresh, file=sys.stderr)
-    print("\nДобавьте в .env проекта: GBP_OAUTH_REFRESH_TOKEN=<значение>\n"
-          "Проверка: python3 scripts/gbp-health.py && python3 scripts/gbp-fetch.py --report locations --live",
+    print("\nСохраните в Keychain скрытым вводом: ai-secret set <scope> GBP_OAUTH_REFRESH_TOKEN\n"
+          "Проверка: ai-secret run <scope> -- python3 scripts/gbp-health.py",
           file=sys.stderr)
     return 0
 

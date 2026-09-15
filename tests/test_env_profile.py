@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Tests for env profiles (project/global chain) and auth-assistant."""
+"""Tests for env profiles (read-side chain) and the CLI env merge."""
 
 from __future__ import annotations
 
-import json
 import os
 import pathlib
 import shutil
 import stat
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -72,53 +70,9 @@ class EnvProfileCoreTest(unittest.TestCase):
         self.assertEqual(mode, 0o600)
 
 
-class AuthAssistantCliTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-auth-"))
-        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
-        (self.tmp / "seo-cycle.yaml").write_text("project:\n  name: auth\n", encoding="utf-8")
-        self.global_env = self.tmp / "env.global"
-
-    def run_auth(self, *args: str) -> subprocess.CompletedProcess:
-        env = {key: value for key, value in os.environ.items() if not key.startswith(("PERPLEXITY", "GBP_"))}
-        env["SEO_CYCLE_GLOBAL_ENV"] = str(self.global_env)
-        return subprocess.run(
-            [sys.executable, str(SCRIPTS / "auth-assistant.py"), *args],
-            cwd=self.tmp, env=env, text=True, capture_output=True, check=False,
-        )
-
-    def test_set_writes_project_env_by_default(self) -> None:
-        proc = self.run_auth("set", "PERPLEXITY_API_KEY", "--value", "sk-test")
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("PERPLEXITY_API_KEY=sk-test", (self.tmp / ".env").read_text(encoding="utf-8"))
-        self.assertNotIn("sk-test", proc.stdout + proc.stderr.replace("PERPLEXITY_API_KEY", ""))
-
-    def test_set_global_writes_global_env(self) -> None:
-        proc = self.run_auth("set", "TELEGRAM_BOT_TOKEN", "--global", "--value", "123:abc")
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("TELEGRAM_BOT_TOKEN=123:abc", self.global_env.read_text(encoding="utf-8"))
-        self.assertFalse((self.tmp / ".env").exists())
-
-    def test_list_shows_sources(self) -> None:
-        self.run_auth("set", "PERPLEXITY_API_KEY", "--value", "sk-1")
-        self.run_auth("set", "TELEGRAM_BOT_TOKEN", "--global", "--value", "t-1")
-        proc = self.run_auth("list", "--format", "json")
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        report = json.loads(proc.stdout)
-        perplexity = {row["var"]: row for row in report["perplexity"]["vars"]}
-        self.assertEqual(perplexity["PERPLEXITY_API_KEY"]["source"], "project")
-        self.assertEqual(report["perplexity"]["state"], "ready")
-        telegram = {row["var"]: row for row in report["telegram"]["vars"]}
-        self.assertEqual(telegram["TELEGRAM_BOT_TOKEN"]["source"], "global")
-        self.assertEqual(report["gbp"]["state"], "not_configured")
-        # значения секретов не должны попадать в вывод
-        self.assertNotIn("sk-1", proc.stdout)
-        self.assertNotIn("t-1", proc.stdout)
-
-    def test_login_unknown_provider_fails(self) -> None:
-        proc = self.run_auth("login", "nosuch")
-        self.assertEqual(proc.returncode, 2)
-        self.assertIn("неизвестный провайдер", proc.stderr)
+# `auth set`/`auth login`/`auth list` behaviour (values -> Keychain via the
+# ai-secret broker, never a file) lives in tests/test_auth_secrets_canon.py
+# against a stub broker on an isolated PATH (T-108).
 
 
 class CliEnvChainTest(unittest.TestCase):

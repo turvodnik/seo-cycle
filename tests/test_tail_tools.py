@@ -160,6 +160,7 @@ class TokenAgeTest(unittest.TestCase):
         (tmp / ".env").write_text(f"GBP_TOKEN_MINTED_AT={old}\n", encoding="utf-8")
         env = {k: v for k, v in os.environ.items() if not k.startswith("GBP")}
         env["SEO_CYCLE_GLOBAL_ENV"] = str(tmp / "env.global")
+        env["PATH"] = "/usr/bin:/bin"  # no real ai-secret/Keychain in tests (T-108)
         proc = subprocess.run(
             [sys.executable, str(SCRIPTS / "auth-assistant.py"), "list", "--format", "json"],
             cwd=tmp, env=env, text=True, capture_output=True, check=False)

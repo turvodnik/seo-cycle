@@ -27,10 +27,13 @@ pip3 install pyyaml pydantic
 git clone https://github.com/turvodnik/seo-cycle ./.codex/skills/seo-cycle
 git clone <репо проекта> ~/projects/<name>          # seo-cycle.yaml внутри
 
-# 3. Ключи: глобальный профиль агентства (0600)
-mkdir -p ~/.seo-cycle && touch ~/.seo-cycle/env.global && chmod 600 ~/.seo-cycle/env.global
-# заполнить: ./.codex/skills/seo-cycle/scripts/auth-assistant.py set YANDEX_OAUTH_TOKEN --global
-# клиентские ключи проекта — в .env проекта (auth-assistant.py set ... без --global)
+# 3. Ключи: значения — только в хранилище секретов через `ai-secret` (T-108, политика §5).
+#    На Linux-VPS macOS Keychain нет: либо поставь совместимый брокер `ai-secret`
+#    (те же команды set/list/run), либо экспортируй переменные в окружение сервиса
+#    (systemd `Environment=`/`EnvironmentFile=` с правами 0600 — вне git). В .env — только имена.
+# с брокером: ./.codex/skills/seo-cycle/scripts/auth-assistant.py set YANDEX_OAUTH_TOKEN --global
+#             ./.codex/skills/seo-cycle/scripts/auth-assistant.py set WP_APP_PASSWORD   # scope проекта
+# без брокера auth set завершится с кодом 3 — это ожидаемо, тихой записи в .env нет
 
 # 4. Реестр проектов (машинно-локальный путь по умолчанию; SEO_CYCLE_REGISTRY переопределяет)
 cp ./.codex/skills/seo-cycle/config/projects-registry.example.yaml ~/.seo-cycle/projects-registry.yaml  # и правьте пути
@@ -85,7 +88,7 @@ WantedBy=timers.target
 
 ## Безопасность
 
-- Секреты только в `.env`/`env.global` (0600); в git они не попадают.
+- Секреты только в хранилище `ai-secret` или в окружении сервиса (0600, вне git); `.env`/`env.global` со значениями — legacy, только читаются до переноса (`ai-secret import <scope> .env`).
 - Отдельный unix-пользователь `seo` без sudo; SSH-ключи вместо паролей.
 - `usage-ledger` и `spend-guard` работают и на VPS — бюджеты не улетят.
 - Бэкап: `seo/` каталоги проектов (артефакты + seo.db) — в приватный git

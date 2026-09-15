@@ -323,7 +323,16 @@ python3 ./.codex/skills/seo-cycle/scripts/validate-config.py <project-root>/seo-
 
 **`.env` с реальными значениями запрещён политикой (§5 глобальных правил).** Значения ключей живут в macOS Keychain, доступ к ним — только через инструмент `ai-secret`; `.env.example` в проекте — каталог ИМЁН без значений (см. `docs/oauth-setup.md` — как получить каждый ключ).
 
-По чек-листу из валидатора зарегистрируй нужные проекту ключи в Keychain (человек вводит значение скрытым вводом, агент значений не видит):
+Scope Keychain проекта = `project.brand_name_technical` из `seo-cycle.yaml` (латинский слаг, например `emwoody`); общие ключи агентства — scope `global`. Самый короткий путь — через `seo-cycle auth`: он сам определяет scope, спрашивает каждую переменную скрытым вводом и передаёт значение в `ai-secret set` по stdin (в файлы не пишет никогда):
+
+```bash
+seo-cycle auth list                      # кто настроен и откуда: [keychain:<scope>] / [keychain:global] / [env] / [.env legacy] / [—]
+seo-cycle auth login yandex --global     # общий токен агентства
+seo-cycle auth login wordpress           # WP_BASE_URL / WP_USER / WP_APP_PASSWORD — в scope проекта
+seo-cycle auth set NEURON_API_KEY        # одна переменная (--global / --scope <slug> при необходимости)
+```
+
+Без `ai-secret` в PATH `auth login`/`auth set` завершаются с кодом 3 и сообщением «секреты не подключены» — тихой записи в `.env` нет. Тот же результат руками, по чек-листу из валидатора (человек вводит значение скрытым вводом, агент значений не видит):
 
 ```bash
 # scope — слаг проекта (например emwoody) или global
@@ -341,7 +350,7 @@ ai-secret set <project-scope> DATAFORSEO_PASSWORD
 
 Не заполняющиеся ключи (опции, которые не используешь) просто не регистрируй — валидатор считает отсутствующий необязательный ключ нормой.
 
-Скрипты и агент получают значения только в окружении дочернего процесса, не читая их сами:
+Скрипты и агент получают значения только в окружении дочернего процесса, не читая их сами. Команды семейства pulse (`pulse`, `doctor`, `cohorts`) лончер `seo-cycle` сам перезапускает под `ai-secret run <scope>`, если ключей pulse (`YANDEX_OAUTH_TOKEN`/`YANDEX_WEBMASTER_OAUTH_TOKEN`/`GOOGLE_APPLICATION_CREDENTIALS`) нет в окружении, а `ai-secret` найден; уже экспортированные руками ключи не перекрывает; если брокера нет — печатает одну строку предупреждения в stderr и идёт дальше (прогон на старом срезе никогда не бывает тихим). Остальные команды с ключами провайдеров (`sync`, `ads`, `feed`, `notify`) — руками под `ai-secret run` (то же для launchd/cron: обёртка зашивается в сам job):
 
 ```bash
 ai-secret run <project-scope> -- seo-cycle <команда>

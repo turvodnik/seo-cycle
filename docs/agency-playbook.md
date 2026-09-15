@@ -17,9 +17,9 @@
 
 ```bash
 seo-cycle init                      # мастер: конфиг, политики, реестр
-seo-cycle auth list                 # чего не хватает из доступов
-seo-cycle auth login yandex --global   # общие ключи агентства — один раз
-seo-cycle auth login wordpress         # клиентские — в проект
+seo-cycle auth list                 # чего не хватает из доступов (источник: keychain:<scope> / keychain:global / env / legacy)
+seo-cycle auth login yandex --global   # общие ключи агентства — один раз, в Keychain scope global
+seo-cycle auth login wordpress         # клиентские — в Keychain scope проекта (project.brand_name_technical)
 seo-cycle doctor                    # всё ли зелёное
 seo-cycle status                    # journey скажет первый шаг
 ```
@@ -64,7 +64,7 @@ seo-cycle status                    # journey скажет первый шаг
 - Платное (XMLRiver/NW/embeddings/ads) — только после `seo-cycle spend` и
   ledger-preflight; расход записывается после.
 - Публикация, реклама, индексация, расписания — через approval-тикеты.
-- Секреты только в `.env`/`env.global` (0600); в чаты и отчёты не попадают.
+- Секреты только в macOS Keychain через `ai-secret` (`seo-cycle auth login/set` → `ai-secret set`, потребление — `ai-secret run <scope> -- …`); в `.env` — только имена, в чаты и отчёты значения не попадают.
 - Достоверность: findings класса evidence лечатся источниками, не рерайтом.
 - После каждой задачи — самооценка 0–10 (`seo-cycle score record`), честная.
 

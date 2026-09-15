@@ -8,6 +8,16 @@ before running, this launcher looks upward from $PWD for
 .agents/external/seo-cycle (the pinned worktree an attach created) and, if
 found and different from this launcher's own root, re-execs that project's
 own bin/seo-cycle instead. A guard env var prevents infinite recursion.
+
+Secrets (T-108, policy §5): key values live in the macOS Keychain and reach
+a process only through `ai-secret run <scope> -- <command>`. For the
+pulse-family commands (SECRET_COMMANDS) this launcher checks whether the
+pulse keys are already in the environment; if not and `ai-secret` is on
+PATH, it re-executes itself under `ai-secret run <scope>` (scope =
+`project.brand_name_technical`), otherwise it prints ONE warning line to
+stderr and continues — a run on stale data is never silent (I-061). Keys
+already exported by hand are never overridden (`ai-secret run` would put
+the Keychain values on top of them, so the check comes BEFORE the re-exec).
 """
 
 import os
@@ -54,6 +64,92 @@ _maybe_redirect_to_project_pin()
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
 from seo_cycle_cli import main  # noqa: E402
+
+# Commands whose fresh data depends on the PULSE keys (Webmaster / GSC):
+# only for these is "no key in the environment" a reliable sign that the run
+# would silently degrade to the previous snapshot (I-061). Other fetching
+# commands (sync, ads, feed, notify) use provider-specific keys the launcher
+# cannot judge without overriding hand-exported values — they are run as
+# `ai-secret run <scope> -- seo-cycle <cmd>` or with the variables exported.
+SECRET_COMMANDS = frozenset({"pulse", "doctor", "cohorts"})
+
+
+def _first_command(argv: list[str]) -> str | None:
+    skip = False
+    for arg in argv:
+        if skip:
+            skip = False
+            continue
+        if arg == "--project":
+            skip = True
+            continue
+        if arg.startswith("-"):
+            continue
+        return arg
+    return None
+
+
+def _project_dir(argv: list[str]) -> pathlib.Path:
+    for index, arg in enumerate(argv):
+        if arg == "--project" and index + 1 < len(argv):
+            return pathlib.Path(argv[index + 1]).expanduser()
+        if arg.startswith("--project="):
+            return pathlib.Path(arg.split("=", 1)[1]).expanduser()
+    return pathlib.Path.cwd()
+
+
+def _maybe_inject_secrets() -> None:
+    """Re-exec under `ai-secret run <scope>` when a fetching command has no keys."""
+    argv = sys.argv[1:]
+    command = _first_command(argv)
+    if command not in SECRET_COMMANDS:
+        return
+    # Imported here, not at module level: the launcher must stay runnable for
+    # every other command with nothing but seo_cycle_cli next to it.
+    from seo_cycle_core.config import find_config, load_yaml
+    from seo_cycle_core.env_profile import PULSE_KEY_NAMES, SECRETS_MARKER, find_ai_secret, secret_scope
+
+    if any(os.environ.get(name) for name in PULSE_KEY_NAMES):
+        return  # keys already provided (manual `ai-secret run`, CI, export) — never override them
+    cfg_path = find_config(_project_dir(argv))
+    if cfg_path is None:
+        return  # the command itself reports the missing config
+    scope = secret_scope(load_yaml(cfg_path))
+    if os.environ.get(SECRETS_MARKER) == "1":
+        # We ARE the re-executed child and the pulse keys still did not arrive:
+        # the Keychain scope exists but holds none of them (typically the keys
+        # sit under a different scope than project.brand_name_technical) —
+        # the I-061 case, so say it instead of letting pulse blame the source.
+        print(
+            f"⚠ seo-cycle {command}: в Keychain scope `{scope}` (и `global`) нет ключей pulse "
+            f"({'/'.join(PULSE_KEY_NAMES)}) — проверь scope (project.brand_name_technical в "
+            f"{cfg_path.name}, `ai-secret list <scope>`) или зарегистрируй: seo-cycle auth login yandex | google-sa",
+            file=sys.stderr,
+        )
+        return
+    binary = find_ai_secret()
+    if binary is None:
+        print(
+            f"⚠ seo-cycle {command}: ключи провайдеров не в окружении и `ai-secret` не найден — "
+            "свежих данных не будет, прогон пойдёт на прошлом срезе. Установи ai-secret или "
+            "экспортируй переменные в окружение сессии.",
+            file=sys.stderr,
+        )
+        return
+    if scope is None:
+        print(
+            f"⚠ seo-cycle {command}: ключи провайдеров не в окружении, а scope Keychain не определён "
+            f"(нет project.brand_name_technical в {cfg_path.name}) — запусти вручную: "
+            f"ai-secret run <scope> -- seo-cycle {' '.join(argv)}",
+            file=sys.stderr,
+        )
+        return
+    env = dict(os.environ)
+    env[SECRETS_MARKER] = "1"
+    os.execve(binary, [binary, "run", scope, "--", sys.executable, str(pathlib.Path(__file__).resolve()), *argv], env)
+
+
+_maybe_inject_secrets()
 
 if __name__ == "__main__":
     raise SystemExit(main())
