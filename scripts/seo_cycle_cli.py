@@ -12,6 +12,7 @@ scripts). Run `seo-cycle <command> --help` for the wrapped script's own help.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import pathlib
 import shutil
 import subprocess
@@ -268,6 +269,57 @@ def cmd_doctor(args: list[str], project: pathlib.Path) -> int:
     return worst
 
 
+def _load_project_journey_module():
+    """Import `project-journey.py` (hyphenated filename, not a valid module
+    name) for direct, read-only access to `build_report()` — same pattern as
+    `page-outline-v3.py`'s `load_v2_module()`. Used only to build the status
+    header (T-105); the detailed report itself still runs as a subprocess via
+    `run_script()` below, so stdout/exit-code contracts stay untouched."""
+    spec = importlib.util.spec_from_file_location(
+        "seo_cycle_project_journey", SCRIPTS_DIR / "project-journey.py"
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Cannot load project-journey.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _status_header_lines(cfg_path: pathlib.Path, snap: pathlib.Path | None, age: int | None) -> list[str] | None:
+    """Three status-header lines (T-105): snapshot freshness, current journey
+    stage, next command — kept as separate lines on purpose (setup-stage
+    readiness and monitoring-snapshot freshness answer different questions
+    and must not be blended into one verdict). Best-effort: `build_report()`
+    calls `require_config`/`require_section`, which `sys.exit(2)` on a
+    malformed config (e.g. `project:` written as a bare string) — on any
+    failure this returns None so the caller falls back to the pre-T-105
+    header, unchanged, and the malformed config still surfaces through the
+    delegated `project-journey.py` subprocess failure below."""
+    try:
+        journey = _load_project_journey_module()
+        report = journey.build_report(cfg_path, goal="complete the next safe SEO cycle")
+    except (Exception, SystemExit):
+        return None
+    if snap is None:
+        freshness = "нет (запусти `seo-cycle pulse`)"
+    else:
+        marker = "ок" if (age or 0) < 3 else ("предупреждение" if (age or 0) < 7 else "просрочен")
+        freshness = f"{marker} ({snap.name} · {age} дн.)"
+    stages = report.get("stages") or []
+    total = len(stages)
+    current = report.get("current_stage")
+    if current:
+        stage_line = f"Стадия: {current.get('title')} ({current.get('order')} из {total})"
+    else:
+        stage_line = f"Стадия: цикл пройден ({total} из {total})"
+    commands = list((current or {}).get("next_commands") or [])
+    action_plan = report.get("action_plan") or []
+    if not commands and action_plan:
+        commands = [action_plan[0].get("command", "")]
+    next_command = next((cmd for cmd in commands if cmd.startswith("seo-cycle ")), "seo-cycle journey")
+    return [f"Срез: {freshness}", stage_line, f"Дальше: {next_command}"]
+
+
 def cmd_status(args: list[str], project: pathlib.Path) -> int:
     """Dashboard: project, snapshot age, loops/escalations, last triggers run — then journey."""
     cfg_path = find_config(project)
@@ -279,13 +331,20 @@ def cmd_status(args: list[str], project: pathlib.Path) -> int:
         return 2
     cfg = load_config(cfg_path)
     name = config_section(cfg, "project").get("name")
-    print(f"# seo-cycle status · {name or project.name}\n")
     snap, age = newest_snapshot(project, cfg)
-    if snap is None:
-        print("- снапшот: нет (запусти `seo-cycle pulse`)")
+    header = _status_header_lines(cfg_path, snap, age)
+    if header:
+        for line in header:
+            print(line)
+        print()
+        print(f"# seo-cycle status · {name or project.name}\n")
     else:
-        marker = "ok" if (age or 0) < 3 else ("warn" if (age or 0) < 7 else "ПРОСРОЧЕН")
-        print(f"- снапшот: {snap.name} · {age} дн. · {marker}")
+        print(f"# seo-cycle status · {name or project.name}\n")
+        if snap is None:
+            print("- снапшот: нет (запусти `seo-cycle pulse`)")
+        else:
+            marker = "ok" if (age or 0) < 3 else ("warn" if (age or 0) < 7 else "ПРОСРОЧЕН")
+            print(f"- снапшот: {snap.name} · {age} дн. · {marker}")
     iterations = sorted(project.glob("seo/**/10-iterations*.md"), key=lambda p: p.stat().st_mtime)
     if iterations:
         latest_iter = iterations[-1]

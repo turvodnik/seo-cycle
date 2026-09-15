@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -22,6 +23,25 @@ except ImportError:  # pragma: no cover
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "config" / "project.template.yaml"
 JOURNEY = ROOT / "scripts" / "project-journey.py"
+SCRIPTS = ROOT / "scripts"
+LAUNCHER = ROOT / "bin" / "seo-cycle"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+from seo_cycle_cli import COMMANDS, EXTRA_COMMANDS  # noqa: E402
+
+
+def make_bare_project(case: unittest.TestCase) -> pathlib.Path:
+    """A minimal `seo-cycle.yaml` with no artifacts (T-105 status-header
+    tests) — the project is at stage 1 (setup_foundation), no snapshot yet."""
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-cycle-status-"))
+    case.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+    cfg_path = tmp / "seo-cycle.yaml"
+    cfg = yaml.safe_load(TEMPLATE.read_text(encoding="utf-8"))
+    cfg["project"]["name"] = "Status Header Test"
+    cfg["project"]["domain"] = "status-header.test"
+    cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return cfg_path
 
 
 @unittest.skipIf(yaml is None, "PyYAML is required")
@@ -336,6 +356,95 @@ class ProjectJourneyTest(unittest.TestCase):
         draft_stage = next(stage for stage in report["stages"] if stage["id"] == "content_draft_gate")
         self.assertEqual(draft_stage["status"], "done")
         self.assertEqual(report["current_stage"]["id"], "monitoring_iteration")
+
+
+@unittest.skipIf(yaml is None, "PyYAML is required")
+class StageTitlesAreRussianTest(unittest.TestCase):
+    """T-105 acceptance criterion 2/3: stage titles/objectives are Russian
+    text (data field, used both in `--format json` and in the printed
+    markdown) — the machine-facing `id` stays English on purpose."""
+
+    ALLOWED_LATIN_TOKENS = ("NeuronWriter",)
+
+    def test_titles_have_no_stray_latin_characters(self) -> None:
+        cfg_path = make_bare_project(self)
+        proc = subprocess.run(
+            [sys.executable, str(JOURNEY), str(cfg_path), "--format", "json"],
+            cwd=cfg_path.parent,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        report = json.loads(proc.stdout)
+        stages = report["stages"]
+        self.assertEqual(len(stages), 12)
+        for stage in stages:
+            title = stage["title"]
+            stripped = title
+            for token in self.ALLOWED_LATIN_TOKENS:
+                stripped = stripped.replace(token, "")
+            self.assertIsNone(
+                re.search(r"[A-Za-z]", stripped),
+                f"stage {stage['id']!r} title still has Latin text: {title!r}",
+            )
+
+    def test_default_markdown_output_has_no_old_english_stage_titles(self) -> None:
+        # Acceptance criterion 2 (grep-based change check): the two titles
+        # named in the ticket must not appear in the default `md` output.
+        cfg_path = make_bare_project(self)
+        proc = subprocess.run(
+            [sys.executable, str(JOURNEY), str(cfg_path)],
+            cwd=cfg_path.parent,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        for leftover in ("Setup foundation", "Technical baseline"):
+            self.assertNotIn(leftover, proc.stdout)
+
+
+@unittest.skipIf(yaml is None, "PyYAML is required")
+class StatusHeaderTest(unittest.TestCase):
+    """T-105: `seo-cycle status` prints a three-line Russian header —
+    snapshot freshness, current journey stage, and the single next command —
+    before the previous detailed output (unchanged below it)."""
+
+    def run_status(self, cfg_path: pathlib.Path) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(LAUNCHER), "status"],
+            cwd=cfg_path.parent,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def test_header_is_the_first_three_lines(self) -> None:
+        cfg_path = make_bare_project(self)
+        proc = self.run_status(cfg_path)
+        lines = proc.stdout.splitlines()
+        self.assertGreaterEqual(len(lines), 3, proc.stdout)
+        self.assertTrue(lines[0].startswith("Срез:"), lines[:5])
+        self.assertTrue(lines[1].startswith("Стадия:"), lines[:5])
+        self.assertTrue(lines[2].startswith("Дальше:"), lines[:5])
+
+    def test_next_command_exists_in_cli_commands(self) -> None:
+        cfg_path = make_bare_project(self)
+        proc = self.run_status(cfg_path)
+        next_line = next(line for line in proc.stdout.splitlines() if line.startswith("Дальше:"))
+        command = next_line.removeprefix("Дальше:").strip()
+        self.assertTrue(command.startswith("seo-cycle "), command)
+        name = command.split()[1]
+        known = set(COMMANDS) | {item[0] for item in EXTRA_COMMANDS}
+        self.assertIn(name, known, f"{name!r} from {command!r} is not a known seo-cycle command")
+
+    def test_freshness_and_stage_stay_on_separate_lines(self) -> None:
+        # Criterion 2: snapshot freshness and setup-stage readiness answer
+        # different questions and must not be merged into one assessment.
+        cfg_path = make_bare_project(self)
+        proc = self.run_status(cfg_path)
+        lines = proc.stdout.splitlines()
+        self.assertNotIn("Стадия", lines[0])
+        self.assertNotIn("Срез", lines[1])
 
 
 if __name__ == "__main__":
