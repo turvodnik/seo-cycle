@@ -485,7 +485,7 @@ echo "Дальше:"
 echo "  seo-cycle validate   — проверить $TARGET"
 echo "  seo-cycle doctor     — диагностика окружения и ключей"
 echo "  seo-cycle status     — что происходит с проектом сейчас"
-echo "Подробный playbook: docs/agency-playbook.md"
+echo "Подробный playbook: seo/setup/onboarding-playbook.md"
 echo ""
 
 # Сразу прогоняем валидатор

@@ -158,7 +158,7 @@ class InitProjectTest(unittest.TestCase):
 
 @unittest.skipIf(yaml is None, "PyYAML is required")
 class WizardSevenQuestionsTest(unittest.TestCase):
-    """T-107: 7 обязательных вопроса + один переключатель «ещё» вместо 23 вопросов
+    """T-107: 7 обязательных вопросов + один переключатель «ещё» вместо 23 вопросов
     (issue-107 / отчёт 2026-09-15-seo-cycle-people-and-quality.md §4.5 H3).
     """
 
@@ -166,7 +166,7 @@ class WizardSevenQuestionsTest(unittest.TestCase):
         tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-cycle-t107-default-"))
         self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
 
-        # 7 обязательных вопроса + переключатель — все на Enter (дефолты),
+        # 7 обязательных вопросов + переключатель — все на Enter (дефолты),
         # плюс финальный «Запустить validate-config.py сейчас? [Y/n]».
         answers = b"\n" * 30
         rc, out = run_with_tty(["bash", str(INIT_PROJECT)], tmp, answers, base_env())
