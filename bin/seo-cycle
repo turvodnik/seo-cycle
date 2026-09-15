@@ -109,14 +109,24 @@ def _maybe_inject_secrets() -> None:
     from seo_cycle_core.config import find_config, load_yaml
     from seo_cycle_core.env_profile import PULSE_KEY_NAMES, SECRETS_MARKER, find_ai_secret, secret_scope
 
-    if os.environ.get(SECRETS_MARKER) == "1":
-        return
     if any(os.environ.get(name) for name in PULSE_KEY_NAMES):
         return  # keys already provided (manual `ai-secret run`, CI, export) — never override them
     cfg_path = find_config(_project_dir(argv))
     if cfg_path is None:
         return  # the command itself reports the missing config
     scope = secret_scope(load_yaml(cfg_path))
+    if os.environ.get(SECRETS_MARKER) == "1":
+        # We ARE the re-executed child and the pulse keys still did not arrive:
+        # the Keychain scope exists but holds none of them (typically the keys
+        # sit under a different scope than project.brand_name_technical) —
+        # the I-061 case, so say it instead of letting pulse blame the source.
+        print(
+            f"⚠ seo-cycle {command}: в Keychain scope `{scope}` (и `global`) нет ключей pulse "
+            f"({'/'.join(PULSE_KEY_NAMES)}) — проверь scope (project.brand_name_technical в "
+            f"{cfg_path.name}, `ai-secret list <scope>`) или зарегистрируй: seo-cycle auth login yandex | google-sa",
+            file=sys.stderr,
+        )
+        return
     binary = find_ai_secret()
     if binary is None:
         print(

@@ -267,6 +267,24 @@ class LauncherSecretsTest(_Base):
         self.assertIn("run testproj", stub_log(self.stub_dir))
         self.assertEqual(stub_log(self.stub_dir).count("run testproj"), 1)  # loop guard
 
+    def test_scope_without_pulse_keys_is_named_after_reexec(self) -> None:
+        # Review round 1 (🟡-2): broker present, scope present, but the scope holds
+        # no pulse key (keys live under another scope) — the child must say so.
+        self.write_config()
+        seed_store(self.stub_dir, {"testproj/PERPLEXITY_API_KEY": "x"})
+        proc = self.launcher("pulse", "--skip-fetch", with_stub=True)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertEqual(stub_log(self.stub_dir).count("run testproj"), 1)
+        self.assertIn("в Keychain scope `testproj`", proc.stderr)
+        self.assertIn("auth login yandex", proc.stderr)
+
+    def test_reexec_with_pulse_key_in_scope_is_silent(self) -> None:
+        self.write_config()
+        seed_store(self.stub_dir, {"testproj/YANDEX_OAUTH_TOKEN": "y"})
+        proc = self.launcher("pulse", "--skip-fetch", with_stub=True)
+        self.assertEqual(stub_log(self.stub_dir).count("run testproj"), 1)
+        self.assertNotIn("⚠ seo-cycle pulse", proc.stderr)
+
     def test_keys_already_in_env_are_never_overridden(self) -> None:
         self.write_config()
         proc = self.launcher("pulse", "--skip-fetch", with_stub=True,

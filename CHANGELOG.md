@@ -60,7 +60,9 @@ helper под `ai-secret run <scope>`. Лончер `bin/seo-cycle` (пункт 
 перекрываются — `ai-secret run` кладёт Keychain поверх окружения, поэтому
 проверка «ключи уже есть» стоит ДО перезапуска); без `ai-secret` или без
 scope — одна строка `⚠ seo-cycle <cmd>: …` в stderr, прогон на старом срезе
-не молчит. `sync`/`ads`/`feed`/`notify` лончер не перезапускает: их ключи
+не молчит; если после перезапуска ключи pulse так и не пришли (scope есть,
+но ключи лежат под другим scope — I-061), дочерний процесс печатает `⚠ … в
+Keychain scope \`X\` нет ключей pulse …` с подсказкой `auth login`. `sync`/`ads`/`feed`/`notify` лончер не перезапускает: их ключи
 провайдер-специфичны, по именам pulse их не оценить, а перезапуск перекрыл
 бы экспортированное руками значение — они идут под `ai-secret run` руками. WordPress: провайдер `wordpress` = REST-семейство
 `WP_BASE_URL`/`WP_USER`/`WP_APP_PASSWORD` (то, что ждут публикация,
@@ -70,7 +72,7 @@ scope — одна строка `⚠ seo-cycle <cmd>: …` в stderr, прого
 `.env` → legacy `env.global`) сохранена: старые файлы читаются до переноса
 (`ai-secret import <scope> .env`), но не пишутся. Докум.: INSTALL.md шаг 4,
 `docs/agency-playbook.md`, `docs/troubleshooting.md` сюжет 6 (T-101).
-Тесты: `tests/test_auth_secrets_canon.py` (24) на заглушке брокера
+Тесты: `tests/test_auth_secrets_canon.py` (28) на заглушке брокера
 `tests/helpers/ai_secret_stub.py` в изолированном PATH — настоящий
 Keychain набор не трогает; `tests/test_env_profile.py` — старые тесты
 записи в `.env` удалены; `AuthAssistantListTest`/`TokenAgeTest` переведены
