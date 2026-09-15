@@ -15,6 +15,7 @@ import argparse
 import copy
 import datetime as dt
 import json
+import os
 import pathlib
 import sys
 from typing import Any
@@ -348,15 +349,20 @@ def read_line(prompt: str) -> str:
     while True:
         _TTY_OUTPUT.write(prompt)
         _TTY_OUTPUT.flush()
+        # One raw read per line, decoded here: a text-layer decoder (or a
+        # buffered readline) would glue a dangling byte flushed by Ctrl-D to
+        # the next line and reject a valid answer too. In canonical mode the
+        # terminal hands over exactly one line per read.
+        raw = os.read(_TTY_INPUT.fileno(), 4096)
+        if not raw:
+            raise EOFError("EOF on /dev/tty")
         try:
-            line = _TTY_INPUT.readline()
+            line = raw.decode("utf-8")
         except UnicodeDecodeError:
             # Same failure class as issue #28: a backspace over a multibyte
             # char leaves a dangling byte. Never write U+FFFD into the intake.
             say("  ⚠ ответ содержит невалидный UTF-8 (обычно backspace над кириллицей) — введи ещё раз")
             continue
-        if not line:
-            raise EOFError("EOF on /dev/tty")
         return line.rstrip("\r\n")
 
 

@@ -151,6 +151,20 @@ class IntakeWizardTtyTest(unittest.TestCase):
         intake = yaml.safe_load(raw.decode("utf-8"))
         self.assertEqual(intake["business"]["project_type"], "saas")
 
+    def test_dangling_byte_does_not_poison_later_answers(self) -> None:
+        """Review R8: a lone lead byte flushed by Ctrl-D must cost one re-ask, not every answer after it."""
+        tmp = self._project()
+        answers = b"\xd0\x04saas\n" + b"\n" * 120
+        rc, out = run_with_tty(
+            [sys.executable, str(INTAKE_WIZARD), "seo-cycle.yaml", "--interactive", "--write"],
+            tmp, answers, base_env(),
+        )
+        text = out.decode("utf-8", "replace")
+        self.assertEqual(rc, 0, text)
+        self.assertEqual(text.count("невалидный UTF-8"), 1, text)
+        intake = yaml.safe_load((tmp / "seo" / "project-intake.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(intake["business"]["project_type"], "saas")
+
     def test_interactive_eof_on_tty_is_not_a_traceback(self) -> None:
         tmp = self._project()
         # The terminal hangs up after the first answer (Ctrl-D on an empty line).
