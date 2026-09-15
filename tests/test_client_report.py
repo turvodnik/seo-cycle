@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -85,6 +86,9 @@ class ClientReportTest(unittest.TestCase):
         self.assertIn("on_track", markdown)
         self.assertIn("Прогноз и потенциал", markdown)
         self.assertIn("Отчёт подготовлен автоматически", markdown)
+        # T-106: glossary is part of the plain-text/markdown report too, not
+        # just an HTML add-on.
+        self.assertIn("Словарь терминов", markdown)
 
         html_path = self.tmp / "seo" / "reports" / "client-report-2026-07.html"
         self.assertTrue(html_path.exists())
@@ -95,12 +99,41 @@ class ClientReportTest(unittest.TestCase):
         self.assertIn("<h2>KPI: план vs факт</h2>", html_body)
         self.assertNotIn("**", html_body)  # bold converted, not leaked
         self.assertTrue((self.tmp / "seo" / "reports" / "latest-client-report.html").exists())
+        # T-106: no internal operator commands in the client-facing HTML.
+        self.assertEqual(0, len(re.findall(r"запустите|seo-cycle |python3", html_body)))
+        # T-106: two snapshots (2026-06-01, 2026-07-01 seeded above) -> the
+        # top-10 strip and the glossary block are both present.
+        self.assertIn("Топ-10 по срезам", html_body)
+        self.assertIn("Словарь терминов", html_body)
+        # T-106: the strip sits next to the numbers it illustrates, not
+        # after the glossary/sign-off — and is tinted with the agency's own
+        # accent color, not html_report's default green.
+        strip_pos = html_body.index("Топ-10 по срезам")
+        self.assertLess(strip_pos, html_body.index("Словарь терминов"))
+        self.assertLess(strip_pos, html_body.index("Отчёт подготовлен автоматически"))
+        bar_row_start = html_body.index('<div class="bar-row">', strip_pos)
+        self.assertIn("#8B5E3C", html_body[bar_row_start:bar_row_start + 200])
 
     def test_empty_project_omits_sections_gracefully(self) -> None:
         proc = self.run_report()
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("Данных за период пока нет", proc.stdout)
         self.assertNotIn("KPI: план vs факт", proc.stdout)
+        # T-106: internal command hint moved out of the client-facing text
+        # into stderr, for the operator only.
+        self.assertNotIn("запустите", proc.stdout)
+        self.assertIn("запустите", proc.stderr)
+        self.assertNotIn("Словарь терминов", proc.stdout)  # empty report has no glossary
+
+    def test_empty_forecast_fixture_html_has_no_internal_commands(self) -> None:
+        # T-106 acceptance criterion: grep -c 'запустите\|seo-cycle \|python3'
+        # on the HTML of an empty-forecast fixture must be 0 (on HEAD: 1 —
+        # the "запустите forecast/kpi/sync/db-sync" phrase used to leak into
+        # the client-facing text).
+        proc = self.run_report("--write")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        html_body = (self.tmp / "seo" / "reports" / "client-report-2026-07.html").read_text(encoding="utf-8")
+        self.assertEqual(0, len(re.findall(r"запустите|seo-cycle |python3", html_body)))
 
     def test_json_format_lists_sections(self) -> None:
         self.seed_artifacts()
@@ -110,6 +143,15 @@ class ClientReportTest(unittest.TestCase):
         self.assertEqual(ids[0], "positions")
         self.assertIn("kpi", ids)
         self.assertIn("forecast", ids)
+
+    def test_html_has_no_external_resources(self) -> None:
+        # T-106 invariant: the client HTML stays self-contained (no
+        # http(s):// anywhere — no external <script>/<link>/<img src=http…>).
+        self.seed_artifacts()
+        proc = self.run_report("--write")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        html_body = (self.tmp / "seo" / "reports" / "client-report-2026-07.html").read_text(encoding="utf-8")
+        self.assertNotIn("http", html_body)
 
     def test_pdf_export_via_headless_chrome(self) -> None:
         sys.path.insert(0, str(SCRIPTS))

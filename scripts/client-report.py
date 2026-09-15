@@ -28,12 +28,23 @@ import sys
 from typing import Any
 
 from seo_cycle_core.config import config_section, find_config, nested_get, project_root_for, require_config, require_section, write_text
-from seo_cycle_core.html_report import html_page, markdown_to_html_body
+from seo_cycle_core.html_report import bar, html_page, markdown_to_html_body
 from seo_cycle_core.logging_setup import setup_logging
 
 log = setup_logging("client-report")
 
 DEFAULT_ACCENT = "#0B57D0"
+
+# T-106: one line per term, for the client-facing glossary block — plain
+# language, no internal tool/command names (this report is read by clients,
+# not operators).
+GLOSSARY = [
+    ("Топ-10", "запросы, по которым сайт занимает места с 1 по 10 в поисковой выдаче."),
+    ("Показы", "сколько раз страница появилась в результатах поиска по запросу."),
+    ("Клики", "сколько раз с этих показов перешли на сайт."),
+    ("Позиция", "место сайта в выдаче по запросу — чем меньше число, тем выше."),
+    ("Срез", "дата, на которую сняты данные о позициях, показах и кликах."),
+]
 
 CHROME_CANDIDATES = (
     os.environ.get("CHROME_BIN", ""),
@@ -121,6 +132,10 @@ def positions_summary(project_root: pathlib.Path, cfg: dict[str, Any]) -> dict[s
         result = {"latest": snapshot(latest)}
         if previous:
             result["previous"] = snapshot(previous)
+        if len(dates) >= 2:
+            # T-106: trend across snapshots for the client-report top-10 strip
+            # (same shape position-progress.py uses for its own bar chart).
+            result["trend"] = [snapshot(date) for date in dates[-12:]]
         conn.close()
         return result
     except sqlite3.Error:
@@ -150,7 +165,7 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any], period: str) -
         prev = positions.get("previous") or {}
         delta = {key: latest[key] - prev.get(key, latest[key]) for key in ("top10", "top3", "clicks")} if prev else {}
         sections.append({"id": "positions", "title": "Видимость в поиске", "data": {
-            "latest": latest, "previous": prev, "delta": delta}})
+            "latest": latest, "previous": prev, "delta": delta, "trend": positions.get("trend") or []}})
 
     kpi = data["kpi"]
     if kpi.get("goals"):
@@ -246,16 +261,45 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.append(f"- SEO {data['seo_share_pct']}% / PPC {data['ppc_share_pct']}%"
                          f" → ожидание ~{data['expected_monthly_leads']} лидов/мес")
     if not report["sections"]:
-        lines.extend(["", "_Данных за период пока нет — запустите forecast/kpi/sync/db-sync._"])
+        # T-106: client-facing — no internal tool/command names here; the
+        # operator hint (what to run) goes to stderr in main() instead.
+        lines.extend(["", "_Данных за период пока нет — они появятся после ближайшего среза._"])
+    else:
+        lines.extend(["", "## Словарь терминов", ""])
+        lines.extend(f"- **{term}** — {definition}" for term, definition in GLOSSARY)
     if agency["footer_note"]:
         lines.extend(["", "---", "", agency["footer_note"]])
     return "\n".join(lines) + "\n"
 
 
 def render_html(report: dict[str, Any], markdown_body: str) -> str:
+    body = markdown_to_html_body(markdown_body)
+    positions = next((s["data"] for s in report["sections"] if s["id"] == "positions"), None)
+    trend = (positions or {}).get("trend") or []
+    if len(trend) >= 2:
+        # T-106: top-10 strip across snapshots, inline CSS bars — same
+        # helper and pattern position-progress.py uses for its own trend,
+        # tinted with the agency's own accent instead of html_report's
+        # default green.
+        accent = report["agency"]["accent_color"]
+        max_top10 = max((snap["top10"] for snap in trend), default=0) or 1
+        bars = "".join(
+            bar(snap["top10"], max_top10, color=accent, label=f"{snap['date']}: топ-10 = {snap['top10']}")
+            for snap in trend
+        )
+        strip = f"<h2>Топ-10 по срезам</h2>{bars}"
+        # Splice right after the "Видимость в поиске" block — a chart
+        # belongs next to the numbers it illustrates, not after the
+        # glossary/sign-off at the bottom of a client-facing letter.
+        anchor = "<h2>Видимость в поиске</h2>"
+        if anchor in body:
+            insert_at = body.index("</ul>", body.index(anchor)) + len("</ul>")
+            body = body[:insert_at] + strip + body[insert_at:]
+        else:
+            body += strip
     return html_page(
         f"{report['client']} — отчёт {report['period']}",
-        markdown_to_html_body(markdown_body),
+        body,
         accent=report["agency"]["accent_color"],
     )
 
@@ -301,6 +345,13 @@ def main() -> int:
     log = setup_logging("client-report", project_root, cfg)
 
     report = build_report(project_root, cfg, args.period)
+    if not report["sections"]:
+        # T-106: the operator-facing hint lives in stderr, not in the
+        # client-facing report text.
+        print(
+            "Нет данных за период — запустите forecast/kpi/sync/db-sync, затем повторите генерацию отчёта.",
+            file=sys.stderr,
+        )
     markdown_body = render_markdown(report)
     if args.write:
         base = project_root / "seo" / "reports"
