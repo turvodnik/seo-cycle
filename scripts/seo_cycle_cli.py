@@ -12,7 +12,9 @@ scripts). Run `seo-cycle <command> --help` for the wrapped script's own help.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
+import io
 import pathlib
 import shutil
 import subprocess
@@ -294,10 +296,19 @@ def _status_header_lines(cfg_path: pathlib.Path, snap: pathlib.Path | None, age:
     malformed config (e.g. `project:` written as a bare string) — on any
     failure this returns None so the caller falls back to the pre-T-105
     header, unchanged, and the malformed config still surfaces through the
-    delegated `project-journey.py` subprocess failure below."""
+    delegated `project-journey.py` subprocess failure below.
+
+    stdout/stderr are captured (not printed) for this in-process call: on a
+    malformed config, `require_config`/`require_section` print their own
+    `ERROR:`/`WARNING:` lines before `sys.exit(2)` — without this, those
+    lines would appear a second time here, ahead of the identical ones the
+    delegated subprocess already prints, silently changing the stderr
+    contract `test_status_on_project_as_string_warns_instead_of_
+    silently_swallowing` locks in."""
     try:
         journey = _load_project_journey_module()
-        report = journey.build_report(cfg_path, goal="complete the next safe SEO cycle")
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            report = journey.build_report(cfg_path, goal="complete the next safe SEO cycle")
     except (Exception, SystemExit):
         return None
     if snap is None:

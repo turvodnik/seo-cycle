@@ -446,6 +446,36 @@ class StatusHeaderTest(unittest.TestCase):
         self.assertNotIn("Стадия", lines[0])
         self.assertNotIn("Срез", lines[1])
 
+    def test_every_stage_next_command_rule_resolves_to_a_known_command(self) -> None:
+        # `test_next_command_exists_in_cli_commands` above only ever
+        # observes stage 1 (a fresh project starts at setup_foundation).
+        # `research_architecture` (order 5) is the one stage where NEITHER
+        # `next_commands` entry is `seo-cycle `-shaped (both are plain
+        # instructions, e.g. "Create or import a research package under
+        # ..."), so the fallback in `_status_header_lines()` — the first
+        # `seo-cycle `-prefixed command, else `seo-cycle journey` — is only
+        # actually exercised there. Apply the same rule to all 12 stages
+        # from one report instead of seeding a project per stage.
+        cfg_path = make_bare_project(self)
+        proc = subprocess.run(
+            [sys.executable, str(JOURNEY), str(cfg_path), "--format", "json"],
+            cwd=cfg_path.parent,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        report = json.loads(proc.stdout)
+        known = set(COMMANDS) | {item[0] for item in EXTRA_COMMANDS}
+        saw_fallback = False
+        for stage in report["stages"]:
+            commands = stage.get("next_commands") or []
+            next_command = next((cmd for cmd in commands if cmd.startswith("seo-cycle ")), "seo-cycle journey")
+            if next_command == "seo-cycle journey" and not any(c.startswith("seo-cycle ") for c in commands):
+                saw_fallback = True
+            name = next_command.split()[1]
+            self.assertIn(name, known, f"stage {stage['id']!r}: {name!r} from {next_command!r} is unknown")
+        self.assertTrue(saw_fallback, "no stage exercised the 'seo-cycle journey' fallback — is research_architecture still non-CLI-shaped?")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
