@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Validate a copy draft against a page-outline v2/v3 brief."""
+"""Validate a copy draft against a page-outline v2/v3 brief.
+
+Exit code follows the same pass/warn/fail scale as page-outline-quality.py
+and research-package-quality.py: 0 when there are no findings or only
+warnings (status "pass"/"warn"), 1 when at least one error-severity finding
+is present (status "fail"). The JSON report always carries the full
+"status" and "findings" list regardless of exit code.
+"""
 
 from __future__ import annotations
 
@@ -161,8 +168,12 @@ def build_report(draft_path: pathlib.Path, outline_path: pathlib.Path) -> dict[s
             }
         )
 
+    has_error = any(finding.get("severity") == "error" for finding in findings)
+    status = "fail" if has_error else "warn" if findings else "pass"
+
     return {
         "script": "draft-quality-gate",
+        "status": status,
         "summary": {
             "findings": len(findings),
             "expected_h2": len(expected_h2(outline)),
@@ -200,7 +211,7 @@ def main() -> int:
     if args.write:
         write_outputs(pathlib.Path(args.draft), report)
     print_report(report, args.format, render_markdown(report))
-    return 0
+    return 1 if report["status"] == "fail" else 0
 
 
 if __name__ == "__main__":

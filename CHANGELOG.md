@@ -24,6 +24,23 @@ Search Console» и помечает каждого провайдера тег�
 самого `COMMANDS`, поэтому пропажа команды красит тест, а не проходит молча,
 `test_unknown_group_in_commands_breaks_overview`, `test_today_group_commands_are_pulse_status_web`,
 `AuthAssistantListTest`).
+### Fix: draft-quality-gate — код выхода по findings (раньше всегда 0) (T-102)
+
+`draft-quality-gate.py` печатал JSON-отчёт с findings (error/warning) и
+всегда возвращал `exit 0` — `seo-cycle gate draft …` сообщал «успех» даже
+при error-находках (например `unsafe_first_person_expertise`). Теперь
+код выхода следует той же шкале pass/warn/fail, что уже используют
+`page-outline-quality.py` и `research-package-quality.py`: `0` — нет
+находок или только warning, `1` — есть хотя бы одна error-находка;
+отчёт получил явное поле `status`. `--help`/docstring описывают шкалу.
+`tests/test_repair_layer.py::test_entity_graph_and_draft_quality_gates_find_concrete_failures`
+использовал фикстуру с error-находкой и `check=True` — обновлён под
+новое поведение (`check=False` + проверка `status`/`returncode`).
+`scripts/cycle-state.py` (init/set/gate/next/show — оркестрация цикла)
+не имел тестов вовсе — добавлено покрытие текущего поведения без смены
+критерия ворот `gate` (файл/каталог непуст остаётся как есть — это
+отдельная L-спека). Тесты: `tests/test_draft_quality_gate.py` (5),
+`tests/test_cycle_state.py` (11), подпроцессом.
 
 ### Fix: топ-500 по показам выдавался за KPI сайта — граница выборки (T-096)
 
