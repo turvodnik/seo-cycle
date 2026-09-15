@@ -301,7 +301,7 @@ def apply_defaults(existing: dict[str, Any], defaults: dict[str, Any]) -> dict[s
     return result
 
 
-EXIT_NO_INTERACTIVE_INPUT = 3
+EXIT_NO_INTERACTIVE_INPUT = 2  # environment/usage error, same as «config not found»
 
 # Issue #29: init-project.sh reads answers from /dev/tty, but this wizard
 # read stdin — when stdin is a pipe or /dev/null (agent, launchd, CI) the
@@ -324,7 +324,7 @@ def open_interactive_input() -> None:
         # Prompts go to the same terminal the answers come from, so an agent
         # that captures stdout still shows the user what is being asked
         # (two handles: a tty is not seekable, "r+" text mode refuses it).
-        _TTY_INPUT = open("/dev/tty", "r", encoding="utf-8", errors="replace")
+        _TTY_INPUT = open("/dev/tty", "r", encoding="utf-8", errors="strict")
         _TTY_OUTPUT = open("/dev/tty", "w", encoding="utf-8", errors="replace")
     except OSError as exc:
         raise InteractiveInputUnavailable(
@@ -333,15 +333,31 @@ def open_interactive_input() -> None:
         ) from exc
 
 
+def say(text: str) -> None:
+    """Print wizard text where the questions go (terminal when stdin is not one)."""
+    if _TTY_OUTPUT is None:
+        print(text)
+    else:
+        _TTY_OUTPUT.write(text + "\n")
+        _TTY_OUTPUT.flush()
+
+
 def read_line(prompt: str) -> str:
     if _TTY_INPUT is None:
         return input(prompt)
-    _TTY_OUTPUT.write(prompt)
-    _TTY_OUTPUT.flush()
-    line = _TTY_INPUT.readline()
-    if not line:
-        raise EOFError("EOF on /dev/tty")
-    return line.rstrip("\r\n")
+    while True:
+        _TTY_OUTPUT.write(prompt)
+        _TTY_OUTPUT.flush()
+        try:
+            line = _TTY_INPUT.readline()
+        except UnicodeDecodeError:
+            # Same failure class as issue #28: a backspace over a multibyte
+            # char leaves a dangling byte. Never write U+FFFD into the intake.
+            say("  ⚠ ответ содержит невалидный UTF-8 (обычно backspace над кириллицей) — введи ещё раз")
+            continue
+        if not line:
+            raise EOFError("EOF on /dev/tty")
+        return line.rstrip("\r\n")
 
 
 def ask(prompt: str, default: str | None = None) -> str:
@@ -368,7 +384,7 @@ def ask_choice(prompt: str, choices: list[str], default: str) -> str:
         value = ask(f"{prompt} ({choice_text})", default)
         if value in choices:
             return value
-        print(f"  Допустимо: {choice_text}")
+        say(f"  Допустимо: {choice_text}")
 
 
 def ask_engines(current: dict[str, bool]) -> dict[str, bool]:
@@ -385,8 +401,8 @@ def interactive_refine(intake: dict[str, Any]) -> dict[str, Any]:
     tools = result.setdefault("tools", {})
     setup = result.setdefault("setup_decisions", {})
 
-    print("\nДетальный intake wizard. Enter оставляет значение по умолчанию.")
-    print("Секреты, токены и пароли здесь не вводятся.\n")
+    say("\nДетальный intake wizard. Enter оставляет значение по умолчанию.")
+    say("Секреты, токены и пароли здесь не вводятся.\n")
 
     business["project_type"] = ask_choice("Тип проекта", PROJECT_TYPES, business.get("project_type", "ecommerce"))
     business["business_model"] = ask_list("Business model tags", string_list(business.get("business_model")))

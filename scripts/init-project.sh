@@ -15,6 +15,13 @@ set -e
 
 SKILL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# python3 is needed from the first answer on (UTF-8 check, generators, validate);
+# without it the wizard would blame every answer instead of the environment.
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "✗ python3 не найден в PATH — установи Python 3 (на macOS: xcode-select --install) и запусти снова" >&2
+    exit 2
+fi
+
 # T-061: реестр проектов — машинно-локальные данные (реальные пути/домены),
 # не часть инструмента. Живёт вне дерева репозитория/снапшота по умолчанию
 # (та же логика, что seo_cycle_core/registry.py и env_profile.py для
@@ -247,8 +254,9 @@ cp "$TEMPLATE" "$TARGET"
 # putting `sed -i ''` into a string variable creates backup files named *'' on macOS.
 # LC_ALL=C (issue #28): sed works on bytes, so a non-ASCII byte in the file or
 # in the replacement never aborts the run with "RE error: illegal byte sequence"
-# leaving a half-edited file and a `.!PID!name` temp file behind. All patterns
-# here are ASCII, so byte mode changes nothing for valid input.
+# leaving a half-edited file and a `.!PID!name` temp file behind. The patterns
+# here are literal (no regex metacharacters outside ASCII), so byte mode gives
+# the same result as a UTF-8 locale for valid input.
 sed_in_place() {
     if [ "$(uname)" = "Darwin" ]; then
         LC_ALL=C sed -i '' "$@"

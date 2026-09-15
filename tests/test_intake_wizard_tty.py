@@ -77,6 +77,19 @@ def run_with_tty(cmd: list[str], cwd: pathlib.Path, answers: bytes, env: dict[st
     return os.waitstatus_to_exitcode(status), bytes(output)
 
 
+def utf8_locale() -> str | None:
+    """A UTF-8 locale present on this machine (macOS: en_US.UTF-8, Linux CI: C.UTF-8)."""
+    try:
+        available = subprocess.run(["locale", "-a"], capture_output=True, text=True, check=False).stdout.split()
+    except OSError:
+        return None
+    lower = {name.lower().replace("-", ""): name for name in available}
+    for candidate in ("en_us.utf8", "c.utf8"):
+        if candidate in lower:
+            return lower[candidate]
+    return None
+
+
 def base_env(**extra: str) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items() if not k.startswith(("LC_", "LANG"))}
     env["SEO_CYCLE_SKIP_REGISTRY"] = "1"
@@ -104,7 +117,7 @@ class IntakeWizardTtyTest(unittest.TestCase):
             env=base_env(),
             check=False,
         )
-        self.assertNotEqual(proc.returncode, 0)
+        self.assertEqual(proc.returncode, 2, proc.stderr)  # environment error, like «config not found»
         self.assertNotIn("Traceback", proc.stderr)
         self.assertIn("нет интерактивного ввода", proc.stderr)
         self.assertFalse((tmp / "seo" / "project-intake.yaml").exists(), "nothing must be written")
@@ -120,6 +133,22 @@ class IntakeWizardTtyTest(unittest.TestCase):
         self.assertEqual(rc, 0, text)
         self.assertNotIn("Traceback", text)
         intake = yaml.safe_load((tmp / "seo" / "project-intake.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(intake["business"]["project_type"], "saas")
+
+    def test_invalid_utf8_answer_is_asked_again_not_written(self) -> None:
+        tmp = self._project()
+        # Dangling lead byte (backspace over a Cyrillic char), then a valid answer.
+        answers = b"\xd0saas\n" + b"saas\n" + b"\n" * 120
+        rc, out = run_with_tty(
+            [sys.executable, str(INTAKE_WIZARD), "seo-cycle.yaml", "--interactive", "--write"],
+            tmp, answers, base_env(),
+        )
+        text = out.decode("utf-8", "replace")
+        self.assertEqual(rc, 0, text)
+        self.assertIn("невалидный UTF-8", text)
+        raw = (tmp / "seo" / "project-intake.yaml").read_bytes()
+        self.assertNotIn("\ufffd".encode("utf-8"), raw)
+        intake = yaml.safe_load(raw.decode("utf-8"))
         self.assertEqual(intake["business"]["project_type"], "saas")
 
     def test_interactive_eof_on_tty_is_not_a_traceback(self) -> None:
@@ -168,6 +197,48 @@ class InitProjectLocaleTest(unittest.TestCase):
 
     def test_lc_all_posix(self) -> None:
         self._run_init("POSIX")
+
+    def test_utf8_locale_the_one_from_the_bug_report(self) -> None:
+        """The reporter's locale: on 89a0218 this is rc=1 + `illegal byte sequence` + a temp file."""
+        locale = utf8_locale()
+        if locale is None:
+            self.skipTest("no UTF-8 locale installed")
+        self._run_init(locale)
+
+    def test_intake_failure_is_reported_not_masked(self) -> None:
+        """Ctrl-D on the first intake question: init must say «не заполнен», never «✓»."""
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-cycle-t099-init-eof-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        answers = b"\n" * 21 + b"y\n" + b"\x04" + b"\n" * 5
+        rc, out = run_with_tty(["bash", str(INIT_PROJECT)], tmp, answers, base_env(LC_ALL="C"))
+        text = out.decode("utf-8", "replace")
+        self.assertEqual(rc, 0, text)
+        self.assertNotIn("Traceback", text)
+        self.assertIn("ℹ project intake не заполнен", text)
+        self.assertNotIn("✓ project intake заполнен", text)
+
+    def test_sed_in_place_survives_invalid_utf8_in_utf8_locale(self) -> None:
+        """Issue #28 at sed level: garbage byte written by call 1 must not abort call 2 (LC_ALL=C inside)."""
+        locale = utf8_locale()
+        if locale is None:
+            self.skipTest("no UTF-8 locale installed")
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-cycle-t099-sed-utf8-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        target = tmp / "t.yaml"
+        script = (
+            "f=$(mktemp); sed -n '/^sed_in_place() {/,/^}/p' \"$1\" > \"$f\"; source \"$f\"; rm -f \"$f\"; "
+            "cp \"$2\" \"$3\"; "
+            "sed_in_place \"s|^project_type: ecommerce|project_type: $(printf 'b\\xd0log')|\" \"$3\" && "
+            "sed_in_place 's|^cms: wordpress|cms: static|' \"$3\""
+        )
+        proc = subprocess.run(
+            ["bash", "-c", script, "_", str(INIT_PROJECT), str(TEMPLATE), str(target)],
+            capture_output=True, text=True, env=base_env(LC_ALL=locale), check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn("illegal byte sequence", proc.stderr)
+        self.assertEqual([p.name for p in tmp.iterdir() if p.name.startswith(".!")], [])
+        self.assertIn(b"cms: static", target.read_bytes())
 
     def test_sed_in_place_keeps_cyrillic_bytes_intact(self) -> None:
         """Byte-for-byte: lines the wizard does not touch stay identical in C vs UTF-8 locale."""
