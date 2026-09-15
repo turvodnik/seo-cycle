@@ -408,7 +408,7 @@ class RepairLayerTest(unittest.TestCase):
             cwd=self.package,
             text=True,
             capture_output=True,
-            check=True,
+            check=False,
         )
         report = json.loads(draft.stdout)
         finding_ids = {finding["id"] for finding in report["findings"]}
@@ -416,6 +416,9 @@ class RepairLayerTest(unittest.TestCase):
         self.assertIn("unsafe_first_person_expertise", finding_ids)
         self.assertIn("missing_internal_link", finding_ids)
         self.assertIn("missing_proof_slot", finding_ids)
+        # unsafe_first_person_expertise is an error finding -> gate fails (rc=1).
+        self.assertEqual(report["status"], "fail")
+        self.assertEqual(draft.returncode, 1)
 
     def test_research_quality_action_plan_points_to_exact_repair_commands(self) -> None:
         quality = self.run_script_allow_fail("research-package-quality.py")
