@@ -308,6 +308,7 @@ EXIT_NO_INTERACTIVE_INPUT = 3
 # first question died with an EOFError traceback. Interactive answers now
 # come from the terminal (/dev/tty) whenever stdin is not one.
 _TTY_INPUT = None  # type: Any
+_TTY_OUTPUT = None  # type: Any
 
 
 class InteractiveInputUnavailable(RuntimeError):
@@ -315,12 +316,16 @@ class InteractiveInputUnavailable(RuntimeError):
 
 
 def open_interactive_input() -> None:
-    global _TTY_INPUT
+    global _TTY_INPUT, _TTY_OUTPUT
     if sys.stdin.isatty():
-        _TTY_INPUT = None
+        _TTY_INPUT = _TTY_OUTPUT = None
         return
     try:
-        _TTY_INPUT = open("/dev/tty", encoding="utf-8", errors="replace")
+        # Prompts go to the same terminal the answers come from, so an agent
+        # that captures stdout still shows the user what is being asked
+        # (two handles: a tty is not seekable, "r+" text mode refuses it).
+        _TTY_INPUT = open("/dev/tty", "r", encoding="utf-8", errors="replace")
+        _TTY_OUTPUT = open("/dev/tty", "w", encoding="utf-8", errors="replace")
     except OSError as exc:
         raise InteractiveInputUnavailable(
             "нет интерактивного ввода: stdin не терминал и /dev/tty недоступен "
@@ -331,7 +336,8 @@ def open_interactive_input() -> None:
 def read_line(prompt: str) -> str:
     if _TTY_INPUT is None:
         return input(prompt)
-    print(prompt, end="", flush=True)
+    _TTY_OUTPUT.write(prompt)
+    _TTY_OUTPUT.flush()
     line = _TTY_INPUT.readline()
     if not line:
         raise EOFError("EOF on /dev/tty")
