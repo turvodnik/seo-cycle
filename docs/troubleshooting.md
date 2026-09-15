@@ -15,14 +15,17 @@ NeuronWriter, LLM CLI) — для отладки самого кода; эти �
 `seo-cycle doctor` тоже говорит «нет снапшотов мониторинга»).
 
 Причина: `pulse` собирает позиции только из двух источников — Я.Вебмастер и
-Google Search Console (GSC) — и включает в запрос лишь то, для чего ОДНОВРЕМЕННО
-выполнены два условия: движок включён в `seo-cycle.yaml` (`engines:`) И токен
-этого источника настроен. Если оба условия не выполнены ни для одного
-источника, список источников пуст и шаг fetch тихо пропускается — снапшот
-никто не построил.
+Google Search Console (GSC) — и включает в запрос лишь то, для чего движок
+включён в `seo-cycle.yaml` (`engines:`, пустой/отсутствующий список —
+ограничения нет) И источник настроен: для Вебмастера — токен
+(`YANDEX_WEBMASTER_OAUTH_TOKEN`/`YANDEX_OAUTH_TOKEN`), для GSC — ОБА срезу
+`GOOGLE_APPLICATION_CREDENTIALS` И `GSC_SITE_URL` (одних credentials без
+`GSC_SITE_URL` недостаточно). Если ни один источник не настроен, `pulse` сам
+об этом печатает — не молчит: `fetch ✗ источник не настроен (auth login
+yandex | google-sa + GSC_SITE_URL)`, плюс finding `fetch_not_configured`.
 
 ```bash
-seo-cycle auth list                 # какие токены реально видны (project/global/missing)
+seo-cycle auth list                 # [env]/[project]/[global]/[—] по каждой переменной
 grep -A3 '^engines:' seo-cycle.yaml # какие движки включены
 seo-cycle pulse --skip-fetch        # проверить свежесть уже имеющихся данных без похода в сеть
 ```
@@ -88,17 +91,31 @@ seo-cycle loop <target> <path> --reset
 cat ~/.seo-cycle/projects-registry.yaml   # проект действительно отсутствует?
 ```
 
-Если `seo-cycle.yaml` в проекте ещё нет — просто `seo-cycle init` из его
-каталога: конфиг создастся и реестр допишется автоматически, одним шагом.
+Самый дешёвый обходной путь — просто запусти `seo-cycle web --open` ИЗ
+КАТАЛОГА этого проекта: дашборд всегда добавляет в переключатель текущий
+каталог, если там есть `seo-cycle.yaml`, даже без реестра (`load_projects()`
+в `webapp.py`). Реестр нужен только для проектов, к которым заходишь не из
+их собственного каталога, и для портфельных команд (`pulse --global` и т.п.).
+
+Если хочешь именно в реестре — и `seo-cycle.yaml` в проекте ещё нет, просто
+`seo-cycle init` из его каталога: конфиг создастся и реестр допишется
+автоматически, одним шагом.
 
 Если `seo-cycle.yaml` уже есть (обычный случай для «второй машины») — **не
 перезапускай `init` не глядя**: он спросит «Перезаписать?» и при `y`
 сотрёт существующий конфиг с его правками. Безопаснее дописать запись в
 реестр вручную, по образцу `config/projects-registry.example.yaml` (поля:
 `name`, абсолютный `path` до каталога с `seo-cycle.yaml`, `region_profile`,
-`cms`, `status`, `monthly_automation`):
+`cms`, `status`, `monthly_automation`). Если файла реестра ещё нет вообще —
+СНАЧАЛА создай шапку из шаблона (без неё верхний уровень получится списком
+вместо словаря, и `seo-cycle web` откажется стартовать с `SystemExit 2`
+«верхний уровень конфига должен быть словарём»), ровно как это делает
+`init-project.sh`:
 
 ```bash
+# только если файла ещё нет (пропусти, если ~/.seo-cycle/projects-registry.yaml уже существует)
+sed '/^projects:/q' config/projects-registry.example.yaml > ~/.seo-cycle/projects-registry.yaml
+
 cat >> ~/.seo-cycle/projects-registry.yaml <<'EOF'
   - name: "<имя проекта>"
     path: "<абсолютный путь к проекту>"
@@ -134,8 +151,9 @@ seo-cycle report --write --pdf 2>&1 | grep -i pdf   # покажет "PDF skippe
 
 Симптом: `ai-secret run <scope> -- ...` подтверждает, что ключ провайдера
 существует и валиден (в macOS Keychain, по глобальной политике секретов
-§5 из `AGENTS.md`), но `seo-cycle auth list` показывает `missing`, и `pulse`
-не может забрать свежие данные.
+§5 из `AGENTS.md`), но `seo-cycle auth list` печатает переменную с меткой
+`[—]` (не найдена ни в одном источнике), и `pulse` не может забрать свежие
+данные.
 
 Причина: `seo-cycle` не читает Keychain напрямую — он берёт переменные
 окружения по своей собственной цепочке (`scripts/seo_cycle_core/env_profile.py`,
@@ -148,7 +166,7 @@ seo-cycle report --write --pdf 2>&1 | grep -i pdf   # покажет "PDF skippe
 значения в `.env`).
 
 ```bash
-seo-cycle auth list                        # источник по каждой переменной: process/project/global/missing
+seo-cycle auth list                        # источник по каждой переменной: [env]/[project]/[global]/[—]
 ai-secret run <scope> -- seo-cycle pulse    # ручной прогон с ключом из Keychain — без .env
 ```
 
