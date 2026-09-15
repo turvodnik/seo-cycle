@@ -82,6 +82,12 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
+# Exit 0 when the string decodes as UTF-8 (python3 is a hard dependency of
+# the wizard anyway, so no extra tool is needed).
+is_valid_utf8() {
+    printf '%s' "$1" | python3 -c 'import sys; sys.stdin.buffer.read().decode("utf-8")' 2>/dev/null
+}
+
 read_answer() {
     local __var="$1"
     local prompt="$2"
@@ -92,6 +98,13 @@ read_answer() {
         answer="$default_value"
     elif [ -r /dev/tty ] && { : </dev/tty; } 2>/dev/null; then
         IFS= read -r -p "$prompt" answer </dev/tty || answer=""
+        # Issue #28: a backspace over a multibyte char in a macOS tty erases
+        # one byte, leaving invalid UTF-8 in the answer; sed then writes it
+        # into the yaml and the next sed dies with "illegal byte sequence".
+        if [ -n "$answer" ] && ! is_valid_utf8 "$answer"; then
+            echo "⚠ ответ содержит невалидный UTF-8 (обычно backspace над кириллицей) — беру значение по умолчанию" >&2
+            answer="$default_value"
+        fi
     else
         if [ "$USED_DEFAULT_STDIN_NOTICE" = "0" ]; then
             echo "ℹ интерактивный stdin недоступен — беру safe defaults"
@@ -232,11 +245,15 @@ cp "$TEMPLATE" "$TARGET"
 
 # macOS / Linux compatible in-place sed. Keep this as a function;
 # putting `sed -i ''` into a string variable creates backup files named *'' on macOS.
+# LC_ALL=C (issue #28): sed works on bytes, so a non-ASCII byte in the file or
+# in the replacement never aborts the run with "RE error: illegal byte sequence"
+# leaving a half-edited file and a `.!PID!name` temp file behind. All patterns
+# here are ASCII, so byte mode changes nothing for valid input.
 sed_in_place() {
     if [ "$(uname)" = "Darwin" ]; then
-        sed -i '' "$@"
+        LC_ALL=C sed -i '' "$@"
     else
-        sed -i "$@"
+        LC_ALL=C sed -i "$@"
     fi
 }
 
@@ -376,8 +393,13 @@ fi
 
 if [ -f "seo/project-intake.yaml" ]; then
     if [ "$RUN_DETAILED_INTAKE" = "true" ]; then
-        python3 "$SKILL_ROOT/scripts/project-intake-wizard.py" "$TARGET" --interactive --write \
-            && echo "✓ project intake заполнен: seo/project-intake.yaml + seo/project-intake-report.md"
+        # Issue #29: `cmd && echo` under `set -e` does not stop on failure —
+        # the wizard used to die with a traceback while init went on as if OK.
+        if python3 "$SKILL_ROOT/scripts/project-intake-wizard.py" "$TARGET" --interactive --write; then
+            echo "✓ project intake заполнен: seo/project-intake.yaml + seo/project-intake-report.md"
+        else
+            echo "ℹ project intake не заполнен (wizard завершился с ошибкой) — запусти scripts/project-intake-wizard.py --interactive --write"
+        fi
     else
         python3 "$SKILL_ROOT/scripts/project-intake-wizard.py" "$TARGET" --defaults --write >/dev/null 2>&1 \
             && echo "✓ project intake уточнён из $TARGET: seo/project-intake.yaml + seo/project-intake-report.md" \
@@ -422,7 +444,7 @@ else
         # строки "projects:"), без примерной записи-заглушки — она бы
         # засоряла реальный реестр.
         mkdir -p "$(dirname "$REGISTRY")"
-        sed '/^projects:/q' "$REGISTRY_EXAMPLE" > "$REGISTRY"
+        LC_ALL=C sed '/^projects:/q' "$REGISTRY_EXAMPLE" > "$REGISTRY"
         echo "✓ Локальный реестр создан (пуст, из шаблона): $REGISTRY"
     fi
 fi

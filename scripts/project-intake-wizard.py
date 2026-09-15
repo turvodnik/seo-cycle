@@ -301,9 +301,46 @@ def apply_defaults(existing: dict[str, Any], defaults: dict[str, Any]) -> dict[s
     return result
 
 
+EXIT_NO_INTERACTIVE_INPUT = 3
+
+# Issue #29: init-project.sh reads answers from /dev/tty, but this wizard
+# read stdin — when stdin is a pipe or /dev/null (agent, launchd, CI) the
+# first question died with an EOFError traceback. Interactive answers now
+# come from the terminal (/dev/tty) whenever stdin is not one.
+_TTY_INPUT = None  # type: Any
+
+
+class InteractiveInputUnavailable(RuntimeError):
+    """No terminal to ask questions from (stdin is not a tty, /dev/tty missing)."""
+
+
+def open_interactive_input() -> None:
+    global _TTY_INPUT
+    if sys.stdin.isatty():
+        _TTY_INPUT = None
+        return
+    try:
+        _TTY_INPUT = open("/dev/tty", encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise InteractiveInputUnavailable(
+            "нет интерактивного ввода: stdin не терминал и /dev/tty недоступен "
+            f"({exc.strerror or exc}). Запусти из терминала или используй --defaults --write."
+        ) from exc
+
+
+def read_line(prompt: str) -> str:
+    if _TTY_INPUT is None:
+        return input(prompt)
+    print(prompt, end="", flush=True)
+    line = _TTY_INPUT.readline()
+    if not line:
+        raise EOFError("EOF on /dev/tty")
+    return line.rstrip("\r\n")
+
+
 def ask(prompt: str, default: str | None = None) -> str:
     suffix = f" [{default}]" if default not in (None, "") else ""
-    raw = input(f"{prompt}{suffix}: ").strip()
+    raw = read_line(f"{prompt}{suffix}: ").strip()
     return raw if raw else str(default or "")
 
 
@@ -488,7 +525,22 @@ def main() -> int:
     next_intake = apply_defaults(intake, defaults)
 
     if args.interactive:
-        next_intake = interactive_refine(next_intake)
+        try:
+            open_interactive_input()
+            next_intake = interactive_refine(next_intake)
+        except InteractiveInputUnavailable as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return EXIT_NO_INTERACTIVE_INPUT
+        except EOFError:
+            print(
+                "ERROR: интерактивный ввод оборвался (EOF) — intake не записан. "
+                "Запусти из терминала или используй --defaults --write.",
+                file=sys.stderr,
+            )
+            return EXIT_NO_INTERACTIVE_INPUT
+        except KeyboardInterrupt:
+            print("\nERROR: intake прерван пользователем — файлы не записаны.", file=sys.stderr)
+            return 130
     elif not args.defaults and sys.stdin.isatty():
         print("INFO: интерактивный режим не запрошен. Использую --defaults. Для опроса запусти --interactive --write.", file=sys.stderr)
 
