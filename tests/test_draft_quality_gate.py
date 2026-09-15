@@ -78,8 +78,7 @@ class DraftQualityGateExitCodeTest(unittest.TestCase):
             check=False,
         )
         self.assertEqual(proc.returncode, 0)
-        self.assertIn("pass", proc.stdout.lower())
-        self.assertIn("fail", proc.stdout.lower())
+        self.assertIn("error-severity finding", proc.stdout.lower())
 
     def test_negative_control_error_severity_threshold(self) -> None:
         """Sanity check that the test actually distinguishes error from warning.
