@@ -143,7 +143,7 @@ if [ ! -f "$TEMPLATE" ]; then
     exit 2
 fi
 
-echo "Отвечай на базовые вопросы (Enter — взять default в скобках):"
+echo "Отвечай на 7 базовых вопросов (Enter — взять default в скобках):"
 echo ""
 
 read_answer PROJECT_NAME "1. Имя проекта (human-readable, например «Эмвуди»): " ""
@@ -152,81 +152,83 @@ PROJECT_NAME="${PROJECT_NAME:-MyProject}"
 read_answer DOMAIN "2. Домен (без https://, например example.com): " ""
 DOMAIN="${DOMAIN:-example.com}"
 
-read_answer BRAND_UF "3. Brand name в user-facing текстах [$PROJECT_NAME]: " ""
-BRAND_UF="${BRAND_UF:-$PROJECT_NAME}"
-
-read_answer BRAND_TECH "4. Brand technical slug (для URL/кода, латиница) [$(echo "$DOMAIN" | cut -d. -f1)]: " ""
-BRAND_TECH="${BRAND_TECH:-$(echo "$DOMAIN" | cut -d. -f1)}"
-
-read_answer PROJECT_TYPE "5. project_type [ecommerce/blog/saas/local_business/corporate/media/portfolio] (default: ecommerce): " ""
+read_answer PROJECT_TYPE "3. project_type [ecommerce/blog/saas/local_business/corporate/media/portfolio] (default: ecommerce): " ""
 PROJECT_TYPE="${PROJECT_TYPE:-ecommerce}"
 
-read_answer CMS "6. CMS [wordpress/shopify/webflow/nextjs/static/custom] (default: wordpress): " ""
+read_answer CMS "4. CMS [wordpress/shopify/webflow/nextjs/static/custom] (default: wordpress): " ""
 CMS="${CMS:-wordpress}"
 
-read_answer LOCALE "7. Язык/Регион [ru-RU/en-US/en-GB/de-DE] (default: ru-RU): " ""
+read_answer LOCALE "5. Язык/Регион [ru-RU/en-US/en-GB/de-DE] (default: ru-RU) — определяет и region_profile, и включённые поисковые движки: " ""
 LOCALE="${LOCALE:-ru-RU}"
 
-echo ""
-echo "Блок управления бюджетами и автоматизациями:"
-
-read_answer GOVERNANCE_PROFILE "8. Governance profile [lean_quality/balanced_growth/aggressive_growth/custom] (default: lean_quality): " ""
+read_answer GOVERNANCE_PROFILE "6. Governance/бюджет-профиль [lean_quality/balanced_growth/aggressive_growth/custom] (default: lean_quality): " ""
 GOVERNANCE_PROFILE="${GOVERNANCE_PROFILE:-lean_quality}"
 
-read_answer PAID_API_BUDGET "9. Monthly paid API budget USD (0 = без платных расходов, default: 0): " ""
+read_answer PAID_API_BUDGET "7. Monthly paid API budget USD (0 = без платных расходов, default: 0): " ""
 PAID_API_BUDGET="${PAID_API_BUDGET:-0}"
 
-read_answer LLM_BUDGET "10. Monthly LLM/token budget USD (0 = без отдельного бюджета, default: 0): " ""
+echo ""
+read_answer MORE_ANSWER "8. Уточнить картинки, расписания и подробный intake сейчас? [y/N]: " ""
+case "$MORE_ANSWER" in
+    y|Y|yes|YES) MORE=true ;;
+    *) MORE=false ;;
+esac
+
+if [ "$MORE" = "true" ]; then
+    echo ""
+    echo "Бренд и бюджеты:"
+
+    read_answer BRAND_UF "9. Brand name в user-facing текстах [$PROJECT_NAME]: " ""
+    read_answer BRAND_TECH "10. Brand technical slug (для URL/кода, латиница) [$(echo "$DOMAIN" | cut -d. -f1)]: " ""
+    read_answer LLM_BUDGET "11. Monthly LLM/token budget USD (0 = без отдельного бюджета, default: 0): " ""
+    read_answer AUTOMATION_MODE "12. Automation mode [disabled/report_only/approval_only/auto_with_caps] (default: approval_only): " ""
+    read_answer CREATE_SCHEDULES_ANSWER "13. Создавать scheduled automations сейчас? [y/N]: " ""
+
+    echo ""
+    echo "Блок изображений для SEO-публикаций:"
+
+    read_answer IMAGE_FEATURED_RATIO "14. Пропорция featured/hero изображений (default: 16:9): " ""
+    read_answer IMAGE_INLINE_RATIO "15. Пропорция inline изображений в статьях (default: 16:9): " ""
+    read_answer IMAGE_WIDTH "16. Ширина WebP в px (default: 1200): " ""
+    read_answer IMAGE_QUALITY "17. WebP quality 1-100 (default: 86): " ""
+    read_answer IMAGE_SOURCE_POLICY "18. Источник фото [thematic_photos_first/product_photos_first/generate_if_missing/manual_only] (default: thematic_photos_first): " ""
+    read_answer IMAGE_VISUAL_STYLE "19. Визуальный стиль [clean_topical_photo/editorial_photo/product_context_photo] (default: clean_topical_photo): " ""
+    read_answer IMAGE_INLINE_MIN "20. Минимум inline-изображений на пост (default: 2): " ""
+    read_answer IMAGE_CAPTIONS_ANSWER "21. Caption под inline-картинками обязателен? [Y/n]: " ""
+    read_answer IMAGE_TEXT_ANSWER "22. Разрешать видимый текст на изображениях? [y/N]: " ""
+
+    echo ""
+    echo "Детальный project intake:"
+    read_answer DETAILED_INTAKE_ANSWER "23. Запустить подробный wizard стран/движков/маркетинга/tools сейчас? [y/N]: " ""
+fi
+
+BRAND_UF="${BRAND_UF:-$PROJECT_NAME}"
+BRAND_TECH="${BRAND_TECH:-$(echo "$DOMAIN" | cut -d. -f1)}"
 LLM_BUDGET="${LLM_BUDGET:-0}"
-
-read_answer AUTOMATION_MODE "11. Automation mode [disabled/report_only/approval_only/auto_with_caps] (default: approval_only): " ""
 AUTOMATION_MODE="${AUTOMATION_MODE:-approval_only}"
-
-read_answer CREATE_SCHEDULES_ANSWER "12. Создавать scheduled automations сейчас? [y/N]: " ""
 case "$CREATE_SCHEDULES_ANSWER" in
     y|Y|yes|YES) CREATE_SCHEDULES=true ;;
     *) CREATE_SCHEDULES=false ;;
 esac
 
-echo ""
-echo "Блок изображений для SEO-публикаций:"
-
-read_answer IMAGE_FEATURED_RATIO "13. Пропорция featured/hero изображений (default: 16:9): " ""
 IMAGE_FEATURED_RATIO="${IMAGE_FEATURED_RATIO:-16:9}"
-
-read_answer IMAGE_INLINE_RATIO "14. Пропорция inline изображений в статьях (default: 16:9): " ""
 IMAGE_INLINE_RATIO="${IMAGE_INLINE_RATIO:-16:9}"
-
-read_answer IMAGE_WIDTH "15. Ширина WebP в px (default: 1200): " ""
 IMAGE_WIDTH="${IMAGE_WIDTH:-1200}"
-
-read_answer IMAGE_QUALITY "16. WebP quality 1-100 (default: 86): " ""
 IMAGE_QUALITY="${IMAGE_QUALITY:-86}"
-
-read_answer IMAGE_SOURCE_POLICY "17. Источник фото [thematic_photos_first/product_photos_first/generate_if_missing/manual_only] (default: thematic_photos_first): " ""
 IMAGE_SOURCE_POLICY="${IMAGE_SOURCE_POLICY:-thematic_photos_first}"
-
-read_answer IMAGE_VISUAL_STYLE "18. Визуальный стиль [clean_topical_photo/editorial_photo/product_context_photo] (default: clean_topical_photo): " ""
 IMAGE_VISUAL_STYLE="${IMAGE_VISUAL_STYLE:-clean_topical_photo}"
-
-read_answer IMAGE_INLINE_MIN "19. Минимум inline-изображений на пост (default: 2): " ""
 IMAGE_INLINE_MIN="${IMAGE_INLINE_MIN:-2}"
 
-read_answer IMAGE_CAPTIONS_ANSWER "20. Caption под inline-картинками обязателен? [Y/n]: " ""
 case "$IMAGE_CAPTIONS_ANSWER" in
     n|N|no|NO) IMAGE_CAPTIONS_REQUIRED=false; IMAGE_CAPTION_MODE=none ;;
     *) IMAGE_CAPTIONS_REQUIRED=true; IMAGE_CAPTION_MODE=short_editorial ;;
 esac
 
-read_answer IMAGE_TEXT_ANSWER "21. Разрешать видимый текст на изображениях? [y/N]: " ""
 case "$IMAGE_TEXT_ANSWER" in
     y|Y|yes|YES) IMAGE_ALLOW_VISIBLE_TEXT=true ;;
     *) IMAGE_ALLOW_VISIBLE_TEXT=false ;;
 esac
 
-echo ""
-echo "Детальный project intake:"
-read_answer DETAILED_INTAKE_ANSWER "22. Запустить подробный wizard стран/движков/маркетинга/tools сейчас? [y/N]: " ""
 case "$DETAILED_INTAKE_ANSWER" in
     y|Y|yes|YES) RUN_DETAILED_INTAKE=true ;;
     *) RUN_DETAILED_INTAKE=false ;;
@@ -416,7 +418,9 @@ if [ -f "seo/project-intake.yaml" ]; then
     python3 "$SKILL_ROOT/scripts/project-profile.py" "$TARGET" --write >/dev/null 2>&1 \
         && echo "✓ project profile создан: seo/project-profile.generated.yaml + seo/project-profile-report.md" \
         || echo "ℹ project profile не создан — запусти scripts/project-profile.py после заполнения intake"
-    read_answer APPLY_PROFILE_ANSWER "23. Применить generated project profile к $TARGET сейчас? [y/N]: " ""
+    if [ "$MORE" = "true" ]; then
+        read_answer APPLY_PROFILE_ANSWER "24. Применить generated project profile к $TARGET сейчас? [y/N]: " ""
+    fi
     case "$APPLY_PROFILE_ANSWER" in
         y|Y|yes|YES)
             python3 "$SKILL_ROOT/scripts/project-profile.py" "$TARGET" --apply \
@@ -477,74 +481,11 @@ echo "════════════════════════�
 echo "  ✓ Создан $TARGET"
 echo "════════════════════════════════════════════════════════════"
 echo ""
-echo "Следующие шаги:"
-echo "  1. Открой $TARGET и доуточни секции (sources, content_rules, publishing)"
-echo "  2. Открой помощник обновления, если проект создавался старой версией:"
-echo "     seo/setup/upgrade-assistant.md"
-echo "     seo/setup/upgrade-questionnaire.csv"
-echo "     # обновить: python3 ./.codex/skills/seo-cycle/scripts/project-upgrade-assistant.py --write"
-echo "  3. Проверь, какие ключи/токены реально нужны этому проекту:"
-echo "     seo/setup/access-key-assistant.md"
-echo "     seo/setup/access-key-assistant.csv"
-echo "     # обновить: python3 ./.codex/skills/seo-cycle/scripts/access-key-assistant.py --write"
-echo "  4. Заполни .env только нужными API ключами (см. docs/oauth-setup.md в скилле)"
-echo "     # Codex: SEO_RUNTIME=codex, SEO_SEARCH_RUNTIME=direct"
-echo "     # Claude: SEO_RUNTIME=claude, SEO_SEARCH_RUNTIME=codex_external"
-echo "  5. Если этому проекту нужен WordPress/Novomira MCP, настрой его явно:"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/project-mcp-config.py --write"
-echo "     # затем заполни локальные WP_API_URL, WP_API_USERNAME, WP_API_PASSWORD или client-specific config"
-echo "  6. Обнови policy-файлы в seo/ при подключении NeuronWriter, Google NLP, GSC/Яндекс/Бинг и автоматизаций"
-echo "  7. Запусти валидатор:"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/validate-config.py"
-echo "  8. Открой короткий context pack — первый файл для Claude/Codex:"
-echo "     seo/setup/context-pack.md"
-echo "     # обновить под задачу: python3 ./.codex/skills/seo-cycle/scripts/context-pack.py --task \"аудит индексации и robots\" --write"
-echo "  9. Открой setup blueprint — матрица стран/регионов/поисковиков/бизнеса/ads/tools/budget/automation:"
-echo "     seo/setup/setup-blueprint.md"
-echo "     seo/setup/setup-matrix.csv"
-echo "     # обновить: python3 ./.codex/skills/seo-cycle/scripts/setup-blueprint.py --write"
-echo "  10. Открой единый setup report:"
-echo "     seo/setup/setup-control-plane.md"
-echo "     # обновить: python3 ./.codex/skills/seo-cycle/scripts/setup-control-plane.py --write"
-echo "  11. Открой вопросы по недонастроенным деталям проекта:"
-echo "     seo/setup/setup-gap-audit.md"
-echo "     seo/setup/setup-questionnaire.csv"
-echo "     # обновить: python3 ./.codex/skills/seo-cycle/scripts/setup-gap-audit.py --write"
-echo "     # после заполнения CSV: python3 ./.codex/skills/seo-cycle/scripts/setup-answer-plan.py --write"
-echo "  12. Открой компактный launch contract:"
-echo "     seo/setup/launch-plan.md"
-echo "     # обновить: python3 ./.codex/skills/seo-cycle/scripts/launch-plan.py --write"
-echo "  13. Открой spend/subscription guard:"
-echo "     seo/setup/spend-guard.md"
-echo "     # обновить: python3 ./.codex/skills/seo-cycle/scripts/spend-guard.py --write"
-echo "  14. При необходимости доуточни подробный intake:"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/project-intake-wizard.py --interactive --write"
-echo "  15. Примени или обнови точечный project profile:"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/project-profile.py --write"
-echo "     # после проверки: python3 ./.codex/skills/seo-cycle/scripts/project-profile.py --apply"
-echo "  16. Посмотри governance report:"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/governance-report.py --format md"
-echo "  17. Перед конкретной задачей построй low-token task route:"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/task-router.py --task \"аудит индексации и robots\" --write"
-echo "     # результат: seo/setup/latest-task-route.md"
-echo "  18. Проверь/запиши расход токенов и платных инструментов:"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/usage-ledger.py report --write"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/usage-ledger.py check --service openai --category llm --usd 0.25 --fail-on-block"
-echo "  19. Сгенерируй и проверь рекомендации автоматизаций:"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/automation-recommender.py --write"
-echo "     # после review: python3 ./.codex/skills/seo-cycle/scripts/automation-recommender.py --apply"
-echo "  20. Проверь рекомендуемый stack инструментов/доступов:"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --write"
-echo "     # после review: python3 ./.codex/skills/seo-cycle/scripts/tool-stack-recommender.py --apply"
-echo "  21. Построй приоритетный growth roadmap:"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/growth-roadmap.py --write"
-echo "     # результат: seo/setup/growth-roadmap.md"
-echo "  22. Собери подробный onboarding playbook:"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/setup-onboarding.py --write"
-echo "     # результат: seo/setup/onboarding-playbook.md + onboarding-checklist.csv"
-echo "  23. Создай безопасный план автоматизаций:"
-echo "     python3 ./.codex/skills/seo-cycle/scripts/automation-plan.py --write --include-disabled"
-echo "  24. В Claude Code/Codex: «давай запустим SEO-цикл для категории X»"
+echo "Дальше:"
+echo "  seo-cycle validate   — проверить $TARGET"
+echo "  seo-cycle doctor     — диагностика окружения и ключей"
+echo "  seo-cycle status     — что происходит с проектом сейчас"
+echo "Подробный playbook: seo/setup/onboarding-playbook.md"
 echo ""
 
 # Сразу прогоняем валидатор
