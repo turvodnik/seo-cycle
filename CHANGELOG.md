@@ -41,6 +41,7 @@ Search Console» и помечает каждого провайдера тег�
 критерия ворот `gate` (файл/каталог непуст остаётся как есть — это
 отдельная L-спека). Тесты: `tests/test_draft_quality_gate.py` (5),
 `tests/test_cycle_state.py` (11), подпроцессом.
+
 ### Fix: мастер нового проекта на macOS без UTF-8-локали и без TTY (issues #28, #29)
 
 Два внешних отчёта 09.09 (`MihailSchwarz`) на шаг 22 `scripts/init-project.sh`.
