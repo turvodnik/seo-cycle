@@ -185,11 +185,13 @@ class InitProjectLocaleTest(unittest.TestCase):
     def _run_init(self, locale: str) -> pathlib.Path:
         tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-cycle-t099-init-"))
         self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
-        # Q1-4 defaults, Q5 project_type typed as «blog» after a backspace over
+        # T-107 renumbered the wizard to 7 mandatory questions + a switch.
+        # Q1-2 defaults, Q3 project_type typed as «blog» after a backspace over
         # a Cyrillic char (one dangling lead byte, exactly the #28 report),
-        # Q6-21 defaults, Q22 "y" → detailed intake reads /dev/tty (#29),
-        # then defaults for every intake question, Q23 and the validate prompt.
-        answers = b"\n" * 4 + b"\xd0blog\n" + b"\n" * 16 + b"y\n" + b"\n" * 120
+        # Q4-7 defaults, Q8 "y" (switch) → Q9-22 defaults (brand/budget/images),
+        # Q23 "y" → detailed intake reads /dev/tty (#29), then defaults for
+        # every intake question, Q24 (apply profile) and the validate prompt.
+        answers = b"\n" * 2 + b"\xd0blog\n" + b"\n" * 4 + b"y\n" + b"\n" * 14 + b"y\n" + b"\n" * 120
         rc, out = run_with_tty(["bash", str(INIT_PROJECT)], tmp, answers, base_env(LC_ALL=locale))
         text = out.decode("utf-8", "replace")
         self.assertEqual(rc, 0, text)
@@ -223,7 +225,9 @@ class InitProjectLocaleTest(unittest.TestCase):
         """Ctrl-D on the first intake question: init must say «не заполнен», never «✓»."""
         tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-cycle-t099-init-eof-"))
         self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
-        answers = b"\n" * 21 + b"y\n" + b"\x04" + b"\n" * 5
+        # T-107: Q1-7 defaults, Q8 "y" (switch) → Q9-22 defaults, Q23 "y" (detailed
+        # intake toggle), then Ctrl-D on the first intake question itself.
+        answers = b"\n" * 7 + b"y\n" + b"\n" * 14 + b"y\n" + b"\x04" + b"\n" * 5
         rc, out = run_with_tty(["bash", str(INIT_PROJECT)], tmp, answers, base_env(LC_ALL="C"))
         text = out.decode("utf-8", "replace")
         self.assertEqual(rc, 0, text)
