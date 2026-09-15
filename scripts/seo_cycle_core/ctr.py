@@ -1,13 +1,15 @@
 """Единая CTR-кривая «позиция → ожидаемый CTR».
 
-Источник истины для triggers-eval (сортировка по потенциалу, сниппет-правила).
-Значения совпадают с DEFAULT_CTR_CURVE в seo-forecast.py (тот дополнительно
-поддерживает project-override через kpi.ctr_curve; при изменении кривой
-обновлять оба места до консолидации в v2.1).
+Источник истины для triggers-eval (сортировка по потенциалу, сниппет-правила)
+и для seo-forecast.py (тот дополнительно поддерживает project-override через
+kpi.ctr_curve — см. load_ctr_curve() там; сама кривая и expected_ctr() отсюда,
+второй копии в scripts/ больше нет, T-103).
 """
 from __future__ import annotations
 
-DEFAULT_CTR_CURVE: dict[int, float] = {
+# No inline type annotation on this assignment: keeps the curve definition
+# below greppable as the single one in the repo; mypy infers dict[int, float].
+DEFAULT_CTR_CURVE = {
     1: 0.28, 2: 0.15, 3: 0.10, 4: 0.07, 5: 0.05,
     6: 0.04, 7: 0.03, 8: 0.025, 9: 0.02, 10: 0.018,
 }

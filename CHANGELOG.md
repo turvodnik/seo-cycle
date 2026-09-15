@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Fix: одна CTR-кривая — seo-forecast.py берёт её из seo_cycle_core.ctr (T-103)
+
+`seo_cycle_core/ctr.py` и `seo-forecast.py` держали две независимые копии
+`DEFAULT_CTR_CURVE`/`CTR_11_20`/`CTR_BEYOND` (докстринг `ctr.py` сам это
+признавал) — правка одной таблицы без другой развела бы triggers-eval и
+forecast по разным кривым незаметно. `seo-forecast.py` теперь импортирует
+кривую и `expected_ctr()` из `seo_cycle_core.ctr` (алиас `ctr_for` сохранён
+для минимального диффа внутри файла), локальные копии удалены. `CTR_SIGMA`
+остался в forecast с комментарием: это точность оценки кривой для
+доверительного интервала Монте-Карло конкретно в этом файле, а не свойство
+самой кривой — `expected_ctr()`/triggers-eval её не используют.
+Значения кривой не менялись. Тесты: `tests/test_forecast_kpi.py::test_single_ctr_curve_source`
+(ровно одно определение таблицы в `scripts/`, по пути `seo_cycle_core/ctr.py`)
+и `test_forecast_reuses_core_ctr_curve` (identity-проверка, что forecast
+ссылается на объекты ядра, а не на свою копию); существующие
+`test_scenarios_ordered_and_upside_computed`/`test_ctr_curve_override` не
+изменились — служат golden-проверкой значений прогноза.
+
 ### Docs: честные тексты — troubleshooting для оператора, Gemini не рантайм, pulse без лишних обещаний (T-101, H7/Q11/Q4)
 
 Шесть частых операторских ситуаций без объяснения в `docs/troubleshooting.md`
@@ -20,6 +38,8 @@ ga4-fetch`, `run script psi-fetch`). `GUIDE.md:18` обещал «нарезку
 на v2.1» — на HEAD `VERSION` уже 2.2.1 и все 10 фаз вынесены в `skills/*`;
 строка заменена на факт (что уже сделано в 2.0.0, чем GUIDE.md остаётся
 справочником — инструменты, команды-шпаргалка, сценарии). Код не менялся.
+
+### Facade: блок «Сегодня» в --help/README, минимум доступов в auth list (T-100, H1/H9)
 
 `--help` печатал 57 команд плоским алфавитом, а три ежедневные (`pulse`,
 `status`, `web`) стояли вперемешку с остальными — оператор не видел, с чего

@@ -90,6 +90,40 @@ class ForecastTest(StrategyTestBase):
         # 1000*0.5 + 500*0.01 + 800*0.002 = 506.6 → 507
         self.assertEqual(report["scenarios"]["current"]["monthly_clicks"], 507)
 
+    def test_single_ctr_curve_source(self) -> None:
+        # T-103: exactly one DEFAULT_CTR_CURVE table across scripts/, in
+        # seo_cycle_core/ctr.py — otherwise the curves drift apart when
+        # only one copy gets edited.
+        hits = subprocess.run(
+            ["grep", "-rn", "DEFAULT_CTR_CURVE *= *{", str(SCRIPTS)],
+            text=True, capture_output=True, check=False,
+        ).stdout.strip().splitlines()
+        self.assertEqual(len(hits), 1, hits)
+        self.assertIn("seo_cycle_core/ctr.py", hits[0])
+
+    def test_forecast_reuses_core_ctr_curve(self) -> None:
+        # seo-forecast.py imports the curve/function from the core module
+        # instead of holding a local copy of the values (identity check,
+        # not just equal values). The hyphenated filename is not a regular
+        # package, so load it from its path explicitly.
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "seo_forecast_under_test", SCRIPTS / "seo-forecast.py"
+        )
+        assert spec and spec.loader
+        forecast = importlib.util.module_from_spec(spec)
+        sys.path.insert(0, str(SCRIPTS))
+        try:
+            spec.loader.exec_module(forecast)
+        finally:
+            if str(SCRIPTS) in sys.path:
+                sys.path.remove(str(SCRIPTS))
+        from seo_cycle_core import ctr as core_ctr
+
+        self.assertIs(forecast.DEFAULT_CTR_CURVE, core_ctr.DEFAULT_CTR_CURVE)
+        self.assertIs(forecast.ctr_for, core_ctr.expected_ctr)
+
     def test_fuzzy_matching_resolves_inflection_and_word_order(self) -> None:
         # живой запрос отличается словоформой, порядком и хвостом «цена» —
         # точный матчинг такое терял (боевой кейс: 0 ranked из 476)
