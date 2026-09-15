@@ -16,7 +16,25 @@ SCRIPTS = ROOT / "scripts"
 LAUNCHER = ROOT / "bin" / "seo-cycle"
 sys.path.insert(0, str(SCRIPTS))
 
-from seo_cycle_cli import ADS_FETCH, ADS_HEALTH, ADS_SCRIPTS, COMMANDS, DOCTOR_STEPS, GATE_SCRIPTS  # noqa: E402
+from seo_cycle_cli import (  # noqa: E402
+    ADS_FETCH,
+    ADS_HEALTH,
+    ADS_SCRIPTS,
+    COMMANDS,
+    DOCTOR_STEPS,
+    EXTRA_COMMANDS,
+    GATE_SCRIPTS,
+    GROUP_KEYS,
+    TODAY_ORDER,
+    command_overview,
+)
+
+# T-100: total command surface (COMMANDS + the extras handled by dedicated
+# main() branches) must not silently shrink. Fixed on purpose — unlike
+# `test_help_lists_all_commands` below, this does NOT derive the expected set
+# from COMMANDS itself, so deleting one entry from COMMANDS makes this go red
+# instead of quietly passing (acceptance criterion 5, negative control).
+EXPECTED_COMMAND_COUNT = 52
 
 
 class CliTableTest(unittest.TestCase):
@@ -39,6 +57,37 @@ class CliTableTest(unittest.TestCase):
         self.assertTrue(LAUNCHER.exists())
         self.assertTrue(LAUNCHER.stat().st_mode & 0o111, "bin/seo-cycle must be executable")
 
+    def test_every_command_has_a_valid_group(self) -> None:
+        """T-100 criterion 4/5: every COMMANDS/EXTRA_COMMANDS entry resolves to
+        a known group, and the total command count is a fixed constant — not
+        derived from COMMANDS itself, so a command silently dropped from
+        COMMANDS makes this assertion go red instead of passing vacuously."""
+        total = 0
+        for name, spec in COMMANDS.items():
+            group = spec.get("group", "other")
+            self.assertIn(group, GROUP_KEYS, f"{name}: unknown group {group!r}")
+            total += 1
+        for name, _help, group in EXTRA_COMMANDS:
+            self.assertIn(group, GROUP_KEYS, f"{name}: unknown group {group!r}")
+            total += 1
+        self.assertEqual(total, EXPECTED_COMMAND_COUNT)
+
+    def test_today_group_commands_are_pulse_status_web(self) -> None:
+        today = {name for name, spec in COMMANDS.items() if spec.get("group") == "today"}
+        today |= {name for name, _help, group in EXTRA_COMMANDS if group == "today"}
+        self.assertEqual(today, {"pulse", "status", "web"})
+        self.assertEqual(set(TODAY_ORDER), today)
+
+    def test_unknown_group_in_commands_breaks_overview(self) -> None:
+        """Negative control (criterion 1 note): an invalid `group` value must
+        raise loudly, never fall through to a silent 'Прочее'."""
+        from unittest import mock
+
+        bogus = {**COMMANDS, "__bogus__": {"script": "x", "help": "x", "group": "not-a-real-group"}}
+        with mock.patch("seo_cycle_cli.COMMANDS", bogus):
+            with self.assertRaises(ValueError):
+                command_overview()
+
 
 class CliDispatchTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -59,6 +108,24 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         for name in [*COMMANDS, "gate", "run", "doctor", "version"]:
             self.assertIn(name, proc.stdout)
+
+    def test_help_starts_with_today_group(self) -> None:
+        """T-100 criterion 1: --help opens with "Сегодня" (pulse/status/web)
+        before any other command, not buried alphabetically."""
+        proc = self.run_cli("--help")
+        self.assertEqual(proc.returncode, 0)
+        lines = proc.stdout.splitlines()
+        today_index = next(i for i, line in enumerate(lines) if line.strip() == "Сегодня:")
+        commands_after = [
+            line.strip().split()[0]
+            for line in lines[today_index + 1 :]
+            if line.startswith("  ") and line.strip() and not line.strip().endswith(":")
+        ][:3]
+        self.assertEqual(commands_after, ["pulse", "status", "web"])
+        # nothing that looks like another command's group header appears before it
+        header_lines_before = [line for line in lines[:today_index] if line.endswith(":") and not line.startswith(" ")]
+        self.assertNotIn("Контент:", header_lines_before)
+        self.assertNotIn("Прочее:", header_lines_before)
 
     def test_version_matches_version_file(self) -> None:
         proc = self.run_cli("version")
@@ -141,6 +208,31 @@ class CliDispatchTest(unittest.TestCase):
         self.assertNotIn("seo-cycle status", proc.stdout)
         self.assertNotIn("снапшот", proc.stdout)
         self.assertIn("ERROR: seo-cycle.yaml not found", proc.stderr)
+
+
+class AuthAssistantListTest(unittest.TestCase):
+    """T-100 criterion 3: `auth list` names the daily-minimum providers instead
+    of listing all of them as equals."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-auth-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+
+    def run_list(self) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(SCRIPTS / "auth-assistant.py"), "list"],
+            cwd=self.tmp,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def test_minimum_tier_summary_and_count(self) -> None:
+        proc = self.run_list()
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("Яндекс.Вебмастер", proc.stdout)
+        self.assertIn("Search Console", proc.stdout)
+        self.assertGreaterEqual(proc.stdout.count("минимум для pulse"), 2)
 
 
 if __name__ == "__main__":
