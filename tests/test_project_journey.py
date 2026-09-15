@@ -28,7 +28,44 @@ LAUNCHER = ROOT / "bin" / "seo-cycle"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from seo_cycle_cli import COMMANDS, EXTRA_COMMANDS  # noqa: E402
+from seo_cycle_cli import (  # noqa: E402
+    COMMANDS,
+    EXTRA_COMMANDS,
+    _format_stage_line,
+    _pick_next_command,
+)
+
+
+def seed_first_four_stages(project_root: pathlib.Path) -> None:
+    """Artifacts for stages 1-4 (setup_foundation .. technical_baseline) —
+    shared by `ProjectJourneyTest.seed_ready_project()` (which also seeds a
+    local research package) and the T-105 `--research-package` test below
+    (which deliberately does NOT seed a local package, so only an explicit
+    `--research-package <external dir>` can move the journey past stage 5)."""
+    setup = project_root / "seo" / "setup"
+    vnext = project_root / "seo" / "vnext"
+    tech = project_root / "seo" / "technical"
+    for directory in (setup, vnext, tech):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    (project_root / "seo" / "project-intake.yaml").write_text("project: {}\n", encoding="utf-8")
+    (setup / "setup-blueprint.md").write_text("# blueprint\n", encoding="utf-8")
+    (setup / "setup-gap-audit.json").write_text(json.dumps({"summary": {"missing": 0}, "score": 100}), encoding="utf-8")
+    (setup / "setup-control-plane.md").write_text("# control\n", encoding="utf-8")
+    (setup / "tool-stack-report.md").write_text("# tools\n", encoding="utf-8")
+    (setup / "access-key-assistant.md").write_text("# access\n", encoding="utf-8")
+    (setup / "access-key-assistant.json").write_text(json.dumps({"summary": {"tasks": 0, "approval_required": 0}}), encoding="utf-8")
+    (setup / "spend-guard.md").write_text("# spend\n", encoding="utf-8")
+    (setup / "launch-plan.md").write_text("# launch\n", encoding="utf-8")
+    (setup / "latest-launch-plan.json").write_text(json.dumps({"approval_gates": []}), encoding="utf-8")
+    (setup / "perplexity-health.md").write_text("# perplexity\n", encoding="utf-8")
+    (setup / "perplexity-health.json").write_text(json.dumps({"status": "ok"}), encoding="utf-8")
+    (setup / "notebooklm-health.md").write_text("# notebook\n", encoding="utf-8")
+    (setup / "notebooklm-health.json").write_text(json.dumps({"status": "ok"}), encoding="utf-8")
+    (vnext / "expert-source-pack.md").write_text("# sources\n", encoding="utf-8")
+    (tech / "technical-site-audit.md").write_text("# technical\n", encoding="utf-8")
+    (tech / "link-audit.md").write_text("# links\n", encoding="utf-8")
+    (tech / "redirect-map-audit.md").write_text("# redirects\n", encoding="utf-8")
 
 
 def make_bare_project(case: unittest.TestCase) -> pathlib.Path:
@@ -68,31 +105,9 @@ class ProjectJourneyTest(unittest.TestCase):
 
     def seed_ready_project(self, cfg_path: pathlib.Path, *, research_quality: dict | None = None) -> pathlib.Path:
         root = cfg_path.parent
-        setup = root / "seo" / "setup"
-        vnext = root / "seo" / "vnext"
-        tech = root / "seo" / "technical"
         package = root / "seo" / "research-package"
-        for directory in (setup, vnext, tech, package):
-            directory.mkdir(parents=True, exist_ok=True)
-
-        (root / "seo" / "project-intake.yaml").write_text("project: {}\n", encoding="utf-8")
-        (setup / "setup-blueprint.md").write_text("# blueprint\n", encoding="utf-8")
-        (setup / "setup-gap-audit.json").write_text(json.dumps({"summary": {"missing": 0}, "score": 100}), encoding="utf-8")
-        (setup / "setup-control-plane.md").write_text("# control\n", encoding="utf-8")
-        (setup / "tool-stack-report.md").write_text("# tools\n", encoding="utf-8")
-        (setup / "access-key-assistant.md").write_text("# access\n", encoding="utf-8")
-        (setup / "access-key-assistant.json").write_text(json.dumps({"summary": {"tasks": 0, "approval_required": 0}}), encoding="utf-8")
-        (setup / "spend-guard.md").write_text("# spend\n", encoding="utf-8")
-        (setup / "launch-plan.md").write_text("# launch\n", encoding="utf-8")
-        (setup / "latest-launch-plan.json").write_text(json.dumps({"approval_gates": []}), encoding="utf-8")
-        (setup / "perplexity-health.md").write_text("# perplexity\n", encoding="utf-8")
-        (setup / "perplexity-health.json").write_text(json.dumps({"status": "ok"}), encoding="utf-8")
-        (setup / "notebooklm-health.md").write_text("# notebook\n", encoding="utf-8")
-        (setup / "notebooklm-health.json").write_text(json.dumps({"status": "ok"}), encoding="utf-8")
-        (vnext / "expert-source-pack.md").write_text("# sources\n", encoding="utf-8")
-        (tech / "technical-site-audit.md").write_text("# technical\n", encoding="utf-8")
-        (tech / "link-audit.md").write_text("# links\n", encoding="utf-8")
-        (tech / "redirect-map-audit.md").write_text("# redirects\n", encoding="utf-8")
+        package.mkdir(parents=True, exist_ok=True)
+        seed_first_four_stages(root)
 
         for name in (
             "semantic-core.csv",
@@ -446,16 +461,74 @@ class StatusHeaderTest(unittest.TestCase):
         self.assertNotIn("Стадия", lines[0])
         self.assertNotIn("Срез", lines[1])
 
-    def test_every_stage_next_command_rule_resolves_to_a_known_command(self) -> None:
-        # `test_next_command_exists_in_cli_commands` above only ever
-        # observes stage 1 (a fresh project starts at setup_foundation).
-        # `research_architecture` (order 5) is the one stage where NEITHER
-        # `next_commands` entry is `seo-cycle `-shaped (both are plain
-        # instructions, e.g. "Create or import a research package under
-        # ..."), so the fallback in `_status_header_lines()` — the first
-        # `seo-cycle `-prefixed command, else `seo-cycle journey` — is only
-        # actually exercised there. Apply the same rule to all 12 stages
-        # from one report instead of seeding a project per stage.
+    def test_stage_one_header_lines_match_exactly(self) -> None:
+        # T-105 review round 1, 🟡-1: an exact `assertEqual` on stage 1 (not
+        # just "starts with") — a mutation that always falls back (M5) or
+        # swaps order/total (M7) changes this line's content, not just its
+        # prefix.
+        cfg_path = make_bare_project(self)
+        proc = self.run_status(cfg_path)
+        lines = proc.stdout.splitlines()
+        self.assertEqual(lines[1], "Стадия: Основа проекта (1 из 12)")
+        self.assertEqual(lines[2], "Дальше: seo-cycle control-plane --write")
+
+    def test_research_package_flag_reaches_the_header_not_just_the_body(self) -> None:
+        # T-105 review round 1, 🟡-2: `--research-package <path outside the
+        # project>` used to reach `project-journey.py`'s own argparse (the
+        # body, via the delegated subprocess) but not the in-process header
+        # call, which kept autodetecting (and failing to find anything
+        # under the project root) — one `status` output naming two
+        # different current stages. `package_state()` only checks that the
+        # six required files exist, so placeholder content is enough to
+        # move the package past `research_architecture` (order 5) to
+        # `research_quality_gate` (order 6, no quality.json yet) — a stage
+        # the plain-autodetect header would never reach.
+        cfg_path = make_bare_project(self)
+        seed_first_four_stages(cfg_path.parent)
+        external = pathlib.Path(tempfile.mkdtemp(prefix="seo-cycle-external-package-"))
+        self.addCleanup(lambda: shutil.rmtree(external, ignore_errors=True))
+        for name in (
+            "semantic-core.csv",
+            "content-plan.csv",
+            "final-clusters.md",
+            "semantic-architecture-final.json",
+            "entity-map.md",
+            "entity-map.yaml",
+        ):
+            (external / name).write_text("placeholder\n", encoding="utf-8")
+
+        proc = subprocess.run(
+            [sys.executable, str(LAUNCHER), "status", "--research-package", str(external)],
+            cwd=cfg_path.parent,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        lines = proc.stdout.splitlines()
+        stage_line = next(line for line in lines if line.startswith("Стадия:"))
+        body_line = next(line for line in lines if line.startswith("- Current stage:"))
+        header_title = stage_line.removeprefix("Стадия: ").rsplit(" (", 1)[0]
+        body_title = body_line.rsplit("` ", 1)[-1].strip()
+        self.assertEqual(
+            header_title, body_title, f"header and body disagree: {stage_line!r} vs {body_line!r}"
+        )
+        # Negative control on the assertion itself: a fresh project (no
+        # --research-package) starts at setup_foundation, not the quality
+        # gate — if this failed too, the test would be vacuously true.
+        self.assertNotEqual(header_title, "Основа проекта")
+
+
+class HeaderSelectorUnitTest(unittest.TestCase):
+    """T-105 review round 1, 🟡-1: call `seo_cycle_cli`'s real
+    `_pick_next_command()`/`_format_stage_line()` against every stage of one
+    report, instead of re-implementing their rule inside the test.
+    `test_next_command_exists_in_cli_commands` (`StatusHeaderTest`) only
+    ever observes stage 1 (a fresh project starts at `setup_foundation`);
+    `research_architecture` (order 5) is the one stage where neither
+    `next_commands` entry is `seo-cycle `-shaped, so the fallback is only
+    exercised there."""
+
+    def _report(self) -> dict:
         cfg_path = make_bare_project(self)
         proc = subprocess.run(
             [sys.executable, str(JOURNEY), str(cfg_path), "--format", "json"],
@@ -464,17 +537,36 @@ class StatusHeaderTest(unittest.TestCase):
             text=True,
             capture_output=True,
         )
-        report = json.loads(proc.stdout)
+        return json.loads(proc.stdout)
+
+    def test_pick_next_command_is_a_known_cli_command_or_the_documented_fallback(self) -> None:
+        report = self._report()
         known = set(COMMANDS) | {item[0] for item in EXTRA_COMMANDS}
-        saw_fallback = False
+        stage_by_id = {stage["id"]: stage for stage in report["stages"]}
+
+        setup = stage_by_id["setup_foundation"]
+        self.assertEqual(_pick_next_command(setup, []), "seo-cycle control-plane --write")
+
+        research = stage_by_id["research_architecture"]
+        self.assertTrue(all(not c.startswith("seo-cycle ") for c in research["next_commands"]), research["next_commands"])
+        self.assertEqual(_pick_next_command(research, []), "seo-cycle journey")
+
         for stage in report["stages"]:
-            commands = stage.get("next_commands") or []
-            next_command = next((cmd for cmd in commands if cmd.startswith("seo-cycle ")), "seo-cycle journey")
-            if next_command == "seo-cycle journey" and not any(c.startswith("seo-cycle ") for c in commands):
-                saw_fallback = True
-            name = next_command.split()[1]
-            self.assertIn(name, known, f"stage {stage['id']!r}: {name!r} from {next_command!r} is unknown")
-        self.assertTrue(saw_fallback, "no stage exercised the 'seo-cycle journey' fallback — is research_architecture still non-CLI-shaped?")
+            command = _pick_next_command(stage, [])
+            name = command.split()[1]
+            self.assertIn(name, known, f"stage {stage['id']!r}: {name!r} from {command!r} is unknown")
+
+    def test_format_stage_line_uses_order_not_total(self) -> None:
+        report = self._report()
+        total = len(report["stages"])
+        research = next(stage for stage in report["stages"] if stage["id"] == "research_architecture")
+        self.assertNotEqual(research["order"], total)  # otherwise an order/total swap wouldn't show here
+        self.assertEqual(
+            _format_stage_line(research, total),
+            f"Стадия: {research['title']} ({research['order']} из {total})",
+        )
+        setup = next(stage for stage in report["stages"] if stage["id"] == "setup_foundation")
+        self.assertEqual(_format_stage_line(setup, total), f"Стадия: Основа проекта (1 из {total})")
 
 
 if __name__ == "__main__":

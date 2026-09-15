@@ -287,7 +287,60 @@ def _load_project_journey_module():
     return module
 
 
-def _status_header_lines(cfg_path: pathlib.Path, snap: pathlib.Path | None, age: int | None) -> list[str] | None:
+def _extract_research_package(args: list[str]) -> str | None:
+    """Pull `--research-package <path>`/`--research-package=<path>` out of
+    `status`'s passthrough args (T-105 review round 1, 🟡-2) so the
+    in-process header call below sees the same package
+    `project-journey.py`'s own argparse will use in the delegated
+    subprocess a few lines later. Without this, an explicit
+    `--research-package` reached the body but not the header: the header
+    silently autodetected (often finding nothing, or a stale package under
+    the project root) while the body honored the flag — one `status` output
+    naming two different current stages."""
+    for index, token in enumerate(args):
+        if token == "--research-package" and index + 1 < len(args):
+            return args[index + 1]
+        if token.startswith("--research-package="):
+            return token.split("=", 1)[1]
+    return None
+
+
+def _pick_next_command(current: dict[str, Any] | None, action_plan: list[dict[str, Any]]) -> str:
+    """The single `Дальше:` command for the current stage: the first
+    `seo-cycle `-shaped entry in its `next_commands` (most stages), else the
+    first action-plan command, else `seo-cycle journey` as a safe default —
+    `research_architecture` is the one stage on HEAD where neither
+    `next_commands` entry is CLI-shaped (both are prose: "Create or import a
+    research package under ..."), so it always falls back.
+
+    Pulled out of `_status_header_lines()` as its own pure function (T-105
+    review round 1, 🟡-1) so a test can call the real selector directly
+    instead of re-implementing the rule — mutating this function (e.g. the
+    fallback string, or the `startswith` check) now fails a test that
+    exercises it, not a copy of it."""
+    commands = list((current or {}).get("next_commands") or [])
+    if not commands and action_plan:
+        commands = [action_plan[0].get("command", "")]
+    return next((cmd for cmd in commands if cmd.startswith("seo-cycle ")), "seo-cycle journey")
+
+
+def _format_stage_line(current: dict[str, Any] | None, total: int) -> str:
+    """The `Стадия:` line — pulled out next to `_pick_next_command()` for
+    the same reason (T-105 review round 1, 🟡-1): a test can call this
+    directly and catch a mutation like `{order}`→`{total}` that a
+    hand-written expected string in the test would not."""
+    if current:
+        return f"Стадия: {current.get('title')} ({current.get('order')} из {total})"
+    return f"Стадия: цикл пройден ({total} из {total})"
+
+
+def _status_header_lines(
+    cfg_path: pathlib.Path,
+    snap: pathlib.Path | None,
+    age: int | None,
+    *,
+    research_package: str | None = None,
+) -> list[str] | None:
     """Three status-header lines (T-105): snapshot freshness, current journey
     stage, next command — kept as separate lines on purpose (setup-stage
     readiness and monitoring-snapshot freshness answer different questions
@@ -304,12 +357,23 @@ def _status_header_lines(cfg_path: pathlib.Path, snap: pathlib.Path | None, age:
     lines would appear a second time here, ahead of the identical ones the
     delegated subprocess already prints, silently changing the stderr
     contract `test_status_on_project_as_string_warns_instead_of_
-    silently_swallowing` locks in."""
+    silently_swallowing` locks in. A single diagnostic line still reaches
+    the real stderr from the `except` branch below (T-105 review round 1,
+    💭: a bare `return None` on ANY exception, with nothing printed, reads
+    as a silent success rather than a fallback — `run_script` a few lines
+    below in `cmd_status` still surfaces the underlying failure on its own
+    for a genuinely broken config, so this is a note, not new information)."""
     try:
         journey = _load_project_journey_module()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            report = journey.build_report(cfg_path, goal="complete the next safe SEO cycle")
-    except (Exception, SystemExit):
+            report = journey.build_report(
+                cfg_path, goal="complete the next safe SEO cycle", research_package=research_package
+            )
+    except (Exception, SystemExit) as exc:
+        print(
+            f"WARNING: status header skipped ({exc.__class__.__name__}) — falling back to the legacy header",
+            file=sys.stderr,
+        )
         return None
     if snap is None:
         freshness = "нет (запусти `seo-cycle pulse`)"
@@ -317,17 +381,9 @@ def _status_header_lines(cfg_path: pathlib.Path, snap: pathlib.Path | None, age:
         marker = "ок" if (age or 0) < 3 else ("предупреждение" if (age or 0) < 7 else "просрочен")
         freshness = f"{marker} ({snap.name} · {age} дн.)"
     stages = report.get("stages") or []
-    total = len(stages)
     current = report.get("current_stage")
-    if current:
-        stage_line = f"Стадия: {current.get('title')} ({current.get('order')} из {total})"
-    else:
-        stage_line = f"Стадия: цикл пройден ({total} из {total})"
-    commands = list((current or {}).get("next_commands") or [])
-    action_plan = report.get("action_plan") or []
-    if not commands and action_plan:
-        commands = [action_plan[0].get("command", "")]
-    next_command = next((cmd for cmd in commands if cmd.startswith("seo-cycle ")), "seo-cycle journey")
+    stage_line = _format_stage_line(current, len(stages))
+    next_command = _pick_next_command(current, report.get("action_plan") or [])
     return [f"Срез: {freshness}", stage_line, f"Дальше: {next_command}"]
 
 
@@ -343,7 +399,7 @@ def cmd_status(args: list[str], project: pathlib.Path) -> int:
     cfg = load_config(cfg_path)
     name = config_section(cfg, "project").get("name")
     snap, age = newest_snapshot(project, cfg)
-    header = _status_header_lines(cfg_path, snap, age)
+    header = _status_header_lines(cfg_path, snap, age, research_package=_extract_research_package(args))
     if header:
         for line in header:
             print(line)
