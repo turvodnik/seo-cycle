@@ -37,6 +37,8 @@ from seo_cycle_core.config import (
     require_section,
     safe_round,
 )
+from seo_cycle_core.ctr import CTR_11_20, CTR_BEYOND, DEFAULT_CTR_CURVE
+from seo_cycle_core.ctr import expected_ctr as ctr_for
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.monitoring import sample_line, snapshot_sample
 from seo_cycle_core.reports import write_report_bundle
@@ -44,27 +46,16 @@ from seo_cycle_core.textmatch import build_query_index, match_position
 
 log = setup_logging("seo-forecast")
 
-DEFAULT_CTR_CURVE = {1: 0.28, 2: 0.15, 3: 0.10, 4: 0.07, 5: 0.05, 6: 0.04, 7: 0.03,
-                     8: 0.025, 9: 0.02, 10: 0.018}
-CTR_11_20 = 0.01
-CTR_BEYOND = 0.002
 UNRANKED_POSITION = 40.0
 BOUNDS = (0.6, 1.4)  # pessimistic / optimistic multipliers
 MONTE_CARLO_RUNS = 400
 POSITION_SIGMA = 1.2   # позиция гуляет на ±1-2 места
+# Not a property of the curve (seo_cycle_core.ctr does not hold it): the
+# curve's accuracy estimate is only needed here, for the Monte Carlo
+# confidence interval (confidence_interval). triggers-eval calls expected_ctr()
+# without a sigma.
 CTR_SIGMA = 0.22       # CTR-кривая известна с точностью ~±22%
 MC_SEED = 42           # детерминизм: одинаковый вход → одинаковые интервалы
-
-
-def ctr_for(position: float, curve: dict[int, float]) -> float:
-    if position <= 0:
-        return CTR_BEYOND
-    bucket = int(round(position))
-    if bucket in curve:
-        return curve[bucket]
-    if bucket <= 20:
-        return CTR_11_20
-    return CTR_BEYOND
 
 
 def load_ctr_curve(cfg: dict[str, Any]) -> dict[int, float]:

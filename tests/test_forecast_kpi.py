@@ -90,6 +90,43 @@ class ForecastTest(StrategyTestBase):
         # 1000*0.5 + 500*0.01 + 800*0.002 = 506.6 → 507
         self.assertEqual(report["scenarios"]["current"]["monthly_clicks"], 507)
 
+    def test_single_ctr_curve_source(self) -> None:
+        # T-103: exactly one DEFAULT_CTR_CURVE table across scripts/, in
+        # seo_cycle_core/ctr.py — otherwise the curves drift apart when
+        # only one copy gets edited. The pattern tolerates an optional type
+        # annotation between the name and "=" (review round 1: the plain
+        # `*= *{` pattern missed an annotated assignment, e.g. a local copy
+        # written as `DEFAULT_CTR_CURVE: dict[int, float] = {...}`).
+        hits = subprocess.run(
+            ["grep", "-Ern", r"DEFAULT_CTR_CURVE\s*(:[^=]*)?=\s*\{", str(SCRIPTS)],
+            text=True, capture_output=True, check=False,
+        ).stdout.strip().splitlines()
+        self.assertEqual(len(hits), 1, hits)
+        self.assertIn("seo_cycle_core/ctr.py", hits[0])
+
+    def test_forecast_reuses_core_ctr_curve(self) -> None:
+        # seo-forecast.py imports the curve/function from the core module
+        # instead of holding a local copy of the values (identity check,
+        # not just equal values). The hyphenated filename is not a regular
+        # package, so load it from its path explicitly.
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "seo_forecast_under_test", SCRIPTS / "seo-forecast.py"
+        )
+        assert spec and spec.loader
+        forecast = importlib.util.module_from_spec(spec)
+        sys.path.insert(0, str(SCRIPTS))
+        try:
+            spec.loader.exec_module(forecast)
+        finally:
+            if str(SCRIPTS) in sys.path:
+                sys.path.remove(str(SCRIPTS))
+        from seo_cycle_core import ctr as core_ctr
+
+        self.assertIs(forecast.DEFAULT_CTR_CURVE, core_ctr.DEFAULT_CTR_CURVE)
+        self.assertIs(forecast.ctr_for, core_ctr.expected_ctr)
+
     def test_fuzzy_matching_resolves_inflection_and_word_order(self) -> None:
         # живой запрос отличается словоформой, порядком и хвостом «цена» —
         # точный матчинг такое терял (боевой кейс: 0 ranked из 476)
@@ -105,6 +142,29 @@ class ForecastTest(StrategyTestBase):
         self.assertEqual(report["inputs"]["ranked_fuzzy"], 1)
         # «имитация бруса» получил позицию 6 → 800*0.04 = 32 клика к прежним 107
         self.assertEqual(report["scenarios"]["current"]["monthly_clicks"], 137)
+
+
+class CtrCoreTest(unittest.TestCase):
+    """Pins the bucket-0 contract of expected_ctr() directly, in the core
+    module — review round 1 (T-103): switching seo-forecast.py from its
+    local ctr_for() to seo_cycle_core.ctr.expected_ctr() changed the
+    outcome for position in (0; 0.5] (bucket 0): the old local function
+    returned CTR_11_20 (0.01) there, the core function returns CTR_BEYOND
+    (0.002). Unreachable on live data (every position writer yields >= 1,
+    or 0 is treated as "unranked" upstream of the position > 0 SQL filter)
+    but must stay a deliberate decision, not an accident of refactoring.
+    """
+
+    def test_ctr_curve_bucket_zero_uses_beyond(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        try:
+            from seo_cycle_core.ctr import CTR_BEYOND, DEFAULT_CTR_CURVE, expected_ctr
+        finally:
+            if str(SCRIPTS) in sys.path:
+                sys.path.remove(str(SCRIPTS))
+
+        self.assertEqual(expected_ctr(0.3), CTR_BEYOND)
+        self.assertEqual(expected_ctr(0.7), DEFAULT_CTR_CURVE[1])
 
 
 class KpiContractTest(StrategyTestBase):
