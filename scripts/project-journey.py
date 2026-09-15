@@ -58,8 +58,8 @@ def setup_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, An
     return stage(
         stage_id="setup_foundation",
         order=1,
-        title="Setup foundation",
-        objective="Project identity, market, governance, and setup questionnaire are known.",
+        title="Основа проекта",
+        objective="Известны личность проекта, рынок, governance-модель и анкета настройки.",
         evidence=evidence,
         missing=missing,
         blockers=blockers,
@@ -98,8 +98,8 @@ def governance_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[st
     return stage(
         stage_id="access_budget_governance",
         order=2,
-        title="Access, budget, and governance",
-        objective="Needed tools are selected, secrets are listed by env name only, and spend gates are clear.",
+        title="Доступы, бюджет и управление",
+        objective="Выбраны нужные инструменты, секреты перечислены только именами env-переменных, лимиты трат понятны.",
         evidence=evidence,
         missing=missing,
         warnings=warnings,
@@ -143,8 +143,8 @@ def evidence_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str,
     return stage(
         stage_id="expert_evidence_sources",
         order=3,
-        title="Expert evidence sources",
-        objective="Expert sources and AI research providers are available as cached distillates, not raw context dumps.",
+        title="Экспертные источники",
+        objective="Экспертные источники и AI-провайдеры доступны как кэшированные выжимки, а не сырые дампы контекста.",
         evidence=evidence,
         missing=missing,
         warnings=warnings,
@@ -177,8 +177,8 @@ def technical_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str
     return stage(
         stage_id="technical_baseline",
         order=4,
-        title="Technical baseline",
-        objective="Crawl, redirects, indexability, performance, and search-console inspections are known before content work.",
+        title="Техническая база",
+        objective="Краулинг, редиректы, индексируемость, производительность и проверки search console известны до начала работы с контентом.",
         evidence=evidence,
         missing=missing,
         commands=[
@@ -203,8 +203,8 @@ def research_stage(project_root: pathlib.Path, package: dict[str, Any]) -> dict[
     return stage(
         stage_id="research_architecture",
         order=5,
-        title="Research architecture",
-        objective="Macro plan exists: semantic core, clusters, URLs, page types, entities, and content plan.",
+        title="Архитектура исследования",
+        objective="Есть макро-план: семантическое ядро, кластеры, URL, типы страниц, сущности и контент-план.",
         evidence=evidence,
         missing=missing,
         commands=[
@@ -254,8 +254,8 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
     return stage(
         stage_id="research_quality_gate",
         order=6,
-        title="Research quality gate",
-        objective="The macro package passes the comparison-audit failure checks before writing begins.",
+        title="Гейт качества исследования",
+        objective="Макро-пакет проходит проверки сравнительного аудита до начала написания текстов.",
         evidence=evidence,
         missing=missing,
         blockers=blockers,
@@ -321,8 +321,8 @@ def repair_stage(package: dict[str, Any]) -> dict[str, Any]:
     return stage(
         stage_id="research_package_repair",
         order=7,
-        title="Research package repair",
-        objective="Repair dirty semantic core, URL/cluster drift, entity/NLP drift, orphan URLs, missing SERP validation and phase-2 spoke opportunities before deep briefs.",
+        title="Починка пакета исследования",
+        objective="Починка грязного семантического ядра, расхождений URL/кластеров, дрейфа сущностей/NLP, потерянных URL, отсутствующей SERP-валидации и spoke-возможностей фазы 2 — до глубоких брифов.",
         evidence=evidence,
         missing=missing,
         blockers=blockers,
@@ -361,8 +361,8 @@ def brief_stage(package: dict[str, Any]) -> dict[str, Any]:
     return stage(
         stage_id="deep_page_briefs",
         order=8,
-        title="Deep page briefs",
-        objective="Every MVP/P1 page has a validated section-level brief with word counts, entities, Answer Units, proof, schema, SEO meta, and no-fabrication guard.",
+        title="Глубокие брифы страниц",
+        objective="У каждой MVP/P1-страницы есть проверенный посекционный бриф: объём текста, сущности, Answer Units, доказательства, schema, SEO meta и защита от выдумывания фактов.",
         evidence=[
             f"page-outlines-v2 json files: {package.get('outline_count', 0)}",
             f"page-outlines-v3 json files: {package.get('outline_v3_count', 0)}",
@@ -418,8 +418,8 @@ def brief_stage_v3(package: dict[str, Any]) -> dict[str, Any]:
     return stage(
         stage_id="deep_page_briefs_v3",
         order=9,
-        title="Deep copywriter briefs v3",
-        objective="Every MVP/P1 page has a copywriter-ready v3 brief with SERP-safe ordering, H2/H3 details, visuals, FAQ guidelines, triplets, and no-fabrication guard.",
+        title="Брифы для копирайтера, версия 3",
+        objective="У каждой MVP/P1-страницы есть готовый для копирайтера бриф версии 3: SERP-совместимый порядок, детали H2/H3, визуалы, гайдлайны FAQ, триплеты и защита от выдумывания фактов.",
         evidence=[
             f"page-outlines-v3 json files: {v3_count}",
             f"copywriter-ready markdown files: {copywriter_count}",
@@ -504,10 +504,10 @@ def content_draft_stage(package: dict[str, Any]) -> dict[str, Any]:
     return stage(
         stage_id="content_draft_gate",
         order=10,
-        title="Content draft and NeuronWriter gate",
+        title="Черновик и гейт NeuronWriter",
         objective=(
-            "Turn copywriter-ready v3 briefs into drafts, optionally use NeuronWriter within limits, "
-            "then validate drafts before implementation or publishing."
+            "Брифы, готовые для копирайтера (версия 3), превращаются в черновики, при необходимости — "
+            "NeuronWriter в рамках лимитов, затем черновики проверяются до внедрения или публикации."
         ),
         evidence=evidence,
         missing=missing,
@@ -541,8 +541,8 @@ def implementation_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dic
     return stage(
         stage_id="implementation_review",
         order=11,
-        title="Implementation and publication review",
-        objective="Approved content/technical changes are implemented only after final review and project-specific gates.",
+        title="Внедрение и ревью публикации",
+        objective="Согласованные контентные/технические правки внедряются только после финального ревью и проектных гейтов.",
         evidence=[f"approval gates: {', '.join(gates) or 'none'}"],
         warnings=warnings,
         commands=[
@@ -572,8 +572,8 @@ def monitoring_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[st
     return stage(
         stage_id="monitoring_iteration",
         order=12,
-        title="Monitoring and iteration",
-        objective="After launch, measurement, bot/index health, AI visibility, and refresh tasks feed the next cycle.",
+        title="Мониторинг и итерации",
+        objective="После запуска замеры, здоровье ботов/индекса, видимость в AI и задачи обновления питают следующий цикл.",
         evidence=evidence,
         missing=missing,
         commands=[
