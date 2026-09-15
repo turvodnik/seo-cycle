@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+### Fix: реестр дашборда очищен от тестового мусора; whitelist больше не врёт про «nothing --live» (T-104)
+
+`~/.seo-cycle/projects-registry.yaml` (машинно-локальный реестр, читает
+`seo-cycle web` и `monthly-runner.sh --all`) содержал три записи
+`"MyProject"` с путями во временные каталоги. Источник по истории
+репозитория не установлен: `grep -rn 'init-project.sh\|monthly-runner.sh'
+tests` на `main` находит только три файла (`test_registry.py`,
+`test_init_project.py`, `test_intake_wizard_tty.py`), и каждый вызов там
+уже изолирован (`SEO_CYCLE_SKIP_REGISTRY=1` или фейковый `HOME`) — живого
+писателя в `tests/` нет. Реестр владельца очищен вручную (три записи
+`MyProject` удалены, добавлен пропущенный `kiyokmag.com seo`), новый тест-сторож
+`tests/test_registry_not_polluted.py` гоняет все subprocess-тесты мастера
+и сверяет хеш реального реестра до/после — ловит будущий тест без
+изоляции (проверено инсценировкой: без `SEO_CYCLE_SKIP_REGISTRY` сторож
+красный).
+
+`scripts/webapp.py` докстринг и `# comment` над `COMMANDS` утверждали
+«nothing --live», при этом whitelist включал три команды с `--live`
+(`yml-feed`, `site-crawl`, `link-liveness`) — все три бесплатны (Woo REST
+read-only / HTTP GET / HEAD), но реально ходят в сеть, поэтому вынесены в
+отдельную UI-группу `LIVE_GROUP` («Живые запросы…») вместо смешивания с
+офлайн-командами их прежних групп; `--live` не убирался, так как без него
+эти три инструмента не дают дашборду ничего полезного (только сообщение
+«сеть выключена», без `--input-file`, которого у дашборда нет). `rag-index
+--write` помечен в hint как потенциально платный при настроенном
+embedding-провайдере (usage-ledger preflight уже гейтит расход — см.
+`rag-index.py`). Новый тест `tests/test_webapp_command_whitelist.py`
+проверяет, что группировка и докстринг не разойдутся с реальностью снова.
+
 ### Fix: одна CTR-кривая — seo-forecast.py берёт её из seo_cycle_core.ctr (T-103)
 
 `seo_cycle_core/ctr.py` и `seo-forecast.py` держали две независимые копии
