@@ -93,9 +93,12 @@ class ForecastTest(StrategyTestBase):
     def test_single_ctr_curve_source(self) -> None:
         # T-103: exactly one DEFAULT_CTR_CURVE table across scripts/, in
         # seo_cycle_core/ctr.py — otherwise the curves drift apart when
-        # only one copy gets edited.
+        # only one copy gets edited. The pattern tolerates an optional type
+        # annotation between the name and "=" (review round 1: the plain
+        # `*= *{` pattern missed an annotated assignment, e.g. a local copy
+        # written as `DEFAULT_CTR_CURVE: dict[int, float] = {...}`).
         hits = subprocess.run(
-            ["grep", "-rn", "DEFAULT_CTR_CURVE *= *{", str(SCRIPTS)],
+            ["grep", "-Ern", r"DEFAULT_CTR_CURVE\s*(:[^=]*)?=\s*\{", str(SCRIPTS)],
             text=True, capture_output=True, check=False,
         ).stdout.strip().splitlines()
         self.assertEqual(len(hits), 1, hits)
@@ -139,6 +142,29 @@ class ForecastTest(StrategyTestBase):
         self.assertEqual(report["inputs"]["ranked_fuzzy"], 1)
         # «имитация бруса» получил позицию 6 → 800*0.04 = 32 клика к прежним 107
         self.assertEqual(report["scenarios"]["current"]["monthly_clicks"], 137)
+
+
+class CtrCoreTest(unittest.TestCase):
+    """Pins the bucket-0 contract of expected_ctr() directly, in the core
+    module — review round 1 (T-103): switching seo-forecast.py from its
+    local ctr_for() to seo_cycle_core.ctr.expected_ctr() changed the
+    outcome for position in (0; 0.5] (bucket 0): the old local function
+    returned CTR_11_20 (0.01) there, the core function returns CTR_BEYOND
+    (0.002). Unreachable on live data (every position writer yields >= 1,
+    or 0 is treated as "unranked" upstream of the position > 0 SQL filter)
+    but must stay a deliberate decision, not an accident of refactoring.
+    """
+
+    def test_ctr_curve_bucket_zero_uses_beyond(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        try:
+            from seo_cycle_core.ctr import CTR_BEYOND, DEFAULT_CTR_CURVE, expected_ctr
+        finally:
+            if str(SCRIPTS) in sys.path:
+                sys.path.remove(str(SCRIPTS))
+
+        self.assertEqual(expected_ctr(0.3), CTR_BEYOND)
+        self.assertEqual(expected_ctr(0.7), DEFAULT_CTR_CURVE[1])
 
 
 class KpiContractTest(StrategyTestBase):

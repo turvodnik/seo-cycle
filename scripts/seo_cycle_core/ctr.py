@@ -7,9 +7,7 @@ kpi.ctr_curve — см. load_ctr_curve() там; сама кривая и expect
 """
 from __future__ import annotations
 
-# No inline type annotation on this assignment: keeps the curve definition
-# below greppable as the single one in the repo; mypy infers dict[int, float].
-DEFAULT_CTR_CURVE = {
+DEFAULT_CTR_CURVE: dict[int, float] = {
     1: 0.28, 2: 0.15, 3: 0.10, 4: 0.07, 5: 0.05,
     6: 0.04, 7: 0.03, 8: 0.025, 9: 0.02, 10: 0.018,
 }
@@ -18,7 +16,14 @@ CTR_BEYOND: float = 0.002
 
 
 def expected_ctr(position: float | None, curve: dict[int, float] | None = None) -> float:
-    """Ожидаемый CTR для средней позиции (bucket = round(position))."""
+    """Ожидаемый CTR для средней позиции (bucket = round(position)).
+
+    position <= 0 or position in (0; 0.5] (bucket 0, not a mapped table
+    key, and below the 11-20 range) both resolve to CTR_BEYOND — a
+    below-page-1 position is treated as "no real ranking", not as the
+    long-tail 11-20 rate. See test_ctr_curve_bucket_zero_uses_beyond
+    (tests/test_forecast_kpi.py) for the pinned contract.
+    """
     if position is None or position <= 0:
         return CTR_BEYOND
     table = curve or DEFAULT_CTR_CURVE
