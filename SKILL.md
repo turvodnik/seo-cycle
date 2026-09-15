@@ -9,7 +9,7 @@ description: Универсальный SEO/контент-цикл — тонк
 
 > **Документация.** Полное руководство (RU + EN) — `GUIDE.md`; установка — `INSTALL.md`; архитектура — `docs/architecture.md`. **Правило: при ЛЮБОМ изменении кода/конфига/возможностей обнови `GUIDE.md`, `CHANGELOG.md` в том же коммите + подними `VERSION` по SemVer.**
 
-> **Рантайм (Claude / Codex / Gemini).** Этот файл — точка входа Claude Code; `AGENTS.md` (симлинк сюда) — точка входа Codex. Режим: `runtime:` в конфиге или env `SEO_RUNTIME=claude|codex|auto`. Логика фаз одинакова; маппинг инструментов в codex-режиме — `docs/codex-runtime.md`.
+> **Рантайм (Claude / Codex).** Этот файл — точка входа Claude Code; `AGENTS.md` (симлинк сюда) — точка входа Codex. Режим: `runtime:` в конфиге или env `SEO_RUNTIME=claude|codex|auto`. Логика фаз одинакова; маппинг инструментов в codex-режиме — `docs/codex-runtime.md`. Gemini и Grok не поддерживаются как рантайм seo-cycle (отдельные CLI-инструменты вроде Gemini CLI используются внутри некоторых шагов, например `graphify-refresh.sh`, — это не то же самое, что рантайм оркестратора).
 
 > **Экономия контекста — правило №1.** Не загружай этот репозиторий целиком. Точка входа под задачу: `seo-cycle status` → `seo/setup/context-pack.md` → нужный модуль `skills/<имя>/SKILL.md`. Общие правила подгружай по требованию из `skills/_shared/*`.
 
