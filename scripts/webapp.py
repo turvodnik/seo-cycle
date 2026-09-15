@@ -6,8 +6,12 @@ project switcher (from the machine-local projects registry, see
 seo_cycle_core/registry.py), agency portfolio
 overview, per-project view (journey stage, ranking progress with deltas,
 self-assessment scorecards), approvals with one-click approve/reject, a
-command panel (whitelisted safe tools only — nothing paid, nothing --live),
-client reports, and provider auth status.
+command panel (a fixed whitelist of tools; almost all are offline/free —
+three make free live network calls and are grouped separately under
+LIVE_GROUP with an honest hint, per T-104; rag-index --write is BM25-only
+and free unless a paid embedding provider is configured, in which case the
+usage ledger preflight gates the spend — nothing here bypasses approvals or
+publishes anything), client reports, and provider auth status.
 
 Security model:
 - binds 127.0.0.1 by default; a per-process random token guards every API call;
@@ -52,8 +56,18 @@ REGISTRY = registry_path(SKILL_ROOT)
 FILE_EXTENSIONS = {".md", ".html", ".pdf", ".json", ".csv", ".txt"}
 STDOUT_LIMIT = 120_000
 
-# Only safe tools: read-only or writing local artifacts. Nothing --live, nothing paid,
-# nothing publishing — those stay behind approvals and the CLI by design.
+# A fixed whitelist of local artifact tools — nothing publishing, that stays
+# behind approvals and the CLI by design. Most commands here are fully
+# offline/free. Three (`yml-feed`, `site-crawl`, `link-liveness`) pass
+# `--live` and go out over the network — free (Woo REST / HTTP HEAD / GET),
+# but real network calls, so they carry LIVE_GROUP instead of a regular
+# group, per T-104 (whitelist previously claimed "nothing --live" while
+# shipping three). `rag-index --write` is BM25-only and free unless a paid
+# embedding provider is configured (EMBEDDING_API_URL/KEY), in which case
+# the usage-ledger preflight (see rag-index.py) gates the spend rather than
+# this whitelist blocking it outright.
+LIVE_GROUP = "Живые запросы (ходят в сеть, не платные)"
+
 COMMANDS: dict[str, dict[str, Any]] = {
     "journey": {"label": "Статус проекта (journey)", "group": "Обзор",
                  "script": "project-journey.py", "args": [],
@@ -94,27 +108,30 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "ads-analytics": {"label": "Аналитика рекламы (кэш)", "group": "Реклама",
                        "script": "ads-analytics.py", "args": ["--write"],
                        "hint": "Кросс-правила SEO+PPC по последним выгрузкам"},
-    "yml-feed": {"label": "YML-фид из WooCommerce", "group": "Данные",
+    "yml-feed": {"label": "YML-фид из WooCommerce", "group": LIVE_GROUP,
                   "script": "woo-yml-feed.py", "args": ["--live", "--write"],
-                  "hint": "Товарный фид для Яндекса из Woo REST (read-only)", "timeout": 300},
+                  "hint": "Живой запрос: Woo REST API (read-only, бесплатно)", "timeout": 300},
     "rag-index": {"label": "Обновить RAG-индекс", "group": "Данные",
                    "script": "rag-index.py", "args": ["--write"],
-                   "hint": "Инкрементальная индексация артефактов"},
+                   "hint": "Офлайн BM25; с платным embedding-провайдером — платные "
+                           "вызовы под usage-ledger preflight"},
     "cohorts": {"label": "Когорты Метрики", "group": "Данные",
                  "script": "metrika-cohorts.py", "args": ["--write"],
                  "hint": "Возврат/конверсия по неделе первого визита (offline)"},
-    "site-crawl": {"label": "Обойти сайт (краулер)", "group": "Техничка",
+    "site-crawl": {"label": "Обойти сайт (краулер)", "group": LIVE_GROUP,
                     "script": "site-crawl.py", "args": ["--live", "--write"],
-                    "hint": "BFS до 300 страниц: битые ссылки, дубли title, noindex", "timeout": 600},
+                    "hint": "Живой обход до 300 страниц (HTTP GET, бесплатно): битые ссылки, "
+                            "дубли title, noindex", "timeout": 600},
     "structure-map": {"label": "Карта структуры сайта", "group": "Техничка",
                        "script": "structure-map.py", "args": ["--write"],
                        "hint": "Визуальное дерево разделов → Отчёты"},
     "serp-intel": {"label": "SERP-интеллект", "group": "Данные",
                     "script": "serp-intel.py", "args": ["--write"],
                     "hint": "Overlap-кластеры, фичи выдачи, кандидаты сущностей (offline)"},
-    "link-liveness": {"label": "Живость внешних источников", "group": "Техничка",
+    "link-liveness": {"label": "Живость внешних источников", "group": LIVE_GROUP,
                        "script": "link-liveness.py", "args": ["--live", "--write"],
-                       "hint": "HEAD-проверка ссылок из статей (E-E-A-T)", "timeout": 300},
+                       "hint": "Живая HEAD-проверка ссылок из статей (бесплатно, E-E-A-T)",
+                       "timeout": 300},
     "validate": {"label": "Проверить конфиг", "group": "Сервис",
                   "script": "validate-config.py", "args": [],
                   "hint": "seo-cycle.yaml: ошибки и подсказки"},
