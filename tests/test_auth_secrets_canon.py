@@ -422,6 +422,48 @@ class GbpHelperTest(_Base):
         self.assertEqual(proc.returncode, 3, proc.stderr)
         self.assertIn("ai-secret", proc.stderr)
 
+    def test_store_scope_hands_the_token_to_the_broker_and_writes_only_the_date(self) -> None:
+        # Wave K 🟡-4: the branch after the code exchange — token -> `ai-secret
+        # set` over stdin, .env receives the mint date only. The exchange is
+        # stubbed (no network), the code arrives via --redirect-url (no server).
+        import contextlib
+        import importlib.util
+        import io
+        import os
+        from unittest import mock
+
+        sys.path.insert(0, str(SCRIPTS))
+        spec = importlib.util.spec_from_file_location("gbp_oauth_helper", SCRIPTS / "gbp-oauth-helper.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        minted_env = self.project / ".env"
+        env = {
+            "HOME": str(self.home), **broker_override(self.stub_dir),
+            "GBP_OAUTH_CLIENT_ID": "client-id", "GBP_OAUTH_CLIENT_SECRET": "client-secret-value",
+        }
+        argv = ["gbp-oauth-helper.py", "--store-scope", "testproj", "--minted-env", str(minted_env),
+                "--redirect-url", "http://localhost:8765/?code=auth-code-123"]
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, env), mock.patch.object(sys, "argv", argv), \
+                mock.patch.object(module, "exchange_code", return_value={"refresh_token": SECRET_VALUE}) as exchange, \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = module.main()
+        self.assertEqual(rc, 0, err.getvalue())
+        exchange.assert_called_once()
+        self.assertEqual(exchange.call_args.args[0], "auth-code-123")
+        log = stub_log(self.stub_dir)
+        self.assertIn("set testproj GBP_OAUTH_REFRESH_TOKEN", log)
+        self.assertNotIn(SECRET_VALUE, log)
+        # positive half: the value really travelled over the pipe into the stub's "keychain"
+        store = (self.stub_dir / "store.txt").read_text(encoding="utf-8")
+        self.assertIn(f"testproj/GBP_OAUTH_REFRESH_TOKEN={SECRET_VALUE}", store)
+        env_lines = minted_env.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(env_lines), 1, env_lines)
+        self.assertRegex(env_lines[0], r"^GBP_TOKEN_MINTED_AT=\d{4}-\d{2}-\d{2}$")
+        for text in (out.getvalue(), err.getvalue(), minted_env.read_text(encoding="utf-8")):
+            self.assertNotIn(SECRET_VALUE, text)
+        self.assertIn("значение не показывается", err.getvalue())
+
     def test_write_env_flag_is_gone(self) -> None:
         proc = subprocess.run(
             [sys.executable, str(SCRIPTS / "gbp-oauth-helper.py"), "--write-env", str(self.project / ".env")],
