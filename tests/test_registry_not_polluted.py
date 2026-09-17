@@ -77,6 +77,8 @@ class RealMachineRegistryUntouchedTest(unittest.TestCase):
 
         with open(os.devnull, "w", encoding="utf-8") as devnull:
             result = unittest.TextTestRunner(verbosity=0, stream=devnull).run(suite)
+        # A failed guarded test must not turn into a vacuous "registry untouched".
+        self.assertTrue(result.wasSuccessful(), f"guarded tests failed: {result.failures + result.errors!r}")
 
         after = _hash_or_marker(real)
         self.assertEqual(
