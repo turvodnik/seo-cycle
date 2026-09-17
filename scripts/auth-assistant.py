@@ -58,6 +58,12 @@ from seo_cycle_core.env_profile import (
 
 RC_NO_AI_SECRET = 3
 
+# Provider tiers as `auth list` labels them. Every PROVIDERS entry's `tier`
+# (default "extra") must be a key here — checked by
+# tests/test_auth_secrets_canon.py::test_every_provider_tier_is_known and
+# again at runtime by cmd_list (rc 2 with a message, not a KeyError).
+TIER_LABELS = {"minimum": "минимум для pulse", "extra": "дополнительно"}
+
 PROVIDERS: dict[str, dict[str, Any]] = {
     "gbp": {
         "title": "Google Business Profile (OAuth)",
@@ -299,6 +305,12 @@ def source_mark(source: str | None) -> str:
 
 
 def cmd_list(args: argparse.Namespace, project_root: pathlib.Path | None) -> int:
+    unknown = {alias: spec.get("tier", "extra") for alias, spec in PROVIDERS.items()
+               if spec.get("tier", "extra") not in TIER_LABELS}
+    if unknown:
+        print(f"ERROR: неизвестный tier у провайдера: {unknown} — допустимо: {', '.join(TIER_LABELS)} "
+              "(PROVIDERS в scripts/auth-assistant.py)", file=sys.stderr)
+        return 2
     binary = find_ai_secret()
     scope = resolve_scope(project_root, args.use_global, args.scope)
     index = KeychainIndex(binary, scope)
@@ -328,9 +340,8 @@ def cmd_list(args: argparse.Namespace, project_root: pathlib.Path | None) -> int
     print(f"- legacy global env:  {global_env_path()}")
     print("  (legacy-файлы только читаются; перенос: `ai-secret import <scope> .env` и удалить файл)\n")
     icons = {"ready": "✅", "partial": "🟡", "not_configured": "▫️"}
-    tier_labels = {"minimum": "минимум для pulse", "extra": "дополнительно"}
     for alias, data in report.items():
-        tier = tier_labels[PROVIDERS[alias].get("tier", "extra")]
+        tier = TIER_LABELS[data["tier"]]  # validated above
         print(f"{icons[data['state']]} {alias:<14} {data['title']} — {tier}")
         if data.get("warning"):
             print(f"    ⚠️  {data['warning']}")

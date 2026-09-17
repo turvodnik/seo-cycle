@@ -458,6 +458,20 @@ class NoSecretWritersLeftTest(unittest.TestCase):
         self.assertEqual(module.PROVIDERS["wordpress-mcp"]["env"], ["WP_API_URL", "WP_API_USERNAME", "WP_API_PASSWORD"])
         self.assertEqual(module.PROVIDERS["yandex"]["tier"], "minimum")  # T-100 kept
 
+    def test_every_provider_tier_is_known(self) -> None:
+        # Wave K 🟡-2: an unknown `tier` used to surface as a bare KeyError in
+        # `auth list`; every provider must map onto a TIER_LABELS key.
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("auth_assistant", SCRIPTS / "auth-assistant.py")
+        module = importlib.util.module_from_spec(spec)
+        sys.path.insert(0, str(SCRIPTS))
+        spec.loader.exec_module(module)
+        self.assertEqual(set(module.TIER_LABELS), {"minimum", "extra"})
+        for alias, provider in module.PROVIDERS.items():
+            tier = provider.get("tier", "extra")
+            self.assertIn(tier, module.TIER_LABELS, f"{alias}: unknown tier {tier!r}")
+
 
 if __name__ == "__main__":
     unittest.main()
