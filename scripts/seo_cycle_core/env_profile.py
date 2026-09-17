@@ -17,7 +17,11 @@ kept for non-secret markers only (see its docstring).
 
 Write side (`store_secret`): the value is handed to `ai-secret set` through
 stdin — never argv, never a file, never printed. `find_ai_secret` resolves
-the binary on PATH; a public installation without it gets an honest error
+the binary at its canonical install path `~/.local/bin/ai-secret` — never
+through PATH (the broker receives secret values, so a directory earlier in
+PATH must not be able to substitute it; policy §5 treats PATH as untrusted).
+Another location is honoured only through the explicit `SEO_CYCLE_AI_SECRET`
+variable. A public installation without the broker gets an honest error
 (`AI_SECRET_MISSING`) instead of a quiet write somewhere weaker.
 """
 
@@ -26,7 +30,6 @@ from __future__ import annotations
 import os
 import pathlib
 import re
-import shutil
 import subprocess
 
 # Set by bin/seo-cycle on the process it re-executes under `ai-secret run`;
@@ -49,8 +52,18 @@ PULSE_KEY_NAMES: tuple[str, ...] = (
 SCOPE_RE = re.compile(r"^[a-z0-9._-]{1,64}$")
 GLOBAL_SCOPE = "global"
 
+# Canonical location of the broker. PATH is deliberately NOT consulted:
+# `auth set`/`gbp-oauth-helper` hand secret values to this binary over stdin
+# and the launcher execs it, so a look-up through PATH would let any earlier
+# directory substitute the receiver of those values. The only other place
+# that is honoured is the explicit override variable below (tests point it
+# at their stub broker; a non-standard install points it at its binary).
+AI_SECRET_DEFAULT = pathlib.Path("~/.local/bin/ai-secret")
+AI_SECRET_ENV = "SEO_CYCLE_AI_SECRET"
+
 AI_SECRET_MISSING = (
-    "секреты не подключены: не найден `ai-secret` в PATH. Установи ai-secret "
+    f"секреты не подключены: не найден `ai-secret` по пути `{AI_SECRET_DEFAULT}` "
+    f"(другой путь — только через переменную {AI_SECRET_ENV}; PATH не используется). Установи ai-secret "
     "(значения ключей живут в macOS Keychain, доступ — `ai-secret run <scope> -- <команда>`) "
     "или экспортируй нужные переменные в окружение сессии. В файлы значения не записываются (§5)."
 )
@@ -141,8 +154,18 @@ def upsert_env_var(path: pathlib.Path, key: str, value: str) -> pathlib.Path:
 
 
 def find_ai_secret() -> str | None:
-    """Path to the `ai-secret` broker on PATH, or None (secrets not wired)."""
-    return shutil.which("ai-secret")
+    """Path to the `ai-secret` broker, or None (secrets not wired).
+
+    `SEO_CYCLE_AI_SECRET` set → that path and nothing else (an override that
+    points nowhere is an honest "not wired", never a fallback to the default
+    or to PATH). Unset → `~/.local/bin/ai-secret`. PATH is never searched —
+    see the module docstring for why.
+    """
+    override = os.environ.get(AI_SECRET_ENV, "").strip()
+    candidate = pathlib.Path(override).expanduser() if override else AI_SECRET_DEFAULT.expanduser()
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        return str(candidate)
+    return None
 
 
 def secret_scope(cfg: dict | None) -> str | None:

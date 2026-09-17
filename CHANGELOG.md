@@ -41,7 +41,7 @@ embedding-провайдере (usage-ledger preflight уже гейтит ра�
 — явно), читает значение скрытым вводом (на не-tty — одной строкой из
 stdin) и передаёт его в `ai-secret set <scope> <ИМЯ>` по stdin — не через
 argv (попадал бы в `ps` и лог диспетчера; флаг `--value` удалён) и не в
-файл. Без `ai-secret` в PATH `login`/`set` — rc 3 и «секреты не подключены:
+файл. Без `ai-secret` (`~/.local/bin/ai-secret`, см. фикс-проход волны K) `login`/`set` — rc 3 и «секреты не подключены:
 установи ai-secret или экспортируй переменные в окружение сессии», без
 тихой записи куда-то слабее. `auth list` показывает источник
 `keychain:<scope>` / `keychain:global` (имена через `ai-secret list`,

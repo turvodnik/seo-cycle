@@ -194,7 +194,9 @@ scope, а один `ai-secret run <scope>` покрывает только од�
 (launchd/cron) обёртка `ai-secret run <scope> -- <команда>` должна быть
 зашита прямо в сам job (`ProgramArguments` плиста), а не запускаться руками
 один раз — лончер под launchd тоже перезапустится сам, но только если
-`ai-secret` виден в его PATH; проверять поведением: `launchctl kickstart -k
+`ai-secret` стоит по каноническому пути `~/.local/bin/ai-secret` (PATH лончер
+не смотрит; другой путь — только переменная `SEO_CYCLE_AI_SECRET`);
+проверять поведением: `launchctl kickstart -k
 <label>` → `LastExitStatus = 0` и свежий артефакт в логе, не фактом
 загрузки плиста.
 

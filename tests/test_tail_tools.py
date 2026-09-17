@@ -158,9 +158,10 @@ class TokenAgeTest(unittest.TestCase):
         (tmp / "seo-cycle.yaml").write_text("project:\n  name: t\n", encoding="utf-8")
         old = (dt.date.today() - dt.timedelta(days=6)).isoformat()
         (tmp / ".env").write_text(f"GBP_TOKEN_MINTED_AT={old}\n", encoding="utf-8")
-        env = {k: v for k, v in os.environ.items() if not k.startswith("GBP")}
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("GBP", "SEO_CYCLE_AI_SECRET"))}
         env["SEO_CYCLE_GLOBAL_ENV"] = str(tmp / "env.global")
-        env["PATH"] = "/usr/bin:/bin"  # no real ai-secret/Keychain in tests (T-108)
+        (tmp / "home").mkdir()
+        env["HOME"] = str(tmp / "home")  # no real ~/.local/bin/ai-secret in tests (T-108, wave K)
         proc = subprocess.run(
             [sys.executable, str(SCRIPTS / "auth-assistant.py"), "list", "--format", "json"],
             cwd=tmp, env=env, text=True, capture_output=True, check=False)

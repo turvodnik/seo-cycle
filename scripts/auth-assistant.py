@@ -25,7 +25,8 @@ Commands:
       one line from stdin — never from argv, which would land in `ps` and
       the dispatcher log).
 
-Without `ai-secret` on PATH, `login`/`set` exit 3 with an explicit message —
+Without `ai-secret` at `~/.local/bin/ai-secret` (or `SEO_CYCLE_AI_SECRET`;
+PATH is never consulted), `login`/`set` exit 3 with an explicit message —
 no quiet fallback to `.env` (policy §5, invariant 7). `list` still works and
 reports that secrets are not wired.
 """
