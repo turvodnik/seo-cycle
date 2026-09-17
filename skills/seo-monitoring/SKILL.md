@@ -11,7 +11,7 @@ description: Мониторинг (Phase 9): ежедневный pulse (GSC + �
 
 - **Входы:** API-токены источников (Keychain через ai-secret), машинный реестр проектов (`~/.seo-cycle/projects-registry.yaml` по умолчанию) для `pulse --global`
 - **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `seo-cycle cycle init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
-- **Выходы:** `09-monitoring/YYYY-MM-DD-snapshot.json` + markdown-отчёт; `seo.db` через `db-sync`
+- **Выходы:** `seo/monitoring/webmaster-snapshot-<дата>.json` (пишет `pulse`; каталог — `monitoring.path` в `seo-cycle.yaml`, дефолт `seo/monitoring`; оттуда же читают `doctor`/`status`) + markdown-отчёт; `seo.db` через `db-sync`
 - **Gate:** freshness: снапшоту < 3 дней (warn) / < 7 дней (error) — проверяется в `doctor`
 - **Делегаты:** `delegate.google_data` (`claude-seo:seo-google`), `delegate.yandex_specialist`
 - **Общие правила:** `../_shared/policy-intake.md` (политики/бюджеты проекта — прочитать до платных действий), `../_shared/scorecard.md` (самооценка после задачи), `../_shared/rag-usage.md` (переиспользуй накопленное).
@@ -47,7 +47,7 @@ delegate(claude-seo:seo-google) → GSC/GA4 JSON ┐
 delegate(yandex-seo-specialist) → Webmaster/   ├→ snapshot-build.py --source X
   Metrika данные                               │   (нормализация в единую schema)
 psi-fetch.py URL → PSI JSON                    ┘                  ↓
-                                                    09-monitoring/YYYY-MM-DD-snapshot.json
+                                                    seo/monitoring/YYYY-MM-DD-snapshot.json (--output)
 ```
 
 **Единая schema `snapshot.json`:** см. `scripts/snapshot-build.py --help`. Поля: `queries[]`, `pages[]`, `cwv{}`, `behavior{}`, `sources[]`. Скрипт умеет мердж нескольких источников в один snapshot через `--merge`.
@@ -59,4 +59,4 @@ psi-fetch.py URL → PSI JSON                    ┘                  ↓
 - Изменения vs прошлый снапшот
 - Сезонные сравнения (если есть данные за прошлый период)
 
-**Выход:** `09-monitoring/YYYY-MM-DD-snapshot.json` + `*.md` отчёт по шаблону.
+**Выход:** `seo/monitoring/YYYY-MM-DD-snapshot.json` (в `snapshot-build.py` каталог задавай `--output` явно — `doctor`/`status` ищут снапшоты только в `monitoring.path`) + `*.md` отчёт по шаблону.
