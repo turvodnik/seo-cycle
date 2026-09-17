@@ -21,6 +21,7 @@ import datetime as dt
 import json
 import os
 import pathlib
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -34,6 +35,33 @@ from seo_cycle_core.logging_setup import setup_logging
 log = setup_logging("client-report")
 
 DEFAULT_ACCENT = "#0B57D0"
+
+ACCENT_COLOR_RE = re.compile(r"#[0-9a-fA-F]{3,8}$")
+
+
+def safe_accent_color(value: Any) -> str:
+    """Reject anything that isn't a plain #hex color, fall back to default.
+
+    T-106 fix-round 1: `agency.accent_color` from the project config reaches
+    `html_report.bar()` (unlike `html_page()`, `bar()` does not HTML-escape
+    its `color`) and is spliced straight into a `style="...background:{color}"`
+    attribute — a hostile value like `#112233"></div><script src="http://...">`
+    breaks out of the attribute and injects a live external <script>, which
+    is exactly what the "no external resources" invariant exists to prevent.
+    A `#`+hex check is sufficient here (no quotes, no angle brackets, no
+    `http`) and keeps the accent usable in CSS. `value` is untrusted YAML,
+    not necessarily a string (e.g. `accent_color: 123`) — check the type
+    before matching, instead of letting `re.fullmatch` raise a `TypeError`.
+    """
+    if isinstance(value, str) and ACCENT_COLOR_RE.fullmatch(value):
+        return value
+    if value:
+        print(
+            f"WARN: agency.accent_color {value!r} is not a plain #hex color — "
+            f"using the default ({DEFAULT_ACCENT}) instead",
+            file=sys.stderr,
+        )
+    return DEFAULT_ACCENT
 
 # T-106: one line per term, for the client-facing glossary block — plain
 # language, no internal tool/command names (this report is read by clients,
@@ -205,7 +233,7 @@ def build_report(project_root: pathlib.Path, cfg: dict[str, Any], period: str) -
         "agency": {
             "name": agency.get("name") or "",
             "contact": agency.get("contact") or "",
-            "accent_color": agency.get("accent_color") or DEFAULT_ACCENT,
+            "accent_color": safe_accent_color(agency.get("accent_color")),
             "footer_note": agency.get("footer_note") or "",
         },
         "sections": sections,

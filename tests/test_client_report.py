@@ -144,6 +144,46 @@ class ClientReportTest(unittest.TestCase):
         self.assertIn("kpi", ids)
         self.assertIn("forecast", ids)
 
+    def test_hostile_accent_color_cannot_inject_a_script(self) -> None:
+        # T-106 fix-round 1: bar() (unlike html_page()) does not HTML-escape
+        # its color= argument before splicing it into a style="..." attribute
+        # — a hostile accent_color config value used to break out of the
+        # attribute and inject a live external <script src="http...">.
+        # Needs >=2 snapshots so the top-10 strip (which calls bar()) renders.
+        hostile_cfg = CFG.replace(
+            'accent_color: "#8B5E3C"',
+            'accent_color: "#112233\\"></div><script src=\\"http://evil.example/x.js\\">//"',
+        )
+        (self.tmp / "seo-cycle.yaml").write_text(hostile_cfg, encoding="utf-8")
+        self.seed_artifacts()
+        proc = self.run_report("--write")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        html_body = (self.tmp / "seo" / "reports" / "client-report-2026-07.html").read_text(encoding="utf-8")
+        self.assertEqual(0, len(re.findall(r'<script src="http', html_body)))
+        self.assertNotIn("evil.example", html_body)
+        # The rejected value must actually be replaced by the default in the
+        # rendered artifact, not just kept out of the script — check the
+        # bar's fill color explicitly (the normal-fixture test already shows
+        # a valid #hex accent lands in the bar rows the same way).
+        self.assertIn("#0B57D0", html_body)
+        # The fallback to DEFAULT_ACCENT is an operator-facing diagnostic,
+        # not something silently swallowed.
+        self.assertIn("WARN", proc.stderr)
+        self.assertIn("accent_color", proc.stderr)
+
+    def test_non_string_accent_color_falls_back_without_crashing(self) -> None:
+        # T-106 fix-round 1: agency.accent_color is untrusted YAML, not
+        # necessarily a string — a bare `accent_color: 123` must not crash
+        # safe_accent_color()'s regex match with a TypeError.
+        int_cfg = CFG.replace('accent_color: "#8B5E3C"', "accent_color: 123")
+        (self.tmp / "seo-cycle.yaml").write_text(int_cfg, encoding="utf-8")
+        self.seed_artifacts()
+        proc = self.run_report("--write")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        html_body = (self.tmp / "seo" / "reports" / "client-report-2026-07.html").read_text(encoding="utf-8")
+        self.assertIn("#0B57D0", html_body)
+        self.assertIn("WARN", proc.stderr)
+
     def test_html_has_no_external_resources(self) -> None:
         # T-106 invariant: the client HTML stays self-contained (no
         # http(s):// anywhere — no external <script>/<link>/<img src=http…>).
