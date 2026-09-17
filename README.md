@@ -14,7 +14,7 @@
 
 ```bash
 seo-cycle pulse    # свежие позиции: fetch → snapshot → db → progress + алерты
-seo-cycle status   # дашборд: возраст снапшота, P0-приоритеты, approvals, что дальше
+seo-cycle status   # дашборд: возраст снапшота, P0-приоритеты, эскалации, что дальше
 seo-cycle web      # тот же дашборд визуально, в браузере (--open)
 ```
 

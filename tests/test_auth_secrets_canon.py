@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """T-108: one secrets canon — values go to the Keychain via `ai-secret`, never to files.
 
-Every test here runs against the stub broker from tests/helpers/ai_secret_stub.py
-on an isolated PATH; the real `ai-secret`/Keychain of the machine is never
-reached (the reviewer's staging: the suite stays green with PATH lacking
-~/.local/bin, because the tests never rely on it in the first place).
+Every test here runs against the stub broker from tests/helpers/ai_secret_stub.py,
+reached through `SEO_CYCLE_AI_SECRET` under a fake HOME; the real
+`ai-secret`/Keychain of the machine is never reached (the default
+`~/.local/bin/ai-secret` resolves inside an empty temp HOME, and PATH is not
+consulted by the code under test at all — wave K 🟡-1).
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ SCRIPTS = ROOT / "scripts"
 LAUNCHER = ROOT / "bin" / "seo-cycle"
 sys.path.insert(0, str(ROOT / "tests" / "helpers"))
 
-from ai_secret_stub import clean_env, install_stub, isolated_path, seed_store, stub_log  # noqa: E402
+from ai_secret_stub import broker_override, clean_env, install_stub, isolated_path, seed_store, stub_log  # noqa: E402
 
 SECRET_VALUE = "sk-live-T108-do-not-leak-9f3a"
 CONFIG_WITH_SCOPE = "project:\n  name: Test Project\n  brand_name_technical: testproj\n"
@@ -39,11 +40,16 @@ class _Base(unittest.TestCase):
         install_stub(self.stub_dir)
         self.empty_dir = self.tmp / "nothing"
         self.empty_dir.mkdir()
+        self.home = self.tmp / "home"  # empty: no ~/.local/bin/ai-secret here
+        self.home.mkdir()
         self.global_env = self.tmp / "env.global"
 
     def env(self, *, with_stub: bool, extra: dict[str, str] | None = None) -> dict[str, str]:
-        path = isolated_path(self.stub_dir) if with_stub else isolated_path(self.empty_dir)
-        return clean_env(path=path, extra={"SEO_CYCLE_GLOBAL_ENV": str(self.global_env), **(extra or {})})
+        # The stub is wired ONLY through the override variable; PATH never
+        # contains it, so a green run here also proves PATH is not consulted.
+        override = broker_override(self.stub_dir) if with_stub else {}
+        return clean_env(path=isolated_path(self.empty_dir), home=self.home,
+                         extra={"SEO_CYCLE_GLOBAL_ENV": str(self.global_env), **override, **(extra or {})})
 
     def auth(self, *args: str, with_stub: bool = True, stdin: str | None = None,
              extra: dict[str, str] | None = None) -> subprocess.CompletedProcess:
@@ -145,12 +151,144 @@ class AuthSetTest(_Base):
         (broken / "ai-secret").chmod(0o755)
         proc = subprocess.run(
             [sys.executable, str(SCRIPTS / "auth-assistant.py"), "set", "PERPLEXITY_API_KEY"],
-            cwd=self.project, env=clean_env(path=isolated_path(broken)),
+            cwd=self.project, env=clean_env(path=isolated_path(self.empty_dir), home=self.home,
+                                            extra=broker_override(broken)),
             input=SECRET_VALUE + "\n", text=True, capture_output=True, check=False, timeout=60,
         )
         self.assertEqual(proc.returncode, 14, proc.stderr)
         self.assertIn("OSStatus", proc.stderr)
         self.assertNotIn(SECRET_VALUE, proc.stdout + proc.stderr)
+
+
+class BrokerResolutionTest(_Base):
+    """Wave K 🟡-1: the broker is taken from `~/.local/bin/ai-secret` or the
+    explicit `SEO_CYCLE_AI_SECRET` — never from PATH (policy §5: PATH is
+    untrusted, and `ai-secret set` receives secret values over stdin)."""
+
+    def _sentinel(self, directory: pathlib.Path) -> pathlib.Path:
+        """A fake `ai-secret` that only logs it was called and fails."""
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "ai-secret").write_text(
+            f"#!{sys.executable}\nimport pathlib, sys\n"
+            "pathlib.Path(__file__).resolve().with_name('sentinel.log').write_text('CALLED\\n')\n"
+            "sys.exit(99)\n", encoding="utf-8")
+        (directory / "ai-secret").chmod(0o755)
+        return directory / "sentinel.log"
+
+    def test_stub_first_in_path_without_override_is_not_used(self) -> None:
+        # Control question 1 of the wave-K gate: a foreign `ai-secret` earlier
+        # in PATH must not receive the value. No override, empty HOME -> rc 3.
+        self.write_config()
+        env = clean_env(path=isolated_path(self.stub_dir), home=self.home,
+                        extra={"SEO_CYCLE_GLOBAL_ENV": str(self.global_env)})
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "auth-assistant.py"), "set", "PERPLEXITY_API_KEY"],
+            cwd=self.project, env=env, input=SECRET_VALUE + "\n",
+            text=True, capture_output=True, check=False, timeout=60,
+        )
+        self.assertEqual(proc.returncode, 3, proc.stderr)
+        self.assertIn("секреты не подключены", proc.stderr)
+        self.assertEqual(stub_log(self.stub_dir), "")  # the PATH stub never ran
+        self.assert_no_leak(proc)
+
+    def test_canonical_path_wins_over_a_sentinel_in_path(self) -> None:
+        # Sentinel first in PATH, real (stub) broker at $HOME/.local/bin — the
+        # canonical one is called, the sentinel log stays empty.
+        self.write_config()
+        sentinel_log = self._sentinel(self.tmp / "evil")
+        canonical_dir = self.home / ".local" / "bin"
+        install_stub(canonical_dir)
+        env = clean_env(path=isolated_path(self.tmp / "evil"), home=self.home,
+                        extra={"SEO_CYCLE_GLOBAL_ENV": str(self.global_env)})
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "auth-assistant.py"), "set", "PERPLEXITY_API_KEY"],
+            cwd=self.project, env=env, input=SECRET_VALUE + "\n",
+            text=True, capture_output=True, check=False, timeout=60,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("set testproj PERPLEXITY_API_KEY", stub_log(canonical_dir))
+        self.assertFalse(sentinel_log.exists())
+        self.assertNotIn(SECRET_VALUE, proc.stdout + proc.stderr)
+
+    def test_override_variable_selects_the_broker(self) -> None:
+        # Same sentinel in PATH; the override names the stub explicitly.
+        self.write_config()
+        sentinel_log = self._sentinel(self.tmp / "evil")
+        env = clean_env(path=isolated_path(self.tmp / "evil"), home=self.home,
+                        extra={"SEO_CYCLE_GLOBAL_ENV": str(self.global_env), **broker_override(self.stub_dir)})
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "auth-assistant.py"), "set", "PERPLEXITY_API_KEY"],
+            cwd=self.project, env=env, input=SECRET_VALUE + "\n",
+            text=True, capture_output=True, check=False, timeout=60,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("set testproj PERPLEXITY_API_KEY", stub_log(self.stub_dir))
+        self.assertFalse(sentinel_log.exists())
+
+    def test_override_pointing_nowhere_does_not_fall_back(self) -> None:
+        # An explicit override that does not exist = "not wired", not a quiet
+        # fallback to the default path or PATH (both hold a stub here).
+        self.write_config()
+        install_stub(self.home / ".local" / "bin")
+        env = clean_env(path=isolated_path(self.stub_dir), home=self.home,
+                        extra={"SEO_CYCLE_GLOBAL_ENV": str(self.global_env),
+                               "SEO_CYCLE_AI_SECRET": str(self.tmp / "missing" / "ai-secret")})
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "auth-assistant.py"), "set", "PERPLEXITY_API_KEY"],
+            cwd=self.project, env=env, input=SECRET_VALUE + "\n",
+            text=True, capture_output=True, check=False, timeout=60,
+        )
+        self.assertEqual(proc.returncode, 3, proc.stderr)
+        self.assertEqual(stub_log(self.stub_dir), "")
+        self.assertEqual(stub_log(self.home / ".local" / "bin"), "")
+
+    def test_project_env_file_cannot_name_the_broker(self) -> None:
+        # Hostile checkout: a cloned repo ships `.env` with SEO_CYCLE_AI_SECRET
+        # pointing at its own binary. `seo-cycle auth set` dispatches with the
+        # env chain (process > .env > env.global) — the name must not survive
+        # the file layer, the canonical broker must be the one called.
+        self.write_config()
+        sentinel_log = self._sentinel(self.project / "evil")
+        (self.project / ".env").write_text(
+            f"SEO_CYCLE_AI_SECRET={self.project / 'evil' / 'ai-secret'}\nHOME={self.project / 'evil'}\n",
+            encoding="utf-8")
+        canonical_dir = self.home / ".local" / "bin"
+        install_stub(canonical_dir)
+        env = clean_env(path=isolated_path(self.empty_dir), home=self.home,
+                        extra={"SEO_CYCLE_GLOBAL_ENV": str(self.global_env)})
+        proc = subprocess.run(
+            [sys.executable, str(LAUNCHER), "auth", "set", "PERPLEXITY_API_KEY"],
+            cwd=self.project, env=env, input=SECRET_VALUE + "\n",
+            text=True, capture_output=True, check=False, timeout=120,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("set testproj PERPLEXITY_API_KEY", stub_log(canonical_dir))
+        self.assertFalse(sentinel_log.exists())
+        self.assertNotIn(SECRET_VALUE, proc.stdout + proc.stderr)
+
+    def test_env_chain_drops_broker_names_from_files(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        from seo_cycle_core.env_profile import PROCESS_ONLY_NAMES, env_chain
+
+        self.assertEqual(PROCESS_ONLY_NAMES, {"SEO_CYCLE_AI_SECRET", "HOME"})
+        (self.project / ".env").write_text("SEO_CYCLE_AI_SECRET=/x/ai-secret\nHOME=/x\nKEYSO_API_TOKEN=k\n",
+                                            encoding="utf-8")
+        chain = env_chain(self.project, base={"OTHER": "1"})
+        self.assertEqual(chain, {"KEYSO_API_TOKEN": "k", "OTHER": "1"})
+
+    def test_relative_override_is_refused(self) -> None:
+        # `SEO_CYCLE_AI_SECRET=ai-secret` would resolve from the project cwd.
+        self.write_config()
+        install_stub(self.project)  # ./ai-secret inside the checkout
+        env = clean_env(path=isolated_path(self.empty_dir), home=self.home,
+                        extra={"SEO_CYCLE_GLOBAL_ENV": str(self.global_env), "SEO_CYCLE_AI_SECRET": "ai-secret"})
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "auth-assistant.py"), "set", "PERPLEXITY_API_KEY"],
+            cwd=self.project, env=env, input=SECRET_VALUE + "\n",
+            text=True, capture_output=True, check=False, timeout=60,
+        )
+        self.assertEqual(proc.returncode, 3, proc.stderr)
+        self.assertEqual(stub_log(self.project), "")
 
 
 class AuthLoginTest(_Base):
@@ -332,6 +470,48 @@ class GbpHelperTest(_Base):
         self.assertEqual(proc.returncode, 3, proc.stderr)
         self.assertIn("ai-secret", proc.stderr)
 
+    def test_store_scope_hands_the_token_to_the_broker_and_writes_only_the_date(self) -> None:
+        # Wave K 🟡-4: the branch after the code exchange — token -> `ai-secret
+        # set` over stdin, .env receives the mint date only. The exchange is
+        # stubbed (no network), the code arrives via --redirect-url (no server).
+        import contextlib
+        import importlib.util
+        import io
+        import os
+        from unittest import mock
+
+        sys.path.insert(0, str(SCRIPTS))
+        spec = importlib.util.spec_from_file_location("gbp_oauth_helper", SCRIPTS / "gbp-oauth-helper.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        minted_env = self.project / ".env"
+        env = {
+            "HOME": str(self.home), **broker_override(self.stub_dir),
+            "GBP_OAUTH_CLIENT_ID": "client-id", "GBP_OAUTH_CLIENT_SECRET": "client-secret-value",
+        }
+        argv = ["gbp-oauth-helper.py", "--store-scope", "testproj", "--minted-env", str(minted_env),
+                "--redirect-url", "http://localhost:8765/?code=auth-code-123"]
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, env), mock.patch.object(sys, "argv", argv), \
+                mock.patch.object(module, "exchange_code", return_value={"refresh_token": SECRET_VALUE}) as exchange, \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = module.main()
+        self.assertEqual(rc, 0, err.getvalue())
+        exchange.assert_called_once()
+        self.assertEqual(exchange.call_args.args[0], "auth-code-123")
+        log = stub_log(self.stub_dir)
+        self.assertIn("set testproj GBP_OAUTH_REFRESH_TOKEN", log)
+        self.assertNotIn(SECRET_VALUE, log)
+        # positive half: the value really travelled over the pipe into the stub's "keychain"
+        store = (self.stub_dir / "store.txt").read_text(encoding="utf-8")
+        self.assertIn(f"testproj/GBP_OAUTH_REFRESH_TOKEN={SECRET_VALUE}", store)
+        env_lines = minted_env.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(env_lines), 1, env_lines)
+        self.assertRegex(env_lines[0], r"^GBP_TOKEN_MINTED_AT=\d{4}-\d{2}-\d{2}$")
+        for text in (out.getvalue(), err.getvalue(), minted_env.read_text(encoding="utf-8")):
+            self.assertNotIn(SECRET_VALUE, text)
+        self.assertIn("значение не показывается", err.getvalue())
+
     def test_write_env_flag_is_gone(self) -> None:
         proc = subprocess.run(
             [sys.executable, str(SCRIPTS / "gbp-oauth-helper.py"), "--write-env", str(self.project / ".env")],
@@ -367,6 +547,20 @@ class NoSecretWritersLeftTest(unittest.TestCase):
         self.assertEqual(module.PROVIDERS["wordpress"]["env"], ["WP_BASE_URL", "WP_USER", "WP_APP_PASSWORD"])
         self.assertEqual(module.PROVIDERS["wordpress-mcp"]["env"], ["WP_API_URL", "WP_API_USERNAME", "WP_API_PASSWORD"])
         self.assertEqual(module.PROVIDERS["yandex"]["tier"], "minimum")  # T-100 kept
+
+    def test_every_provider_tier_is_known(self) -> None:
+        # Wave K 🟡-2: an unknown `tier` used to surface as a bare KeyError in
+        # `auth list`; every provider must map onto a TIER_LABELS key.
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("auth_assistant", SCRIPTS / "auth-assistant.py")
+        module = importlib.util.module_from_spec(spec)
+        sys.path.insert(0, str(SCRIPTS))
+        spec.loader.exec_module(module)
+        self.assertEqual(set(module.TIER_LABELS), {"minimum", "extra"})
+        for alias, provider in module.PROVIDERS.items():
+            tier = provider.get("tier", "extra")
+            self.assertIn(tier, module.TIER_LABELS, f"{alias}: unknown tier {tier!r}")
 
 
 if __name__ == "__main__":

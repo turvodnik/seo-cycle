@@ -29,7 +29,8 @@ git clone <репо проекта> ~/projects/<name>          # seo-cycle.yaml 
 
 # 3. Ключи: значения — только в хранилище секретов через `ai-secret` (T-108, политика §5).
 #    На Linux-VPS macOS Keychain нет: либо поставь совместимый брокер `ai-secret`
-#    (те же команды set/list/run), либо экспортируй переменные в окружение сервиса
+#    (те же команды set/list/run) в ~/.local/bin/ai-secret — PATH не смотрится, другой путь
+#    только через SEO_CYCLE_AI_SECRET=<абсолютный путь> в окружении сервиса, — либо экспортируй переменные в окружение сервиса
 #    (systemd `Environment=`/`EnvironmentFile=` с правами 0600 — вне git). В .env — только имена.
 # с брокером: ./.codex/skills/seo-cycle/scripts/auth-assistant.py set YANDEX_OAUTH_TOKEN --global
 #             ./.codex/skills/seo-cycle/scripts/auth-assistant.py set WP_APP_PASSWORD   # scope проекта

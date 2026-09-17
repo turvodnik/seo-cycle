@@ -17,7 +17,11 @@ kept for non-secret markers only (see its docstring).
 
 Write side (`store_secret`): the value is handed to `ai-secret set` through
 stdin — never argv, never a file, never printed. `find_ai_secret` resolves
-the binary on PATH; a public installation without it gets an honest error
+the binary at its canonical install path `~/.local/bin/ai-secret` — never
+through PATH (the broker receives secret values, so a directory earlier in
+PATH must not be able to substitute it; policy §5 treats PATH as untrusted).
+Another location is honoured only through the explicit `SEO_CYCLE_AI_SECRET`
+variable. A public installation without the broker gets an honest error
 (`AI_SECRET_MISSING`) instead of a quiet write somewhere weaker.
 """
 
@@ -26,7 +30,6 @@ from __future__ import annotations
 import os
 import pathlib
 import re
-import shutil
 import subprocess
 
 # Set by bin/seo-cycle on the process it re-executes under `ai-secret run`;
@@ -49,8 +52,25 @@ PULSE_KEY_NAMES: tuple[str, ...] = (
 SCOPE_RE = re.compile(r"^[a-z0-9._-]{1,64}$")
 GLOBAL_SCOPE = "global"
 
+# Canonical location of the broker. PATH is deliberately NOT consulted:
+# `auth set`/`gbp-oauth-helper` hand secret values to this binary over stdin
+# and the launcher execs it, so a look-up through PATH would let any earlier
+# directory substitute the receiver of those values. The only other place
+# that is honoured is the explicit override variable below (tests point it
+# at their stub broker; a non-standard install points it at its binary).
+AI_SECRET_DEFAULT = pathlib.Path("~/.local/bin/ai-secret")
+AI_SECRET_ENV = "SEO_CYCLE_AI_SECRET"
+
+# Names that `env_chain` takes from the PROCESS environment only, never from
+# a project `.env` or `env.global`: they select WHERE secret values go (the
+# broker binary, and HOME behind the default path). A cloned repository ships
+# its `.env`; letting it name the broker would hand every `auth set` value to
+# a file inside that repository.
+PROCESS_ONLY_NAMES: frozenset[str] = frozenset({AI_SECRET_ENV, "HOME"})
+
 AI_SECRET_MISSING = (
-    "секреты не подключены: не найден `ai-secret` в PATH. Установи ai-secret "
+    f"секреты не подключены: не найден `ai-secret` по пути `{AI_SECRET_DEFAULT}` "
+    f"(другой путь — только через переменную {AI_SECRET_ENV}; PATH не используется). Установи ai-secret "
     "(значения ключей живут в macOS Keychain, доступ — `ai-secret run <scope> -- <команда>`) "
     "или экспортируй нужные переменные в окружение сессии. В файлы значения не записываются (§5)."
 )
@@ -95,6 +115,8 @@ def env_chain(project_root: pathlib.Path | None = None, *, base: dict[str, str] 
     merged = dict(parse_env_file(global_env_path()))
     if project_root is not None:
         merged.update(parse_env_file(project_env_path(project_root)))
+    for name in PROCESS_ONLY_NAMES:
+        merged.pop(name, None)  # file-supplied broker/HOME never reach a child process
     merged.update(os.environ if base is None else base)
     return merged
 
@@ -141,8 +163,22 @@ def upsert_env_var(path: pathlib.Path, key: str, value: str) -> pathlib.Path:
 
 
 def find_ai_secret() -> str | None:
-    """Path to the `ai-secret` broker on PATH, or None (secrets not wired)."""
-    return shutil.which("ai-secret")
+    """Path to the `ai-secret` broker, or None (secrets not wired).
+
+    `SEO_CYCLE_AI_SECRET` set → that path and nothing else (an override that
+    points nowhere or is not absolute is an honest "not wired", never a
+    fallback to the default or to PATH — a relative path would resolve from
+    the project cwd, i.e. from a possibly untrusted checkout). Unset →
+    `~/.local/bin/ai-secret`. PATH is never searched — see the module
+    docstring for why; `env_chain` keeps the variable out of `.env` files.
+    """
+    override = os.environ.get(AI_SECRET_ENV, "").strip()
+    candidate = pathlib.Path(override).expanduser() if override else AI_SECRET_DEFAULT.expanduser()
+    if not candidate.is_absolute():
+        return None
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        return str(candidate)
+    return None
 
 
 def secret_scope(cfg: dict | None) -> str | None:

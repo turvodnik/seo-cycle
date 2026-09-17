@@ -12,8 +12,9 @@ own bin/seo-cycle instead. A guard env var prevents infinite recursion.
 Secrets (T-108, policy §5): key values live in the macOS Keychain and reach
 a process only through `ai-secret run <scope> -- <command>`. For the
 pulse-family commands (SECRET_COMMANDS) this launcher checks whether the
-pulse keys are already in the environment; if not and `ai-secret` is on
-PATH, it re-executes itself under `ai-secret run <scope>` (scope =
+pulse keys are already in the environment; if not and `ai-secret` is
+installed at `~/.local/bin/ai-secret` (or named by `SEO_CYCLE_AI_SECRET`;
+PATH is never searched), it re-executes itself under `ai-secret run <scope>` (scope =
 `project.brand_name_technical`), otherwise it prints ONE warning line to
 stderr and continues — a run on stale data is never silent (I-061). Keys
 already exported by hand are never overridden (`ai-secret run` would put

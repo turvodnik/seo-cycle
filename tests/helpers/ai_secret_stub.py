@@ -2,9 +2,12 @@
 
 Every test of the secrets canon runs against this stub, never against the
 real macOS Keychain: the stub is a small Python script written into a temp
-directory as an executable named `ai-secret`, and the test builds a PATH
-that contains that directory plus the bare system dirs — so whatever the
-developer machine has in ~/.local/bin is invisible to the suite.
+directory as an executable named `ai-secret`, and the test reaches it the
+only way the code under test allows — `SEO_CYCLE_AI_SECRET=<stub path>`
+(`find_ai_secret` never searches PATH, wave K 🟡-1). `clean_env` also
+points HOME at an empty temp directory, so the default
+`~/.local/bin/ai-secret` of the developer machine is invisible to the suite
+even when no override is set (the "secrets not wired" tests).
 
 Behaviour (mirrors the real CLI's contract as far as the tests need it):
   list <scope>          -> "scope: X", "keys: N", one name per line
@@ -108,16 +111,31 @@ def seed_store(directory: pathlib.Path, entries: dict[str, str]) -> None:
 
 
 def isolated_path(*stub_dirs: pathlib.Path) -> str:
-    """PATH with only the stub dir(s) and bare system dirs — no real ai-secret."""
+    """PATH with only the given dir(s) and bare system dirs — no real ai-secret.
+
+    Since wave K PATH no longer selects the broker; the tests still build an
+    isolated PATH so that a stub placed there proves it is NOT picked up.
+    """
     return os.pathsep.join([*(str(d) for d in stub_dirs), "/usr/bin", "/bin"])
 
 
-def clean_env(*, path: str, extra: dict[str, str] | None = None, drop_prefixes: tuple[str, ...] = ()) -> dict[str, str]:
-    """Copy of os.environ with PATH replaced and secret-looking names dropped."""
+def broker_override(stub_dir: pathlib.Path) -> dict[str, str]:
+    """The one legitimate way to point the code under test at a stub broker."""
+    return {"SEO_CYCLE_AI_SECRET": str(stub_dir / "ai-secret")}
+
+
+def clean_env(*, path: str, home: pathlib.Path, extra: dict[str, str] | None = None,
+              drop_prefixes: tuple[str, ...] = ()) -> dict[str, str]:
+    """Copy of os.environ with PATH and HOME replaced and secret-looking names dropped.
+
+    `home` must be an empty temp directory: `find_ai_secret` defaults to
+    `$HOME/.local/bin/ai-secret`, and the real one must never be reached.
+    """
     drop = ("YANDEX_", "GOOGLE_", "GBP_", "PERPLEXITY", "TELEGRAM_", "WP_", "AI_SECRET_", "SEO_CYCLE_SECRETS",
-            *drop_prefixes)
+            "SEO_CYCLE_AI_SECRET", *drop_prefixes)
     env = {k: v for k, v in os.environ.items() if not k.startswith(drop)}
     env["PATH"] = path
+    env["HOME"] = str(home)
     if extra:
         env.update(extra)
     return env
