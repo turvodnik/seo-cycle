@@ -61,6 +61,13 @@ GLOBAL_SCOPE = "global"
 AI_SECRET_DEFAULT = pathlib.Path("~/.local/bin/ai-secret")
 AI_SECRET_ENV = "SEO_CYCLE_AI_SECRET"
 
+# Names that `env_chain` takes from the PROCESS environment only, never from
+# a project `.env` or `env.global`: they select WHERE secret values go (the
+# broker binary, and HOME behind the default path). A cloned repository ships
+# its `.env`; letting it name the broker would hand every `auth set` value to
+# a file inside that repository.
+PROCESS_ONLY_NAMES: frozenset[str] = frozenset({AI_SECRET_ENV, "HOME"})
+
 AI_SECRET_MISSING = (
     f"секреты не подключены: не найден `ai-secret` по пути `{AI_SECRET_DEFAULT}` "
     f"(другой путь — только через переменную {AI_SECRET_ENV}; PATH не используется). Установи ai-secret "
@@ -108,6 +115,8 @@ def env_chain(project_root: pathlib.Path | None = None, *, base: dict[str, str] 
     merged = dict(parse_env_file(global_env_path()))
     if project_root is not None:
         merged.update(parse_env_file(project_env_path(project_root)))
+    for name in PROCESS_ONLY_NAMES:
+        merged.pop(name, None)  # file-supplied broker/HOME never reach a child process
     merged.update(os.environ if base is None else base)
     return merged
 
@@ -157,12 +166,16 @@ def find_ai_secret() -> str | None:
     """Path to the `ai-secret` broker, or None (secrets not wired).
 
     `SEO_CYCLE_AI_SECRET` set → that path and nothing else (an override that
-    points nowhere is an honest "not wired", never a fallback to the default
-    or to PATH). Unset → `~/.local/bin/ai-secret`. PATH is never searched —
-    see the module docstring for why.
+    points nowhere or is not absolute is an honest "not wired", never a
+    fallback to the default or to PATH — a relative path would resolve from
+    the project cwd, i.e. from a possibly untrusted checkout). Unset →
+    `~/.local/bin/ai-secret`. PATH is never searched — see the module
+    docstring for why; `env_chain` keeps the variable out of `.env` files.
     """
     override = os.environ.get(AI_SECRET_ENV, "").strip()
     candidate = pathlib.Path(override).expanduser() if override else AI_SECRET_DEFAULT.expanduser()
+    if not candidate.is_absolute():
+        return None
     if candidate.is_file() and os.access(candidate, os.X_OK):
         return str(candidate)
     return None

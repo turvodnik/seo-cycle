@@ -242,6 +242,54 @@ class BrokerResolutionTest(_Base):
         self.assertEqual(stub_log(self.stub_dir), "")
         self.assertEqual(stub_log(self.home / ".local" / "bin"), "")
 
+    def test_project_env_file_cannot_name_the_broker(self) -> None:
+        # Hostile checkout: a cloned repo ships `.env` with SEO_CYCLE_AI_SECRET
+        # pointing at its own binary. `seo-cycle auth set` dispatches with the
+        # env chain (process > .env > env.global) — the name must not survive
+        # the file layer, the canonical broker must be the one called.
+        self.write_config()
+        sentinel_log = self._sentinel(self.project / "evil")
+        (self.project / ".env").write_text(
+            f"SEO_CYCLE_AI_SECRET={self.project / 'evil' / 'ai-secret'}\nHOME={self.project / 'evil'}\n",
+            encoding="utf-8")
+        canonical_dir = self.home / ".local" / "bin"
+        install_stub(canonical_dir)
+        env = clean_env(path=isolated_path(self.empty_dir), home=self.home,
+                        extra={"SEO_CYCLE_GLOBAL_ENV": str(self.global_env)})
+        proc = subprocess.run(
+            [sys.executable, str(LAUNCHER), "auth", "set", "PERPLEXITY_API_KEY"],
+            cwd=self.project, env=env, input=SECRET_VALUE + "\n",
+            text=True, capture_output=True, check=False, timeout=120,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("set testproj PERPLEXITY_API_KEY", stub_log(canonical_dir))
+        self.assertFalse(sentinel_log.exists())
+        self.assertNotIn(SECRET_VALUE, proc.stdout + proc.stderr)
+
+    def test_env_chain_drops_broker_names_from_files(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        from seo_cycle_core.env_profile import PROCESS_ONLY_NAMES, env_chain
+
+        self.assertEqual(PROCESS_ONLY_NAMES, {"SEO_CYCLE_AI_SECRET", "HOME"})
+        (self.project / ".env").write_text("SEO_CYCLE_AI_SECRET=/x/ai-secret\nHOME=/x\nKEYSO_API_TOKEN=k\n",
+                                            encoding="utf-8")
+        chain = env_chain(self.project, base={"OTHER": "1"})
+        self.assertEqual(chain, {"KEYSO_API_TOKEN": "k", "OTHER": "1"})
+
+    def test_relative_override_is_refused(self) -> None:
+        # `SEO_CYCLE_AI_SECRET=ai-secret` would resolve from the project cwd.
+        self.write_config()
+        install_stub(self.project)  # ./ai-secret inside the checkout
+        env = clean_env(path=isolated_path(self.empty_dir), home=self.home,
+                        extra={"SEO_CYCLE_GLOBAL_ENV": str(self.global_env), "SEO_CYCLE_AI_SECRET": "ai-secret"})
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "auth-assistant.py"), "set", "PERPLEXITY_API_KEY"],
+            cwd=self.project, env=env, input=SECRET_VALUE + "\n",
+            text=True, capture_output=True, check=False, timeout=60,
+        )
+        self.assertEqual(proc.returncode, 3, proc.stderr)
+        self.assertEqual(stub_log(self.project), "")
+
 
 class AuthLoginTest(_Base):
     def test_login_prompts_each_var_and_stores_in_keychain(self) -> None:
