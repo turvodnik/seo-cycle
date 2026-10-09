@@ -269,11 +269,14 @@ ff_main_or_report() {
     local branch ahead behind
     git -C "$local_dir" rev-parse --verify -q refs/remotes/origin/main >/dev/null || return 0
     branch="$(git -C "$local_dir" symbolic-ref -q --short HEAD 2>/dev/null || true)"
-    [ "$branch" = "main" ] || return 0
+    if [ "$branch" != "main" ]; then
+        warn "$label: хранилище не на main (${branch:-detached}) — main не обновлён; верните хранилище на main"
+        return 1
+    fi
     ahead="$(git -C "$local_dir" rev-list --count origin/main..main)"
     behind="$(git -C "$local_dir" rev-list --count main..origin/main)"
     if [ "$ahead" -gt 0 ]; then
-        warn "$label: хранилище расходится с origin: $ahead локальных коммитов; vendor только для чтения — перенесите правки в dev-клон"
+        warn "$label: main хранилища расходится с origin/main (локальные коммиты или переписанный origin): коммитов только у хранилища: $ahead; vendor только для чтения — свои правки переносите в dev-клон, иначе удалите хранилище и поставьте заново"
         return 1
     fi
     if [ "$behind" -gt 0 ]; then
