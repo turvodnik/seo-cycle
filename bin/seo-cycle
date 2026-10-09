@@ -44,10 +44,17 @@ def _find_project_pin(start: pathlib.Path) -> pathlib.Path | None:
     return link.resolve() if link is not None else None
 
 
-def _trusted_versions_root() -> pathlib.Path:
-    # Same store location rule as install.sh (SHARED_DIR/versions).
+def _trusted_versions_roots() -> list[pathlib.Path]:
+    # The store this launcher runs from is <shared>/seo-cycle, its snapshots
+    # live in <shared>/versions — derived from our own location, so a custom
+    # SEO_CYCLE_SHARED_DIR at install time keeps working when the shell that
+    # runs seo-cycle no longer exports it (T-159 review round 1). The env/HOME
+    # rule of install.sh is kept as a second root.
     shared = os.environ.get("SEO_CYCLE_SHARED_DIR") or str(pathlib.Path.home() / ".codex" / "vendor")
-    return (pathlib.Path(shared).expanduser() / "versions").resolve()
+    return [
+        (SKILL_ROOT.resolve().parent / "versions").resolve(),
+        (pathlib.Path(shared).expanduser() / "versions").resolve(),
+    ]
 
 
 def _is_trusted_pin(link: pathlib.Path) -> bool:
@@ -57,10 +64,11 @@ def _is_trusted_pin(link: pathlib.Path) -> bool:
     bin/seo-cycle`; exec'ing it would run foreign code and hand it the value
     piped into `auth set`.
     """
-    if not link.is_symlink():
+    if not link.is_symlink():  # defense in depth: attach always makes a symlink
         return False
     try:
-        return link.resolve().is_relative_to(_trusted_versions_root())
+        target = link.resolve()
+        return any(target.is_relative_to(root) for root in _trusted_versions_roots())
     except (OSError, ValueError):
         return False
 
@@ -84,7 +92,7 @@ def _maybe_redirect_to_project_pin() -> None:
     if not _is_trusted_pin(_find_pin_link(pathlib.Path.cwd())):
         print(
             f"⚠ seo-cycle: {pinned} — не симлинк в снапшот версии "
-            f"({_trusted_versions_root()}); не исполняю его, работает версия хранилища",
+            f"({' или '.join(str(r) for r in _trusted_versions_roots())}); не исполняю его, работает версия хранилища",
             file=sys.stderr,
         )
         return

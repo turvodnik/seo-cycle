@@ -12,6 +12,7 @@ import os
 import pathlib
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -938,6 +939,38 @@ class WorktreeNotClonedOverTest(unittest.TestCase):
         )
 
 
+class EnvExampleWritableFromSnapshotTest(InstallerFixture):
+    """T-159 F1 (review round 1): a real attach creates `.env.example` in
+    install.sh ensure_env_template() BEFORE init-project.sh runs, copying it
+    out of the a-w version snapshot. Without `chmod u+w` it lands 0444."""
+
+    CHMOD = 'chmod u+w "$project_dir/.env.example"'
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.seed / ".env.example").write_text("NEURON_API_KEY=\n", encoding="utf-8")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "env example")
+        _git(self.seed, "tag", "v1.1.0")
+        _git(self.seed, "push", "-q", "origin", "main", "--tags")
+
+    def env_example_mode(self, proc: subprocess.CompletedProcess) -> int:
+        self.assertEqual(proc.returncode, 0, proc.stdout[-1500:] + proc.stderr[-1500:])
+        snapshot_copy = self.shared / "versions" / "seo-cycle" / "v1.1.0" / ".env.example"
+        self.assertFalse(snapshot_copy.stat().st_mode & stat.S_IWUSR, "snapshot must be read-only")
+        return (self.project / ".env.example").stat().st_mode
+
+    def test_attach_creates_owner_writable_env_example(self) -> None:
+        mode = self.env_example_mode(
+            self.run_install("--project", str(self.project), "--pin", "v1.1.0", "--skip-init"))
+        self.assertTrue(mode & stat.S_IWUSR, f".env.example is read-only ({oct(mode & 0o777)})")
+
+    def test_reverting_the_chmod_reintroduces_read_only_env_example(self) -> None:
+        mode = self.env_example_mode(
+            self.run_install_without(self.CHMOD, "--project", str(self.project), "--pin", "v1.1.0", "--skip-init"))
+        self.assertFalse(mode & stat.S_IWUSR, "without the chmod the copy must stay 0444 — else the guard tests nothing")
+
+
 class ShimPinSelectionTest(unittest.TestCase):
     """Exercises bin/seo-cycle's own upward-search redirect (D7) directly,
     independent of install.sh — two fake SKILL_ROOTs, one is the project pin."""
@@ -980,6 +1013,18 @@ class ShimPinSelectionTest(unittest.TestCase):
     def test_global_shim_run_from_project_redirects_to_pin(self) -> None:
         proc = self.run_shim(self.project)
         self.assertEqual(proc.stdout.strip(), "versions/seo-cycle/project-pin", proc.stdout + proc.stderr)
+
+    def test_pin_trusted_without_shared_dir_env(self) -> None:
+        # T-159 review round 1: installed with a custom SEO_CYCLE_SHARED_DIR,
+        # run from a shell that does not export it — the pin next to the
+        # launcher's own store (<store>/../versions) must still be trusted.
+        empty_home = self.tmp / "empty-home"
+        empty_home.mkdir()
+        self.env.pop("SEO_CYCLE_SHARED_DIR", None)
+        self.env["HOME"] = str(empty_home)
+        proc = self.run_shim(self.project)
+        self.assertEqual(proc.stdout.strip(), "versions/seo-cycle/project-pin", proc.stdout + proc.stderr)
+        self.assertNotIn("не симлинк в снапшот версии", proc.stderr)
 
     def plant_hostile_launcher(self, project: pathlib.Path) -> pathlib.Path:
         marker = self.tmp / "PWNED"
