@@ -14,6 +14,7 @@ import argparse
 import json
 import pathlib
 import re
+import sys
 from typing import Any
 
 from research_package_repair_core import (
@@ -207,7 +208,19 @@ def main() -> int:
     parser.add_argument("--format", choices=("json", "md"), default="md")
     args = parser.parse_args()
 
-    report = build_report(pathlib.Path(args.draft), pathlib.Path(args.outline))
+    # Call/config errors (missing file, unparsable outline) are exit 2 with one
+    # line — not a traceback; 1 stays reserved for "gate failed" (T-182 F12).
+    try:
+        report = build_report(pathlib.Path(args.draft), pathlib.Path(args.outline))
+    except FileNotFoundError as exc:
+        print(f"файл не найден: {exc.filename}", file=sys.stderr)
+        return 2
+    except json.JSONDecodeError as exc:
+        print(f"outline не разобран: {args.outline}: {exc.msg}", file=sys.stderr)
+        return 2
+    except (IsADirectoryError, PermissionError, UnicodeDecodeError) as exc:
+        print(f"файл не прочитан: {getattr(exc, 'filename', None) or args.draft}: {exc}", file=sys.stderr)
+        return 2
     if args.write:
         write_outputs(pathlib.Path(args.draft), report)
     print_report(report, args.format, render_markdown(report))

@@ -183,5 +183,42 @@ class WebappTest(unittest.TestCase):
         self.assertEqual(status, 400)
 
 
+class WebLauncherSignalTest(unittest.TestCase):
+    """T-182 F13: `seo-cycle web` replaces itself with the server (exec), so
+    SIGTERM sent to the launcher PID stops the server and frees the port."""
+
+    def test_sigterm_to_launcher_frees_port(self) -> None:
+        import os
+        import signal
+        import socket
+        import subprocess
+        import time
+
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-web-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        env = {**os.environ, "HOME": str(tmp)}
+        proc = subprocess.Popen(
+            [sys.executable, str(ROOT / "bin" / "seo-cycle"), "web", "--port", str(port)],
+            cwd=tmp, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        self.addCleanup(lambda: proc.poll() is None and proc.kill())
+
+        def listening() -> bool:
+            with socket.socket() as probe:
+                probe.settimeout(0.3)
+                return probe.connect_ex(("127.0.0.1", port)) == 0
+
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not listening():
+            time.sleep(0.1)
+        self.assertTrue(listening(), "web server did not start")
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=3)  # the launcher PID *is* the server after exec
+        self.assertFalse(listening(), "port still held after SIGTERM")
+
+
 if __name__ == "__main__":
     unittest.main()
