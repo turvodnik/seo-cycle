@@ -1688,6 +1688,48 @@ class OrphanedWorktreeRefusesTest(unittest.TestCase):
         )
 
 
+class UpdateStoreFastForwardMainTest(InstallerFixture):
+    """T-181: --update must move the store's `main` to origin/main (ff-only)
+    and refuse (rc 1, no reset) when the store has diverged."""
+
+    def _push_commits(self, n: int) -> None:
+        for i in range(n):
+            (self.seed / "VERSION").write_text(f"1.0.{i + 1}\n", encoding="utf-8")
+            _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+            _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", f"c{i}")
+        _git(self.seed, "push", "-q", "origin", "main")
+
+    def _main(self) -> str:
+        return _git(self.core, "rev-parse", "main").stdout.strip()
+
+    def test_update_ff_main_to_origin(self) -> None:
+        self._push_commits(2)
+        target = _git(self.origin, "rev-parse", "main").stdout.strip()
+        self.assertNotEqual(self._main(), target)
+        proc = self.run_install("--update")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(self._main(), target, proc.stdout + proc.stderr)
+        self.assertIn("main →", proc.stdout + proc.stderr)
+
+    def test_update_diverged_store_refused(self) -> None:
+        (self.core / "LOCAL").write_text("x\n", encoding="utf-8")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "add", "-A")
+        _git(self.core, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "-m", "local")
+        self._push_commits(1)
+        before = self._main()
+        proc = self.run_install("--update")
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertEqual(self._main(), before, "расходящийся main трогать нельзя")
+        self.assertIn("расходится", proc.stdout + proc.stderr)
+
+    def test_update_already_current_is_quiet(self) -> None:
+        before = self._main()
+        proc = self.run_install("--update")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(self._main(), before)
+        self.assertNotIn("main →", proc.stdout + proc.stderr)
+
+
 class UpdateStoreForceTagsTest(InstallerFixture):
     """T-068 / F-10: --update must FORCE-rewrite a tag that moved on origin
     (a plain `git fetch --tags` silently refuses to do that, exit code 0 —

@@ -260,6 +260,33 @@ fetch_tags_or_report() {
     return "$rc"
 }
 
+# T-181: --update used to fetch tags/commits but leave the store's `main`
+# behind origin/main. Fast-forward only: a ff creates no commit and cannot
+# overwrite local work (vendor rules forbid commit/tag/reset, not ff). A
+# diverged store (local commits) is refused with rc 1 and left untouched.
+ff_main_or_report() {
+    local local_dir="$1" label="$2"
+    local branch ahead behind
+    git -C "$local_dir" rev-parse --verify -q refs/remotes/origin/main >/dev/null || return 0
+    branch="$(git -C "$local_dir" symbolic-ref -q --short HEAD 2>/dev/null || true)"
+    [ "$branch" = "main" ] || return 0
+    ahead="$(git -C "$local_dir" rev-list --count origin/main..main)"
+    behind="$(git -C "$local_dir" rev-list --count main..origin/main)"
+    if [ "$ahead" -gt 0 ]; then
+        warn "$label: хранилище расходится с origin: $ahead локальных коммитов; vendor только для чтения — перенесите правки в dev-клон"
+        return 1
+    fi
+    if [ "$behind" -gt 0 ]; then
+        if git -C "$local_dir" merge --ff-only origin/main --quiet; then
+            log "$label: main → $(git -C "$local_dir" rev-parse --short HEAD)"
+        else
+            warn "$label: fast-forward main не удался (локальные изменения мешают?)"
+            return 1
+        fi
+    fi
+    return 0
+}
+
 install_or_update_repo() {
     local repo="$1" dest="$2" label="$3"
     mkdir -p "$(dirname "$dest")"
@@ -656,6 +683,7 @@ update_store_only() {
             # the three places that pull tags cannot drift apart again.
             if fetch_tags_or_report "$local_dir" "$label"; then
                 log "✓ $label: fetch ok, latest tag: $(latest_tag "$local_dir")"
+                ff_main_or_report "$local_dir" "$label" || overall_rc=1
             else
                 overall_rc=1
             fi
