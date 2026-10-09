@@ -117,6 +117,18 @@ class WebappTest(unittest.TestCase):
         self.assertEqual(self.raw("GET", "/api/projects", {"Host": f"127.0.0.1:{port}", **token}), 200)
         self.assertEqual(self.raw("GET", "/api/projects", {"Host": f"localhost:{port}", **token}), 200)
 
+    def test_post_protected_route_checks_host_and_origin(self) -> None:
+        # The host/origin guard must also sit in do_POST, not only in do_GET.
+        # A bogus action keeps the allowed path side-effect free (400, never 403).
+        port = self.server.server_address[1]
+        body = json.dumps({"project": str(self.tmp), "action": "bogus", "id": "x1"}).encode("utf-8")
+        good = {"Host": f"127.0.0.1:{port}", "X-Auth-Token": "test-token-123",
+                "Content-Type": "application/json"}
+        self.assertEqual(self.raw("POST", "/api/ticket", {**good, "Host": "attacker.example"}, body), 403)
+        self.assertEqual(self.raw("POST", "/api/ticket", {**good, "Origin": "http://attacker.example"}, body), 403)
+        self.assertEqual(self.raw("POST", "/api/ticket", good, body), 400)
+        self.assertEqual(self.raw("POST", "/api/ticket", {**good, "Origin": f"http://127.0.0.1:{port}"}, body), 400)
+
     def test_foreign_origin_is_rejected(self) -> None:
         port = self.server.server_address[1]
         base = {"Host": f"127.0.0.1:{port}", "X-Auth-Token": "test-token-123"}
