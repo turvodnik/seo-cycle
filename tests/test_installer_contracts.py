@@ -1722,6 +1722,30 @@ class UpdateStoreFastForwardMainTest(InstallerFixture):
         self.assertEqual(self._main(), before, "расходящийся main трогать нельзя")
         self.assertIn("расходится", proc.stdout + proc.stderr)
 
+    def test_update_detached_head_refused(self) -> None:
+        before = self._main()
+        _git(self.core, "checkout", "-q", "--detach")
+        self._push_commits(1)
+        proc = self.run_install("--update")
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("не на main", proc.stdout + proc.stderr)
+        self.assertEqual(self._main(), before)
+
+    def test_update_rewritten_origin_refused(self) -> None:
+        before = self._main()
+        _git(self.seed, "reset", "-q", "--hard", "HEAD~0")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "base2")
+        _git(self.seed, "push", "-q", "origin", "main")
+        _git(self.core, "pull", "-q", "--ff-only", "origin", "main")
+        before = self._main()
+        _git(self.seed, "reset", "-q", "--hard", "HEAD~1")
+        _git(self.seed, "-c", "user.email=t@t.t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "rewritten")
+        _git(self.seed, "push", "-q", "-f", "origin", "main")
+        proc = self.run_install("--update")
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("расходится", proc.stdout + proc.stderr)
+        self.assertEqual(self._main(), before)
+
     def test_update_already_current_is_quiet(self) -> None:
         before = self._main()
         proc = self.run_install("--update")
