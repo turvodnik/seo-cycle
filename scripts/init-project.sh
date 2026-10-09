@@ -251,6 +251,10 @@ echo "Создаю $TARGET..."
 
 # Копируем шаблон и подменяем ключевые поля через sed
 cp "$TEMPLATE" "$TARGET"
+# T-159 F1: cp carries the source mode, and the version snapshot is a-w
+# (install.sh ensure_worktree) — without this the operator's own config and
+# every later --write/--apply into it fail with PermissionError.
+chmod u+w "$TARGET"
 
 # macOS / Linux compatible in-place sed. Keep this as a function;
 # putting `sed -i ''` into a string variable creates backup files named *'' on macOS.
@@ -313,6 +317,7 @@ echo "ℹ region_profile: $REGION_PROFILE (для $CTRY_CODE) — источни
 # Копируем .env.example если есть
 if [ -f "$ENV_TEMPLATE" ] && [ ! -f "$TARGET_ENV" ]; then
     cp "$ENV_TEMPLATE" "$TARGET_ENV"
+    chmod u+w "$TARGET_ENV"  # T-159 F1: snapshot templates are read-only
     echo "✓ $TARGET_ENV скопирован (заполни перед использованием API-источников)"
 fi
 
@@ -338,6 +343,7 @@ copy_policy_template() {
         return 0
     fi
     cp "$src" "$dest"
+    chmod u+w "$dest"  # T-159 F1: snapshot templates are read-only
     sed_in_place "s|__DATE__|$TODAY|g" "$dest"
     sed_in_place "s|__PROJECT_NAME__|$PROJECT_NAME|g" "$dest"
     sed_in_place "s|__DOMAIN__|$DOMAIN|g" "$dest"

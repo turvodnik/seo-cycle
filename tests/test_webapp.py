@@ -89,10 +89,39 @@ class WebappTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload[0]["name"], "webapp-test")
 
-    def test_login_without_password_returns_token(self) -> None:
+    def test_login_without_password_does_not_hand_out_token(self) -> None:
+        # T-159 / QA v3.0.0 F5: this used to return the token to anyone.
         status, payload = self.request("/api/login", token=None, body={})
-        self.assertEqual(status, 200)
-        self.assertEqual(payload["token"], "test-token-123")
+        self.assertEqual(status, 403)
+        self.assertNotIn("token", payload)
+        self.assertNotIn("test-token-123", json.dumps(payload))
+
+    def raw(self, method: str, path: str, headers: dict[str, str], body: bytes | None = None) -> int:
+        import http.client
+        conn = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=30)
+        conn.putrequest(method, path, skip_host=True)
+        for key, value in headers.items():
+            conn.putheader(key, value)
+        conn.putheader("Content-Length", str(len(body or b"")))
+        conn.endheaders(body)
+        status = conn.getresponse().status
+        conn.close()
+        return status
+
+    def test_foreign_host_header_is_rejected(self) -> None:
+        # DNS rebinding: the browser sends the attacker's domain as Host.
+        port = self.server.server_address[1]
+        token = {"X-Auth-Token": "test-token-123"}
+        self.assertEqual(self.raw("GET", "/api/projects", {"Host": "attacker.example", **token}), 403)
+        self.assertEqual(self.raw("POST", "/api/login", {"Host": "attacker.example"}, b"{}"), 403)
+        self.assertEqual(self.raw("GET", "/api/projects", {"Host": f"127.0.0.1:{port}", **token}), 200)
+        self.assertEqual(self.raw("GET", "/api/projects", {"Host": f"localhost:{port}", **token}), 200)
+
+    def test_foreign_origin_is_rejected(self) -> None:
+        port = self.server.server_address[1]
+        base = {"Host": f"127.0.0.1:{port}", "X-Auth-Token": "test-token-123"}
+        self.assertEqual(self.raw("GET", "/api/projects", {**base, "Origin": "http://attacker.example"}), 403)
+        self.assertEqual(self.raw("GET", "/api/projects", {**base, "Origin": f"http://127.0.0.1:{port}"}), 200)
 
     def test_login_with_password(self) -> None:
         self.server.dashboard_state["password"] = "s3cret"

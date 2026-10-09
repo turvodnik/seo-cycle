@@ -4,7 +4,7 @@
 The page JS previously had zero automated coverage. Two layers here:
   1. `node --check` on the extracted <script> — catches syntax errors on every CI run;
   2. headless Chrome `--dump-dom` against a live server — boots the real page,
-     runs auto-login + renderOverview, and asserts the rendered DOM.
+     takes the token from the URL + renderOverview, and asserts the rendered DOM.
 Both skip cleanly when the binary is unavailable.
 """
 
@@ -75,7 +75,8 @@ class DashboardJsTest(unittest.TestCase):
         thread.start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
-        url = f"http://127.0.0.1:{server.server_address[1]}/"
+        # T-159 F5: the token comes from the URL `seo-cycle web` opens, not /api/login
+        url = f"http://127.0.0.1:{server.server_address[1]}/?token=browser-token"
 
         proc = subprocess.run(
             [CHROME, "--headless=new", "--disable-gpu", "--no-sandbox",

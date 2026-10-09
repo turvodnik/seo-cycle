@@ -851,6 +851,7 @@ ensure_env_template() {
     local project_dir="$1" target="$2"
     if [ ! -f "$project_dir/.env.example" ] && [ -f "$target/.env.example" ]; then
         cp "$target/.env.example" "$project_dir/.env.example"
+        chmod u+w "$project_dir/.env.example"  # T-159 F1: the snapshot is a-w
         log "✓ .env.example создан (только имена ключей; значения — в Keychain через ai-secret)"
     fi
     if [ -f "$project_dir/.env" ]; then

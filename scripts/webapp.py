@@ -15,6 +15,10 @@ publishes anything), client reports, and provider auth status.
 
 Security model:
 - binds 127.0.0.1 by default; a per-process random token guards every API call;
+  without a password the token travels only in the URL the process prints and
+  opens (`?token=`), /api/login never hands it out (T-159 F5);
+- on a loopback bind every request must carry a loopback Host (and Origin, if
+  any) — DNS-rebinding and cross-site requests get 403;
 - optional password (SEO_CYCLE_DASHBOARD_PASSWORD env or --ask-password):
   the login form exchanges it for the token; REQUIRED for non-local --host;
 - secrets never leave env files: auth status shows sources only;
@@ -221,6 +225,9 @@ def list_reports(project: pathlib.Path) -> list[dict[str, Any]]:
     return reports
 
 
+LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
     server_version = "seo-cycle-dashboard"
 
@@ -231,6 +238,24 @@ class DashboardHandler(BaseHTTPRequestHandler):
     @property
     def state(self) -> dict[str, Any]:
         return self.server.dashboard_state  # type: ignore[attr-defined]
+
+    def host_allowed(self) -> bool:
+        """T-159 F5: on a loopback bind, Host and Origin must name loopback.
+
+        Blocks DNS rebinding (a web page re-pointing its own domain at
+        127.0.0.1 sends `Host: attacker.example`) and cross-site requests.
+        A non-loopback bind is password-protected instead (main()).
+        """
+        bound = str(self.server.server_address[0])
+        if not (bound.startswith("127.") or bound == "::1"):
+            return True
+        host = self.headers.get("Host")
+        if host is not None and urllib.parse.urlsplit("//" + host).hostname not in LOOPBACK_NAMES:
+            return False
+        origin = self.headers.get("Origin")
+        if origin is not None and urllib.parse.urlsplit(origin).hostname not in LOOPBACK_NAMES:
+            return False
+        return True
 
     def send_json(self, payload: Any, code: int = 200) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -270,6 +295,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
     # --- GET ---------------------------------------------------------------
     def do_GET(self) -> None:  # noqa: N802 - stdlib naming
         route = self.route()
+        if not self.host_allowed():
+            self.send_json({"error": "forbidden host"}, 403)
+            return
         if route == "/":
             body = PAGE_HTML.encode("utf-8")
             self.send_response(200)
@@ -353,11 +381,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
     # --- POST ---------------------------------------------------------------
     def do_POST(self) -> None:  # noqa: N802 - stdlib naming
         route = self.route()
+        if not self.host_allowed():
+            self.send_json({"error": "forbidden host"}, 403)
+            return
         if route == "/api/login":
             data = self.body_json()
             password = self.state["password"]
             if not password:
-                self.send_json({"token": self.state["token"]})
+                # T-159 F5: without a password the token travels only in the
+                # URL the process itself prints/opens — never handed out here.
+                self.send_json({"error": "no password set: open the link printed by `seo-cycle web`"}, 403)
                 return
             if secrets.compare_digest(str(data.get("password") or ""), password):
                 self.send_json({"token": self.state["token"]})
@@ -501,7 +534,7 @@ footer{color:var(--muted);text-align:center;font-size:12.5px;padding:26px 0}
   <h1>SEO <b style="color:var(--accent)">Cycle</b></h1>
   <p class="muted">Введите пароль дашборда</p>
   <input id="pw" type="password" placeholder="Пароль" autofocus>
-  <button class="primary" onclick="doLogin()">Войти</button>
+  <button id="loginbtn" class="primary" onclick="doLogin()">Войти</button>
   <p id="loginerr" class="down"></p>
 </div>
 
@@ -521,7 +554,7 @@ footer{color:var(--muted);text-align:center;font-size:12.5px;padding:26px 0}
 const TABS=[["overview","Портфель"],["project","Проект"],["approvals","Approvals"],
             ["commands","Команды"],["reports","Отчёты"],["access","Доступы"]];
 let token=localStorage.getItem("seoCycleToken")||"";
-let projects=[],currentProject="",tab="overview",cache={};
+let projects=[],currentProject="",tab="overview",cache={},needsPassword=true;
 
 const qs=new URLSearchParams(location.search);
 if(qs.get("token")){token=qs.get("token");localStorage.setItem("seoCycleToken",token);
@@ -537,7 +570,13 @@ async function api(path,opts={}){
   return r.json();
 }
 function showLogin(){document.getElementById("app").classList.add("hidden");
-  document.getElementById("login").classList.remove("hidden");}
+  document.getElementById("login").classList.remove("hidden");
+  if(!needsPassword){
+    document.getElementById("pw").classList.add("hidden");
+    document.getElementById("loginbtn").classList.add("hidden");
+    document.getElementById("loginerr").textContent=
+      "Откройте ссылку с токеном, которую напечатала команда seo-cycle web в терминале.";
+  }}
 async function doLogin(){
   const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({password:document.getElementById("pw").value})});
@@ -550,11 +589,7 @@ document.addEventListener("keydown",e=>{if(e.key==="Enter"&&!document.getElement
 async function boot(){
   const ping=await (await fetch("/api/ping")).json();
   document.getElementById("ver").textContent="v"+ping.version;
-  if(!token&&!ping.needs_password){
-    const r=await (await fetch("/api/login",{method:"POST",
-      headers:{"Content-Type":"application/json"},body:"{}"})).json();
-    if(r.token){token=r.token;localStorage.setItem("seoCycleToken",token);}
-  }
+  needsPassword=!!ping.needs_password;
   try{projects=await api("/api/projects");}catch(e){return;}
   document.getElementById("login").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
