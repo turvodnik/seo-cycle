@@ -14,7 +14,7 @@ cd <project-root>
 curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install.sh | bash -s -- --project "$(pwd)"
 
 # Обновления и версии
-~/.codex/vendor/seo-cycle/install.sh --update                          # fetch новых тегов в хранилище
+~/.codex/vendor/seo-cycle/install.sh --update                          # fetch тегов и перевод main хранилища на origin/main (только fast-forward)
 ~/.codex/vendor/seo-cycle/install.sh --project <dir> --pin vX.Y.Z --sync   # перевести проект на версию
 ~/.codex/vendor/seo-cycle/install.sh --upgrade-all                     # перевести все подключённые проекты
 ~/.codex/vendor/seo-cycle/install.sh --project <dir> --detach          # отключить проект (файлы проекта не трогаются)

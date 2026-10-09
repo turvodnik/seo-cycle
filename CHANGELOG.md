@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-_пусто_
+### Fix (3.0.1)
+
+- `install.sh --update` переводит `main` хранилища на `origin/main` (ff-only); при расхождении — отказ rc 1 без `reset`.
 
 ## [3.0.0] — 2026-10-09
 
