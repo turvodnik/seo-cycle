@@ -185,7 +185,9 @@ def exec_script(script: str, args: list[str], project: pathlib.Path) -> int:
 
     A long-running server must not live as a child: SIGTERM sent to the
     launcher would never reach it. After exec the PID *is* the server, so
-    a plain `kill` stops it. Falls back to run_script when exec is impossible.
+    a plain `kill` stops it. Use ONLY for `web`: exec never returns, so a
+    command after which the launcher must log the rc, notify or clean up
+    would silently skip all of that. Falls back to run_script when exec is impossible.
     """
     path = SCRIPTS_DIR / script
     if not path.exists() or script.endswith(".sh"):
