@@ -274,7 +274,10 @@ class BrokerResolutionTest(_Base):
         (self.project / ".env").write_text("SEO_CYCLE_AI_SECRET=/x/ai-secret\nHOME=/x\nKEYSO_API_TOKEN=k\n",
                                             encoding="utf-8")
         chain = env_chain(self.project, base={"OTHER": "1"})
+        # T-159 F4: env_chain also carries provenance markers (names only).
+        marker = chain.pop("SEO_CYCLE_ENV_FROM_PROJECT", None)
         self.assertEqual(chain, {"KEYSO_API_TOKEN": "k", "OTHER": "1"})
+        self.assertEqual(marker, "KEYSO_API_TOKEN")
 
     def test_relative_override_is_refused(self) -> None:
         # `SEO_CYCLE_AI_SECRET=ai-secret` would resolve from the project cwd.

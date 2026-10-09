@@ -31,6 +31,7 @@ import os
 import pathlib
 import re
 import subprocess
+from collections.abc import Mapping
 
 # Set by bin/seo-cycle on the process it re-executes under `ai-secret run`;
 # the only purpose is to break the re-exec loop. It is NOT proof that keys
@@ -111,24 +112,61 @@ def parse_env_file(path: pathlib.Path) -> dict[str, str]:
     return data
 
 
+# Provenance markers (T-159, QA v3.0.0 F4): env_chain() flattens legacy file
+# values into a child's environment, so the child (`auth list` behind the
+# dispatcher) used to report them as "process". env_chain() records the NAMES
+# (never values) that came from the legacy files; env_source() reads them.
+# The markers are recomputed on every call and always overwrite whatever a
+# file supplied, so a planted `.env` cannot forge them.
+FILE_SOURCE_MARKERS: dict[str, str] = {
+    "project": "SEO_CYCLE_ENV_FROM_PROJECT",
+    "global": "SEO_CYCLE_ENV_FROM_GLOBAL",
+}
+
+
+def _marked_names(env: Mapping[str, str], kind: str) -> set[str]:
+    raw = env.get(FILE_SOURCE_MARKERS[kind], "")
+    return {name for name in raw.split(",") if name}
+
+
 def env_chain(project_root: pathlib.Path | None = None, *, base: dict[str, str] | None = None) -> dict[str, str]:
-    merged = dict(parse_env_file(global_env_path()))
-    if project_root is not None:
-        merged.update(parse_env_file(project_env_path(project_root)))
+    process = dict(os.environ if base is None else base)
+    markers = set(FILE_SOURCE_MARKERS.values())
+    inherited = {kind: _marked_names(process, kind) for kind in FILE_SOURCE_MARKERS}
+    real_process = set(process) - inherited["project"] - inherited["global"] - markers
+    global_vals = parse_env_file(global_env_path())
+    project_vals = parse_env_file(project_env_path(project_root)) if project_root is not None else {}
+    merged = dict(global_vals)
+    merged.update(project_vals)
     for name in PROCESS_ONLY_NAMES:
         merged.pop(name, None)  # file-supplied broker/HOME never reach a child process
-    merged.update(os.environ if base is None else base)
+    merged.update(process)
+    skip = real_process | PROCESS_ONLY_NAMES | markers
+    from_project = (set(project_vals) | inherited["project"]) - skip
+    from_global = (set(global_vals) | inherited["global"]) - skip - from_project
+    for kind, names in (("project", from_project), ("global", from_global)):
+        if names:
+            merged[FILE_SOURCE_MARKERS[kind]] = ",".join(sorted(names))
+        else:
+            merged.pop(FILE_SOURCE_MARKERS[kind], None)
     return merged
 
 
 def env_source(project_root: pathlib.Path | None, key: str) -> str | None:
-    """Where a variable currently comes from: process | project | global | None."""
-    if key in os.environ:
+    """Where a variable currently comes from: process | project | global | None.
+
+    A name that env_chain() injected from a legacy file (provenance markers)
+    is not "process" even though the child sees it in os.environ.
+    """
+    from_files = _marked_names(os.environ, "project") | _marked_names(os.environ, "global")
+    if key in os.environ and key not in from_files:
         return "process"
     if project_root is not None and key in parse_env_file(project_env_path(project_root)):
         return "project"
     if key in parse_env_file(global_env_path()):
         return "global"
+    if key in os.environ:
+        return "process"  # marked as file-sourced, but the file is gone now
     return None
 
 
