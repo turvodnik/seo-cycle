@@ -26,7 +26,7 @@ globalThis.localStorage = {
   setItem(k, v) { this.store[k] = v; },
   removeItem(k) { delete this.store[k]; },
 };
-globalThis.location = { search: "", pathname: "/" };
+globalThis.location = { search: "?token=unit-token", pathname: "/" }; // T-159 F5: token from the URL
 globalThis.history = { replaceState() {} };
 globalThis.alert = () => {};
 // детерминированное «сегодня» для freshness-бейджей (фикстуры датированы 2026-07-04)
@@ -36,7 +36,6 @@ Date.now = () => new Date("2026-07-08T12:00:00").getTime();
 const PROJECT = "/tmp/proj";
 const FIXTURES = {
   "/api/ping": { ok: true, needs_password: false, version: "test" },
-  "/api/login": { token: "unit-token" },
   "/api/projects": [{ name: "Юнит", path: PROJECT }],
   "/api/portfolio": {
     totals: { projects: 1, queries: 500, top3: 24, top10: 419, clicks: 111,
@@ -119,7 +118,7 @@ check("daysSince()/freshBadge() grade data age", () => {
 });
 
 // --- boot() side effects ---------------------------------------------------
-check("boot() auto-logs-in and loads projects", () => {
+check("boot() takes the token from the URL and loads projects", () => {
   assert.equal(g("token"), "unit-token");
   assert.equal(g("projects.length"), 1);
   assert.equal(g("currentProject"), PROJECT);
