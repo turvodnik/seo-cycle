@@ -222,8 +222,8 @@ def find_ai_secret() -> str | None:
 def secret_scope(cfg: dict | None) -> str | None:
     """Keychain scope of a project = `project.brand_name_technical` (latin slug).
 
-    Matches how live scopes are named on the reference machine (gsse, emwoody,
-    pifagorlab, kiyokmag). Returns None when the field is absent or does not
+    Matches how live scopes are named on the reference machine (a short latin
+    slug, e.g. `shop`, `blog`). Returns None when the field is absent or does not
     satisfy the broker's scope rules — callers must then ask for `--scope`
     rather than guess from the domain or the human-readable name.
     """
