@@ -28,15 +28,41 @@ import sys
 SKILL_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
-def _find_project_pin(start: pathlib.Path) -> pathlib.Path | None:
+def _find_pin_link(start: pathlib.Path) -> pathlib.Path | None:
     cur = start
     while True:
         candidate = cur / ".agents" / "external" / "seo-cycle"
         if candidate.is_dir():
-            return candidate.resolve()
+            return candidate
         if cur.parent == cur:
             return None
         cur = cur.parent
+
+
+def _find_project_pin(start: pathlib.Path) -> pathlib.Path | None:
+    link = _find_pin_link(start)
+    return link.resolve() if link is not None else None
+
+
+def _trusted_versions_root() -> pathlib.Path:
+    # Same store location rule as install.sh (SHARED_DIR/versions).
+    shared = os.environ.get("SEO_CYCLE_SHARED_DIR") or str(pathlib.Path.home() / ".codex" / "vendor")
+    return (pathlib.Path(shared).expanduser() / "versions").resolve()
+
+
+def _is_trusted_pin(link: pathlib.Path) -> bool:
+    """T-159 F2: only an attach-made symlink into a version snapshot is exec'd.
+
+    A cloned, untrusted tree can carry a plain `.agents/external/seo-cycle/
+    bin/seo-cycle`; exec'ing it would run foreign code and hand it the value
+    piped into `auth set`.
+    """
+    if not link.is_symlink():
+        return False
+    try:
+        return link.resolve().is_relative_to(_trusted_versions_root())
+    except (OSError, ValueError):
+        return False
 
 
 def _maybe_redirect_to_project_pin() -> None:
@@ -54,6 +80,13 @@ def _maybe_redirect_to_project_pin() -> None:
     if not pinned_launcher.is_file():
         return
     if pinned.resolve() == SKILL_ROOT.resolve():
+        return
+    if not _is_trusted_pin(_find_pin_link(pathlib.Path.cwd())):
+        print(
+            f"⚠ seo-cycle: {pinned} — не симлинк в снапшот версии "
+            f"({_trusted_versions_root()}); не исполняю его, работает версия хранилища",
+            file=sys.stderr,
+        )
         return
     env = dict(os.environ)
     env["SEO_CYCLE_SHIM_REDIRECTED"] = "1"

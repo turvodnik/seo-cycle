@@ -958,20 +958,55 @@ class ShimPinSelectionTest(unittest.TestCase):
             )
             return root
 
+        self.make_root = make_root
         self.store_head = make_root("store-head")
-        self.pinned = make_root("project-pin")
+        # T-159 F2: a pin is trusted only inside SHARED_DIR/versions — same
+        # layout install.sh creates (<shared>/versions/seo-cycle/vX.Y.Z).
+        self.pinned = make_root("versions/seo-cycle/project-pin")
+        self.env = {**os.environ, "SEO_CYCLE_SHARED_DIR": str(self.tmp)}
+        self.env.pop("SEO_CYCLE_SHIM_REDIRECTED", None)
 
         self.project = self.tmp / "проект с пробелом"
         (self.project / ".agents" / "external").mkdir(parents=True)
         # symlink, same as install.sh's ensure_surfaces/attach_project would create
         (self.project / ".agents" / "external" / "seo-cycle").symlink_to(self.pinned, target_is_directory=True)
 
-    def test_global_shim_run_from_project_redirects_to_pin(self) -> None:
-        proc = subprocess.run(
+    def run_shim(self, cwd: pathlib.Path) -> subprocess.CompletedProcess:
+        return subprocess.run(
             ["python3", str(self.store_head / "bin" / "seo-cycle")],
-            cwd=str(self.project), capture_output=True, text=True,
+            cwd=str(cwd), capture_output=True, text=True, env=self.env,
         )
-        self.assertEqual(proc.stdout.strip(), "project-pin", proc.stdout + proc.stderr)
+
+    def test_global_shim_run_from_project_redirects_to_pin(self) -> None:
+        proc = self.run_shim(self.project)
+        self.assertEqual(proc.stdout.strip(), "versions/seo-cycle/project-pin", proc.stdout + proc.stderr)
+
+    def plant_hostile_launcher(self, project: pathlib.Path) -> pathlib.Path:
+        marker = self.tmp / "PWNED"
+        launcher = project / ".agents" / "external" / "seo-cycle" / "bin" / "seo-cycle"
+        launcher.parent.mkdir(parents=True)
+        launcher.write_text(f"import pathlib\npathlib.Path({str(marker)!r}).write_text('x')\nprint('hostile')\n",
+                            encoding="utf-8")
+        return marker
+
+    def test_plain_directory_launcher_in_untrusted_tree_is_not_executed(self) -> None:
+        # QA v3.0.0 F2: a cloned tree ships a plain .agents/external/seo-cycle
+        # (not an attach symlink) — the global shim must not exec it.
+        hostile = self.tmp / "чужой-клон"
+        marker = self.plant_hostile_launcher(hostile)
+        proc = self.run_shim(hostile)
+        self.assertFalse(marker.exists(), "planted launcher was executed")
+        self.assertEqual(proc.stdout.strip(), "store-head", proc.stdout + proc.stderr)
+        self.assertIn("не симлинк в снапшот версии", proc.stderr)
+
+    def test_symlink_outside_versions_root_is_not_executed(self) -> None:
+        elsewhere = self.make_root("elsewhere")
+        hostile = self.tmp / "чужой-клон-2"
+        (hostile / ".agents" / "external").mkdir(parents=True)
+        (hostile / ".agents" / "external" / "seo-cycle").symlink_to(elsewhere, target_is_directory=True)
+        proc = self.run_shim(hostile)
+        self.assertEqual(proc.stdout.strip(), "store-head", proc.stdout + proc.stderr)
+        self.assertIn("не симлинк в снапшот версии", proc.stderr)
 
     def test_shim_run_outside_any_project_uses_own_root_and_warns(self) -> None:
         outside = self.tmp  # no .agents/external/seo-cycle above this
