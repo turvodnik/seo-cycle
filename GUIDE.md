@@ -189,7 +189,7 @@ codex exec -c model_reasoning_effort="xhigh" -c web_search="live" \
 
 `seo-cycle` — **диспетчер**. Фазы постепенно выносятся в самостоятельные **фазовые скиллы** (каждый — папка `SKILL.md` + README, можно дёргать независимо, шарить и продавать отдельно). Координация — через единый файл состояния `seo/cycles/<тема>/_state.json` (контракт `cycle-state.py`). Это «цепочка передачи»: фазовый скилл читает state → делает своё → обновляет state → разблокирует следующую фазу.
 
-**Вынесено (пилот):** `seo-keywords` (Phase 2-3). **Статус: дробление заморожено** (решение 2026-05-30) — монолитный `seo-cycle` основной; остальные фазы не выносим без явной потребности (продажа модулей / команда / переиспользование / параллелизм).
+**Вынесено (пилот):** `seo-keywords` (Phase 2-3). **Статус:** модульная архитектура — основная с v2.0.0 (29.07); `seo-keywords` — внешний репозиторий, остальные фазы живут в `skills/` этого репозитория.
 
 ```bash
 python3 ./.codex/skills/seo-cycle/scripts/cycle-state.py init --topic "минвата"
@@ -730,7 +730,7 @@ Full mapping — [docs/codex-runtime.md](docs/codex-runtime.md).
 
 `seo-cycle` is a **dispatcher**. Phases are gradually extracted into standalone **phase skills** (each a `SKILL.md` + README folder — invokable independently, shareable, sellable separately). Coordination is via a single state file `seo/cycles/<topic>/_state.json` (the `cycle-state.py` contract). This is the "handoff chain": a phase skill reads state → does its job → updates state → unblocks the next phase.
 
-**Extracted (pilot):** `seo-keywords` (Phase 2-3). **Status: splitting is frozen** (decision 2026-05-30) — the monolithic `seo-cycle` is primary; remaining phases are not extracted without a clear need (selling modules / a team / reuse / parallelism).
+**Extracted (pilot):** `seo-keywords` (Phase 2-3). **Status:** the modular architecture has been primary since v2.0.0 (29 Jul); `seo-keywords` is an external repository, the remaining phases live in `skills/` of this repository.
 
 ```bash
 python3 ./.codex/skills/seo-cycle/scripts/cycle-state.py init --topic "mineral wool"

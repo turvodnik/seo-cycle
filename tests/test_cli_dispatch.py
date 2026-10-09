@@ -201,6 +201,13 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("ПРОСРОЧЕН", proc.stdout)
         self.assertIn("порог 2", proc.stdout)
 
+    def test_doctor_help_prints_usage_not_diagnostics(self) -> None:
+        for flag in ("--help", "-h"):
+            proc = self.run_cli("doctor", flag)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertTrue(proc.stdout.startswith("usage:"), proc.stdout)
+            self.assertNotIn("# seo-cycle doctor", proc.stdout)
+
     def test_status_without_config_errors_before_header(self) -> None:
         # T-052: раньше status печатал шапку («снапшот: нет», «triggers не
         # строился») ДО того, как обнаруживал отсутствие конфига — читалось
