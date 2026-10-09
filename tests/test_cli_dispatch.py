@@ -250,5 +250,25 @@ class AuthAssistantListTest(unittest.TestCase):
         self.assertGreaterEqual(proc.stdout.count("минимум для pulse"), 2)
 
 
+class HelpFlagGuardTest(unittest.TestCase):
+    """T-182 F14: `<cmd> --help` is rc 0 with usage on stdout for EVERY command
+    (class guard, not just the five multi-commands that used to return 2)."""
+
+    def test_every_command_help_exits_zero(self) -> None:
+        names = [*COMMANDS, *(name for name, _help, _group in EXTRA_COMMANDS)]
+        self.assertGreaterEqual(len(set(names)), EXPECTED_COMMAND_COUNT - 1)
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="seo-help-"))
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+        bad = []
+        for name in sorted(set(names)):
+            proc = subprocess.run(
+                [sys.executable, str(LAUNCHER), name, "--help"],
+                cwd=tmp, text=True, capture_output=True, check=False, stdin=subprocess.DEVNULL,
+            )
+            if proc.returncode != 0 or not proc.stdout.strip() or "Traceback" in proc.stdout + proc.stderr:
+                bad.append((name, proc.returncode, (proc.stdout + proc.stderr)[-120:]))
+        self.assertEqual(bad, [])
+
+
 if __name__ == "__main__":
     unittest.main()

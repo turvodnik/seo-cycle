@@ -15,6 +15,7 @@ import argparse
 import contextlib
 import importlib.util
 import io
+import os
 import pathlib
 import shutil
 import subprocess
@@ -124,6 +125,8 @@ SYNC_ADAPTERS = {
     "bitrix": "bitrix-content-pull.py",
 }
 
+MULTI_COMMANDS = ("ads", "gate", "rag", "run", "menu", "status")
+
 GATE_SCRIPTS = {
     "research-package": "research-package-quality.py",
     "outline": "page-outline-quality.py",
@@ -175,6 +178,24 @@ def run_script(script: str, args: list[str], project: pathlib.Path) -> int:
     proc = subprocess.run(command, cwd=project, env=env_chain(project), check=False)
     log.info("dispatch %s args=%s rc=%s duration=%.1fs", script, args, proc.returncode, time.monotonic() - started)
     return proc.returncode
+
+
+def exec_script(script: str, args: list[str], project: pathlib.Path) -> int:
+    """Replace this launcher process with the script (T-182 F13).
+
+    A long-running server must not live as a child: SIGTERM sent to the
+    launcher would never reach it. After exec the PID *is* the server, so
+    a plain `kill` stops it. Falls back to run_script when exec is impossible.
+    """
+    path = SCRIPTS_DIR / script
+    if not path.exists() or script.endswith(".sh"):
+        return run_script(script, args, project)
+    log.info("exec %s args=%s", script, args)
+    os.chdir(project)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os.execve(sys.executable, [sys.executable, str(path), *args], env_chain(project))
+    return 2  # unreachable: execve either replaces the process or raises
 
 
 def newest_snapshot(project: pathlib.Path, cfg: dict[str, Any] | None = None) -> tuple[pathlib.Path | None, int | None]:
@@ -558,6 +579,21 @@ def cmd_ads(args: list[str], project: pathlib.Path) -> int:
     return run_script(ADS_SCRIPTS[sub], rest, project)
 
 
+def multi_command_usage(name: str) -> str:
+    """Usage text for the multi-commands that parse their own subcommands (T-182 F14)."""
+    summary = next((text for cmd, text, _ in EXTRA_COMMANDS if cmd == name), "") or COMMANDS.get(name, {}).get("help", "")
+    forms = {
+        "ads": "seo-cycle ads {" + "|".join(ADS_SCRIPTS) + "} [args...]\n"
+               "  fetch: --platform yandex_direct|google_ads (default: yandex_direct)",
+        "gate": "seo-cycle gate {" + "|".join(GATE_SCRIPTS) + "} [args...]",
+        "rag": "seo-cycle rag {" + "|".join(RAG_SCRIPTS) + "} [args...]",
+        "run": "seo-cycle run monthly [...] | run script <name> [args...] | run <task words>",
+        "status": "seo-cycle [--project DIR] status [--research-package DIR]",
+        "menu": "seo-cycle menu   (interactive; needs a terminal)",
+    }
+    return f"usage: {forms[name]}\n\n{name}: {summary}"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="seo-cycle",
@@ -647,6 +683,10 @@ def main(argv: list[str] | None = None) -> int:
         print("⚠ `--project` указан после подкоманды и уйдёт во вложенный скрипт. "
               "Глобальный выбор проекта: seo-cycle --project DIR <command> ...", file=sys.stderr)
 
+    if args.command in MULTI_COMMANDS and passthrough[:1] in (["-h"], ["--help"]):
+        print(multi_command_usage(args.command))
+        return 0
+
     if args.command == "doctor":
         return cmd_doctor(passthrough, project)
     if args.command == "status":
@@ -685,6 +725,8 @@ def main(argv: list[str] | None = None) -> int:
     if not spec:
         print(f"ERROR: unknown command `{args.command}`. Run `seo-cycle --help`.", file=sys.stderr)
         return 2
+    if args.command == "web":
+        return exec_script(spec["script"], [*spec.get("prepend", []), *passthrough], project)
     return run_script(spec["script"], [*spec.get("prepend", []), *passthrough], project)
 
 

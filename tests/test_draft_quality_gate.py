@@ -94,5 +94,49 @@ class DraftQualityGateExitCodeTest(unittest.TestCase):
         self.assertNotEqual(warn_proc.returncode, error_proc.returncode)
 
 
+class DraftQualityGateCallErrorTest(unittest.TestCase):
+    """T-182 F12: bad call/config input is exit 2 + one line, never a traceback."""
+
+    def setUp(self) -> None:
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="draft-gate-err-"))
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+        self.draft = self.tmp / "draft.md"
+        self.draft.write_text("# Пост\n", encoding="utf-8")
+        self.outline = self.tmp / "outline.json"
+        self.outline.write_text("{}", encoding="utf-8")
+
+    def run_gate(self, draft: pathlib.Path, outline: pathlib.Path) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), str(draft), "--outline", str(outline)],
+            cwd=self.tmp, text=True, capture_output=True, check=False,
+        )
+
+    def assert_clean_exit2(self, proc: subprocess.CompletedProcess, needle: str) -> None:
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertNotIn("Traceback", proc.stdout + proc.stderr)
+        self.assertIn(needle, proc.stderr)
+        self.assertEqual(len(proc.stderr.strip().splitlines()), 1, proc.stderr)
+
+    def test_missing_draft(self) -> None:
+        self.assert_clean_exit2(self.run_gate(self.tmp / "nope.md", self.outline), "файл не найден")
+
+    def test_missing_outline(self) -> None:
+        self.assert_clean_exit2(self.run_gate(self.draft, self.tmp / "nope.json"), "файл не найден")
+
+    def test_broken_outline_json(self) -> None:
+        self.outline.write_text("{bad", encoding="utf-8")
+        self.assert_clean_exit2(self.run_gate(self.draft, self.outline), "outline не разобран")
+
+    def test_loop_runner_treats_gate_call_error_as_config_error(self) -> None:
+        # loop-runner exit 2 = "config error", not 1 = "escalated".
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "loop-runner.py"), "draft", str(self.draft),
+             "--outline", str(self.tmp / "nope.json")],
+            cwd=self.tmp, text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
