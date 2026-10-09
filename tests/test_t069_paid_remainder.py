@@ -290,12 +290,23 @@ class _ShellFixture(unittest.TestCase):
     def fake(self, name: str, body: str) -> None:
         # One line per invocation even when an argument (the LLM prompt)
         # spans many lines: %q renders newlines as $'\n'.
-        _write_exe(self.bin / name, f'printf \'%s %q\\n\' "{name}" "$*" >> "{self.log}"\n' + body)
+        # One log FILE per process ($$): a script may start several fakes in
+        # parallel (llm-cli-collect.sh runs agy and codex with `&`), and an
+        # ~8 KB %q line leaves bash's printf in several write() calls —
+        # O_APPEND keeps only each single write() whole, so two fakes sharing
+        # one log interleaved mid-line and the parsed command words broke.
+        _write_exe(self.bin / name, f'printf \'%s %q\\n\' "{name}" "$*" >> "{self.log}.$$"\n' + body)
 
     def calls(self) -> list[str]:
         # errors="replace": bash's %q under a C locale may emit raw bytes for
         # a non-ASCII prompt; only the leading command word matters here.
-        return self.log.read_text(encoding="utf-8", errors="replace").splitlines() if self.log.exists() else []
+        # `self.log` itself is still read: the python `graphify` fake below
+        # writes there directly. No consumer relies on order across files.
+        lines: list[str] = []
+        for path in [self.log, *sorted(self.tmp.glob(self.log.name + ".*"))]:
+            if path.exists():
+                lines += path.read_text(encoding="utf-8", errors="replace").splitlines()
+        return lines
 
     def run_cmd(self, *cmd: str, env_extra: dict[str, str] | None = None) -> subprocess.CompletedProcess:
         env = dict(os.environ)

@@ -2619,9 +2619,21 @@ class GitChokePointBypassEnumerationTest(InstallerFixture):
         call `git fetch`/`git tag -f` directly to SIMULATE what an external
         actor did on origin — that is not a bypass of install.sh's own
         behaviour, see the H boundary below) — checked for an unrouted
-        tag-fetching git call."""
+        tag-fetching git call.
+
+        Files are enumerated the way git sees the tree — tracked plus
+        untracked-but-not-ignored — never a raw directory walk: a walk also
+        descends into git-ignored areas (nested agent worktrees, run
+        outputs, virtualenvs) whose copies of tests/ are not this
+        repository's code and turned the guard red for the wrong reason.
+        A failing enumeration raises: an empty list must never pass as
+        "zero hits"."""
+        listed = subprocess.run(
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            cwd=root, capture_output=True, text=True, check=True,
+        ).stdout
         hits: list[tuple[str, int, str]] = []
-        for path in sorted(root.rglob("*")):
+        for path in sorted({root / name for name in listed.split("\0") if name}):
             if not path.is_file() or path.suffix not in (".sh", ".py"):
                 continue
             if path.name == "install.sh":
@@ -2650,6 +2662,7 @@ class GitChokePointBypassEnumerationTest(InstallerFixture):
     def test_bypass_g_new_script_file_is_caught_by_the_repo_wide_scan(self) -> None:
         scratch = self.tmp / "repo-copy"
         (scratch / "scripts").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(scratch)], check=True)
         shutil.copy2(INSTALL, scratch / "install.sh")
         rogue = scratch / "scripts" / "rev-sync-tags.sh"
         rogue.write_text(
