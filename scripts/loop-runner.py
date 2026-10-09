@@ -60,6 +60,11 @@ def run_check(target: str, path: pathlib.Path, outline: pathlib.Path | None, pro
     command += spec["check_args"]
     proc = subprocess.run(command, cwd=project_root, text=True, capture_output=True, check=False)
     log.info("loop check %s rc=%s", spec["check_script"], proc.returncode)
+    if proc.returncode == 2:
+        # Gate contract: 2 = call/config error. Never fall through to a report
+        # left on disk by an earlier run - that would turn a broken call into
+        # a silent "passed" (T-182 round 1).
+        raise RuntimeError(f"check failed with a config error (rc=2): {proc.stderr.strip()[-500:]}")
     report = read_check_report(target, path, proc.stdout)
     if not report:
         raise RuntimeError(

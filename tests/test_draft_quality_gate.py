@@ -127,8 +127,24 @@ class DraftQualityGateCallErrorTest(unittest.TestCase):
         self.outline.write_text("{bad", encoding="utf-8")
         self.assert_clean_exit2(self.run_gate(self.draft, self.outline), "outline не разобран")
 
-    def test_loop_runner_treats_gate_call_error_as_config_error(self) -> None:
-        # loop-runner exit 2 = "config error", not 1 = "escalated".
+    def test_loop_does_not_trust_stale_report_when_gate_returns_2(self) -> None:
+        # Outline exists but is broken, and an old passing report is on disk:
+        # the gate's rc 2 must win over the stale report.
+        self.outline.write_text("{bad", encoding="utf-8")
+        stale = self.draft.with_suffix(".draft-quality-gate.json")
+        stale.write_text(json.dumps({"status": "pass", "summary": {"errors": 0, "warnings": 0}, "findings": []}),
+                         encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPTS / "loop-runner.py"), "draft", str(self.draft),
+             "--outline", str(self.outline), "--reset"],
+            cwd=self.tmp, text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertNotIn("passed", proc.stdout.lower())
+        self.assertIn("outline не разобран", proc.stderr)
+
+    def test_loop_precheck_rejects_missing_outline(self) -> None:
+        # Covers loop-runner's own pre-check (outline missing), not the gate.
         proc = subprocess.run(
             [sys.executable, str(SCRIPTS / "loop-runner.py"), "draft", str(self.draft),
              "--outline", str(self.tmp / "nope.json")],
