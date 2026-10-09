@@ -128,6 +128,17 @@ _пусто_
   `test_foreign_host_header_is_rejected`, `test_foreign_origin_is_rejected`;
   браузерный e2e и JS-юниты берут токен из URL вместо авто-логина. Докстринг
   модели безопасности `webapp.py` приведён к факту.
+- **Фикс-раунд 1 ревью T-159.** (F1) Сторож на путь установки:
+  `EnvExampleWritableFromSnapshotTest` — настоящий `install.sh --project` из
+  read-only снапшота, `.env.example` создаётся `ensure_env_template` раньше
+  мастера; проверка `S_IWUSR` + встроенный негативный контроль (копия
+  `install.sh` без `chmod` → файл остаётся `0444`). (F2) Доверенный корень
+  снапшотов выводится ещё и из расположения самого лончера
+  (`<хранилище>/../versions`): установка с кастомным `SEO_CYCLE_SHARED_DIR`
+  больше не теряет редирект в оболочке без этой переменной
+  (`test_pin_trusted_without_shared_dir_env`). (F5) `docs/troubleshooting.md`,
+  ситуация 7: `forbidden host` при заходе по имени машины/туннелю и вход
+  только по ссылке с токеном.
 
 ### Фикс-проход волны K (17.09): брокер по каноническому пути, tier без KeyError, контракт мониторинга, тест GBP-ветки
 
