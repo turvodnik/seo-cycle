@@ -36,8 +36,8 @@ class ChangelogLiveListTest(unittest.TestCase):
         for name in names:
             path = ROOT / "scripts" / name
             self.assertTrue(path.is_file(), f"{name}: no such script")
-            self.assertIn("--live", path.read_text(encoding="utf-8"),
-                          f"{name} is listed as requiring --live but has no such flag")
+            self.assertTrue("--live" in path.read_text(encoding="utf-8"),
+                            f"{name} is listed as requiring --live but has no such flag")
 
     def test_rag_scripts_not_listed_as_live(self) -> None:
         affected = affected_list()
