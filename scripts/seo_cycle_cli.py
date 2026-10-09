@@ -208,6 +208,13 @@ def cmd_doctor(args: list[str], project: pathlib.Path) -> int:
     are declared mandatory for Phase 2 by the phase skill, so doctor must be
     able to say whether they are actually available (T-052).
     """
+    if any(a in ("-h", "--help") for a in args):
+        # Print usage instead of running the diagnostics (which can be slow
+        # and report unrelated failures).
+        desc = next(h for n, h, _g in EXTRA_COMMANDS if n == "doctor")
+        print("usage: seo-cycle [--project DIR] doctor [-h]\n")
+        print(desc)
+        return 0
     cfg_path = find_config(project)
     cfg = load_config(cfg_path) if cfg_path else {}
     max_age = coerce_int(
