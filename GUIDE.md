@@ -485,6 +485,28 @@ Image gate: настройки берутся из `images.*` в `seo-cycle.yaml
 
 Артефакты каждого запуска — в `seo/cycles/<тема>-<квартал>/`.
 
+**Одна модель прогресса.** У проекта две шкалы, и они связаны. *Фазы цикла* (таблица выше) живут в `seo/cycles/<тема>/_state.json` (`cycle-state.py`): у каждой есть `status` и `gate_passed` — прошла ли фаза свои ворота. *Стадии journey* (12 штук, `seo-cycle status` / `project-journey.py`) считаются по файлам на диске. Journey читает все `_state.json` из `artifacts.cycles_root` (по умолчанию `./seo/cycles`) и закрывает стадию, если все сопоставленные ей фазы `done` с `gate_passed: true` хотя бы в одном цикле — даже когда стадия стоит после текущей:
+
+| Фазы цикла | Стадия journey |
+|---|---|
+| `discovery` | Основа проекта (`setup_foundation`) |
+| `audit` | Техническая база (`technical_baseline`) |
+| `keywords` + `clusters` | Архитектура исследования (`research_architecture`) |
+| `entity_map` + `content_plan` | Глубокие брифы страниц (`deep_page_briefs`) |
+| `writing` | Черновик и гейт (`content_draft_gate`) |
+| `publishing` + `schema` | Внедрение и ревью публикации (`implementation_review`) |
+| `monitoring` + `iteration` | Мониторинг и итерации (`monitoring_iteration`) |
+
+Фаза `done` без `gate_passed` стадию не закрывает: ворота не проходились (так помечаются, например, импортированные старые артефакты). Стадии без фазы (доступы и бюджет, экспертные источники, гейт качества, починка пакета, брифы v3) закрываются только своими файлами и, как раньше, только когда закрыты все предыдущие. Шапка `seo-cycle status` поэтому показывает и сделанное, и то, что ждёт:
+
+```
+Срез: ок (gsc-snapshot-2026-10-09.json · 1 дн.)
+Сделано: 6 из 12 стадий (Основа проекта, Доступы, бюджет и управление, …)
+Ждёт: Гейт качества исследования (6 из 12)
+Причина: нет seo/research-package/research-package-quality.json
+Дальше: seo-cycle loop research-package seo/research-package
+```
+
 ---
 
 ## <a id="агенты"></a>9. Агенты и делегаты — кого как вызывать
@@ -511,6 +533,9 @@ Image gate: настройки берутся из `images.*` в `seo-cycle.yaml
 ## <a id="команды"></a>10. Команды-шпаргалка
 
 ```bash
+# Где проект сейчас
+seo-cycle status                                  # шапка: Срез / Сделано / Ждёт / Причина / Дальше (journey + фазы цикла, §8)
+
 # Настройка
 bash init-project.sh                              # новый проект
 python3 validate-config.py                        # проверить конфиг
@@ -1019,6 +1044,8 @@ External (connected separately, not skill code): goals/conversions in Yandex.Met
 | **10 Iteration** | `triggers-eval` + `source-attribution` → fixes | snapshot → `10-iterations.md` |
 
 Each run's artifacts go to `seo/cycles/<topic>-<quarter>/`.
+
+**One progress model.** *Cycle phases* (table above) live in `seo/cycles/<topic>/_state.json` (`cycle-state.py`), each with `status` and `gate_passed`. *Journey stages* (12, `seo-cycle status` / `project-journey.py`) are computed from files on disk. The journey reads every `_state.json` under `artifacts.cycles_root` (default `./seo/cycles`) and closes a stage when all phases mapped to it are `done` with `gate_passed: true` in any cycle — even if the stage comes after the current one. Mapping: `discovery` → `setup_foundation`; `audit` → `technical_baseline`; `keywords` + `clusters` → `research_architecture`; `entity_map` + `content_plan` → `deep_page_briefs`; `writing` → `content_draft_gate`; `publishing` + `schema` → `implementation_review`; `monitoring` + `iteration` → `monitoring_iteration`. A phase `done` without `gate_passed` never closes a stage. Unmapped stages are closed by their files only, and only once every earlier stage is closed. The `seo-cycle status` header is five lines: `Срез / Сделано / Ждёт / Причина / Дальше` (snapshot, done stages, waiting stage, why it waits, next command).
 
 ---
 

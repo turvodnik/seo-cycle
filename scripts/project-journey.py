@@ -31,7 +31,9 @@ from seo_cycle_core.journey import (  # noqa: E402
     json_summary,
     loop_evidence_line,
     package_state,
+    read_cycle_phases,
     stage,
+    stage_closed_by_cycle,
     utc_now,
 )
 
@@ -588,19 +590,38 @@ def monitoring_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[st
     )
 
 
-def assign_status(stages: list[dict[str, Any]]) -> None:
-    first_open = None
+def assign_status(stages: list[dict[str, Any]], cycle_phases: dict[str, dict[str, Any]] | None = None) -> None:
+    """Give every stage its own fact (T-184).
+
+    A stage is `done` when either (a) the cycle closed it — every mapped
+    cycle phase is `done` with `gate_passed: true` (`CYCLE_PHASE_TO_STAGE`),
+    regardless of order; or (b) its artifacts are in place AND every earlier
+    stage is `done` (the pre-T-184 prefix rule, kept so stages with no checks
+    of their own — repair, implementation review — are not declared done
+    vacuously). The first non-`done` stage is `current`, or `blocked` when it
+    has blockers; everything else not done is `pending`. Without
+    `seo/cycles/` this is exactly the old behaviour."""
+    cycle_phases = cycle_phases or {}
+    prefix_ok = True
     for item in stages:
-        if item["missing_artifacts"] or item["blockers"]:
-            first_open = item
-            break
-        item["status"] = "done"
-    if first_open is None:
-        return
-    first_open["status"] = "blocked" if first_open["blockers"] else "current"
-    for item in stages:
-        if item["order"] > first_open["order"]:
+        closing = stage_closed_by_cycle(item["id"], cycle_phases)
+        artifact_done = prefix_ok and not item["missing_artifacts"] and not item["blockers"]
+        if closing:
+            item["status"] = "done"
+            item["closed_by_cycle"] = closing
+            item["evidence"].append(f"cycle-state: phases {', '.join(closing)} done with gate_passed")
+            if item["blockers"]:
+                # Keep the open question visible instead of silently dropping it.
+                item["warnings"].extend(item["blockers"])
+                item["blockers"] = []
+        elif artifact_done:
+            item["status"] = "done"
+        else:
             item["status"] = "pending"
+        prefix_ok = prefix_ok and item["status"] == "done"
+    first_open = next((item for item in stages if item["status"] != "done"), None)
+    if first_open is not None:
+        first_open["status"] = "blocked" if first_open["blockers"] else "current"
 
 
 def build_action_plan(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -672,8 +693,10 @@ def build_report(cfg_path: pathlib.Path, *, goal: str, research_package: str | N
         implementation_stage(cfg, project_root),
         monitoring_stage(cfg, project_root),
     ]
-    assign_status(stages)
-    current = next((item for item in stages if item["status"] in {"current", "blocked"}), None)
+    # T-184: cycle phases from every <cycles_root>/*/_state.json close mapped stages.
+    cycle_phases = read_cycle_phases(cfg, project_root)
+    assign_status(stages, cycle_phases)
+    current =next((item for item in stages if item["status"] in {"current", "blocked"}), None)
     done_count = sum(1 for item in stages if item["status"] == "done")
     status = "ready" if current is None else "blocked" if current["status"] == "blocked" else "needs_work"
     report = {

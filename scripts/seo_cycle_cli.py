@@ -355,13 +355,37 @@ def _pick_next_command(current: dict[str, Any] | None, action_plan: list[dict[st
 
 
 def _format_stage_line(current: dict[str, Any] | None, total: int) -> str:
-    """The `Стадия:` line — pulled out next to `_pick_next_command()` for
-    the same reason (T-105 review round 1, 🟡-1): a test can call this
-    directly and catch a mutation like `{order}`→`{total}` that a
-    hand-written expected string in the test would not."""
+    """The `Ждёт:` line (T-184; was `Стадия:` in T-105) — pulled out next to
+    `_pick_next_command()` for the same reason (T-105 review round 1, 🟡-1):
+    a test can call this directly and catch a mutation like
+    `{order}`→`{total}` that a hand-written expected string would not."""
     if current:
-        return f"Стадия: {current.get('title')} ({current.get('order')} из {total})"
-    return f"Стадия: цикл пройден ({total} из {total})"
+        return f"Ждёт: {current.get('title')} ({current.get('order')} из {total})"
+    return f"Ждёт: ничего — цикл пройден ({total} из {total})"
+
+
+def _format_done_line(stages: list[dict[str, Any]], limit: int = 5) -> str:
+    """The `Сделано:` line (T-184): how many stages are done and which —
+    every done stage counts, including ones closed by cycle-state phases
+    after the current stage, so months of work are visible at a glance."""
+    done = [str(item.get("title")) for item in stages if item.get("status") == "done"]
+    summary = f"{len(done)} из {len(stages)} стадий"
+    if not done:
+        return f"Сделано: {summary}"
+    names = ", ".join(done[:limit]) + (", …" if len(done) > limit else "")
+    return f"Сделано: {summary} ({names})"
+
+
+def _format_reason_line(current: dict[str, Any] | None) -> str:
+    """The `Причина:` line (T-184): why the current stage waits — its first
+    blocker, else its first missing artifact, else «—»."""
+    blockers = list((current or {}).get("blockers") or [])
+    missing = list((current or {}).get("missing_artifacts") or [])
+    if blockers:
+        return f"Причина: {blockers[0]}"
+    if missing:
+        return f"Причина: нет {missing[0]}"
+    return "Причина: —"
 
 
 def _status_header_lines(
@@ -371,8 +395,9 @@ def _status_header_lines(
     *,
     research_package: str | None = None,
 ) -> list[str] | None:
-    """Three status-header lines (T-105): snapshot freshness, current journey
-    stage, next command — kept as separate lines on purpose (setup-stage
+    """Five status-header lines (T-105, extended in T-184): snapshot
+    freshness, done stages, the stage that waits, why it waits, next
+    command — kept as separate lines on purpose (setup-stage
     readiness and monitoring-snapshot freshness answer different questions
     and must not be blended into one verdict). Best-effort: `build_report()`
     calls `require_config`/`require_section`, which `sys.exit(2)` on a
@@ -412,9 +437,14 @@ def _status_header_lines(
         freshness = f"{marker} ({snap.name} · {age} дн.)"
     stages = report.get("stages") or []
     current = report.get("current_stage")
-    stage_line = _format_stage_line(current, len(stages))
     next_command = _pick_next_command(current, report.get("action_plan") or [])
-    return [f"Срез: {freshness}", stage_line, f"Дальше: {next_command}"]
+    return [
+        f"Срез: {freshness}",
+        _format_done_line(stages),
+        _format_stage_line(current, len(stages)),
+        _format_reason_line(current),
+        f"Дальше: {next_command}",
+    ]
 
 
 def cmd_status(args: list[str], project: pathlib.Path) -> int:
