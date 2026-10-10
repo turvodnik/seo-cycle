@@ -613,6 +613,7 @@ def assign_status(stages: list[dict[str, Any]], cycle_phases: dict[str, dict[str
             if item["blockers"]:
                 # Keep the open question visible instead of silently dropping it.
                 item["warnings"].extend(item["blockers"])
+                item["open_on_closed"] = list(item["blockers"])
                 item["blockers"] = []
         elif artifact_done:
             item["status"] = "done"
@@ -624,8 +625,59 @@ def assign_status(stages: list[dict[str, Any]], cycle_phases: dict[str, dict[str
         first_open["status"] = "blocked" if first_open["blockers"] else "current"
 
 
-def build_action_plan(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+# Stages that consume the research package produced at `research_architecture`.
+PACKAGE_CONSUMERS = {
+    "research_quality_gate",
+    "research_package_repair",
+    "deep_page_briefs",
+    "deep_page_briefs_v3",
+    "content_draft_gate",
+}
+
+
+def missing_input(stages: list[dict[str, Any]], package: dict[str, Any]) -> dict[str, Any] | None:
+    """The first input that really is absent for the current stage (T-184 round 1).
+
+    The cycle may close `research_architecture` (keywords + clusters passed
+    their gates) while no research package exists on disk. The next stage
+    then waits on a derived file (`research-package-quality.json`) and its
+    command (`seo-cycle loop research-package ...`) fails with "not found".
+    In that case the honest reason and next step are the package itself."""
     current = next((item for item in stages if item["status"] in {"current", "blocked"}), None)
+    if current is None or current["id"] not in PACKAGE_CONSUMERS or package.get("exists"):
+        return None
+    research = next((item for item in stages if item["id"] == "research_architecture"), None)
+    if research is None:
+        return None
+    package_dir = f"{package.get('package_dir') or 'seo/research-package'}/"
+    why = "закрыта циклом" if research.get("closed_by_cycle") else "пройдена"
+    return {
+        "stage": research["id"],
+        "order": research["order"],
+        "artifact": package_dir,
+        "reason": f"нет {package_dir} (стадия {research['order']} {why}, пакет исследования не создан)",
+        "command": (
+            f"создай или импортируй пакет исследования в {package_dir} "
+            "(semantic-core.csv, content-plan.csv, final-clusters.md, semantic-architecture-final.json, "
+            "entity-map.md, entity-map.yaml)"
+        ),
+    }
+
+
+def build_action_plan(stages: list[dict[str, Any]], input_gap: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    current = next((item for item in stages if item["status"] in {"current", "blocked"}), None)
+    if current is not None and input_gap:
+        # The current stage cannot run without its input: fix the input first.
+        return [
+            {
+                "step": 1,
+                "priority": "P0-input",
+                "stage": input_gap["stage"],
+                "action": f"Missing input for {current['title']}: {input_gap['reason']}.",
+                "command": input_gap["command"],
+                "done": f"{input_gap['artifact']} exists; rerun `seo-cycle journey`.",
+            }
+        ]
     if current is None:
         return [
             {
@@ -696,7 +748,8 @@ def build_report(cfg_path: pathlib.Path, *, goal: str, research_package: str | N
     # T-184: cycle phases from every <cycles_root>/*/_state.json close mapped stages.
     cycle_phases = read_cycle_phases(cfg, project_root)
     assign_status(stages, cycle_phases)
-    current =next((item for item in stages if item["status"] in {"current", "blocked"}), None)
+    current = next((item for item in stages if item["status"] in {"current", "blocked"}), None)
+    input_gap = missing_input(stages, package)
     done_count = sum(1 for item in stages if item["status"] == "done")
     status = "ready" if current is None else "blocked" if current["status"] == "blocked" else "needs_work"
     report = {
@@ -714,10 +767,13 @@ def build_report(cfg_path: pathlib.Path, *, goal: str, research_package: str | N
         "next_stage": next((item for item in stages if item["order"] == (current or {}).get("order", len(stages)) + 1), None)
         if current
         else None,
-        "missing_for_next_step": (current or {}).get("missing_artifacts", []) + (current or {}).get("blockers", []),
+        "missing_input": input_gap,
+        "missing_for_next_step": ([input_gap["reason"]] if input_gap else [])
+        + (current or {}).get("missing_artifacts", [])
+        + (current or {}).get("blockers", []),
         "stages": stages,
         "scorecards": load_scorecards(project_root),
-        "action_plan": build_action_plan(stages),
+        "action_plan": build_action_plan(stages, input_gap),
         "rules": [
             "Do not skip a blocked/current stage just because a later artifact exists.",
             "Use distillates and generated reports as context; keep raw CSV/JSON/logs on disk.",
