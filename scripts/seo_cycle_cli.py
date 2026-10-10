@@ -376,16 +376,35 @@ def _format_done_line(stages: list[dict[str, Any]], limit: int = 5) -> str:
     return f"Сделано: {summary} ({names})"
 
 
-def _format_reason_line(current: dict[str, Any] | None) -> str:
-    """The `Причина:` line (T-184): why the current stage waits — its first
-    blocker, else its first missing artifact, else «—»."""
+def _format_reason_line(
+    current: dict[str, Any] | None,
+    stages: list[dict[str, Any]] | None = None,
+    input_gap: dict[str, Any] | None = None,
+) -> str:
+    """The `Причина:` line (T-184): why the current stage waits — a really
+    missing input (`report["missing_input"]`, e.g. no research package behind
+    a stage the cycle closed), else its first blocker, else its first missing
+    artifact, else «—». Blockers left open on stages the cycle closed (moved
+    to warnings, e.g. the unanswered questionnaire) are appended as a tail so
+    they stay visible in the header."""
     blockers = list((current or {}).get("blockers") or [])
     missing = list((current or {}).get("missing_artifacts") or [])
-    if blockers:
-        return f"Причина: {blockers[0]}"
-    if missing:
-        return f"Причина: нет {missing[0]}"
-    return "Причина: —"
+    if input_gap:
+        reason = str(input_gap.get("reason"))
+    elif blockers:
+        reason = str(blockers[0])
+    elif missing:
+        reason = f"нет {missing[0]}"
+    else:
+        reason = "—"
+    open_on_closed = [
+        f"{item.get('title')} — {str(note).rstrip('.')}"
+        for item in (stages or [])
+        for note in (item.get("open_on_closed") or [])
+    ]
+    if open_on_closed:
+        reason += f" (+ открыто на закрытых стадиях: {'; '.join(open_on_closed)})"
+    return f"Причина: {reason}"
 
 
 def _status_header_lines(
@@ -437,12 +456,18 @@ def _status_header_lines(
         freshness = f"{marker} ({snap.name} · {age} дн.)"
     stages = report.get("stages") or []
     current = report.get("current_stage")
-    next_command = _pick_next_command(current, report.get("action_plan") or [])
+    input_gap = report.get("missing_input") if current else None
+    # T-184 round 1: a missing input (no research package behind a stage the
+    # cycle closed) beats the current stage's own command, which would fail
+    # with "not found" on this project.
+    next_command = (
+        str(input_gap["command"]) if input_gap else _pick_next_command(current, report.get("action_plan") or [])
+    )
     return [
         f"Срез: {freshness}",
         _format_done_line(stages),
         _format_stage_line(current, len(stages)),
-        _format_reason_line(current),
+        _format_reason_line(current, stages, input_gap),
         f"Дальше: {next_command}",
     ]
 

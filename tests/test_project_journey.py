@@ -420,9 +420,10 @@ class StageTitlesAreRussianTest(unittest.TestCase):
 
 @unittest.skipIf(yaml is None, "PyYAML is required")
 class StatusHeaderTest(unittest.TestCase):
-    """T-105: `seo-cycle status` prints a three-line Russian header —
-    snapshot freshness, current journey stage, and the single next command —
-    before the previous detailed output (unchanged below it)."""
+    """T-105, extended in T-184: `seo-cycle status` prints a five-line
+    Russian header — snapshot freshness, done stages, the waiting stage, why
+    it waits, and the single next command — before the previous detailed
+    output (unchanged below it)."""
 
     def run_status(self, cfg_path: pathlib.Path) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -703,6 +704,60 @@ class CycleStateBridgeTest(unittest.TestCase):
         )
         self.assertEqual(lines[2], "Ждёт: Доступы, бюджет и управление (2 из 12)")
         self.assertTrue(lines[3].startswith("Причина: нет seo/setup/"), lines[3])
+        # Round 1, 💭-2: the questionnaire blocker of the cycle-closed stage 1
+        # stays visible in the header, not only in the body.
+        self.assertIn(
+            "(+ открыто на закрытых стадиях: Основа проекта — 3 setup questionnaire fields are still unanswered)",
+            lines[3],
+        )
+
+    def run_status_lines(self, cfg_path: pathlib.Path) -> list[str]:
+        proc = subprocess.run(
+            [sys.executable, str(LAUNCHER), "status"], cwd=cfg_path.parent, text=True, capture_output=True, check=False
+        )
+        return proc.stdout.splitlines()
+
+    def test_cycle_closed_research_without_package_points_to_the_package(self) -> None:
+        # Round 1, 🟡-1 (the gsse.ru shape): keywords + clusters passed their
+        # gates, so the cycle closes stage 5, but no research package exists.
+        # The current stage (research quality gate) must not send the operator
+        # to `seo-cycle loop research-package ...`, which fails "not found".
+        cfg_path = make_bare_project(self)
+        seed_first_four_stages(cfg_path.parent)
+        write_cycle_state(cfg_path.parent, "first-cycle", {name: True for name in FIRST_SIX_PHASES})
+        report = self.report(cfg_path)
+        self.assertEqual(report["current_stage"]["id"], "research_quality_gate")
+        self.assertEqual(report["missing_input"]["artifact"], "seo/research-package/")
+        self.assertNotIn("loop research-package", report["action_plan"][0]["command"])
+        lines = self.run_status_lines(cfg_path)
+        self.assertEqual(lines[2], "Ждёт: Гейт качества исследования (6 из 12)")
+        self.assertEqual(
+            lines[3], "Причина: нет seo/research-package/ (стадия 5 закрыта циклом, пакет исследования не создан)"
+        )
+        self.assertTrue(lines[4].startswith("Дальше: создай или импортируй пакет исследования в seo/research-package/"), lines[4])
+        self.assertNotIn("loop research-package", lines[4])
+
+    def test_with_the_package_present_the_loop_command_stays(self) -> None:
+        # Negative control for the test above: once the package exists, the
+        # current stage's own (now runnable) command is shown again.
+        cfg_path = make_bare_project(self)
+        seed_first_four_stages(cfg_path.parent)
+        package = cfg_path.parent / "seo" / "research-package"
+        package.mkdir(parents=True)
+        for name in (
+            "semantic-core.csv",
+            "content-plan.csv",
+            "final-clusters.md",
+            "semantic-architecture-final.json",
+            "entity-map.md",
+            "entity-map.yaml",
+        ):
+            (package / name).write_text("ok\n", encoding="utf-8")
+        write_cycle_state(cfg_path.parent, "first-cycle", {name: True for name in FIRST_SIX_PHASES})
+        self.assertIsNone(self.report(cfg_path)["missing_input"])
+        lines = self.run_status_lines(cfg_path)
+        self.assertEqual(lines[2], "Ждёт: Гейт качества исследования (6 из 12)")
+        self.assertIn("loop research-package", lines[4])
 
 
 class HeaderLineUnitTest(unittest.TestCase):
@@ -722,6 +777,20 @@ class HeaderLineUnitTest(unittest.TestCase):
         self.assertEqual(_format_reason_line({"blockers": [], "missing_artifacts": ["m1", "m2"]}), "Причина: нет m1")
         self.assertEqual(_format_reason_line({"blockers": [], "missing_artifacts": []}), "Причина: —")
         self.assertEqual(_format_reason_line(None), "Причина: —")
+
+    def test_reason_line_input_gap_wins_and_open_blockers_are_appended(self) -> None:
+        from seo_cycle_cli import _format_reason_line
+
+        current = {"blockers": [], "missing_artifacts": ["derived.json"]}
+        stages = [{"title": "Основа", "open_on_closed": ["3 fields open."]}, {"title": "Другая"}]
+        self.assertEqual(
+            _format_reason_line(current, stages, {"reason": "нет pkg/"}),
+            "Причина: нет pkg/ (+ открыто на закрытых стадиях: Основа — 3 fields open)",
+        )
+
+    def test_stage_line_when_the_journey_is_complete(self) -> None:
+        # Round 1, 💭-5: the «nothing waits» branch.
+        self.assertEqual(_format_stage_line(None, 12), "Ждёт: ничего — цикл пройден (12 из 12)")
 
 
 if __name__ == "__main__":
