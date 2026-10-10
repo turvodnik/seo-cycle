@@ -243,3 +243,73 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
 
 def json_summary(path: pathlib.Path) -> dict[str, Any]:
     return read_json(path) if path.exists() else {}
+
+
+# T-184: one progress model. `cycle-state.py` tracks cycle *phases* with
+# quality gates in `<cycles_root>/<topic>/_state.json`; project-journey tracks
+# *stages* by artifacts on disk. This table is the only bridge between them.
+CYCLE_PHASE_TO_STAGE: dict[str, str] = {
+    "discovery": "setup_foundation",
+    "audit": "technical_baseline",
+    "keywords": "research_architecture",
+    "clusters": "research_architecture",
+    "entity_map": "deep_page_briefs",
+    "content_plan": "deep_page_briefs",
+    "writing": "content_draft_gate",
+    "publishing": "implementation_review",
+    "schema": "implementation_review",
+    "monitoring": "monitoring_iteration",
+    "iteration": "monitoring_iteration",
+}
+"""Cycle phase (cycle-state.py `DEFAULT_PHASES`) -> journey stage id.
+
+A journey stage is closed by the cycle when EVERY phase mapped to it is
+`done` with `gate_passed: true` (in any cycle). A phase that is `done`
+without a passed gate (e.g. imported legacy artifacts) never closes a stage:
+the gate was not run. Stages with no mapped phase (governance, evidence
+sources, research quality gate, repair, v3 copywriter briefs) are closed by
+their artifacts only. `deep_page_briefs_v3` is intentionally unmapped:
+`content_plan` proves page briefs exist, not that copywriter-ready v3
+outlines passed their own gate."""
+
+
+def cycles_root(cfg: dict[str, Any], project_root: pathlib.Path) -> pathlib.Path:
+    """`artifacts.cycles_root` (default `./seo/cycles`) — the obsidian-sync key."""
+    artifacts = cfg.get("artifacts")
+    raw = str((artifacts.get("cycles_root") if isinstance(artifacts, dict) else None) or "./seo/cycles")
+    path = pathlib.Path(raw).expanduser()
+    return path if path.is_absolute() else project_root / path
+
+
+def read_cycle_phases(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, dict[str, Any]]:
+    """Merge every `<cycles_root>/*/_state.json` into `{phase: {"closed": bool, "cycles": [...]}}`.
+
+    Several cycles: the best fact per phase wins (closed if any cycle has it
+    `done` with `gate_passed: true`). A missing root, unreadable JSON or
+    malformed `phases` yield an empty/partial dict and never raise —
+    `seo-cycle status` builds its header from this on a best-effort basis."""
+    root = cycles_root(cfg, project_root)
+    result: dict[str, dict[str, Any]] = {}
+    if not root.is_dir():
+        return result
+    for state_path in sorted(root.glob("*/_state.json")):
+        phases = read_json(state_path).get("phases")
+        if not isinstance(phases, dict):
+            continue
+        for name, info in phases.items():
+            if not isinstance(info, dict):
+                continue
+            closed = info.get("status") == "done" and info.get("gate_passed") is True
+            entry = result.setdefault(str(name), {"closed": False, "cycles": []})
+            if closed:
+                entry["closed"] = True
+                entry["cycles"].append(state_path.parent.name)
+    return result
+
+
+def stage_closed_by_cycle(stage_id: str, cycle_phases: dict[str, dict[str, Any]]) -> list[str]:
+    """Phases that close `stage_id`, or [] when the cycle does not close it."""
+    mapped = [phase for phase, target in CYCLE_PHASE_TO_STAGE.items() if target == stage_id]
+    if mapped and all((cycle_phases.get(phase) or {}).get("closed") for phase in mapped):
+        return mapped
+    return []

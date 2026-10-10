@@ -433,14 +433,19 @@ class StatusHeaderTest(unittest.TestCase):
             check=False,
         )
 
-    def test_header_is_the_first_three_lines(self) -> None:
+    def test_header_is_the_first_five_lines(self) -> None:
+        # T-184: «Срез / Сделано / Ждёт / Причина / Дальше» (was three lines
+        # with «Стадия:» in T-105).
         cfg_path = make_bare_project(self)
         proc = self.run_status(cfg_path)
         lines = proc.stdout.splitlines()
-        self.assertGreaterEqual(len(lines), 3, proc.stdout)
-        self.assertTrue(lines[0].startswith("Срез:"), lines[:5])
-        self.assertTrue(lines[1].startswith("Стадия:"), lines[:5])
-        self.assertTrue(lines[2].startswith("Дальше:"), lines[:5])
+        self.assertGreaterEqual(len(lines), 5, proc.stdout)
+        self.assertTrue(lines[0].startswith("Срез:"), lines[:6])
+        self.assertTrue(lines[1].startswith("Сделано:"), lines[:6])
+        self.assertTrue(lines[2].startswith("Ждёт:"), lines[:6])
+        self.assertTrue(lines[3].startswith("Причина:"), lines[:6])
+        self.assertTrue(lines[4].startswith("Дальше:"), lines[:6])
+        self.assertFalse(any(line.startswith("Стадия:") for line in lines), lines[:6])
 
     def test_next_command_exists_in_cli_commands(self) -> None:
         cfg_path = make_bare_project(self)
@@ -458,8 +463,8 @@ class StatusHeaderTest(unittest.TestCase):
         cfg_path = make_bare_project(self)
         proc = self.run_status(cfg_path)
         lines = proc.stdout.splitlines()
-        self.assertNotIn("Стадия", lines[0])
-        self.assertNotIn("Срез", lines[1])
+        self.assertNotIn("Ждёт", lines[0])
+        self.assertNotIn("Срез", lines[2])
 
     def test_stage_one_header_lines_match_exactly(self) -> None:
         # T-105 review round 1, 🟡-1: an exact `assertEqual` on stage 1 (not
@@ -469,8 +474,10 @@ class StatusHeaderTest(unittest.TestCase):
         cfg_path = make_bare_project(self)
         proc = self.run_status(cfg_path)
         lines = proc.stdout.splitlines()
-        self.assertEqual(lines[1], "Стадия: Основа проекта (1 из 12)")
-        self.assertEqual(lines[2], "Дальше: seo-cycle control-plane --write")
+        self.assertEqual(lines[1], "Сделано: 0 из 12 стадий")
+        self.assertEqual(lines[2], "Ждёт: Основа проекта (1 из 12)")
+        self.assertEqual(lines[3], "Причина: нет seo/project-intake.yaml")
+        self.assertEqual(lines[4], "Дальше: seo-cycle control-plane --write")
 
     def test_research_package_flag_reaches_the_header_not_just_the_body(self) -> None:
         # T-105 review round 1, 🟡-2: `--research-package <path outside the
@@ -505,9 +512,9 @@ class StatusHeaderTest(unittest.TestCase):
             check=False,
         )
         lines = proc.stdout.splitlines()
-        stage_line = next(line for line in lines if line.startswith("Стадия:"))
+        stage_line = next(line for line in lines if line.startswith("Ждёт:"))
         body_line = next(line for line in lines if line.startswith("- Current stage:"))
-        header_title = stage_line.removeprefix("Стадия: ").rsplit(" (", 1)[0]
+        header_title = stage_line.removeprefix("Ждёт: ").rsplit(" (", 1)[0]
         body_title = body_line.rsplit("` ", 1)[-1].strip()
         self.assertEqual(
             header_title, body_title, f"header and body disagree: {stage_line!r} vs {body_line!r}"
@@ -565,10 +572,156 @@ class HeaderSelectorUnitTest(unittest.TestCase):
         self.assertNotEqual(research["order"], total)  # otherwise an order/total swap wouldn't show here
         self.assertEqual(
             _format_stage_line(research, total),
-            f"Стадия: {research['title']} ({research['order']} из {total})",
+            f"Ждёт: {research['title']} ({research['order']} из {total})",
         )
         setup = next(stage for stage in report["stages"] if stage["id"] == "setup_foundation")
-        self.assertEqual(_format_stage_line(setup, total), f"Стадия: Основа проекта (1 из {total})")
+        self.assertEqual(_format_stage_line(setup, total), f"Ждёт: Основа проекта (1 из {total})")
+
+
+FIRST_SIX_PHASES = ("discovery", "audit", "keywords", "clusters", "entity_map", "content_plan")
+ALL_PHASES = FIRST_SIX_PHASES + ("writing", "publishing", "schema", "monitoring", "iteration")
+
+
+def write_cycle_state(project_root: pathlib.Path, topic: str, closed: dict[str, bool], *, root: str = "seo/cycles") -> None:
+    """A `_state.json` in the cycle-state.py shape: `closed[phase]` True means
+    `done` + `gate_passed: true`, False means `done` + `gate_passed: false`;
+    phases not listed are `pending`."""
+    cycle_dir = project_root / root / topic
+    cycle_dir.mkdir(parents=True, exist_ok=True)
+    phases = {}
+    for name in ALL_PHASES:
+        if name in closed:
+            phases[name] = {"status": "done", "gate_passed": closed[name], "deps": [], "outputs": []}
+        else:
+            phases[name] = {"status": "pending", "gate_passed": False, "deps": [], "outputs": []}
+    (cycle_dir / "_state.json").write_text(
+        json.dumps({"topic": topic, "cycle_dir": str(cycle_dir), "phases": phases}), encoding="utf-8"
+    )
+
+
+@unittest.skipIf(yaml is None, "PyYAML is required")
+class CycleStateBridgeTest(unittest.TestCase):
+    """T-184: one progress model — journey stages read cycle-state phases
+    (`CYCLE_PHASE_TO_STAGE`), a stage after the current one keeps its own
+    fact instead of being declared `pending` blindly, and a `done` phase
+    without `gate_passed` never closes a stage."""
+
+    def report(self, cfg_path: pathlib.Path) -> dict:
+        proc = subprocess.run(
+            [sys.executable, str(JOURNEY), str(cfg_path), "--format", "json"],
+            cwd=cfg_path.parent,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        return json.loads(proc.stdout)
+
+    def statuses(self, report: dict) -> dict[str, str]:
+        return {stage["id"]: stage["status"] for stage in report["stages"]}
+
+    def gsse_like_project(self, closed: dict[str, bool]) -> pathlib.Path:
+        # Unanswered questionnaire (the gsse.ru shape): setup_foundation has a
+        # blocker of its own, yet the cycle passed `discovery` through its gate.
+        cfg_path = make_bare_project(self)
+        setup = cfg_path.parent / "seo" / "setup"
+        setup.mkdir(parents=True, exist_ok=True)
+        (setup / "setup-gap-audit.json").write_text(json.dumps({"summary": {"missing": 3}}), encoding="utf-8")
+        write_cycle_state(cfg_path.parent, "first-cycle-2026-q2", closed)
+        return cfg_path
+
+    def test_six_gated_phases_close_their_stages_and_raise_the_score(self) -> None:
+        cfg_path = self.gsse_like_project({name: True for name in FIRST_SIX_PHASES})
+        report = self.report(cfg_path)
+        status = self.statuses(report)
+        for stage_id in ("setup_foundation", "technical_baseline", "research_architecture", "deep_page_briefs"):
+            self.assertEqual(status[stage_id], "done", status)
+        self.assertGreater(report["journey_score"], 0)
+        self.assertEqual(report["journey_score"], round(4 / 12 * 10, 1))
+        first_not_done = next(stage for stage in report["stages"] if stage["status"] != "done")
+        self.assertEqual(report["current_stage"]["id"], first_not_done["id"])
+        self.assertEqual(report["current_stage"]["id"], "access_budget_governance")
+        self.assertEqual(report["current_stage"]["status"], "current")
+        # Stages without a closing phase and without the prefix stay pending.
+        self.assertEqual(status["research_package_repair"], "pending")
+        self.assertEqual(status["implementation_review"], "pending")
+        # The questionnaire blocker is moved to warnings, not dropped.
+        setup_stage = next(stage for stage in report["stages"] if stage["id"] == "setup_foundation")
+        self.assertEqual(setup_stage["blockers"], [])
+        self.assertTrue(any("questionnaire" in warning for warning in setup_stage["warnings"]), setup_stage)
+        self.assertEqual(setup_stage["closed_by_cycle"], ["discovery"])
+
+    def test_done_phase_without_gate_passed_does_not_close_the_stage(self) -> None:
+        closed = {name: True for name in FIRST_SIX_PHASES}
+        closed["audit"] = False  # done, but the gate was never passed
+        closed["clusters"] = False
+        report = self.report(self.gsse_like_project(closed))
+        status = self.statuses(report)
+        self.assertNotEqual(status["technical_baseline"], "done", status)
+        self.assertNotEqual(status["research_architecture"], "done", status)
+        self.assertEqual(status["setup_foundation"], "done", status)
+        self.assertEqual(status["deep_page_briefs"], "done", status)
+
+    def test_phases_merge_across_cycles(self) -> None:
+        cfg_path = make_bare_project(self)
+        write_cycle_state(cfg_path.parent, "cycle-a", {"keywords": True, "clusters": False})
+        write_cycle_state(cfg_path.parent, "cycle-b", {"clusters": True})
+        status = self.statuses(self.report(cfg_path))
+        self.assertEqual(status["research_architecture"], "done", status)
+        self.assertEqual(status["setup_foundation"], "current", status)
+
+    def test_cycles_root_comes_from_config(self) -> None:
+        cfg_path = make_bare_project(self)
+        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        cfg.setdefault("artifacts", {})["cycles_root"] = "./custom/cycles"
+        cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        write_cycle_state(cfg_path.parent, "elsewhere", {"discovery": True}, root="custom/cycles")
+        self.assertEqual(self.statuses(self.report(cfg_path))["setup_foundation"], "done")
+
+    def test_without_cycles_or_with_broken_state_behaviour_is_unchanged(self) -> None:
+        baseline_cfg = make_bare_project(self)
+        baseline = self.report(baseline_cfg)
+        self.assertEqual(baseline["journey_score"], 0.0)
+        self.assertEqual(baseline["current_stage"]["id"], "setup_foundation")
+        broken_cfg = make_bare_project(self)
+        broken = broken_cfg.parent / "seo" / "cycles" / "broken"
+        broken.mkdir(parents=True)
+        (broken / "_state.json").write_text("{not json", encoding="utf-8")
+        odd = broken_cfg.parent / "seo" / "cycles" / "odd"
+        odd.mkdir(parents=True)
+        (odd / "_state.json").write_text(json.dumps({"phases": ["discovery"]}), encoding="utf-8")
+        self.assertEqual(self.statuses(self.report(broken_cfg)), self.statuses(baseline))
+
+    def test_status_header_shows_done_stages_and_the_reason(self) -> None:
+        cfg_path = self.gsse_like_project({name: True for name in FIRST_SIX_PHASES})
+        proc = subprocess.run(
+            [sys.executable, str(LAUNCHER), "status"], cwd=cfg_path.parent, text=True, capture_output=True, check=False
+        )
+        lines = proc.stdout.splitlines()
+        self.assertEqual(
+            lines[1],
+            "Сделано: 4 из 12 стадий (Основа проекта, Техническая база, Архитектура исследования, Глубокие брифы страниц)",
+        )
+        self.assertEqual(lines[2], "Ждёт: Доступы, бюджет и управление (2 из 12)")
+        self.assertTrue(lines[3].startswith("Причина: нет seo/setup/"), lines[3])
+
+
+class HeaderLineUnitTest(unittest.TestCase):
+    """T-184: pure formatters for the «Сделано» and «Причина» header lines."""
+
+    def test_done_line_truncates_after_five(self) -> None:
+        from seo_cycle_cli import _format_done_line
+
+        stages = [{"title": f"S{i}", "status": "done"} for i in range(7)] + [{"title": "X", "status": "current"}]
+        self.assertEqual(_format_done_line(stages), "Сделано: 7 из 8 стадий (S0, S1, S2, S3, S4, …)")
+        self.assertEqual(_format_done_line([{"title": "X", "status": "pending"}]), "Сделано: 0 из 1 стадий")
+
+    def test_reason_line_prefers_blocker_then_missing_then_dash(self) -> None:
+        from seo_cycle_cli import _format_reason_line
+
+        self.assertEqual(_format_reason_line({"blockers": ["b1"], "missing_artifacts": ["m1"]}), "Причина: b1")
+        self.assertEqual(_format_reason_line({"blockers": [], "missing_artifacts": ["m1", "m2"]}), "Причина: нет m1")
+        self.assertEqual(_format_reason_line({"blockers": [], "missing_artifacts": []}), "Причина: —")
+        self.assertEqual(_format_reason_line(None), "Причина: —")
 
 
 if __name__ == "__main__":
