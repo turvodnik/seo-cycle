@@ -38,6 +38,8 @@ Phase 10  skills/seo-iteration   ← triggers-eval + source-attribution + kpi/fo
 - **governance/spend** (`usage-ledger.py`, `spend-guard.py`, `approvals.py`) — preflight и учёт платного;
 - **data pipeline** (`pulse` → `*-fetch.py` → `snapshot-build.py` → `db-sync.py` → `position-progress.py` → `triggers-eval.py`).
 
+**Одна модель прогресса (T-184).** Journey (`project-journey.py`, 12 стадий) — что видит оператор; cycle-state (`_state.json`, 11 фаз с воротами) — источник истины о пройденных воротах. Мост — константа `CYCLE_PHASE_TO_STAGE` и `read_cycle_phases()` в `scripts/seo_cycle_core/journey.py`: стадия `done`, если все её фазы `done` + `gate_passed: true` в любом цикле из `artifacts.cycles_root`, либо её файлы на месте и все предыдущие стадии `done`. `cycle-state.py` journey не пишет и не меняет. Таблица соответствия и шапка `status` — `GUIDE.md` §8.
+
 ## Структура репозитория (v2)
 
 ```
