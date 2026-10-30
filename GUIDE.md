@@ -201,6 +201,25 @@ python3 ./.codex/skills/seo-cycle/scripts/cycle-state.py show      # прогр�
 
 Преимущества дробления: переиспользование (фаза вне цикла), ясность/контроль (видно прогресс и gate'ы), параллельность (независимые фазы разом), продажа (модуль = отдельный продукт). «Улучшение» — на данных (`source-attribution.py` + `triggers-eval.py`), без авто-переписывания кода.
 
+### <a id="импорт-старого-проекта"></a>Как поднять старый проект в конвейер (`cycle import`)
+
+Проект, который вели без `seo/cycles/`, держит артефакты фаз плоскими файлами в `seo/`: `02-keywords.md`, `03-clusters.md`, `keywords/`, `entities/`, `content-drafts/`, `monitoring/`. Ворота (`cycle gate`) для него не работают — нет `_state.json`. `cycle import` строит этот файл из того, что уже лежит на диске, и ничего не удаляет и не переносит.
+
+```bash
+cd <корень проекта>
+seo-cycle cycle import <тема>              # dry-run: карта «фаза → файл → статус», ничего не пишет
+seo-cycle cycle import <тема> --write      # создаёт <cycles_root>/<каталог>/_state.json и печатает этот путь
+seo-cycle cycle show --dir <каталог из вывода import>
+seo-cycle cycle gate keywords --dir <каталог из вывода import>   # подтвердить фазу воротами
+```
+
+Каталог цикла — `artifacts.cycles_root` из `seo-cycle.yaml` (по умолчанию `seo/cycles`) плюс имя темы латиницей: кириллица транслитерируется («минеральная вата» → `seo/cycles/mineralnaya-vata`). В `--dir` передавайте путь, который напечатал `import`, а не тему как есть.
+
+- Карта по умолчанию (пути от `--from`, по умолчанию `seo/`): `setup/context-pack.md` → discovery, `technical/technical-site-audit.md` → audit, `02-keywords.md` и `keywords/` → keywords, `03-clusters.md` → clusters, `entities/` → entity_map, `content-drafts/` → writing, `monitoring/` → monitoring. Не считаются: файл из одних пробелов и переводов строки, каталог без такого файла внутри (пустые подкаталоги, скрытые `.gitkeep`, `.DS_Store` и прочие файлы с точкой в начале имени). Своя раскладка — `--map <файл.json>` вида `{"content_plan": ["plan.md"]}` поверх карты по умолчанию.
+- Найденная фаза получает `status: done`, `output: <реальный путь>` и **`gate_passed: false`**: файлы есть, но ворота задним числом не подтверждаются. `cycle show` помечает такие фазы «импорт, gate_passed: false — ворота не проходились». Следующие фазы остаются `blocked`, пока ворота не пройдены; journey такие фазы тоже не засчитывает (см. «Одна модель прогресса»). Фаза, чьи файлы найдены, а предыдущая фаза — нет (например, `content-drafts/` есть, а плана контента нет), остаётся `blocked` с записью `imported_from`: `cycle show` пишет «ждут предыдущих фаз»; закрыть её можно после предыдущих.
+- Подтверждение — обычный `cycle gate <фаза>`: он проверяет, что артефакт существует и в нём есть содержимое (то же правило, что у импорта). Путь `output` ищется в каталоге цикла; от корня проекта — только для фаз, записанных импортом (путь из `imported_from`). Посторонний `02-keywords.md` в корне проекта ворота цикла из `init` не открывает.
+- Если `_state.json` этого цикла уже есть, `--write` отказывает (код 1) и состояние не трогает; подсказка называет другую тему и её каталог. Ошибка вызова (нет каталога `--from`, битая карта, `--dir` без цикла) — код 2.
+
 ---
 
 ## <a id="политики-проекта"></a>6c. Локальные политики проекта
@@ -493,11 +512,11 @@ Image gate: настройки берутся из `images.*` в `seo-cycle.yaml
 | `audit` | Техническая база (`technical_baseline`) |
 | `keywords` + `clusters` | Архитектура исследования (`research_architecture`) |
 | `entity_map` + `content_plan` | Глубокие брифы страниц (`deep_page_briefs`) |
-| `writing` | Черновик и гейт (`content_draft_gate`) |
+| `writing` | Черновик и гейт (`content_draft_gate`) — только если у стадии нет собственных блокеров |
 | `publishing` + `schema` | Внедрение и ревью публикации (`implementation_review`) |
 | `monitoring` + `iteration` | Мониторинг и итерации (`monitoring_iteration`) |
 
-Фаза `done` без `gate_passed` стадию не закрывает: ворота не проходились (так помечаются, например, импортированные старые артефакты). Стадии без фазы (доступы и бюджет, экспертные источники, гейт качества, починка пакета, брифы v3) закрываются только своими файлами и, как раньше, только когда закрыты все предыдущие. Шапка `seo-cycle status` поэтому показывает и сделанное, и то, что ждёт:
+Фаза `done` без `gate_passed` стадию не закрывает: ворота не проходились (так помечаются, например, импортированные старые артефакты). Ворота фазы `writing` проверяют только, что черновики есть, — это не гейт черновика и не NeuronWriter. Поэтому «Черновик и гейт» цикл закрывает, лишь когда у стадии нет своих блокеров (брифы v3, copywriter-ready, `page-outline-quality.json` v3/pass) и у каждого черновика лежит отчёт гейта с пройденным вердиктом (`status` `pass` или `warn`; пустой, битый или `fail` отчёт — блокер); иначе блокеры остаются блокерами. Стадии без фазы (доступы и бюджет, экспертные источники, гейт качества, починка пакета, брифы v3) закрываются только своими файлами и, как раньше, только когда закрыты все предыдущие. Шапка `seo-cycle status` поэтому показывает и сделанное, и то, что ждёт:
 
 ```
 Срез: ок (gsc-snapshot-2026-10-09.json · 1 дн.)
@@ -507,7 +526,7 @@ Image gate: настройки берутся из `images.*` в `seo-cycle.yaml
 Дальше: создай или импортируй пакет исследования в seo/research-package/ (semantic-core.csv, content-plan.csv, …)
 ```
 
-«Причина» и «Дальше» называют первый *реально отсутствующий вход*: если цикл закрыл «Архитектуру исследования» (ворота `keywords` и `clusters` пройдены), а пакета исследования на диске нет, шапка ведёт создавать пакет, а не в `seo-cycle loop research-package`, который на таком проекте упал бы с «not found». Хвост «(+ открыто на закрытых стадиях: …)» — вопросы, которые остались открытыми на стадиях, закрытых циклом (например, анкета настройки).
+«Причина» и «Дальше» называют первый *реально отсутствующий вход*. На стадиях настройки (1–4) «Дальше» — команда, которая создаёт именно файл из «Причины» (`нет seo/setup/tool-stack-report.md` → `seo-cycle run script tool-stack-recommender --write`). При незаполненной анкете настройки «Дальше» — заполнить `seo/setup/setup-questionnaire.csv` (поля названы), затем `seo-cycle run script setup-answer-plan --write`; на стадии 5 без пакета — создать или импортировать пакет. Если каталог пакета исследования начат, но не достроен, «Причина» перечисляет недостающие файлы. Если цикл закрыл «Архитектуру исследования» (ворота `keywords` и `clusters` пройдены), а пакета исследования на диске нет, шапка ведёт создавать пакет, а не в `seo-cycle loop research-package`, который на таком проекте упал бы с «not found». Хвост «(+ открыто на закрытых стадиях: …)» — вопросы, которые остались открытыми на стадиях, закрытых циклом (например, анкета настройки).
 
 ---
 
@@ -768,6 +787,10 @@ python3 ./.codex/skills/seo-cycle/scripts/cycle-state.py show      # progress
 ```
 
 Benefits of splitting: reuse (phase outside the cycle), clarity/control (visible progress and gates), parallelism (independent phases at once), sale (a module is a separate product). "Improvement" is data-driven (`source-attribution.py` + `triggers-eval.py`), no code self-rewriting.
+
+### <a id="en-cycle-import"></a>Bringing an old project into the pipeline (`cycle import`)
+
+A project run without `seo/cycles/` keeps phase artifacts as flat files in `seo/` (`02-keywords.md`, `03-clusters.md`, `keywords/`, `entities/`, `content-drafts/`, `monitoring/`), so `cycle gate` has no `_state.json` to work with. `seo-cycle cycle import <topic>` prints the "phase → file → status" map (dry-run by default); `--write` creates `<artifacts.cycles_root>/<dir>/_state.json` (default `seo/cycles`) and prints that path; Cyrillic topics are transliterated («минеральная вата» → `seo/cycles/mineralnaya-vata`) — pass the printed path to `--dir`. Nothing is deleted or moved. Found phases get `status: done`, the real path as `output` and **`gate_passed: false`** — gates are never confirmed retroactively; `cycle show` marks them as imported, and you confirm a phase with `cycle gate <phase>`. A phase whose files are found but whose predecessor is not stays `blocked` (with `imported_from`). Whitespace-only files and directories holding only empty subdirectories or dot-files (`.gitkeep`, `.DS_Store`) do not count, for import and gate alike. The gate falls back to a project-root path only for imported phases, so a stray root `02-keywords.md` never opens an `init` cycle's gate. Default map, `--from` (default `seo/`) and `--map <file.json>` are described in the Russian section above. An existing `_state.json` makes `--write` refuse (exit 1).
 
 ---
 
@@ -1047,7 +1070,7 @@ External (connected separately, not skill code): goals/conversions in Yandex.Met
 
 Each run's artifacts go to `seo/cycles/<topic>-<quarter>/`.
 
-**One progress model.** *Cycle phases* (table above) live in `seo/cycles/<topic>/_state.json` (`cycle-state.py`), each with `status` and `gate_passed`. *Journey stages* (12, `seo-cycle status` / `project-journey.py`) are computed from files on disk. The journey reads every `_state.json` under `artifacts.cycles_root` (default `./seo/cycles`) and closes a stage when all phases mapped to it are `done` with `gate_passed: true` in any cycle — even if the stage comes after the current one. Mapping: `discovery` → `setup_foundation`; `audit` → `technical_baseline`; `keywords` + `clusters` → `research_architecture`; `entity_map` + `content_plan` → `deep_page_briefs`; `writing` → `content_draft_gate`; `publishing` + `schema` → `implementation_review`; `monitoring` + `iteration` → `monitoring_iteration`. A phase `done` without `gate_passed` never closes a stage. Unmapped stages are closed by their files only, and only once every earlier stage is closed. The `seo-cycle status` header is five lines: `Срез / Сделано / Ждёт / Причина / Дальше` (snapshot, done stages, waiting stage, why it waits, next command).
+**One progress model.** *Cycle phases* (table above) live in `seo/cycles/<topic>/_state.json` (`cycle-state.py`), each with `status` and `gate_passed`. *Journey stages* (12, `seo-cycle status` / `project-journey.py`) are computed from files on disk. The journey reads every `_state.json` under `artifacts.cycles_root` (default `./seo/cycles`) and closes a stage when all phases mapped to it are `done` with `gate_passed: true` in any cycle — even if the stage comes after the current one. Mapping: `discovery` → `setup_foundation`; `audit` → `technical_baseline`; `keywords` + `clusters` → `research_architecture`; `entity_map` + `content_plan` → `deep_page_briefs`; `writing` → `content_draft_gate` (only while that stage has no blockers of its own and its drafts with their gate reports are in place — the generic `writing` gate only checks that drafts exist); `publishing` + `schema` → `implementation_review`; `monitoring` + `iteration` → `monitoring_iteration`. A phase `done` without `gate_passed` never closes a stage. Unmapped stages are closed by their files only, and only once every earlier stage is closed. The `seo-cycle status` header is five lines: `Срез / Сделано / Ждёт / Причина / Дальше` (snapshot, done stages, waiting stage, why it waits, next command). On setup stages 1–4 the next command is the one that writes the missing file named in `Причина` (an unanswered questionnaire points to `seo/setup/setup-questionnaire.csv` and `setup-answer-plan`); each header line is a single line — control characters coming from data are replaced with spaces; a started but incomplete research package is reported with its missing files.
 
 ---
 

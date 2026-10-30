@@ -18,10 +18,14 @@ picked up by project-journey.py.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import pathlib
+import stat
 import subprocess
 import sys
+import time
 from typing import Any
 
 from seo_cycle_core.config import find_config, load_config, package_project_root, write_text
@@ -58,6 +62,9 @@ def run_check(target: str, path: pathlib.Path, outline: pathlib.Path | None, pro
     if target == "draft":
         command += ["--outline", str(outline)]
     command += spec["check_args"]
+    refuse_unsafe_outputs(target, path)
+    started = time.time_ns()
+    before = report_identity(report_file(target, path))
     proc = subprocess.run(command, cwd=project_root, text=True, capture_output=True, check=False)
     log.info("loop check %s rc=%s", spec["check_script"], proc.returncode)
     if proc.returncode == 2:
@@ -65,32 +72,146 @@ def run_check(target: str, path: pathlib.Path, outline: pathlib.Path | None, pro
         # left on disk by an earlier run - that would turn a broken call into
         # a silent "passed" (T-182 round 1).
         raise RuntimeError(f"check failed with a config error (rc=2): {proc.stderr.strip()[-500:]}")
-    report = read_check_report(target, path, proc.stdout)
+    if proc.returncode not in (0, 1):
+        raise RuntimeError(f"check exited with unexpected rc={proc.returncode}: {proc.stderr.strip()[-500:]}")
+    report = read_check_report(target, path, proc.stdout, fresh_since=started, before=before)
     if not report:
+        # rc 1 is also what a crashing check (traceback) returns: without a
+        # report produced by THIS run there is no verdict (QA 3.0.1 R2).
         raise RuntimeError(
-            f"check produced no readable report (rc={proc.returncode}); stderr: {proc.stderr[-500:]}"
+            f"check produced no fresh report (rc={proc.returncode}); stderr: {proc.stderr.strip()[-500:]}"
         )
     return report
 
 
-def read_check_report(target: str, path: pathlib.Path, stdout: str) -> dict[str, Any]:
-    spec = TARGETS[target]
+def report_file(target: str, path: pathlib.Path) -> pathlib.Path:
+    """Where the check of `target` writes its report for `path`."""
     if target == "draft":
-        report_path = path.with_suffix(".draft-quality-gate.json")
-    else:
-        base = path if path.is_dir() else path.parent
-        report_path = base / spec["report_name"]
+        return path.with_suffix(".draft-quality-gate.json")
+    base = path if path.is_dir() else path.parent
+    return base / TARGETS[target]["report_name"]
+
+
+# A report is a few KB; the cap only bounds what an untrusted package can make
+# the loop read (QA3 3.0.1 #3: a report symlinked to /dev/zero ate memory).
+MAX_REPORT_BYTES = 16 * 1024 * 1024
+
+# Files each check (and the machine repair) writes next to the report, by name.
+# A planted symlink at any of them would let the check overwrite the link target
+# (QA3 3.0.1, out of diff: `research-package-quality.md -> ../../AGENTS.md`).
+EXTRA_OUTPUTS = {
+    "research-package": ("research-package-action-plan.md", "research-package-repair.json", "research-package-repair.md"),
+    "page-outline": ("latest-page-outline-quality.json", "latest-page-outline-quality.md"),
+    "draft": (),
+}
+
+
+def check_outputs(target: str, path: pathlib.Path) -> list[pathlib.Path]:
+    report = report_file(target, path)
+    return [report, report.with_suffix(".md"), *(report.parent / name for name in EXTRA_OUTPUTS[target])]
+
+
+def _refuse_if_unsafe(output: pathlib.Path, st: os.stat_result) -> None:
+    if not stat.S_ISREG(st.st_mode):
+        kind = "symlink" if stat.S_ISLNK(st.st_mode) else "not a regular file"
+        raise RuntimeError(
+            f"refusing {output}: {kind} — loop never reads or writes check reports through links or "
+            "special files; remove it and rerun"
+        )
+    if st.st_size > MAX_REPORT_BYTES:
+        raise RuntimeError(f"refusing {output}: {st.st_size} bytes > limit {MAX_REPORT_BYTES}; remove it and rerun")
+
+
+def refuse_unsafe_outputs(target: str, path: pathlib.Path) -> None:
+    """Before the check runs: every existing output must be a regular file
+    (not a symlink, FIFO or device) within the size cap. `lstat` — links are
+    never followed."""
+    for output in check_outputs(target, path):
+        try:
+            st = os.lstat(output)
+        except FileNotFoundError:
+            continue
+        _refuse_if_unsafe(output, st)
+
+
+def read_report_bytes(report_path: pathlib.Path) -> tuple[os.stat_result, bytes] | None:
+    """The report's stat and bytes, None when absent. Never follows a symlink
+    (`O_NOFOLLOW`), never blocks on a FIFO (`O_NONBLOCK`), never reads more
+    than `MAX_REPORT_BYTES` — an unsafe file raises RuntimeError."""
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
     try:
-        data = json.loads(report_path.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            return data
-    except (OSError, json.JSONDecodeError):
-        pass
+        fd = os.open(report_path, flags)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        # ELOOP from O_NOFOLLOW (a symlink) or another unreadable entry.
+        try:
+            st = os.lstat(report_path)
+        except OSError:
+            st = None
+        if st is not None:
+            _refuse_if_unsafe(report_path, st)
+        raise RuntimeError(f"report not readable: {report_path}: {exc.strerror or exc}") from exc
+    try:
+        st = os.fstat(fd)
+        _refuse_if_unsafe(report_path, st)
+        with os.fdopen(fd, "rb", closefd=False) as handle:
+            data = handle.read(MAX_REPORT_BYTES + 1)
+    finally:
+        os.close(fd)
+    if len(data) > MAX_REPORT_BYTES:
+        raise RuntimeError(f"refusing {report_path}: more than {MAX_REPORT_BYTES} bytes")
+    return st, data
+
+
+def report_identity(report_path: pathlib.Path) -> tuple[int, int, int, str] | None:
+    """(inode, size, mtime_ns, sha256) of the report before the run, None when
+    absent. A file whose identity did not change is the previous run's report,
+    whatever its mtime says (QA2 3.0.1 #2: a synced file or a clock running
+    ahead gives an old report a mtime after the run start). Read through
+    `read_report_bytes` only: no links, bounded size (QA3 3.0.1 #3)."""
+    got = read_report_bytes(report_path)
+    if got is None:
+        return None
+    st, data = got
+    return (st.st_ino, st.st_size, st.st_mtime_ns, hashlib.sha256(data).hexdigest())
+
+
+def read_check_report(
+    target: str,
+    path: pathlib.Path,
+    stdout: str,
+    fresh_since: int | None = None,
+    before: tuple[int, int, int, str] | None = None,
+) -> dict[str, Any]:
+    """The report of the run that just finished: JSON on stdout first (every
+    target runs with `--format json`), else the report file — but only when
+    this run wrote it: it changed against its pre-run identity (`before`) and
+    `st_mtime_ns >= fresh_since` (strict: a coarse-mtime filesystem yields a
+    noisy error, never a stale verdict). A file left by an earlier run is
+    never a verdict (QA 3.0.1 R2, QA2 #2)."""
     try:
         data = json.loads(stdout)
-        return data if isinstance(data, dict) else {}
+        if isinstance(data, dict) and data:
+            return data
     except json.JSONDecodeError:
-        return {}
+        pass
+    report_path = report_file(target, path)
+    try:
+        got = read_report_bytes(report_path)
+        if got is None:
+            return {}
+        st, raw = got
+        if before is not None and (st.st_ino, st.st_size, st.st_mtime_ns, hashlib.sha256(raw).hexdigest()) == before:
+            return {}
+        if fresh_since is not None and st.st_mtime_ns < fresh_since:
+            return {}
+        data = json.loads(raw.decode("utf-8"))
+        if isinstance(data, dict):
+            return data
+    except (OSError, RuntimeError, UnicodeDecodeError, json.JSONDecodeError):
+        pass
+    return {}
 
 
 def run_repair(target: str, path: pathlib.Path, project_root: pathlib.Path) -> dict[str, Any]:

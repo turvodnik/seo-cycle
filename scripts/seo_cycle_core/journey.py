@@ -185,6 +185,7 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
     )
     draft_paths = [path for path in draft_paths if ".draft-quality-gate" not in path.name]
     draft_quality_missing = []
+    draft_quality_invalid: list[str] = []
     draft_quality_findings: list[dict[str, Any]] = []
     draft_quality_count = 0
     draft_quality_errors = 0
@@ -195,19 +196,24 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
             draft_quality_missing.append(rel_display(project_root, gate_path))
             continue
         draft_quality_count += 1
-        report = read_json(gate_path)
-        for finding in report.get("findings", []) if isinstance(report.get("findings"), list) else []:
+        report = draft_gate_verdict(gate_path)
+        if report is None:
+            # Empty (a crash while writing), unparsable, or no passing verdict:
+            # not a passed gate (QA3 3.0.1 #1).
+            draft_quality_invalid.append(rel_display(project_root, gate_path))
+            continue
+        for finding in report["findings"]:
             if not isinstance(finding, dict):
                 continue
-            severity = str(finding.get("severity") or "").lower()
+            severity = (finding_text(finding.get("severity")) or "").lower()
             row = {
                 "draft": rel_display(project_root, draft_path),
-                "id": finding.get("id"),
+                "id": finding_text(finding.get("id")),
                 "severity": severity,
-                "message": finding.get("message") or finding.get("title"),
+                "message": finding_text(finding.get("message") or finding.get("title")),
             }
             draft_quality_findings.append(row)
-            if severity in {"error", "critical"}:
+            if severity in {"error", "critical", "blocker"}:
                 draft_quality_errors += 1
             elif severity in {"warning", "warn", "high", "medium", "low"}:
                 draft_quality_warnings += 1
@@ -236,9 +242,48 @@ def package_state(project_root: pathlib.Path, package: pathlib.Path | None) -> d
         "draft_quality_errors": draft_quality_errors,
         "draft_quality_warnings": draft_quality_warnings,
         "draft_quality_missing": draft_quality_missing,
+        "draft_quality_invalid": draft_quality_invalid,
         "draft_quality_findings": draft_quality_findings,
         "loops": loop_states(project_root),
     }
+
+
+def finding_text(value: Any) -> str | None:
+    """A finding field as short plain text: a nested value would later overflow
+    `json.dumps(indent=2)` (pure Python on 3.12) when the report is printed.
+    Non-printable characters become spaces: a newline or an ESC sequence
+    cannot forge an output line (QA6 3.0.1 #4), and a lone surrogate
+    (`\\ud800`, valid JSON) cannot break UTF-8 output (QA6 3.0.1 #2)."""
+    if value is None:
+        return None
+    try:
+        text = str(value)[:500]
+    except RecursionError:
+        return "(unreadable)"
+    return "".join(ch if ch.isprintable() else " " for ch in text)
+
+
+def draft_gate_verdict(gate_path: pathlib.Path) -> dict[str, Any] | None:
+    """The draft gate report when it carries a passing verdict, else None.
+
+    Valid: a JSON object with a `findings` list and, when `status` is present,
+    `pass` or `warn` (reports written before T-102 have no `status`; their
+    verdict is the findings). Error/critical findings are counted by the
+    caller."""
+    try:
+        data = json.loads(gate_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, RecursionError):
+        # RecursionError: a deeply nested `[[[[...` file overflows the parser
+        # (it is not a ValueError); an unreadable report is an invalid gate.
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
+        return None
+    status = data.get("status")
+    # isinstance first: a list/object `status` is unhashable for `in {set}`
+    # (TypeError crashed journey/status, QA6 3.0.1 #1).
+    if "status" in data and not (isinstance(status, str) and status in {"pass", "warn"}):
+        return None
+    return data
 
 
 def json_summary(path: pathlib.Path) -> dict[str, Any]:

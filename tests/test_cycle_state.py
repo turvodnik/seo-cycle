@@ -61,21 +61,25 @@ class CycleStateTest(unittest.TestCase):
         self.assertEqual(state["phases"]["discovery"]["status"], "pending")
         self.assertEqual(state["phases"]["audit"]["status"], "blocked")
 
-    def test_init_on_existing_dir_recreates_state(self) -> None:
-        # Documents current behavior: a second init on the same --dir does
-        # not refuse and overwrites _state.json (no merge, no error).
+    def test_init_on_existing_state_refuses_without_force(self) -> None:
+        # QA6 3.0.1 #5: a second init of the same cycle silently wiped the
+        # phases and gate marks. Now it refuses with rc 1 (like `import`) and
+        # leaves _state.json untouched; `--force` recreates it.
         cdir = self.init_cycle()
         state_path = cdir / "_state.json"
-        # Mutate state, then re-init on the same dir.
         set_proc = self.run_cs("set", "keywords", "--status", "done", "--dir", str(cdir))
         self.assertEqual(set_proc.returncode, 0, set_proc.stderr)
-        mutated = json.loads(state_path.read_text(encoding="utf-8"))
-        self.assertEqual(mutated["phases"]["keywords"]["status"], "done", "set must actually apply before re-init")
+        before = state_path.read_bytes()
+        self.assertEqual(json.loads(before)["phases"]["keywords"]["status"], "done", "set must apply before re-init")
 
         proc = self.run_cs("init", "--topic", "минеральная вата", "--dir", str(cdir))
-        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("--force", proc.stderr)
+        self.assertEqual(state_path.read_bytes(), before, "refused init must not touch _state.json")
+
+        forced = self.run_cs("init", "--topic", "минеральная вата", "--dir", str(cdir), "--force")
+        self.assertEqual(forced.returncode, 0, forced.stderr)
         state = json.loads(state_path.read_text(encoding="utf-8"))
-        # Fresh state -> earlier mutation is gone (overwritten, not merged).
         self.assertEqual(state["phases"]["keywords"]["status"], "blocked")
 
     # -- set ----------------------------------------------------------------

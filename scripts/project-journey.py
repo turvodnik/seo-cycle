@@ -13,10 +13,19 @@ import csv
 import io
 import json
 import pathlib
+import shlex
 import sys
 from typing import Any
 
-from seo_cycle_core.config import config_section, find_config, load_yaml, project_root_for, require_config, require_section, write_text
+from seo_cycle_core.config import (
+    config_section,
+    find_config,
+    load_yaml,
+    project_root_for,
+    rel_display,
+    require_config,
+    require_section,
+)
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.scorecard import load_latest as load_scorecards
 from seo_cycle_core.scorecard import render_scorecards_markdown
@@ -28,6 +37,7 @@ from seo_cycle_core.journey import (  # noqa: E402
     artifact_exists,
     artifact_path,
     detect_research_package,
+    finding_text,
     json_summary,
     loop_evidence_line,
     package_state,
@@ -57,7 +67,7 @@ def setup_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, An
     blockers = []
     if missing_gaps:
         blockers.append(f"{missing_gaps} setup questionnaire fields are still unanswered.")
-    return stage(
+    result = stage(
         stage_id="setup_foundation",
         order=1,
         title="Основа проекта",
@@ -75,6 +85,17 @@ def setup_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, An
             "seo/setup/setup-control-plane.md exists.",
         ],
     )
+    if missing_gaps:
+        # For the status header: the action that clears the blocker is the
+        # questionnaire itself, not the stage's first command (QA2 3.0.1 #5).
+        fields = gap.get("missing_fields")
+        questionnaire = gap.get("questionnaire")
+        csv_path = questionnaire.get("csv") if isinstance(questionnaire, dict) else None
+        result["questionnaire"] = {
+            "csv": str(csv_path or "seo/setup/setup-questionnaire.csv"),
+            "fields": [str(f) for f in fields] if isinstance(fields, list) else [],
+        }
+    return result
 
 
 def governance_stage(cfg: dict[str, Any], project_root: pathlib.Path) -> dict[str, Any]:
@@ -236,7 +257,7 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
         warnings.append(f"Research package quality gate is fail: critical={critical}, high={high}; continue to repair layer.")
         for finding in quality.get("findings", [])[:5]:
             if isinstance(finding, dict):
-                warnings.append(f"{finding.get('severity', 'finding')}: {finding.get('id')} — {finding.get('title')}")
+                warnings.append(f"{finding_text(finding.get('severity', 'finding'))}: {finding_text(finding.get('id'))} — {finding_text(finding.get('title'))}")
     evidence = [
         f"{package_dir}/research-package-quality.json: {'exists' if package.get('quality_exists') else 'missing'}",
         f"{package_dir}/research-package-repair.json: {'exists' if package.get('repair_exists') else 'missing'}",
@@ -263,8 +284,8 @@ def quality_stage(package: dict[str, Any]) -> dict[str, Any]:
         blockers=blockers,
         warnings=warnings,
         commands=[
-            f"seo-cycle loop research-package {package_dir}",
-            f"seo-cycle run script research-package-quality {package_dir} --write --format plan",
+            f"seo-cycle loop research-package {shlex.quote(str(package_dir))}",
+            f"seo-cycle run script research-package-quality {shlex.quote(str(package_dir))} --write --format plan",
         ],
         exit_criteria=[
             "No critical findings remain.",
@@ -292,8 +313,8 @@ def repair_stage(package: dict[str, Any]) -> dict[str, Any]:
     missing = []
     blockers = []
     commands = [
-        f"seo-cycle loop research-package {package_dir}",
-        f"seo-cycle repair {package_dir} --write",
+        f"seo-cycle loop research-package {shlex.quote(str(package_dir))}",
+        f"seo-cycle repair {shlex.quote(str(package_dir))} --write",
     ]
     if quality_failed and not package.get("repair_exists"):
         missing.append(f"{package_dir}/research-package-repair.json")
@@ -301,8 +322,8 @@ def repair_stage(package: dict[str, Any]) -> dict[str, Any]:
         blockers.append("Research package repair is required before deep briefs.")
         for finding in quality.get("findings", [])[:8]:
             if isinstance(finding, dict):
-                finding_id = str(finding.get("id") or "")
-                blockers.append(f"{finding.get('severity', 'finding')}: {finding_id} — {finding.get('title')}")
+                finding_id = finding_text(finding.get("id")) or ""
+                blockers.append(f"{finding_text(finding.get('severity', 'finding'))}: {finding_id} — {finding_text(finding.get('title'))}")
                 command = REPAIR_COMMANDS.get(finding_id)
                 if command:
                     commands.append(command.format(package_dir=package_dir))
@@ -311,7 +332,7 @@ def repair_stage(package: dict[str, Any]) -> dict[str, Any]:
                         "seo-cycle run script serp-validation-import "
                         f"{package_dir} --input-json <reviewed-serp-export.json> --write"
                     )
-        commands.append(f"seo-cycle run script research-package-quality {package_dir} --write --format plan")
+        commands.append(f"seo-cycle run script research-package-quality {shlex.quote(str(package_dir))} --write --format plan")
     failed_steps = int(((repair.get("summary") or {}) if isinstance(repair.get("summary"), dict) else {}).get("failed_steps") or 0)
     if failed_steps:
         blockers.append(f"research-package-repair has {failed_steps} failed steps.")
@@ -354,7 +375,7 @@ def brief_stage(package: dict[str, Any]) -> dict[str, Any]:
         )
         for finding in outline_quality.get("findings", [])[:5]:
             if isinstance(finding, dict):
-                blockers.append(f"{finding.get('severity', 'finding')}: {finding.get('id')} — {finding.get('title')}")
+                blockers.append(f"{finding_text(finding.get('severity', 'finding'))}: {finding_text(finding.get('id'))} — {finding_text(finding.get('title'))}")
     elif not has_v3 and outline_quality.get("status") == "warn":
         warnings.append("Page outlines have non-critical findings; review page-outline-quality action plan before writing.")
     missing = []
@@ -376,9 +397,9 @@ def brief_stage(package: dict[str, Any]) -> dict[str, Any]:
         blockers=blockers,
         warnings=warnings,
         commands=[
-            f"seo-cycle run script page-outline-v2 {package_dir} --all-mvp --write",
-            f"seo-cycle run script page-outline-v2 {package_dir} --priority P1 --write",
-            f"seo-cycle run script page-outline-quality {package_dir} --write --format markdown",
+            f"seo-cycle run script page-outline-v2 {shlex.quote(str(package_dir))} --all-mvp --write",
+            f"seo-cycle run script page-outline-v2 {shlex.quote(str(package_dir))} --priority P1 --write",
+            f"seo-cycle run script page-outline-quality {shlex.quote(str(package_dir))} --write --format markdown",
         ],
         exit_criteria=[
             "MVP/P1 pages have outline v2 files.",
@@ -407,7 +428,7 @@ def brief_stage_v3(package: dict[str, Any]) -> dict[str, Any]:
         )
         for finding in outline_quality.get("findings", [])[:5]:
             if isinstance(finding, dict):
-                blockers.append(f"{finding.get('severity', 'finding')}: {finding.get('id')} — {finding.get('title')}")
+                blockers.append(f"{finding_text(finding.get('severity', 'finding'))}: {finding_text(finding.get('id'))} — {finding_text(finding.get('title'))}")
     elif outline_quality.get("status") == "warn" and outline_version == "v3":
         blockers.append("Page outline v3 has non-critical findings; improve or explicitly accept them before writing.")
     missing = []
@@ -434,9 +455,9 @@ def brief_stage_v3(package: dict[str, Any]) -> dict[str, Any]:
         blockers=blockers,
         warnings=warnings,
         commands=[
-            f"seo-cycle run script page-outline-v3 {package_dir} --all-mvp --write",
-            f"seo-cycle run script page-outline-v3 {package_dir} --priority P1 --write",
-            f"seo-cycle run script page-outline-quality {package_dir} --version v3 --write --format markdown",
+            f"seo-cycle run script page-outline-v3 {shlex.quote(str(package_dir))} --all-mvp --write",
+            f"seo-cycle run script page-outline-v3 {shlex.quote(str(package_dir))} --priority P1 --write",
+            f"seo-cycle run script page-outline-quality {shlex.quote(str(package_dir))} --version v3 --write --format markdown",
         ],
         exit_criteria=[
             "MVP/P1 pages have page-outline-v3 JSON/Markdown files.",
@@ -474,10 +495,15 @@ def content_draft_stage(package: dict[str, Any]) -> dict[str, Any]:
         missing.append(f"{package_dir}/drafts/*.md")
     else:
         missing.extend(package.get("draft_quality_missing", []))
+    for report_path in package.get("draft_quality_invalid", []):
+        blockers.append(
+            f"Draft quality gate report is empty, unreadable or not passed: {report_path} — "
+            "rerun seo-cycle loop draft for this draft."
+        )
     if draft_quality_errors:
         blockers.append(f"Draft quality gate has {draft_quality_errors} error/critical findings.")
         for finding in package.get("draft_quality_findings", [])[:8]:
-            if isinstance(finding, dict) and finding.get("severity") in {"error", "critical"}:
+            if isinstance(finding, dict) and finding.get("severity") in {"error", "critical", "blocker"}:
                 blockers.append(
                     f"{finding.get('severity')}: {finding.get('id')} — {finding.get('message')} ({finding.get('draft')})"
                 )
@@ -519,7 +545,7 @@ def content_draft_stage(package: dict[str, Any]) -> dict[str, Any]:
             "seo-cycle ledger check --service neuronwriter --category paid_api --content-writer 1 --ai-credits 500 --fail-on-block",
             "seo-cycle ledger check --service neuronwriter --category paid_api --plagiarism-checks 1 --fail-on-block",
             f"Create or revise draft markdown under {package_dir}/drafts/ from {package_dir}/copywriter-ready/*.md, copywriting_playbook, writer_prompt_packet and source slots.",
-            f"seo-cycle loop draft {package_dir}/drafts/<slug>.md --outline {package_dir}/page-outlines-v3/<slug>.json",
+            f"seo-cycle loop draft {shlex.quote(str(package_dir))}/drafts/<slug>.md --outline {shlex.quote(str(package_dir))}/page-outlines-v3/<slug>.json",
             "seo-cycle run script nw-cli.sh evaluate <query_id> <draft.html>",
             "seo-cycle run script nw-cli.sh --live plagiarism <query_id> <draft.html>",
             "seo-cycle ledger record --service neuronwriter --category paid_api --plagiarism-checks 1 --task \"final plagiarism check\" --write",
@@ -605,6 +631,13 @@ def assign_status(stages: list[dict[str, Any]], cycle_phases: dict[str, dict[str
     prefix_ok = True
     for item in stages:
         closing = stage_closed_by_cycle(item["id"], cycle_phases)
+        if closing and item["id"] in CYCLE_CLOSES_ONLY_CLEAN and (item["blockers"] or item["missing_artifacts"]):
+            # The generic cycle gate of `writing` only checks that a drafts
+            # directory is non-empty; it is not the draft/NeuronWriter gate.
+            # While the stage's own checks block it or its own artifacts
+            # (drafts + their gate reports) are missing, the cycle does not
+            # close it (QA 3.0.1 Y5, QA2 #3).
+            closing = []
         artifact_done = prefix_ok and not item["missing_artifacts"] and not item["blockers"]
         if closing:
             item["status"] = "done"
@@ -625,6 +658,12 @@ def assign_status(stages: list[dict[str, Any]], cycle_phases: dict[str, dict[str
         first_open["status"] = "blocked" if first_open["blockers"] else "current"
 
 
+# Stages the cycle closes only when their own checks raise no blocker and no
+# own artifact is missing: the generic phase gate there is weaker than the
+# stage's own gate (QA 3.0.1 Y5, QA2 #3).
+CYCLE_CLOSES_ONLY_CLEAN = {"content_draft_gate"}
+
+
 # Stages that consume the research package produced at `research_architecture`.
 PACKAGE_CONSUMERS = {
     "research_quality_gate",
@@ -635,7 +674,31 @@ PACKAGE_CONSUMERS = {
 }
 
 
-def missing_input(stages: list[dict[str, Any]], package: dict[str, Any]) -> dict[str, Any] | None:
+PACKAGE_REQUIRED = (
+    "semantic-core.csv",
+    "content-plan.csv",
+    "final-clusters.md",
+    "semantic-architecture-final.json",
+    "entity-map.md",
+    "entity-map.yaml",
+)
+
+
+def started_package(project_root: pathlib.Path | None) -> tuple[pathlib.Path, list[str]] | None:
+    """A research package directory that exists but is incomplete (no
+    `semantic-architecture-final.json`, so `detect_research_package` does not
+    see it): its path and the required files still missing (QA 3.0.1 Y6b)."""
+    if project_root is None:
+        return None
+    for candidate in (project_root / "seo" / "research-package", project_root / "research-package"):
+        if candidate.is_dir() and any((candidate / name).exists() for name in PACKAGE_REQUIRED):
+            return candidate, [name for name in PACKAGE_REQUIRED if not (candidate / name).exists()]
+    return None
+
+
+def missing_input(
+    stages: list[dict[str, Any]], package: dict[str, Any], project_root: pathlib.Path | None = None
+) -> dict[str, Any] | None:
     """The first input that really is absent for the current stage (T-184 round 1).
 
     The cycle may close `research_architecture` (keywords + clusters passed
@@ -651,6 +714,17 @@ def missing_input(stages: list[dict[str, Any]], package: dict[str, Any]) -> dict
         return None
     package_dir = f"{package.get('package_dir') or 'seo/research-package'}/"
     why = "закрыта циклом" if research.get("closed_by_cycle") else "пройдена"
+    started = started_package(project_root)
+    if started is not None:
+        started_dir = f"{rel_display(project_root, started[0])}/"
+        absent = ", ".join(started[1])
+        return {
+            "stage": research["id"],
+            "order": research["order"],
+            "artifact": started_dir,
+            "reason": f"в {started_dir} нет: {absent} (стадия {research['order']} {why}, пакет исследования не достроен)",
+            "command": f"дострой пакет исследования в {started_dir}: {absent}",
+        }
     return {
         "stage": research["id"],
         "order": research["order"],
@@ -749,7 +823,7 @@ def build_report(cfg_path: pathlib.Path, *, goal: str, research_package: str | N
     cycle_phases = read_cycle_phases(cfg, project_root)
     assign_status(stages, cycle_phases)
     current = next((item for item in stages if item["status"] in {"current", "blocked"}), None)
-    input_gap = missing_input(stages, package)
+    input_gap = missing_input(stages, package, project_root)
     done_count = sum(1 for item in stages if item["status"] == "done")
     status = "ready" if current is None else "blocked" if current["status"] == "blocked" else "needs_work"
     report = {
@@ -881,13 +955,18 @@ def write_outputs(project_root: pathlib.Path, report: dict[str, Any]) -> pathlib
         "latest_json": setup_dir / "latest-project-journey.json",
     }
     report["paths"] = {key: str(path) for key, path in paths.items()}
-    markdown = render_markdown(report)
-    json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
-    write_text(paths["markdown"], markdown)
-    write_text(paths["json"], json_text)
-    write_text(paths["checklist"], checklist_csv(report))
-    write_text(paths["latest_markdown"], markdown)
-    write_text(paths["latest_json"], json_text)
+    # Encode every payload before opening any file: an encoding error must
+    # not leave an empty project-journey.json behind (QA6 3.0.1 #2), the
+    # same rule as the draft quality gate's own write_outputs.
+    markdown = render_markdown(report).encode("utf-8")
+    json_bytes = (json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    checklist = checklist_csv(report).encode("utf-8")
+    setup_dir.mkdir(parents=True, exist_ok=True)
+    paths["markdown"].write_bytes(markdown)
+    paths["json"].write_bytes(json_bytes)
+    paths["checklist"].write_bytes(checklist)
+    paths["latest_markdown"].write_bytes(markdown)
+    paths["latest_json"].write_bytes(json_bytes)
     return paths["markdown"]
 
 

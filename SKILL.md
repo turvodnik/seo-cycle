@@ -37,6 +37,7 @@ python3 scripts/cycle-state.py next                      # какие фазы �
 # → открыть skills/<модуль>/SKILL.md соответствующей фазы и работать по нему
 python3 scripts/cycle-state.py gate <phase>              # проверить quality-gate
 python3 scripts/cycle-state.py show                      # прогресс цикла
+python3 scripts/cycle-state.py import <тема>             # старый проект без _state.json: карта артефактов (--write — создать)
 ```
 Перед передачей фазы дальше диспетчер проверяет **quality-gate**. Независимые фазы (где `depends_on` уже `done`) можно запускать параллельно. Управление «улучшением» — на данных: `source-attribution.py` + `triggers-eval.py`, **без** авто-переписывания кода.
 
