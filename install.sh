@@ -15,7 +15,8 @@
 #
 # Modes:
 #   install.sh                          ensure store (clone/update) + CLI shim
-#   install.sh --update                 fetch new tags/commits into the store only
+#   install.sh --update                 fetch tags + fast-forward the store's main to origin/main
+#                                       (from a 3.0.0 store: run plain install.sh once first)
 #   install.sh --project DIR [opts]     attach a project / re-sync its surfaces
 #   install.sh --project DIR --detach   remove seo-cycle links from a project
 #   install.sh --upgrade-all [--pin T]  re-pin every attached project (default: latest tag)

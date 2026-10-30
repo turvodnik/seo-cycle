@@ -22,8 +22,6 @@ from research_package_repair_core import (
     normalize_space,
     normalize_url,
     print_report,
-    write_json,
-    write_text,
 )
 
 
@@ -33,8 +31,42 @@ FIRST_PERSON_EXPERTISE = re.compile(
 )
 
 
+class OutlineShapeError(ValueError):
+    """Outline is valid JSON but not the object shape the gate reads (QA 3.0.1 Y3)."""
+
+
+class CallError(Exception):
+    """Call/config error with a ready one-line message (exit 2)."""
+
+
+def _check_outline_shape(outline: Any) -> None:
+    if not isinstance(outline, dict):
+        raise OutlineShapeError(f"нужен JSON-объект, получено {type(outline).__name__}")
+    sections = outline.get("sections")
+    if sections is not None:
+        if not isinstance(sections, list) or not all(isinstance(item, dict) for item in sections):
+            raise OutlineShapeError("`sections` должен быть списком объектов")
+        for item in sections:
+            subs = item.get("h3_subsections")
+            if subs is not None and not isinstance(subs, list):
+                raise OutlineShapeError("`h3_subsections` должен быть списком")
+    for key in ("internal_links", "faq"):
+        value = outline.get(key)
+        if value is not None and not isinstance(value, list):
+            raise OutlineShapeError(f"`{key}` должен быть списком")
+
+
 def load_outline(path: pathlib.Path) -> dict[str, Any]:
-    return json.loads(path.expanduser().resolve().read_text(encoding="utf-8"))
+    outline = json.loads(path.expanduser().resolve().read_text(encoding="utf-8"))
+    _check_outline_shape(outline)
+    try:
+        # JSON accepts a lone surrogate (`"\\ud800"`); such text cannot be
+        # written or printed as UTF-8 — the gate used to crash after
+        # truncating its report (QA3 3.0.1 #1).
+        json.dumps(outline, ensure_ascii=False).encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise OutlineShapeError("строка с непарным суррогатом (\\ud800–\\udfff) — не UTF-8") from exc
+    return outline
 
 
 def heading_set(text: str, level: int | None = None) -> set[str]:
@@ -82,11 +114,27 @@ def is_public_handoff_draft(draft_path: pathlib.Path) -> bool:
     return ".public." in name or ".wp-draft." in name or name.endswith(".public.md") or name.endswith(".wp-draft.md")
 
 
+def _read_input(path: pathlib.Path, label: str, reader: Any) -> Any:
+    """Read one input and turn every call error into a CallError that names
+    THIS file (QA 3.0.1 Y3: an undecodable outline used to be reported as the
+    draft)."""
+    try:
+        return reader(path)
+    except FileNotFoundError as exc:
+        raise CallError(f"файл не найден: {exc.filename or path}") from exc
+    except json.JSONDecodeError as exc:
+        raise CallError(f"outline не разобран: {path}: {exc.msg}") from exc
+    except OutlineShapeError as exc:
+        raise CallError(f"outline не той формы: {path}: {exc}") from exc
+    except (IsADirectoryError, PermissionError, UnicodeDecodeError, OSError) as exc:
+        raise CallError(f"файл не прочитан ({label}): {path}: {exc}") from exc
+
+
 def build_report(draft_path: pathlib.Path, outline_path: pathlib.Path) -> dict[str, Any]:
     draft_path = draft_path.expanduser().resolve()
     outline_path = outline_path.expanduser().resolve()
-    text = draft_path.read_text(encoding="utf-8")
-    outline = load_outline(outline_path)
+    text = _read_input(draft_path, "черновик", lambda p: p.read_text(encoding="utf-8"))
+    outline = _read_input(outline_path, "outline", load_outline)
     public_handoff = is_public_handoff_draft(draft_path)
     h2 = heading_set(text, 2)
     h3 = heading_set(text, 3)
@@ -196,8 +244,13 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def write_outputs(draft_path: pathlib.Path, report: dict[str, Any]) -> None:
     draft_path = draft_path.expanduser().resolve()
-    write_json(draft_path.with_suffix(".draft-quality-gate.json"), report)
-    write_text(draft_path.with_suffix(".draft-quality-gate.md"), render_markdown(report))
+    # Encode both reports before opening either file: an encoding error must
+    # not leave a truncated 0-byte report behind (QA3 3.0.1 #1).
+    json_bytes = (json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    md_bytes = render_markdown(report).encode("utf-8")
+    draft_path.parent.mkdir(parents=True, exist_ok=True)
+    draft_path.with_suffix(".draft-quality-gate.json").write_bytes(json_bytes)
+    draft_path.with_suffix(".draft-quality-gate.md").write_bytes(md_bytes)
 
 
 def main() -> int:
@@ -212,17 +265,18 @@ def main() -> int:
     # line — not a traceback; 1 stays reserved for "gate failed" (T-182 F12).
     try:
         report = build_report(pathlib.Path(args.draft), pathlib.Path(args.outline))
-    except FileNotFoundError as exc:
-        print(f"файл не найден: {exc.filename}", file=sys.stderr)
-        return 2
-    except json.JSONDecodeError as exc:
-        print(f"outline не разобран: {args.outline}: {exc.msg}", file=sys.stderr)
-        return 2
-    except (IsADirectoryError, PermissionError, UnicodeDecodeError) as exc:
-        print(f"файл не прочитан: {getattr(exc, 'filename', None) or args.draft}: {exc}", file=sys.stderr)
+    except CallError as exc:
+        print(str(exc).replace("\n", " "), file=sys.stderr)
         return 2
     if args.write:
-        write_outputs(pathlib.Path(args.draft), report)
+        # An unwritable report is a call error too: rc 1 here would let a
+        # caller fall back to the stale report on disk (QA 3.0.1 R2, path 2).
+        try:
+            write_outputs(pathlib.Path(args.draft), report)
+        except (OSError, UnicodeError) as exc:
+            print(f"отчёт не записан: {getattr(exc, 'filename', None) or args.draft}: "
+                  f"{getattr(exc, 'strerror', None) or exc}", file=sys.stderr)
+            return 2
     print_report(report, args.format, render_markdown(report))
     return 1 if report["status"] == "fail" else 0
 

@@ -214,7 +214,7 @@ def snapshot_sample(cfg: dict[str, Any], project_root: pathlib.Path, snapshot_da
     for path in _snapshot_files(cfg, project_root):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError):
             continue
         if not isinstance(data, dict):
             continue

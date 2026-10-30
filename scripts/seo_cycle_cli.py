@@ -17,6 +17,7 @@ import importlib.util
 import io
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -60,7 +61,7 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "control-plane": {"script": "setup-control-plane.py", "help": "Full setup/readiness control plane"},
     "context": {"script": "context-pack.py", "help": "Low-token context pack for a task"},
     "notify": {"script": "notify.py", "help": "Send a Telegram notification"},
-    "cycle": {"script": "cycle-state.py", "help": "Phase DAG state (init/next/show/set/gate)"},
+    "cycle": {"script": "cycle-state.py", "help": "Phase DAG state (init/next/show/set/gate/import)"},
     "forecast": {"script": "seo-forecast.py", "help": "Traffic/lead forecast from core + positions"},
     "kpi": {"script": "kpi-contract.py", "help": "KPI contract check: plan vs fact, escalation", "group": "money"},
     "budget": {"script": "budget-mix-planner.py", "help": "SEO+PPC budget mix by leads per unit", "group": "money"},
@@ -354,6 +355,73 @@ def _pick_next_command(current: dict[str, Any] | None, action_plan: list[dict[st
     return next((cmd for cmd in commands if cmd.startswith("seo-cycle ")), "seo-cycle journey")
 
 
+# Artifact (file name) -> the command that writes it, where the script name
+# differs from the artifact name. On the setup stages (one report per script)
+# other artifacts are matched by stem against the stage's own
+# `run script <stem>` commands (QA 3.0.1 Y6a). Later stages keep their own
+# first command (e.g. `loop research-package`, which runs the check itself).
+PRODUCER_STAGES = {"setup_foundation", "access_budget_governance", "expert_evidence_sources", "technical_baseline"}
+ARTIFACT_PRODUCERS = {
+    "tool-stack-report.md": "seo-cycle run script tool-stack-recommender --write",
+    "spend-guard.md": "seo-cycle spend --write",
+    "setup-control-plane.md": "seo-cycle control-plane --write",
+    "project-intake.yaml": "seo-cycle control-plane --write",
+    "setup-blueprint.md": "seo-cycle control-plane --write",
+    "setup-gap-audit.json": "seo-cycle control-plane --write",
+}
+
+
+def _producer_command(current: dict[str, Any] | None) -> str | None:
+    """When `Причина:` is a missing artifact (no blocker), `Дальше:` names the
+    command that writes THAT artifact — otherwise the operator runs the
+    stage's first command, the header does not change, and they go in
+    circles (QA 3.0.1 Y6a). None = no known producer, keep the old choice."""
+    if (not current or current.get("id") not in PRODUCER_STAGES or current.get("blockers")
+            or not current.get("missing_artifacts")):
+        return None
+    name = pathlib.PurePosixPath(str(current["missing_artifacts"][0])).name
+    if name in ARTIFACT_PRODUCERS:
+        return ARTIFACT_PRODUCERS[name]
+    stem = name.split(".", 1)[0]
+    return next(
+        (cmd for cmd in current.get("next_commands") or [] if cmd.startswith(f"seo-cycle run script {stem} ")),
+        None,
+    )
+
+
+def _stage_action(current: dict[str, Any] | None) -> str | None:
+    """«Дальше» for a stage whose own first command does not move it (QA2
+    3.0.1 #5): an unanswered setup questionnaire (stage 1) and stage 5 with
+    no research package. None = keep the usual choice."""
+    if not current:
+        return None
+    questionnaire = current.get("questionnaire")
+    if current.get("id") == "setup_foundation" and current.get("blockers") and isinstance(questionnaire, dict):
+        fields = ", ".join(questionnaire.get("fields") or [])
+        return (
+            f"заполни {questionnaire.get('csv')}" + (f" (поля: {fields})" if fields else "")
+            + ", затем seo-cycle run script setup-answer-plan --write, перенеси ответы по плану"
+            " и обнови аудит: seo-cycle run script setup-gap-audit --write"
+        )
+    missing = [str(item) for item in current.get("missing_artifacts") or []]
+    if current.get("id") == "research_architecture" and missing and not current.get("blockers"):
+        package_dir = str(pathlib.PurePosixPath(missing[0]).parent)
+        names = ", ".join(pathlib.PurePosixPath(item).name for item in missing)
+        return (
+            f"создай или импортируй пакет исследования в {package_dir}/ "
+            "(semantic-core.csv, content-plan.csv, final-clusters.md, semantic-architecture-final.json, "
+            f"entity-map.md, entity-map.yaml; сейчас нет: {names})"
+        )
+    return None
+
+
+def _one_line(text: str) -> str:
+    """A header line is one line: control characters from data (a newline in
+    a finding title or a directory name, `\r`, ANSI escapes) become spaces,
+    so files cannot forge a «Дальше:» line (QA2 3.0.1 #4)."""
+    return re.sub(r" {2,}", " ", "".join(ch if ch.isprintable() else " " for ch in text)).strip()
+
+
 def _format_stage_line(current: dict[str, Any] | None, total: int) -> str:
     """The `Ждёт:` line (T-184; was `Стадия:` in T-105) — pulled out next to
     `_pick_next_command()` for the same reason (T-105 review round 1, 🟡-1):
@@ -461,15 +529,18 @@ def _status_header_lines(
     # cycle closed) beats the current stage's own command, which would fail
     # with "not found" on this project.
     next_command = (
-        str(input_gap["command"]) if input_gap else _pick_next_command(current, report.get("action_plan") or [])
+        str(input_gap["command"]) if input_gap
+        else _stage_action(current) or _producer_command(current)
+        or _pick_next_command(current, report.get("action_plan") or [])
     )
-    return [
+    lines = [
         f"Срез: {freshness}",
         _format_done_line(stages),
         _format_stage_line(current, len(stages)),
         _format_reason_line(current, stages, input_gap),
         f"Дальше: {next_command}",
     ]
+    return [_one_line(line) for line in lines]
 
 
 def cmd_status(args: list[str], project: pathlib.Path) -> int:

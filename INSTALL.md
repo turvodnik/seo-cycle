@@ -15,6 +15,8 @@ curl -fsSL https://raw.githubusercontent.com/turvodnik/seo-cycle/main/install.sh
 
 # Обновления и версии
 ~/.codex/vendor/seo-cycle/install.sh --update                          # fetch тегов и перевод main хранилища на origin/main (только fast-forward)
+# С 3.0.0 на 3.0.1 и новее — ОДИН раз без флагов: в хранилище 3.0.0 лежит старый install.sh, его --update main не двигает
+~/.codex/vendor/seo-cycle/install.sh                                   # git pull --ff-only хранилища + шим; дальше --update работает как описано
 ~/.codex/vendor/seo-cycle/install.sh --project <dir> --pin vX.Y.Z --sync   # перевести проект на версию
 ~/.codex/vendor/seo-cycle/install.sh --upgrade-all                     # перевести все подключённые проекты
 ~/.codex/vendor/seo-cycle/install.sh --project <dir> --detach          # отключить проект (файлы проекта не трогаются)
