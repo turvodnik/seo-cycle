@@ -11,8 +11,17 @@ _пусто_
 Плюс исправления по итогам разбора 3.0.1 (`docs/history/review-2026-11.md`).
 Сначала коротко для оператора, затем подробности.
 
+### Может остановить ваши цепочки
+
+- **`seo-cycle gate draft` / `seo-cycle loop draft` проверяют правила проекта из `seo-cycle.yaml`.** Раньше гейт читал только outline и пропускал черновик со стоп-словами, картинкой без alt и без `fact_check_log`, хотя `skills/seo-writing/SKILL.md` называл это блокерами. Теперь гейт сам находит конфиг (вверх от каталога черновика, в том числе `.claude/` и `seo/`) и даёт error за стоп-слова, отсутствие `fact_check_log`, картинку без alt, inline-картинку без подписи и объём ниже `quality_gates.word_count_min`. Кому ломает: черновикам, которые проходили гейт по старым правилам, и цепочкам `gate draft && <публикация>`. Что сделать: исправить черновик (`seo-cycle loop draft` сам выдаст модели инструкции); если правило проекту не нужно — выключить его флагом в конфиге (`quality_gates.stop_words_check.enabled`, `quality_gates.fact_check_log_present.enabled`, `quality_gates.word_count_min.enabled`, `images.alt.required`, `images.captions.inline_required`), а не обходить гейт. Ключа нет в конфиге — правило не действует.
+- **Выдуманная экспертиза от первого лица ловится и по-русски, даже без конфига:** «по моему опыту», «мои клиенты», «в нашей практике», «мы протестировали на объекте» дают error `unsafe_first_person_expertise`, как раньше «in my years». Обычное «мы доставляем» не ловится. Если автор реальный — подтвердите его в брифе (`page-outline-v3 --expert-author`).
+- **Битый frontmatter черновика — error `frontmatter_invalid`** (раньше гейт его не разбирал вовсе).
+- **`check-stop-words.py` возвращает код 2**, если файл не найден или не читается, и если конфиг не разбирается (раньше — «⚠» и код по найденным словам).
+
 ### Для оператора — что изменилось
 
+- Гейт черновика пишет, где именно проблема: «Стоп-слово «лучший» (строки 6, 14)», «Изображения без alt (строки 10)», «В тексте 29 слов, для типа «blog_post» нужно не меньше 1500». Демо-города из шаблона («Мытищи») он не требует — такие правила видны в `summary.skipped_checks`.
+- `check-stop-words.py` показывает правильный номер строки: раньше после frontmatter или блока кода номера съезжали вверх, а `---` в тексте или апостроф («It's») прятали целые абзацы от проверки.
 - `access-key-assistant` больше не советует класть ключи в `.env`: каждый шаг говорит «в Keychain» (`seo-cycle auth set <ИМЯ>` / `seo-cycle auth login <провайдер>`), как требует 3.0.0. Две противоречащие записи про Яндекс.Директ сведены в одну.
 - `seo-cycle run "<задача>"` и `context-pack` точнее понимают задачу: «описание категории» больше не уходит в «AI-видимость».
 - Шаблон конфига больше не тащит в новые проекты данные конкретного клиента: проектные publish-скиллы и семантический бриф по умолчанию `null`, палитра бренда пустая, в примерах и в мастере нет имени клиента.
@@ -28,6 +37,15 @@ _пусто_
 - Обещание «симлинк-шимы удаляются в v3» (`skills/manifest.yaml`, `SKILL.md`, `docs/architecture.md`) исправлено на «в следующем мажорном релизе (v4)» — в 3.x шимы на месте.
 - `scripts/img-generate.sh`: комментарий о пропорциях согласован с `images.aspect_ratios` шаблона (16:9 — hero/featured/inline, 4:3 — только значение по умолчанию скрипта).
 
+#### Честный гейт черновика
+
+- `scripts/seo_cycle_core/draft_checks.py` (новый) — проверки правил проекта: `stop_words_found` (одна находка на каждое слово, строки в `message`, до 50), `fact_check_log_missing` (error), `fact_check_log_incomplete` и `fact_check_claim_disputed` (warning), `image_missing_alt` (markdown, `<img>`, `featured_image` без `featured_image_alt`), `image_generic_alt`, `image_missing_caption` (подпись — следующая строка курсивом или `<figcaption>`; тип картинки — title: `![alt](src "hero")`, hero/og/icon/decorative подписи не требуют), `inline_images_below_min`, `word_count_below_min` (корзины blog_post/category/landing по типу страницы), `internal_links_below_min` (только `[..](/…)` и ссылки на свой домен, без картинок), `local_signals_below_min` (основа слова ≥4 букв, короче — точная форма; фразы — подряд).
+- `scripts/draft-quality-gate.py`: конфиг — `--config` или `find_project_config()` от каталога черновика; битый YAML — rc 2 одной строкой, без отчёта; пустой файл — как без конфига. В `summary` — `page_type`, `config`, `checks_run`, `skipped_checks`. Без конфига новых находок нет.
+- `scripts/seo_cycle_core/config.py`: `find_project_config()` обходит предков и на каждом уровне пробует все `CONFIG_SEARCH_PATHS`, останавливаясь до домашнего каталога; `parse_yaml_text_safe()` и `load_yaml_safe()` возвращают `(данные, ошибка)` вместо выхода — для frontmatter и необязательных файлов.
+- `scripts/seo_cycle_core/frontmatter.py` (новый): frontmatter только в начале файла, даты → строки (отчёт — JSON). `scripts/seo_cycle_core/page_types.py` (новый): `normalize_page_type()`, `word_count_bucket()`.
+- `scripts/seo_cycle_core/stop_words.py` (новый): паттерны и поиск вынесены из `check-stop-words.py`; игнорируемые участки забиваются пробелами на месте (строки и колонки сохраняются), frontmatter — только в начале файла, кавычки — в пределах строки, `'` — не внутри слова, совпадения встроенного паттерна и `tone.stop_words_extra` не дублируются.
+- `scripts/seo_cycle_core/loop.py`: `fact_check_log_missing`, `fact_check_log_incomplete`, `fact_check_claim_disputed` — класс evidence; инструкции модели для draft называют новые находки и как их чинить. `scripts/loop-runner.py` передаёт гейту `--config` с уже найденным путём.
+
 #### Шаблон без данных клиента и примерные значения
 
 - `seo_cycle_core/placeholders.py`: `find_placeholders(cfg)` сравнивает курируемые пути (`project.*`, `business_profile.*`, `industry.*`, `content_rules.local_signals.examples`, `tone.description`) со значениями из самого `config/project.template.yaml` и с дефолтами мастера (`MyProject`, `example.com`); списки — по пересечению. `setup-gap-audit` кладёт находки в `advisory_gaps`/`advisory_fields`/`summary.advisory_missing` и в анкету, не трогая `summary.missing`, `missing_fields` и score — по ним journey решает, закрыта ли стадия 1. `setup-answer-plan` сопоставляет поле `placeholders.<путь>` с `<путь>` в `seo-cycle.yaml`.
@@ -40,6 +58,7 @@ _пусто_
 #### Tests
 
 - `tests/helpers/root_guard.py` (`skip_if_root`): шесть тестов на отказ доступа к файлам (`chmod 000`, каталог только для чтения) пропускаются под root — root обходит права, и в контейнерах/на VPS они падали ложно. В CI (не root) они по-прежнему выполняются.
+- `tests/test_draft_gate_config_checks.py` (реальный CLI в временном проекте: каждое правило срабатывает, выключается флагом, без конфига — прежнее поведение, битый конфиг/frontmatter, русская «экспертиза», `loop draft` → exit 3 с находками и классом evidence), `tests/test_draft_checks_core.py` (прямой импорт: стоп-слова, frontmatter, типы страниц, картинки, счётчики, безопасный YAML, поиск конфига).
 - `tests/test_placeholders.py` (прямой импорт), `test_setup_gap_audit` (advisory-категория не меняет `summary.missing` и score), `test_project_journey::AdvisoryGapsDoNotBlockSetupTest`.
 - `tests/test_task_router.py` — сопоставление с начала слова и стабильность прежних маршрутов; `tests/test_upgrade_access_assistants.py` — уникальность ключей `ACCESS_CATALOG` и отсутствие советов хранить секреты в `.env`.
 

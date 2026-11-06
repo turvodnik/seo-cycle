@@ -12,7 +12,7 @@ description: Контент-план (hub-and-spoke, KPI-90d) и написан�
 - **Входы:** `04-entity-maps/*`, `page-outline-v3` брифы (`copywriter-ready/*.md`), RAG-контекст
 - **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `seo-cycle cycle init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
 - **Выходы:** `05-content-plan.md`; `06-drafts/*.publish.md` (+ `fact_check_log` frontmatter)
-- **Gate:** `seo-cycle loop draft <draft.md> --outline <outline.json>` — exit 0; стоп-слова, fact-check, alt/caption — блокеры
+- **Gate:** `seo-cycle loop draft <draft.md> --outline <outline.json>` — exit 0. Гейт сам находит `seo-cycle.yaml` от каталога черновика и блокирует (error): стоп-слова (`quality_gates.stop_words_check`), нет `fact_check_log` (`quality_gates.fact_check_log_present`), картинка без alt (`images.alt.required`), inline-картинка без подписи (`images.captions.inline_required`), объём ниже `quality_gates.word_count_min`, битый frontmatter, выдуманная экспертиза от первого лица (EN/RU). Предупреждает: мало inline-картинок, внутренних ссылок, локальных сигналов, неполный/спорный fact_check_log. Отключается только флагом в конфиге, не обходом гейта
 - **Делегаты:** `delegate.content_strategy` (default `seo-content-strategist`), `delegate.content_writer` (default `seo-content-writer`)
 - **Общие правила:** `../_shared/policy-intake.md` (политики/бюджеты проекта — прочитать до платных действий), `../_shared/scorecard.md` (самооценка после задачи), `../_shared/rag-usage.md` (переиспользуй накопленное).
 
