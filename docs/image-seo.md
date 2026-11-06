@@ -38,13 +38,13 @@ Image SEO даёт:
 
 | Контекст | Шаблон | Пример |
 |---|---|---|
-| Hero/cover | `{H1 page} — {brand if relevant}` | «Минеральная вата Knauf Akustik для звукоизоляции — Эмвуди» |
+| Hero/cover | `{H1 page} — {brand if relevant}` | «Минеральная вата Knauf Akustik для звукоизоляции — <Бренд>» |
 | Inline / иллюстрация процесса | Описание действия | «Монтаж минваты между стойками каркаса с шагом 600мм» |
 | Product card thumbnail | `{product name} {key spec}` | «Knauf Akustik 100мм 1200×600мм» |
 | Иконка категории | `{категория}` (короткое) | «Шумоизоляция» |
 | Comparison diagram | Описание сравнения | «Сравнение слоёв пирога стены: с пароизоляцией и без» |
 | Decoration / pattern | `alt=""` (пустое, аriahidden) | n/a |
-| OG image | `{Page title} — {brand}` | «Как выбрать минеральную вату — гайд Эмвуди» |
+| OG image | `{Page title} — {brand}` | «Как выбрать минеральную вату — гайд <Бренд>» |
 
 **Запреты:**
 - `alt="image"`, `alt="photo"`, `alt="picture"`
@@ -64,7 +64,7 @@ Image SEO даёт:
 | Favicon | 32 × 32 | ICO/PNG | 5 |
 | Logo | vector | SVG | 10 |
 
-**Pipeline в seo-cycle:** существующий `seo/scripts/publish/img-generate.sh` + `img-optimize.sh` (если эти проектные скрипты есть — emwoody-стиль). Универсального генератора пока нет (на roadmap).
+**Pipeline в seo-cycle:** `scripts/img-generate.sh --live` — генерация (рантайм-aware, расход через usage-ledger), `scripts/wp-photo-image.py` — кроп по `images.aspect_ratios.*`, WebP по `images.output.*` и загрузка в WordPress. Типы изображений, стиль и правила подписей проекта — в профиле голоса (`seo/brand/voice.yaml` → `visuals`).
 
 ## CWV impact (LCP)
 
@@ -91,9 +91,9 @@ Hero image = первый paint в большинстве layouts. Оптими�
   "contentUrl": "https://example.com/img/minvata-knauf.webp",
   "license": "https://example.com/license",
   "acquireLicensePage": "https://example.com/license-info",
-  "creator": {"@type": "Organization", "name": "Эмвуди"},
-  "creditText": "Эмвуди (emwoody.ru)",
-  "copyrightNotice": "© Эмвуди 2026"
+  "creator": {"@type": "Organization", "name": "<Бренд>"},
+  "creditText": "<Бренд> (example.com)",
+  "copyrightNotice": "© <Бренд> 2026"
 }
 ```
 
@@ -139,7 +139,7 @@ curl "https://api.indexnow.org/indexnow?url=https://example.com/img/new-image.we
 
 ## AI image generation
 
-Для seo-cycle проектов используется генерация (например emwoody — Codex CLI):
+Для seo-cycle проектов используется генерация (например, через Codex CLI — `scripts/img-generate.sh`):
 
 - [ ] **Brand palette consistency** (см. `images.brand_palette` в конфиге)
 - [ ] **Aspect ratio** соответствует target (4:3 / 1:1 / 16:9 / 1.91:1)

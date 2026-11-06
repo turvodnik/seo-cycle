@@ -146,7 +146,7 @@ fi
 echo "Отвечай на 7 базовых вопросов (Enter — взять default в скобках):"
 echo ""
 
-read_answer PROJECT_NAME "1. Имя проекта (human-readable, например «Эмвуди»): " ""
+read_answer PROJECT_NAME "1. Имя проекта (human-readable, например «Строймаркет Север»): " ""
 PROJECT_NAME="${PROJECT_NAME:-MyProject}"
 
 read_answer DOMAIN "2. Домен (без https://, например example.com): " ""

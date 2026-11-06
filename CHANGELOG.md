@@ -15,6 +15,8 @@ _пусто_
 
 - `access-key-assistant` больше не советует класть ключи в `.env`: каждый шаг говорит «в Keychain» (`seo-cycle auth set <ИМЯ>` / `seo-cycle auth login <провайдер>`), как требует 3.0.0. Две противоречащие записи про Яндекс.Директ сведены в одну.
 - `seo-cycle run "<задача>"` и `context-pack` точнее понимают задачу: «описание категории» больше не уходит в «AI-видимость».
+- Шаблон конфига больше не тащит в новые проекты данные конкретного клиента: проектные publish-скиллы и семантический бриф по умолчанию `null`, палитра бренда пустая, в примерах и в мастере нет имени клиента.
+- `setup-gap-audit` показывает примеры из шаблона, которые остались в `seo-cycle.yaml` (демо-адрес и телефон `business_profile` попадают в schema.org, «Мытищи» — в требования к текстам). Это рекомендательная категория `placeholders`: строки есть в анкете, но стадия «Основа проекта» из-за них не блокируется.
 
 ### Подробности
 
@@ -26,6 +28,11 @@ _пусто_
 - Обещание «симлинк-шимы удаляются в v3» (`skills/manifest.yaml`, `SKILL.md`, `docs/architecture.md`) исправлено на «в следующем мажорном релизе (v4)» — в 3.x шимы на месте.
 - `scripts/img-generate.sh`: комментарий о пропорциях согласован с `images.aspect_ratios` шаблона (16:9 — hero/featured/inline, 4:3 — только значение по умолчанию скрипта).
 
+#### Шаблон без данных клиента и примерные значения
+
+- `seo_cycle_core/placeholders.py`: `find_placeholders(cfg)` сравнивает курируемые пути (`project.*`, `business_profile.*`, `industry.*`, `content_rules.local_signals.examples`, `tone.description`) со значениями из самого `config/project.template.yaml` и с дефолтами мастера (`MyProject`, `example.com`); списки — по пересечению. `setup-gap-audit` кладёт находки в `advisory_gaps`/`advisory_fields`/`summary.advisory_missing` и в анкету, не трогая `summary.missing`, `missing_fields` и score — по ним journey решает, закрыта ли стадия 1. `setup-answer-plan` сопоставляет поле `placeholders.<путь>` с `<путь>` в `seo-cycle.yaml`.
+- `config/project.template.yaml`: `publishing.publish_skills.*` и `delegate.semantic_brief` → `null`; `images.brand_palette` — пустые значения; убран клиентский пакет из `context_files`; у `alt_text_pattern` пояснение, что он работает только при `alt.mode: template`. `scripts/init-project.sh`: пример имени проекта без имени клиента. `docs/image-seo.md`: примеры без названия клиента, описан реальный конвейер картинок ядра (`img-generate.sh`, `wp-photo-image.py`).
+
 #### Docs
 
 - `docs/history/review-2026-11.md` — разбор состояния 3.0.1: оценки по областям, доказательства, блокеры результата и план.
@@ -33,6 +40,7 @@ _пусто_
 #### Tests
 
 - `tests/helpers/root_guard.py` (`skip_if_root`): шесть тестов на отказ доступа к файлам (`chmod 000`, каталог только для чтения) пропускаются под root — root обходит права, и в контейнерах/на VPS они падали ложно. В CI (не root) они по-прежнему выполняются.
+- `tests/test_placeholders.py` (прямой импорт), `test_setup_gap_audit` (advisory-категория не меняет `summary.missing` и score), `test_project_journey::AdvisoryGapsDoNotBlockSetupTest`.
 - `tests/test_task_router.py` — сопоставление с начала слова и стабильность прежних маршрутов; `tests/test_upgrade_access_assistants.py` — уникальность ключей `ACCESS_CATALOG` и отсутствие советов хранить секреты в `.env`.
 
 ## [3.0.1] — 2026-10-30

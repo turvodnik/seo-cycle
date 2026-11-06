@@ -133,6 +133,8 @@ def target_path_for(field: str) -> str:
     }
     if field in mapping:
         return mapping[field]
+    if field.startswith("placeholders."):
+        return field.removeprefix("placeholders.")
     return field
 
 

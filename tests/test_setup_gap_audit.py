@@ -111,6 +111,35 @@ class SetupGapAuditTest(unittest.TestCase):
         self.assertIn("seo-cycle.yaml", local_row["target_file"])
         self.assertIn("seo-cycle intake", local_row["follow_up_command"])
 
+    def test_template_placeholders_are_advisory_and_do_not_change_missing(self) -> None:
+        cfg_path = self.make_project(country="RU", project_type="ecommerce")
+        baseline = self.run_gap_audit(cfg_path)
+        self.assertIn("placeholders", baseline["categories"])
+        self.assertTrue(baseline["categories"]["placeholders"]["advisory"])
+        fields = set(baseline["advisory_fields"])
+        # demo NAP from the template survives the copy and must be flagged
+        self.assertIn("placeholders.business_profile.telephone", fields)
+        self.assertIn("placeholders.content_rules.local_signals.examples", fields)
+        # identity fields were rewritten by make_project → not flagged
+        self.assertNotIn("placeholders.project.name", fields)
+        self.assertEqual(baseline["summary"]["advisory_missing"], len(fields))
+        self.assertFalse(fields & set(baseline["missing_fields"]))
+        questionnaire_fields = {row["field"] for row in baseline["questionnaire"]["rows"]}
+        self.assertTrue(fields <= questionnaire_fields)
+
+        # filling the placeholders changes advisory counts only, never summary.missing
+        cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        cfg["business_profile"]["telephone"] = "+7 843 555-01-02"
+        cfg["content_rules"]["local_signals"]["examples"] = ["Казань", "Татарстан"]
+        cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        after = self.run_gap_audit(cfg_path)
+        self.assertNotIn("placeholders.business_profile.telephone", after["advisory_fields"])
+        self.assertNotIn("placeholders.content_rules.local_signals.examples", after["advisory_fields"])
+        self.assertEqual(after["summary"]["missing"], baseline["summary"]["missing"])
+        self.assertEqual(after["score"], baseline["score"])
+        markdown = (cfg_path.parent / "seo" / "setup" / "setup-gap-audit.md").read_text(encoding="utf-8")
+        self.assertIn("placeholders (advisory)", markdown)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
