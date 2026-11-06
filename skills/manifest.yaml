@@ -51,7 +51,7 @@ shared:
   - skills/_shared/customization.md
   - skills/_shared/sources-of-truth.md
   - skills/_shared/lessons-learned.md
-# Симлинк-шимы совместимости (v1-пути; удаляются в v3):
+# Симлинк-шимы совместимости (v1-пути; удаляются в следующем мажорном релизе, v4):
 compat_shims:
   - prompts/competitor-analysis.md
   - prompts/competitor-pages-analysis.md

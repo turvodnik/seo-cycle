@@ -16,6 +16,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "helpers"))
+from root_guard import skip_if_root  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -169,6 +171,8 @@ class DraftQualityGateCallErrorTest(unittest.TestCase):
         proc = self.run_gate(self.draft, self.outline)
         self.assert_clean_exit2(proc, str(self.outline))
         self.assertNotIn(str(self.draft), proc.stderr)
+
+    @skip_if_root
 
     def test_unwritable_report_is_a_call_error(self) -> None:
         for suffix in (".draft-quality-gate.json", ".draft-quality-gate.md"):

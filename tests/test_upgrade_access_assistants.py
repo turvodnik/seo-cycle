@@ -196,5 +196,39 @@ class UpgradeAccessAssistantsTest(unittest.TestCase):
         self.assertTrue((cfg_path.parent / "seo" / "setup" / "access-key-assistant.csv").exists())
 
 
+class AccessCatalogLiteralTest(unittest.TestCase):
+    """3.1.0: `ACCESS_CATALOG` had `yandex_direct` twice — the first entry was
+    silently dropped by the dict literal and the surviving one told the
+    operator to copy the token into `.env`, which 3.0.0 forbade (Keychain only)."""
+
+    def catalog_node(self):
+        import ast
+
+        tree = ast.parse(ACCESS.read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") == "ACCESS_CATALOG":
+                return node.value
+        self.fail("ACCESS_CATALOG literal not found")
+
+    def test_catalog_keys_are_unique(self) -> None:
+        keys = [key.value for key in self.catalog_node().keys]
+        duplicates = sorted({key for key in keys if keys.count(key) > 1})
+        self.assertEqual(duplicates, [])
+
+    def test_no_step_tells_to_store_secrets_in_dotenv(self) -> None:
+        import ast
+
+        catalog = ast.literal_eval(self.catalog_node())
+        offenders = [
+            (name, step)
+            for name, row in catalog.items()
+            for step in row.get("steps", [])
+            if ("into .env" in step or "в .env" in step) and "never in .env" not in step
+        ]
+        self.assertEqual(offenders, [])
+        steps = " ".join(catalog["yandex_direct"]["steps"])
+        self.assertIn("seo-cycle auth login yandex-direct", steps)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

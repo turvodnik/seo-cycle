@@ -175,6 +175,18 @@ TASKS: dict[str, dict[str, Any]] = {
 }
 
 
+def keyword_matches(keyword: str, normalized_task: str) -> bool:
+    """A keyword matches only at the start of a word (3.1.0).
+
+    Plain substring matching sent «описание категории» to `ai_visibility`
+    (the keyword «ии» inside «категории»), «rewrite» to anything holding
+    «write» and «контекст» to «текст». Keywords are stems/prefixes
+    («перепис», «стать»), so the match stays open on the right.
+    """
+    pattern = r"(?<![\w])" + re.escape(keyword.lower())
+    return re.search(pattern, normalized_task) is not None
+
+
 def classify_task(task: str, explicit: str | None) -> str:
     if explicit:
         if explicit not in TASKS:
@@ -186,7 +198,7 @@ def classify_task(task: str, explicit: str | None) -> str:
     for task_type, meta in TASKS.items():
         score = 0
         for keyword in meta["keywords"]:
-            if keyword.lower() in normalized:
+            if keyword_matches(keyword, normalized):
                 score += 2 if len(keyword) > 4 else 1
         scores[task_type] = score
     best = max(scores, key=scores.get)

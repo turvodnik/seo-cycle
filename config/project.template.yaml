@@ -741,7 +741,8 @@ cms: wordpress                  # wordpress | shopify | webflow | nextjs | stati
 # Режим цикла:
 #   standard      — обычный цикл по 10 фазам (default)
 #   migration     — миграция домена/CMS (см. docs/migration-planner.md)
-#   programmatic  — массовая генерация страниц по шаблону (см. docs/programmatic-seo.md)
+#   programmatic  — массовая генерация страниц по шаблону (Phase 4P, см.
+#                   skills/seo-entity-map/templates/programmatic-page.template.md)
 mode: standard
 
 business_model:                 # массив тегов

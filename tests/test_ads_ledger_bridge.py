@@ -30,6 +30,8 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from seo_cycle_core import ads  # noqa: E402 (sys.path must be set first)
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "helpers"))
+from root_guard import skip_if_root  # noqa: E402
 
 CFG = (
     "project:\n  name: ads-ledger-bridge-test\n  url: https://example.com\n"
@@ -57,6 +59,8 @@ class LedgerRecordRealSubprocessTest(unittest.TestCase):
         self.assertEqual(record["service"], "yandex_direct")
         self.assertEqual(record["metrics"].get("requests"), 3.0)
         self.assertEqual(record["note"], "bridge test: real write")
+
+    @skip_if_root
 
     def test_write_failure_on_readonly_project_returns_false(self) -> None:
         """Второй случай: запись реально не может состояться (директория
