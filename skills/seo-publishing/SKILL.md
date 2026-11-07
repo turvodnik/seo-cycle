@@ -22,7 +22,14 @@ description: CMS-aware публикация (WordPress REST + App Password ка�
 
 **Цель:** залить контент на сайт.
 
-Делегирование зависит от `publishing.cms` и `publishing.publish_skills`:
+**WordPress — одна команда (3.2.0):**
+```bash
+seo-cycle publish 06-drafts/<slug>.publish.md --outline <outline.json>          # план, ничего не отправляет
+seo-cycle publish 06-drafts/<slug>.publish.md --outline <outline.json> --live   # гейт → WordPress → проверка
+```
+Команда сама прогоняет гейт черновика (error = отказ, чинить через `seo-cycle loop draft`), переводит markdown в HTML (картинка + строка курсивом под ней = `<figure>` с подписью, `"hero"` = обложка), грузит картинки в медиатеку один раз, создаёт или обновляет пост (тот же `wp_id`), пишет SEO-мету по `publishing.seo_plugin`, добавляет блок «Источники» из `fact_check_log`, проверяет живую страницу (alt, подписи, заголовок; код 3 — проверка не прошла), пишет строку в `artifacts.publish_log` и `wp_id`/`wp_url` во frontmatter, с `--cycle-dir` — `07-published.md`. Статус по умолчанию — `publishing.default_status` (publish); `publishing.require_approval: true` — нужен `--ticket` одобренного `content_publish`. После публикации — `seo-cycle run script indexnow-submit --url <url> --live`.
+
+Свои публикаторы проекта (категории, ACF, Bricks) — через `publishing.publish_skills`:
 
 | CMS | Скилл / подход |
 |---|---|

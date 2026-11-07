@@ -196,12 +196,18 @@ def check_one_source(name: str, cfg: dict, env: dict, project_root: pathlib.Path
 
 def check_publishing(cfg: dict, env: dict, checklist: list, warnings: list):
     pub = config_section(cfg, "publishing")
+    status = pub.get("default_status")
+    if status is not None and status not in ("publish", "draft", "pending", "private", "future"):
+        warnings.append(f"publishing.default_status={status!r} — допустимо publish | draft | pending | private | future")
+    for key in ("require_approval", "verify_after_publish"):
+        if key in pub and not isinstance(pub.get(key), bool):
+            warnings.append(f"publishing.{key} должен быть true/false (получено {pub.get(key)!r})")
     if not pub.get("enabled"):
         return
-    env_vars = pub.get("env_vars", {})
+    env_vars = pub.get("env_vars", {}) if isinstance(pub.get("env_vars"), dict) else {}
     for label, env_name in env_vars.items():
         if env_name and not env.get(env_name):
-            checklist.append(f"Добавить в .env: {env_name}= (publishing.{label})")
+            checklist.append(f"Добавить в Keychain: {env_name} (publishing.{label}) — seo-cycle auth login wordpress")
 
 
 def check_images(cfg: dict, env: dict, project_root: pathlib.Path, checklist: list, warnings: list):

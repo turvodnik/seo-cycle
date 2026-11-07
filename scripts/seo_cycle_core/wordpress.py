@@ -56,7 +56,7 @@ def credentials(env: dict[str, str] | None = None) -> dict[str, str]:
 
 def missing_credentials(env: dict[str, str] | None = None) -> list[str]:
     creds = credentials(env)
-    pairs = zip(ENV_NAMES, (creds["base_url"], creds["user"], creds["app_password"]))
+    pairs = zip(ENV_NAMES, (creds["base_url"], creds["user"], creds["app_password"]), strict=True)
     return [name for name, value in pairs if not value]
 
 
