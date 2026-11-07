@@ -15,7 +15,8 @@ import pathlib
 import sys
 from typing import Any
 
-from seo_cycle_core.config import load_config, write_text
+from seo_cycle_core import brand_voice
+from seo_cycle_core.config import find_project_config, load_config, load_yaml, project_root_for, write_text
 
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
@@ -387,6 +388,15 @@ def render_markdown(outline: dict[str, Any]) -> str:
             f"- `{visual['id']}` ({visual['type']}): {visual['purpose']} "
             f"Placement: `{visual['placement']}`. Source: {visual['source_requirement']}"
         )
+    voice = outline.get("brand_voice") if isinstance(outline.get("brand_voice"), dict) else None
+    if voice:
+        method = voice.get("method") or {}
+        lines.extend(["", "## v3 Brand Voice", ""])
+        lines.append(f"- Profile: `{voice.get('profile')}`")
+        lines.append(f"- Method: `{method.get('page_type')}` — " + " → ".join(method.get("structure") or []))
+        lines.append(f"- Address: `{voice.get('address')}`; first person: `{voice.get('first_person_allowed')}`")
+        slots = ", ".join(f"`{slot.get('type')}`" for slot in voice.get("visual_slots") or [])
+        lines.append(f"- Required visuals: {slots or '-'}")
     addendum = outline.get("source_lock_addendum") if isinstance(outline.get("source_lock_addendum"), dict) else None
     if addendum:
         lines.extend(["", "## v3 Source-Lock Addendum", ""])
@@ -401,6 +411,39 @@ def render_markdown(outline: dict[str, Any]) -> str:
         lines.extend(f"- {item}" for item in addendum.get("blocked_claims", []))
         lines.extend(["", f"Rule: {addendum.get('draft_rule')}"])
     return "\n".join(lines) + "\n"
+
+
+def project_voice(package: pathlib.Path) -> tuple[dict[str, Any] | None, str]:
+    """The project's brand voice profile for this package (3.1.0), or None.
+
+    Read softly: an empty config means no rules, a broken profile is a note on
+    stderr — outlines are still generated. `attach_rag_passages` keeps its own
+    strict `load_config` (the T-069 money guard).
+    """
+    cfg_path = find_project_config(package)
+    if cfg_path is None:
+        return None, brand_voice.DEFAULT_PROFILE
+    cfg = load_yaml(cfg_path)
+    root = project_root_for(cfg_path)
+    profile, error = brand_voice.load_profile(cfg, root, strict=False)
+    display = brand_voice.display_path(root, brand_voice.profile_path(cfg, root))
+    if error:
+        print(f"NOTE: профиль голоса не подключён к брифу: {error}", file=sys.stderr)
+        return None, display
+    if profile is not None and brand_voice.validate_profile(profile):
+        print("NOTE: профиль голоса с ошибками — не подключён к брифу (seo-cycle voice validate)", file=sys.stderr)
+        return None, display
+    return profile, display
+
+
+def attach_brand_voice(outline: dict[str, Any], profile: dict[str, Any] | None, display: str) -> dict[str, Any]:
+    """Top-level `brand_voice` block only: `writer_handoff`/`tone_contract`
+    are scanned by page-outline-quality's first-person check, the profile's
+    own wording must not trip it."""
+    if not profile:
+        return outline
+    page_type = (outline.get("page") or {}).get("page_type") if isinstance(outline.get("page"), dict) else None
+    return {**outline, "brand_voice": brand_voice.brief_block(profile, page_type, display)}
 
 
 def render_copywriter_ready(outline: dict[str, Any]) -> str:
@@ -422,6 +465,9 @@ def render_copywriter_ready(outline: dict[str, Any]) -> str:
         lines.append(f"- Do: {item}")
     for item in outline.get("writer_handoff", {}).get("must_not", []):
         lines.append(f"- Do not: {item}")
+    if isinstance(outline.get("brand_voice"), dict):
+        lines.append("")
+        lines.extend(brand_voice.render_brief_markdown(outline["brand_voice"], heading_level=2))
     lines.extend(["", "## H1/H2/H3 Outline", ""])
     lines.append(f"# {page.get('title')}")
     for section in outline.get("sections", []):
@@ -597,13 +643,16 @@ def main(argv: list[str] | None = None) -> int:
 
     package = V2.package_dir(args.package)
     batch_mode = bool(args.all_mvp or args.priority)
+    voice, voice_display = project_voice(package)
     outlines = build_outlines(
         package,
         args.page,
         all_mvp=args.all_mvp,
         priorities=args.priority,
-        expert_author=args.expert_author,
+        # a real author with proof in the voice profile allows the expert first person
+        expert_author=args.expert_author or brand_voice.has_real_author(voice),
     )
+    outlines = [attach_brand_voice(outline, voice, voice_display) for outline in outlines]
     if args.rag and not attach_rag_passages(package, outlines):
         return 2
     if args.write:

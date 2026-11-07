@@ -19,7 +19,9 @@
 #              инструкцию CODEX_NATIVE_IMAGE — Codex генерит своим image-skill
 #              (seo-image-gen / image / sora) напрямую и сохраняет в save_to.
 #
-# Поддерживаемые ratio: 4:3 (hero) | 1:1 (иконки) | 16:9 (OG) | 1.91:1 (FB OG).
+# Поддерживаемые ratio: 4:3 (по умолчанию) | 1:1 (иконки) | 16:9 (hero/featured/inline,
+# как images.aspect_ratios в шаблоне конфига) | 1.91:1 (OG). Пропорцию под проект бери
+# из images.aspect_ratios.* (или visuals.types.* профиля голоса) и передавай 4-м аргументом.
 # Idempotent: если файл уже есть и не пустой — ALREADY_EXISTS.
 
 set -e

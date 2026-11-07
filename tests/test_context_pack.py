@@ -85,6 +85,36 @@ class ContextPackTest(unittest.TestCase):
         )
         return json.loads(proc.stdout)
 
+    def run_pack_for(self, cfg_path: pathlib.Path, task: str) -> dict:
+        proc = subprocess.run(
+            [sys.executable, str(CONTEXT_PACK), str(cfg_path), "--task", task, "--format", "json"],
+            cwd=cfg_path.parent, check=True, text=True, capture_output=True,
+        )
+        return json.loads(proc.stdout)
+
+    def test_writing_task_reads_brand_voice_profile_first(self) -> None:
+        cfg_path = self.make_project(country="RU", project_type="ecommerce")
+        without = self.run_pack_for(cfg_path, "написать статью про выбор минваты")
+        self.assertEqual(without["task"]["task_type"], "content_writing")
+        self.assertNotIn("seo/brand/voice.yaml", without["read_order"])
+        self.assertIn("seo-cycle voice init", without["brand_voice_note"])
+
+        subprocess.run([sys.executable, str(ROOT / "scripts" / "brand-voice.py"), "init", "--write"],
+                       cwd=cfg_path.parent, check=True, text=True, capture_output=True)
+        profile = cfg_path.parent / "seo" / "brand" / "voice.yaml"
+        profile.write_text(profile.read_text(encoding="utf-8").replace(
+            "  good: []", '  good: ["seo/brand/examples/good-1.md"]'), encoding="utf-8")
+        report = self.run_pack_for(cfg_path, "написать статью про выбор минваты")
+        self.assertEqual(report["read_order"][:2], ["seo/brand/voice.yaml", "seo/brand/examples/good-1.md"])
+        self.assertIsNone(report["brand_voice_note"])
+        # a non-writing task does not get the profile
+        audit = self.run_pack_for(cfg_path, "аудит индексации, robots и Bricks preview")
+        self.assertNotIn("seo/brand/voice.yaml", audit["read_order"])
+
+        profile.write_text("voice: [oops\n", encoding="utf-8")
+        broken = self.run_pack_for(cfg_path, "написать статью про выбор минваты")
+        self.assertIn("не прочитан", broken["brand_voice_note"])
+
     def test_ru_ecommerce_context_pack_is_compact_and_guarded(self) -> None:
         cfg_path = self.make_project(country="RU", project_type="ecommerce")
         report = self.run_context_pack(cfg_path)

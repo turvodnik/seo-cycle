@@ -80,7 +80,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         "steps": [
             "Open the Business Profile manager.",
             "Confirm this project has a real public location/profile.",
-            "Record only account/location IDs in .env.",
+            "Record only account/location IDs, in the Keychain (`seo-cycle auth set <NAME>`), never .env.",
         ],
         "notes": "Use only for local/profile quality work; no tracking tag.",
     },
@@ -121,7 +121,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
             "Use the verification_code/manual flow to get a token.",
             "Fetch user_id and webmaster host_id with the documented curl commands.",
         ],
-        "notes": "Do not paste OAuth token into reports or questionnaire files; only .env.",
+        "notes": "Do not paste OAuth token into reports or questionnaire files; only the Keychain (`seo-cycle auth set <NAME>`), never .env.",
     },
     "yandex_metrika": {
         "title": "Yandex Metrica OAuth token",
@@ -132,7 +132,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         "steps": [
             "Use only when the project policy allows the Metrica counter.",
             "Create/reuse a Yandex OAuth app with the Metrica read scopes required by docs/oauth-setup.md.",
-            "Record only the counter ID and token in .env.",
+            "Record only the counter ID and token, in the Keychain (`seo-cycle auth set <NAME>`), never .env.",
         ],
         "notes": "For projects where counters/tracking are not allowed, leave Metrica disabled.",
     },
@@ -148,19 +148,6 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
             "Record only the business ID in YANDEX_MERCHANT_BUSINESS_ID.",
         ],
         "notes": "Product/feed diagnostics only; ads and paid promotion stay separate.",
-    },
-    "yandex_direct": {
-        "title": "Yandex Direct client login",
-        "env": ["YANDEX_DIRECT_CLIENT_LOGIN"],
-        "tools": ["yandex_direct"],
-        "url": "https://direct.yandex.ru/",
-        "doc": "docs/oauth-setup.md#9-яндекс-дополнительные-сервисы",
-        "steps": [
-            "Use only for planning/audits when paid media is approved.",
-            "Record the client login, not passwords or campaign secrets.",
-            "Keep campaign launch/spend behind approval.",
-        ],
-        "notes": "No ad spend without budget and explicit approval.",
     },
     "bing_webmaster": {
         "title": "Bing Webmaster Tools API key",
@@ -184,7 +171,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         "steps": [
             "Generate a random key.",
             "Host it as a public .txt file at the site root.",
-            "Record key and public key location in .env.",
+            "Record key and public key location in the Keychain (`seo-cycle auth set <NAME>`), never .env.",
         ],
         "notes": "Mutates search engine submission queues; run only after approval.",
     },
@@ -196,7 +183,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         "doc": "docs/oauth-setup.md#11-paidsubscription-tools",
         "steps": [
             "Open NeuronWriter account/API settings.",
-            "Copy the API key only into .env.",
+            "Store the API key only in the Keychain (`seo-cycle auth set <NAME>`), never .env.",
             "Record the project ID and current monthly limits in seo/neuronwriter-limits.yaml.",
         ],
         "notes": "Use only priority pages; no whole-catalog runs without an approved queue.",
@@ -224,7 +211,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         "doc": "docs/oauth-setup.md#11-paidsubscription-tools",
         "steps": [
             "Open account/API settings.",
-            "Copy token only into .env.",
+            "Store the token only in the Keychain (`seo-cycle auth set <NAME>`), never .env.",
             "Set monthly request caps and reserve in seo/tool-budget.yaml.",
         ],
         "notes": "Use request caps and cache for RU keyword evidence.",
@@ -237,7 +224,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         "doc": "docs/oauth-setup.md#11-paidsubscription-tools",
         "steps": [
             "Open Serpstat API settings.",
-            "Copy API key only into .env.",
+            "Store the API key only in the Keychain (`seo-cycle auth set <NAME>`), never .env.",
             "Set credit caps/reserve before first run.",
         ],
         "notes": "Quota-based; always run spend guard first.",
@@ -251,7 +238,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         "steps": [
             "Register or open the XMLRiver account.",
             "Open collection settings and confirm Google/Yandex/Wordstat parameters needed by this project.",
-            "Copy only the numeric user ID and API key into .env as XMLRIVER_USER_ID and XMLRIVER_API_KEY.",
+            "Store only the numeric user ID and API key (XMLRIVER_USER_ID, XMLRIVER_API_KEY) in the Keychain (`seo-cycle auth set <NAME>`), never .env.",
             "Run spend-guard/usage-ledger preflight before any --live --allow-paid XMLRiver call.",
         ],
         "notes": "Use exported XML/JSON or cached distillates by default. Live XMLRiver requests are paid API calls and stay approval-gated.",
@@ -265,10 +252,11 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         "steps": [
             "Register the app at oauth.yandex.ru with Direct API access.",
             "Get an OAuth token for the account (or agency + Client-Login).",
-            "Copy the token into .env as YANDEX_DIRECT_TOKEN (client login optional).",
+            "Store it in the Keychain: `seo-cycle auth login yandex-direct` (YANDEX_DIRECT_TOKEN; client login optional) — never in .env.",
             "Start with ads.yandex_direct.sandbox: true and rehearse apply in the sandbox.",
+            "Use only for planning/audits when paid media is approved; record the client login, not passwords or campaign secrets.",
         ],
-        "notes": "Fetch is read-only and guarded; apply requires an approved ads ticket + --live --allow-write.",
+        "notes": "Fetch is read-only and guarded; apply requires an approved ads ticket + --live --allow-write. No ad spend without budget and explicit approval.",
     },
     "google_ads": {
         "title": "Google Ads API credentials",
@@ -285,7 +273,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         "steps": [
             "Request a developer token in the Google Ads MCC (test account is enough for read-only).",
             "Create OAuth client credentials and mint a refresh token.",
-            "Copy tokens into .env; never into config or reports.",
+            "Store tokens in the Keychain (`seo-cycle auth set <NAME>`), never .env; never in config or reports.",
             "For region_profile: ru expect region_limited status — use the Google Ads Editor CSV export instead of API writes.",
         ],
         "notes": "API writes stay disabled unless ads.google_ads.apply_enabled is set after review.",
@@ -298,7 +286,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         "doc": "docs/oauth-setup.md#11-paidsubscription-tools",
         "steps": [
             "Use only if question research is in scope.",
-            "Copy token only into .env.",
+            "Store the token only in the Keychain (`seo-cycle auth set <NAME>`), never .env.",
             "Set monthly usage caps if the plan is limited.",
         ],
         "notes": "Skip when Yandex/Google suggest already covers the needed question layer.",
@@ -312,7 +300,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         "steps": [
             "Create a project/API key only if Gemini checks are needed.",
             "Restrict the key where possible.",
-            "Record it only in .env and ledger token spend.",
+            "Record it only in the Keychain (`seo-cycle auth set <NAME>`), never .env, and ledger token spend.",
         ],
         "notes": "Optional AI comparison layer; skip unless requested by project policy.",
     },
@@ -324,7 +312,7 @@ ACCESS_CATALOG: dict[str, dict[str, Any]] = {
         "doc": "docs/oauth-setup.md#12-ai-api-keys",
         "steps": [
             "Create key only if DeepSeek comparison is needed.",
-            "Record it only in .env.",
+            "Record it only in the Keychain (`seo-cycle auth set <NAME>`), never .env.",
             "Set a monthly LLM cap before first run.",
         ],
         "notes": "Optional; skip by default when no explicit AI-comparison task exists.",
@@ -506,12 +494,12 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
         "skipped": skipped,
         "rules": [
             "Never paste API keys, OAuth tokens, passwords, service-account JSON, or client secrets into reports.",
-            "Write only env var names and file paths here; secret values live in .env or provider consoles.",
+            "Write only env var names and file paths here; secret values live in the Keychain (ai-secret) or provider consoles.",
             "Skip a provider if the related tool is not applicable or blocked by project policy.",
         ],
         "next_actions": [
-            "Fill only the needed .env names from this report.",
-            "Run `seo-cycle validate` after editing .env.",
+            "Store only the needed variable names from this report: `seo-cycle auth set <NAME>` (Keychain).",
+            "Run `seo-cycle auth list` and `seo-cycle validate` after storing keys.",
             "Run `seo-cycle spend --write` before paid/quota/LLM/API work.",
         ],
     }

@@ -41,6 +41,7 @@ COMMANDS: dict[str, dict[str, Any]] = {
     "intake": {"script": "project-intake-wizard.py", "help": "Detailed project intake wizard", "group": "setup"},
     "journey": {"script": "project-journey.py", "help": "Current stage, blockers, and next commands"},
     "loop": {"script": "loop-runner.py", "help": "Bounded quality loop: check -> repair -> re-check", "group": "content"},
+    "voice": {"script": "brand-voice.py", "help": "Brand voice, writing methods & image types profile (init/validate/show/check)", "group": "content"},
     "triggers": {"script": "triggers-eval.py", "help": "Phase 10 action list from a snapshot (ranked by potential)"},
     "snapshot": {"script": "snapshot-build.py", "help": "Normalize fetched data into snapshot.json"},
     "cannibalization": {"script": "cannibalization-audit.py", "help": "Query→multiple-URL conflicts report"},

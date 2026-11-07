@@ -56,11 +56,22 @@ def scripts_dir() -> pathlib.Path:
     return pathlib.Path(__file__).resolve().parent
 
 
-def run_check(target: str, path: pathlib.Path, outline: pathlib.Path | None, project_root: pathlib.Path) -> dict[str, Any]:
+def run_check(
+    target: str,
+    path: pathlib.Path,
+    outline: pathlib.Path | None,
+    project_root: pathlib.Path,
+    config_path: pathlib.Path | None = None,
+) -> dict[str, Any]:
     spec = TARGETS[target]
     command = [sys.executable, str(scripts_dir() / spec["check_script"]), str(path)]
     if target == "draft":
         command += ["--outline", str(outline)]
+        if config_path is not None:
+            # 3.1.0: the draft gate enforces project rules from the config;
+            # hand it the one this loop already resolved instead of letting
+            # it guess from the draft's directory.
+            command += ["--config", str(config_path)]
     command += spec["check_args"]
     refuse_unsafe_outputs(target, path)
     started = time.time_ns()
@@ -394,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
 
     while True:
         try:
-            report = run_check(args.target, path, outline, project_root)
+            report = run_check(args.target, path, outline, project_root, cfg_path)
         except RuntimeError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return EXIT_CONFIG_ERROR

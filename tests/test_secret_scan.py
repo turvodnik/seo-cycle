@@ -10,6 +10,8 @@ import pathlib
 import sys
 import tempfile
 import unittest
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "helpers"))
+from root_guard import skip_if_root  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("secret_scan", ROOT / "scripts" / "secret-scan.py")
@@ -339,6 +341,8 @@ class FalsePositiveLedgerTest(unittest.TestCase):
             ss.load_ledger(self.tmp / "no-such.yaml")
         self.assertEqual(ctx.exception.code, 2)
         self.assertIn("ERROR", buf.getvalue())
+
+    @skip_if_root
 
     def test_load_ledger_unreadable_file_errors_and_exits_2(self) -> None:
         """🟡 (повторный гейт): chmod 000 — раньше голый PermissionError-

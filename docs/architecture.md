@@ -58,7 +58,7 @@ seo-cycle/
 │   ├── seo-monitoring/          # Phase 9   (prompts/: ai-visibility, ad-and-social, serp-news; templates/monitoring-report)
 │   └── seo-iteration/           # Phase 10  (prompts/page-rewrite-rescue)
 ├── prompts/, templates/         # v1-пути: реальные файлы оркестратора (marketing-*) + СИМЛИНК-ШИМЫ
-│                                #   на переехавшие в skills/* файлы (совместимость, удаление в v3)
+│                                #   на переехавшие в skills/* файлы (совместимость, удаление в v4)
 ├── scripts/                     # общий движок: ~180 CLI-скриптов + пакет seo_cycle_core/
 ├── bin/seo-cycle                # единый CLI (scripts/seo_cycle_cli.py)
 ├── config/                      # project.template.yaml, triggers.yaml, region-profiles/,

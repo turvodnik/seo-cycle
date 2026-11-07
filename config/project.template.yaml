@@ -351,6 +351,9 @@ policy_files:
   technical_mcp_health_json: seo/technical/technical-mcp-health.json
   latest_technical_mcp_health: seo/technical/latest-technical-mcp-health.md
   latest_technical_mcp_health_json: seo/technical/latest-technical-mcp-health.json
+  # Профиль голоса бренда, методов письма и изображений (3.1.0):
+  # `seo-cycle voice init --write`, описание — docs/brand-voice.md.
+  brand_voice_profile: seo/brand/voice.yaml
 
 # -----------------------------------------------------------------------------
 # 3b. Governance — лимиты токенов, денег, подписок и автоматизаций
@@ -741,7 +744,8 @@ cms: wordpress                  # wordpress | shopify | webflow | nextjs | stati
 # Режим цикла:
 #   standard      — обычный цикл по 10 фазам (default)
 #   migration     — миграция домена/CMS (см. docs/migration-planner.md)
-#   programmatic  — массовая генерация страниц по шаблону (см. docs/programmatic-seo.md)
+#   programmatic  — массовая генерация страниц по шаблону (Phase 4P, см.
+#                   skills/seo-entity-map/templates/programmatic-page.template.md)
 mode: standard
 
 business_model:                 # массив тегов
@@ -818,6 +822,16 @@ business_profile:
 # -----------------------------------------------------------------------------
 # 6. Tone of voice — как пишем
 # -----------------------------------------------------------------------------
+# С 3.1.0 голос бренда, методы письма по типам страниц и типы изображений
+# живут в профиле seo/brand/voice.yaml (policy_files.brand_voice_profile):
+# `seo-cycle voice init --write` переносит туда значения отсюда. Профиль
+# попадает в бриф копирайтера, в context pack задач на написание и в гейт
+# черновика. Секция tone ниже остаётся источником стоп-слов
+# (stop_words_extra / stop_words_regex_extra) и legacy-описанием.
+brand_voice:
+  enabled: true                 # false — профиль не используется нигде
+  enforce: warn                 # warn | error — строгость проверок голоса в гейте черновика
+  require_review: false         # true — гейт ждёт voice_review: {verdict: pass} во frontmatter
 tone:
   formal_level: 2               # 1=very informal, 5=very formal
   style_keywords:
@@ -1060,12 +1074,14 @@ publishing:
   seo_plugin: seopress          # seopress | yoast | rankmath | none
   seopress_term_meta_via_rest: true   # требует PHP snippet — см. seo/wp-snippets/
 
-  # Делегирование на конкретные скиллы публикации
+  # Делегирование на проектные скиллы публикации (имя скилла/агента проекта).
+  # null — проектного скилла нет: публикация идёт по общему порядку из
+  # skills/seo-publishing/SKILL.md (WordPress REST + Application Password).
   publish_skills:
-    blog: emwoody-publish-post      # или твой кастомный
-    category: emwoody-publish-taxonomy
-    brand: emwoody-publish-taxonomy
-    page: emwoody-publish-page
+    blog: null                  # например: my-site-publish-post
+    category: null
+    brand: null
+    page: null
 
 # -----------------------------------------------------------------------------
 # 9. Images — генерация и оптимизация
@@ -1112,17 +1128,18 @@ images:
     og: "1.91:1"                # OpenGraph (1200×630)
     article_inline: "16:9"
 
+  # Палитра бренда для генерации/подбора визуалов. Заполни под свой бренд —
+  # или веди её в профиле голоса (seo/brand/voice.yaml → visuals.palette,
+  # `seo-cycle voice init`), он подробнее: типы изображений, стиль, подписи.
   brand_palette:
-    primary: forest_green
-    secondary: kraft_beige
-    accent: mustard
-    tertiary: [terracotta, dusty_teal, cream]
-    avoid:
-      - bright_red
-      - neon_blue
-      - neon_green
-      - pastel_washed_out
+    primary: ""                 # например: forest_green
+    secondary: ""
+    accent: ""
+    tertiary: []
+    avoid: []                   # например: [neon_blue, pastel_washed_out]
 
+  # Используется только при alt.mode: template; при natural_entity (по
+  # умолчанию) alt пишется по смыслу изображения, без шаблона.
   alt_text_pattern: "{category_name} — {city} | {brand_name}"
 
 # -----------------------------------------------------------------------------
@@ -1209,8 +1226,8 @@ context_files:
     role: "project rules"
   # - path: "./brand-guidelines.md"
   # - path: "./content-strategy.md"
-  # Опционально — базовые пакеты SEO/UX
-  # - path: "./emwoody-seo-geo-ux-package-2026-04-23.md"
+  # Опционально — базовые пакеты SEO/UX проекта
+  # - path: "./seo-geo-ux-package.md"
   #   role: "base SEO/GEO/UX package"
 
 # -----------------------------------------------------------------------------
@@ -1220,7 +1237,7 @@ context_files:
 # Если у тебя есть проектные скиллы — указывай их здесь, иначе используются
 # универсальные fallback'и из ./.codex/skills/seo-cycle/.
 delegate:
-  semantic_brief: emwoody-semantic-brief    # или null → fallback на универсальный шаблон
+  semantic_brief: null                       # имя проектного скилла брифа; null → универсальный шаблон
   audit: seo-auditor                         # agent/skill name or project-specific fallback
   keyword_research: seo-keyword-researcher
   content_writer: seo-content-writer

@@ -4,6 +4,93 @@
 
 _пусто_
 
+## [3.1.0] — 2026-11-06
+
+Гейт черновика начинает проверять то, что всегда обещала документация, а у
+каждого проекта появляется профиль голоса, методов письма и типов изображений.
+Плюс исправления по итогам разбора 3.0.1 (`docs/history/review-2026-11.md`).
+Сначала коротко для оператора, затем подробности.
+
+### Может остановить ваши цепочки
+
+- **`seo-cycle gate draft` / `seo-cycle loop draft` проверяют правила проекта из `seo-cycle.yaml`.** Раньше гейт читал только outline и пропускал черновик со стоп-словами, картинкой без alt и без `fact_check_log`, хотя `skills/seo-writing/SKILL.md` называл это блокерами. Теперь гейт сам находит конфиг (вверх от каталога черновика, в том числе `.claude/` и `seo/`) и даёт error за стоп-слова, отсутствие `fact_check_log`, картинку без alt, inline-картинку без подписи и объём ниже `quality_gates.word_count_min`. Кому ломает: черновикам, которые проходили гейт по старым правилам, и цепочкам `gate draft && <публикация>`. Что сделать: исправить черновик (`seo-cycle loop draft` сам выдаст модели инструкции); если правило проекту не нужно — выключить его флагом в конфиге (`quality_gates.stop_words_check.enabled`, `quality_gates.fact_check_log_present.enabled`, `quality_gates.word_count_min.enabled`, `images.alt.required`, `images.captions.inline_required`), а не обходить гейт. Ключа нет в конфиге — правило не действует.
+- **Выдуманная экспертиза от первого лица ловится и по-русски, даже без конфига:** «по моему опыту», «мои клиенты», «в нашей практике», «мы протестировали на объекте» дают error `unsafe_first_person_expertise`, как раньше «in my years». Обычное «мы доставляем» не ловится. Если автор реальный — подтвердите его в брифе (`page-outline-v3 --expert-author`).
+- **Битый frontmatter черновика — error `frontmatter_invalid`** (раньше гейт его не разбирал вовсе).
+- **`check-stop-words.py` возвращает код 2**, если файл не найден или не читается, и если конфиг не разбирается (раньше — «⚠» и код по найденным словам).
+- **Битый профиль голоса останавливает гейт черновика (код 2) и `seo-cycle validate` (ошибка).** Профиль появляется только после `seo-cycle voice init` или мастера; если файл есть, но с ошибкой структуры («address: sir»), гейт отказывается проверять, а не молча игнорирует профиль. Что сделать: `seo-cycle voice validate` и поправить поле.
+- **Проекты с конфигом в `.claude/seo-cycle.yaml` или `seo/seo-cycle.yaml`: корень проекта теперь — каталог над ними.** Раньше корнем считался сам `.claude/` (или `seo/`), и отчёты, кэши и политики писались в `.claude/seo/…` / `seo/seo/…`. Кому ломает: таким проектам — после обновления команды ищут артефакты в `<проект>/seo/…`. Что сделать: перенести каталог `.claude/seo/` (или `seo/seo/`) в `<проект>/seo/` либо положить конфиг в корень проекта. Проектов с `seo-cycle.yaml` в корне это не касается.
+
+### Для оператора — что изменилось
+
+- **Профиль голоса бренда, методов письма и изображений — заранее, на каждый проект.** `seo-cycle voice init --write` создаёт `seo/brand/voice.yaml`: кто мы и для кого пишем, голос в парах «это / а не это», обращение на «вы»/«ты», лексика (как не пишем → как пишем, запрещённые слова), длина предложений, кавычки и тире, порядок блоков для каждого типа страницы (статья, категория, товар, лендинг, сравнение, инструкция, инструмент), реальные авторы, типы изображений (обложка, inline-фото, схема, таблица сравнения, товар, скриншот, OG, иконка) с источником, стилем, пропорцией и правилом подписи. Значения переносятся из `tone.*`, `images.*`, `project.*`; примеры из шаблона — нет. `seo-cycle voice validate` показывает, что заполнить; `voice show` — как блок увидит копирайтер; `voice check` проверяет черновик; `voice extract-prompt --from <тексты>` готовит запрос модели, чтобы вывести голос из уже опубликованных текстов. Описание — `docs/brand-voice.md`.
+- **Профиль доходит до того, кто пишет.** Бриф копирайтера (`page-outline-v3 --write`) получает раздел «Голос бренда и метод»: как звучим, обращение, порядок блоков для этого типа страницы, как пишем и как не пишем, какие изображения нужны. Context pack задачи «написать статью…» первым ставит `seo/brand/voice.yaml` (раньше — 20 файлов настройки и ни одного про бренд). Гейт черновика сверяет текст с профилем: запрещённые слова — error, «ты» вместо «вы», «минвата» вместо «минеральная вата», длинные предложения, прямые кавычки и дефис вместо тире, нет обязательной обложки — warning (`brand_voice.enforce: error` — всё error). Новый проект получает профиль из мастера, существующий — `seo-cycle voice init --write` (подсказывает `project-upgrade-assistant`), незаполненные поля видны в `setup-gap-audit` (рекомендательная категория `voice`).
+- `seo-cycle run "написать текст / подготовь черновик / описание категории"` — новый маршрут `content_writing` (фаза 6, гейт черновика), а не «контент-план» или «технический аудит».
+- Гейт черновика пишет, где именно проблема: «Стоп-слово «лучший» (строки 6, 14)», «Изображения без alt (строки 10)», «В тексте 29 слов, для типа «blog_post» нужно не меньше 1500». Демо-города из шаблона («Мытищи») он не требует — такие правила видны в `summary.skipped_checks`.
+- `check-stop-words.py` показывает правильный номер строки: раньше после frontmatter или блока кода номера съезжали вверх, а `---` в тексте или апостроф («It's») прятали целые абзацы от проверки.
+- `access-key-assistant` больше не советует класть ключи в `.env`: каждый шаг говорит «в Keychain» (`seo-cycle auth set <ИМЯ>` / `seo-cycle auth login <провайдер>`), как требует 3.0.0. Две противоречащие записи про Яндекс.Директ сведены в одну.
+- `seo-cycle run "<задача>"` и `context-pack` точнее понимают задачу: «описание категории» больше не уходит в «AI-видимость».
+- Шаблон конфига больше не тащит в новые проекты данные конкретного клиента: проектные publish-скиллы и семантический бриф по умолчанию `null`, палитра бренда пустая, в примерах и в мастере нет имени клиента.
+- `setup-gap-audit` показывает примеры из шаблона, которые остались в `seo-cycle.yaml` (демо-адрес и телефон `business_profile` попадают в schema.org, «Мытищи» — в требования к текстам). Это рекомендательная категория `placeholders`: строки есть в анкете, но стадия «Основа проекта» из-за них не блокируется.
+
+### Подробности
+
+#### Fix
+
+- `scripts/task-router.py`: ключевые слова задачи сопоставляются только с начала слова (`keyword_matches`). Раньше подстрока «ии» ловила «категории», «write» — «rewrite», «текст» — «контекст».
+- `scripts/access-key-assistant.py`: ключ `yandex_direct` был в `ACCESS_CATALOG` дважды — первая запись молча терялась, оставшаяся велела копировать токен в `.env`. Теперь одна запись, шаги ведут в Keychain; так же исправлены все остальные шаги и общие подсказки отчёта вида «положи в `.env`».
+- `config/project.template.yaml`: ссылка на несуществующий `docs/programmatic-seo.md` заменена на `skills/seo-entity-map/templates/programmatic-page.template.md`.
+- Обещание «симлинк-шимы удаляются в v3» (`skills/manifest.yaml`, `SKILL.md`, `docs/architecture.md`) исправлено на «в следующем мажорном релизе (v4)» — в 3.x шимы на месте.
+- `scripts/img-generate.sh`: комментарий о пропорциях согласован с `images.aspect_ratios` шаблона (16:9 — hero/featured/inline, 4:3 — только значение по умолчанию скрипта).
+
+#### Честный гейт черновика
+
+- `scripts/seo_cycle_core/draft_checks.py` (новый) — проверки правил проекта: `stop_words_found` (одна находка на каждое слово, строки в `message`, до 50), `fact_check_log_missing` (error), `fact_check_log_incomplete` и `fact_check_claim_disputed` (warning), `image_missing_alt` (markdown, `<img>`, `featured_image` без `featured_image_alt`), `image_generic_alt`, `image_missing_caption` (подпись — следующая строка курсивом или `<figcaption>`; тип картинки — title: `![alt](src "hero")`, hero/og/icon/decorative подписи не требуют), `inline_images_below_min`, `word_count_below_min` (корзины blog_post/category/landing по типу страницы), `internal_links_below_min` (только `[..](/…)` и ссылки на свой домен, без картинок), `local_signals_below_min` (основа слова ≥4 букв, короче — точная форма; фразы — подряд).
+- `scripts/draft-quality-gate.py`: конфиг — `--config` или `find_project_config()` от каталога черновика; битый YAML — rc 2 одной строкой, без отчёта; пустой файл — как без конфига. В `summary` — `page_type`, `config`, `checks_run`, `skipped_checks`. Без конфига новых находок нет.
+- `scripts/seo_cycle_core/config.py`: `find_project_config()` обходит предков и на каждом уровне пробует все `CONFIG_SEARCH_PATHS`, останавливаясь до домашнего каталога; `parse_yaml_text_safe()` и `load_yaml_safe()` возвращают `(данные, ошибка)` вместо выхода — для frontmatter и необязательных файлов.
+- `scripts/seo_cycle_core/frontmatter.py` (новый): frontmatter только в начале файла, даты → строки (отчёт — JSON). `scripts/seo_cycle_core/page_types.py` (новый): `normalize_page_type()`, `word_count_bucket()`.
+- `scripts/seo_cycle_core/stop_words.py` (новый): паттерны и поиск вынесены из `check-stop-words.py`; игнорируемые участки забиваются пробелами на месте (строки и колонки сохраняются), frontmatter — только в начале файла, кавычки — в пределах строки, `'` — не внутри слова, совпадения встроенного паттерна и `tone.stop_words_extra` не дублируются.
+- `scripts/seo_cycle_core/loop.py`: `fact_check_log_missing`, `fact_check_log_incomplete`, `fact_check_claim_disputed` — класс evidence; инструкции модели для draft называют новые находки и как их чинить. `scripts/loop-runner.py` передаёт гейту `--config` с уже найденным путём.
+
+#### Профиль голоса и визуала
+
+- `templates/project-policies/brand-voice.template.yaml` (схема v1): `identity`, `voice`, `lexicon`, `style`, `methods` (структуры по типам страниц, `aliases`, `cta`), `authors` + `first_person_allowed`, `visuals` (`types`, `per_page_type`, `palette`), `examples`, `disclaimers`; комментарии к каждому полю.
+- `scripts/seo_cycle_core/brand_voice.py` (новый): `load_profile()` (активен, только если файл есть и `brand_voice.enabled` не `false`; неявного фолбэка из `tone.*` нет), `validate_profile()` (только структура и типы), `unanswered_fields()`, `method_for()`, `visuals_for()`, `brief_block()` + `render_brief_markdown()` (ru/en), `check_draft()`, `render_init()`. Подстановка в шаблон — `json.dumps(..., ensure_ascii=False)`: комментарии шаблона сохраняются, эмодзи не превращаются в одиночные суррогаты.
+- `scripts/brand-voice.py` (новый) → команда `seo-cycle voice` (группа «Контент»): `init [--write] [--force]` (готовый профиль без `--force` не трогает — rc 0 и «ℹ»), `validate`, `show`, `check`, `extract-prompt`. `--help` работает без проекта.
+- `config/project.template.yaml`: `policy_files.brand_voice_profile: seo/brand/voice.yaml`; секция `brand_voice: {enabled, enforce: warn, require_review: false}`; у `tone:` — пояснение, что голос теперь в профиле, а `tone.stop_words_extra` остаётся источником стоп-слов.
+
+#### Профиль подключён к брифу, гейту, контексту и мастеру
+
+- `scripts/page-outline-v3.py`: `project_voice()` мягко читает профиль (пустой конфиг — нет правил, битый профиль — `NOTE` в stderr, outline всё равно строится); `attach_brand_voice()` кладёт `brand_voice` только верхним ключом — `writer_handoff`/`tone_contract` сканирует проверка «первого лица» `page-outline-quality`, `visual_inventory` не трогается (гейт требует 6 элементов); copywriter-ready — раздел после «Tone Rules», markdown outline — «v3 Brand Voice» без HTML. Автор с `proof_url` и `first_person_allowed: true` включает `--expert-author`. `attach_rag_passages` по-прежнему читает конфиг строго (`load_config`, денежный предохранитель T-069).
+- `scripts/draft-quality-gate.py`: `brand_voice.check_draft()`, если профиль активен; битый профиль — rc 2 одной строкой («профиль голоса с ошибками … — seo-cycle voice validate»); `summary.brand_voice_profile`. `unsafe_first_person_expertise` — info, если бриф собран с реальным автором (`eeat_guard.expert_author_mode: real_expert_allowed`).
+- `scripts/seo_cycle_core/loop.py`: инструкция модели для `voice_*`/`visual_required_missing` — перечитать профиль (`seo-cycle voice show`).
+- `scripts/task-router.py`: тип `content_writing` (стоит перед `content_plan`, ничья «написать статью» решается в его пользу); для `content_writing`/`content_refresh`/`content_plan` профиль — первым в `read_first`. `scripts/context-pack.py`: `voice_first()` ставит профиль и `examples.good/bad` в начало `read_order`; нет профиля или он битый — `brand_voice_note` в пакете, пакет не падает.
+- `scripts/init-project.sh`: после policy-шаблонов — `brand-voice.py --config seo-cycle.yaml init --write` (ошибка не роняет мастер). `scripts/project-upgrade-assistant.py`: возможность `brand_voice_profile`.
+- `scripts/setup-gap-audit.py`: рекомендательная категория `voice` — нет профиля (`voice.profile`), битый (`voice.profile_invalid`), пустые обязательные поля (`voice.<поле>`); в анкете — с командой `seo-cycle voice …`; `setup-answer-plan` сопоставляет их с `seo/brand/voice.yaml`.
+- `scripts/validate-config.py`: `check_brand_voice()` — структурные ошибки профиля (только если файл есть) — error; незаполненные поля — не предупреждения (свежий профиль из мастера оставляет `validate` чистым).
+- `scripts/seo_cycle_core/config.py`: `project_root_for()` для `.claude/seo-cycle.yaml` и `seo/seo-cycle.yaml` возвращал сам подкаталог — проверка имени файла стояла раньше вложенной ветки, и все относительные пути проекта уходили в `.claude/seo/…` / `seo/seo/…`. Теперь `.claude/` — всегда на уровень выше; `seo/` — тоже, если в нём нет своего дерева `seo/` (проект в папке с именем «seo»).
+- `skills/seo-writing/SKILL.md`: входы и правило письма ведут в профиль; `page-rewrite-rescue.md` — переписывать с профилем.
+
+#### Шаблон без данных клиента и примерные значения
+
+- `seo_cycle_core/placeholders.py`: `find_placeholders(cfg)` сравнивает курируемые пути (`project.*`, `business_profile.*`, `industry.*`, `content_rules.local_signals.examples`, `tone.description`) со значениями из самого `config/project.template.yaml` и с дефолтами мастера (`MyProject`, `example.com`); списки — по пересечению. `setup-gap-audit` кладёт находки в `advisory_gaps`/`advisory_fields`/`summary.advisory_missing` и в анкету, не трогая `summary.missing`, `missing_fields` и score — по ним journey решает, закрыта ли стадия 1. `setup-answer-plan` сопоставляет поле `placeholders.<путь>` с `<путь>` в `seo-cycle.yaml`.
+- `config/project.template.yaml`: `publishing.publish_skills.*` и `delegate.semantic_brief` → `null`; `images.brand_palette` — пустые значения; убран клиентский пакет из `context_files`; у `alt_text_pattern` пояснение, что он работает только при `alt.mode: template`. `scripts/init-project.sh`: пример имени проекта без имени клиента. `docs/image-seo.md`: примеры без названия клиента, описан реальный конвейер картинок ядра (`img-generate.sh`, `wp-photo-image.py`).
+
+#### Docs
+
+- README — строка «Brand voice profile»; `skills/_shared/customization.md` и `policy-intake.md` — профиль голоса как механизм адаптации и обязательное чтение перед текстом.
+- `docs/brand-voice.md` — профиль голоса: схема, команды, конвенция изображений в черновике, строгость проверок (RU + EN). GUIDE §7.4 — строка `brand-voice.py` и раздел «Профиль голоса бренда» (RU + EN), шпаргалка §10.
+- `docs/history/review-2026-11.md` — разбор состояния 3.0.1: оценки по областям, доказательства, блокеры результата и план.
+
+#### Tests
+
+- `tests/helpers/root_guard.py` (`skip_if_root`): шесть тестов на отказ доступа к файлам (`chmod 000`, каталог только для чтения) пропускаются под root — root обходит права, и в контейнерах/на VPS они падали ложно. В CI (не root) они по-прежнему выполняются.
+- `tests/test_draft_checks_core.py::RunConfigChecksTest` — `run_config_checks` в процессе (покрытие ядра считается только так): одна находка на слово, номера строк без повторов, корзины объёма по типу страницы, кривые типы значений конфига без падений, лимит 50 находок.
+- `tests/test_page_outline_v3_brand_voice.py` (профиль в outline и copywriter-ready, outline-гейт pass, реальный автор, без профиля — без ключа, битый профиль — NOTE); `test_draft_gate_config_checks` — профиль в гейте, `enforce: error`, выключение, битый профиль rc 2, разрешённое первое лицо; `test_context_pack` — профиль и примеры первыми, заметка без профиля/при битом; `test_task_router` — `content_writing`; `test_setup_gap_audit` — категория `voice`; `test_draft_checks_core` — `project_root_for` для вложенных конфигов; `test_t159_readonly_snapshot_init` — профиль из мастера доступен на запись.
+- `tests/test_brand_voice.py` — ядро профиля (прямой импорт: init из конфига, эмодзи, validate, методы и визуалы, бриф ru/en, проверки черновика, `enforce`, `require_review`) и CLI `seo-cycle voice` (help без проекта, init/повтор/force, validate, show, check, extract-prompt, битый и выключенный профиль). `tests/test_cli_dispatch.py`: команд 53.
+- `tests/test_draft_gate_config_checks.py` (реальный CLI в временном проекте: каждое правило срабатывает, выключается флагом, без конфига — прежнее поведение, битый конфиг/frontmatter, русская «экспертиза», `loop draft` → exit 3 с находками и классом evidence), `tests/test_draft_checks_core.py` (прямой импорт: стоп-слова, frontmatter, типы страниц, картинки, счётчики, безопасный YAML, поиск конфига).
+- `tests/test_placeholders.py` (прямой импорт), `test_setup_gap_audit` (advisory-категория не меняет `summary.missing` и score), `test_project_journey::AdvisoryGapsDoNotBlockSetupTest`.
+- `tests/test_task_router.py` — сопоставление с начала слова и стабильность прежних маршрутов; `tests/test_upgrade_access_assistants.py` — уникальность ключей `ACCESS_CATALOG` и отсутствие советов хранить секреты в `.env`.
+
 ## [3.0.1] — 2026-10-30
 
 Исправления после 3.0.0 без ломающих изменений: `status` честно показывает

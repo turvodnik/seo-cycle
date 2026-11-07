@@ -610,6 +610,35 @@ class ProjectJourneyTest(unittest.TestCase):
 
 
 @unittest.skipIf(yaml is None, "PyYAML is required")
+@unittest.skipIf(yaml is None, "PyYAML is required")
+class AdvisoryGapsDoNotBlockSetupTest(unittest.TestCase):
+    """3.1.0: setup-gap-audit reports template placeholders and brand-voice
+    gaps as *advisory* (summary.advisory_missing). Journey must keep reading
+    only summary.missing — otherwise every finished project falls back to
+    stage 1 «Основа проекта» after `control-plane --write`."""
+
+    def test_advisory_missing_does_not_reopen_setup_foundation(self) -> None:
+        cfg_path = make_bare_project(self)
+        seed_first_four_stages(cfg_path.parent)
+        (cfg_path.parent / "seo" / "setup" / "setup-gap-audit.json").write_text(
+            json.dumps({
+                "summary": {"missing": 0, "advisory_missing": 7},
+                "score": 100,
+                "missing_fields": [],
+                "advisory_fields": ["placeholders.business_profile.telephone", "voice.voice.summary"],
+            }),
+            encoding="utf-8",
+        )
+        proc = subprocess.run(
+            [sys.executable, str(JOURNEY), str(cfg_path), "--format", "json"],
+            cwd=cfg_path.parent, check=True, text=True, capture_output=True,
+        )
+        report = json.loads(proc.stdout)
+        setup = next(stage for stage in report["stages"] if stage["id"] == "setup_foundation")
+        self.assertEqual(setup["status"], "done", setup)
+        self.assertEqual(setup.get("blockers") or [], [])
+
+
 class StageTitlesAreRussianTest(unittest.TestCase):
     """T-105 acceptance criterion 2/3: stage titles/objectives are Russian
     text (data field, used both in `--format json` and in the printed

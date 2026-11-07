@@ -219,12 +219,52 @@ def find_config(start_dir: pathlib.Path) -> pathlib.Path | None:
     return None
 
 
+def find_project_config(start: pathlib.Path) -> pathlib.Path | None:
+    """The project config for a file deep inside a project (3.1.0).
+
+    `find_config` looks in ONE directory and `package_project_root` only for
+    a literal `seo-cycle.yaml`, so a draft at
+    `<project>/seo/research-package/drafts/x.md` with the config in
+    `.claude/` or `seo/` was gated with no config at all. This walks
+    `start` and its ancestors and tries every `CONFIG_SEARCH_PATHS` entry at
+    each level. It stops BEFORE the home directory and the filesystem root:
+    a stray `~/.claude/seo-cycle.yaml` must not adopt every file on the
+    machine.
+    """
+    try:
+        home: pathlib.Path | None = pathlib.Path.home().resolve()
+    except (RuntimeError, OSError):
+        home = None
+    current = start.expanduser().resolve()
+    if current.is_file():
+        current = current.parent
+    for directory in (current, *current.parents):
+        if directory.parent == directory or (home is not None and directory == home):
+            break
+        found = find_config(directory)
+        if found is not None:
+            return found
+    return None
+
+
 def project_root_for(cfg_path: pathlib.Path) -> pathlib.Path:
-    if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
-        return cfg_path.parent
-    if "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
-        return cfg_path.parent.parent
-    return cfg_path.parent
+    """The project root of a config found at one of `CONFIG_SEARCH_PATHS`.
+
+    3.1.0: the name check used to come first, so `.claude/seo-cycle.yaml` and
+    `seo/seo-cycle.yaml` (both named `seo-cycle.yaml`) returned the
+    sub-directory itself as the root and every relative artifact path landed
+    under `.claude/seo/…` / `seo/seo/…`; the nested branch below was dead.
+    `.claude/` is never a project root. For `seo/` the directory is the root
+    only when it already holds its own `seo/` artifacts tree (a project whose
+    folder happens to be named «seo»); otherwise it is `<root>/seo/`.
+    """
+    parent = cfg_path.parent
+    if cfg_path.name == "seo-cycle.yaml":
+        if parent.name == ".claude":
+            return parent.parent
+        if parent.name == "seo" and not (parent / "seo").is_dir():
+            return parent.parent
+    return parent
 
 
 def package_project_root(package_dir: pathlib.Path) -> pathlib.Path:
@@ -476,6 +516,57 @@ def parse_yaml_text(text: str, *, source: str | pathlib.Path = "<string>") -> An
     except yaml.YAMLError as exc:
         print(f"ERROR: {source}: ошибка разбора YAML: {exc}", file=sys.stderr)
         sys.exit(2)
+
+
+def parse_yaml_text_safe(text: str) -> tuple[Any, str | None]:
+    """`parse_yaml_text` that never exits (3.1.0): `(data, None)` or
+    `(None, "<где>: <что>")`.
+
+    For in-memory YAML whose breakage is a FINDING for the caller, not a
+    reason to stop the process — a draft's frontmatter: the draft gate must
+    report `frontmatter_invalid` so the quality loop can hand it to the model,
+    while `parse_yaml_text`'s exit(2) would turn it into a loop config error
+    nobody can repair. Lives here because this is the only module allowed to
+    touch PyYAML (tests/test_no_yaml_bypass.py).
+    """
+    if yaml is None:
+        return None, "PyYAML не установлен (pip install pyyaml)"
+    try:
+        return yaml.safe_load(text), None
+    except yaml.MarkedYAMLError as exc:
+        mark = exc.problem_mark
+        where = f"строка {mark.line + 1}, столбец {mark.column + 1}" if mark else "неизвестное место"
+        problem = exc.problem or exc.context or str(exc)
+        return None, f"{where}: {problem}"
+    except yaml.YAMLError as exc:
+        return None, f"ошибка разбора YAML: {exc}"
+
+
+def load_yaml_safe(path: pathlib.Path) -> tuple[dict[str, Any] | None, str | None]:
+    """An OPTIONAL mapping file for readers that must keep going (3.1.0).
+
+    `(None, None)` — the file does not exist; `({}, None)` — empty or
+    comment-only; `(data, None)` — a mapping; `(None, message)` — unreadable,
+    not UTF-8, broken YAML or not a mapping. Used for the brand-voice profile
+    by context-pack / task-router / setup-gap-audit, which report a broken
+    profile as a gap instead of dying with the whole setup control plane.
+    """
+    if not path.exists() and not path.is_symlink():
+        return None, None
+    try:
+        text = path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return None, f"{path}: файл не в кодировке UTF-8 (позиция {exc.start})"
+    except OSError as exc:
+        return None, f"{path}: не удалось прочитать: {exc.strerror or exc}"
+    data, error = parse_yaml_text_safe(text)
+    if error:
+        return None, f"{path}: {error}"
+    if data is None:
+        return {}, None
+    if not isinstance(data, dict):
+        return None, f"{path}: верхний уровень должен быть словарём (получено {type(data).__name__})"
+    return data, None
 
 
 def config_section(cfg: dict[str, Any], key: str) -> dict[str, Any]:

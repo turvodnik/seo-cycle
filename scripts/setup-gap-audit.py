@@ -20,6 +20,8 @@ import sys
 from typing import Any
 
 from seo_cycle_core.config import require_section, coerce_float, load_config
+from seo_cycle_core import brand_voice
+from seo_cycle_core.placeholders import checked_paths, find_placeholders
 
 
 CONFIG_SEARCH_PATHS = [
@@ -204,6 +206,20 @@ def question_meta(field: str) -> dict[str, str]:
             "answer_format": "run_or_policy",
             "target_file": "seo/automation-policy.yaml; seo/automations/automation-recommendations.md",
             "follow_up_command": "seo-cycle run script automation-recommender --write && seo-cycle control-plane --write",
+        }
+    if field.startswith("voice."):
+        key = field.removeprefix("voice.")
+        return {
+            "answer_format": "text_or_list",
+            "target_file": f"seo/brand/voice.yaml ({key})" if key not in ("profile", "profile_invalid") else "seo/brand/voice.yaml",
+            "follow_up_command": "seo-cycle voice init --write && seo-cycle voice validate"
+            if key == "profile" else "seo-cycle voice validate",
+        }
+    if field.startswith("placeholders."):
+        return {
+            "answer_format": "text_or_list",
+            "target_file": f"seo-cycle.yaml ({field.removeprefix('placeholders.')})",
+            "follow_up_command": "seo-cycle validate && seo-cycle run script setup-gap-audit --write",
         }
     return {
         "answer_format": "text",
@@ -398,6 +414,36 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
     total_missing = sum(row["missing_count"] for row in categories.values())
     score = round(100 * (total_required - total_missing) / total_required) if total_required else 100
 
+    # Advisory categories (3.1.0): asked in the questionnaire, but kept out of
+    # summary.missing / missing_fields / score. project-journey turns any
+    # summary.missing > 0 into a blocker of stage 1, and every finished
+    # project would fall back to «Основа проекта» — what 3.0.1 fixed.
+    advisory_gaps: list[dict[str, Any]] = []
+    for hit in find_placeholders(cfg):
+        add_gap(
+            advisory_gaps,
+            f"placeholders.{hit['path']}",
+            f"{hit['question']} Сейчас там пример из шаблона.",
+            "placeholders",
+            "high",
+        )
+    advisory_categories = {
+        "placeholders": {**category("placeholders", checked_paths(cfg), advisory_gaps), "advisory": True},
+    }
+    if brand_voice.settings(cfg)["enabled"]:
+        profile, profile_error = brand_voice.load_profile(cfg, project_root, strict=False)
+        if profile_error:
+            add_gap(advisory_gaps, "voice.profile_invalid",
+                    f"Профиль голоса не читается ({profile_error}) — почини YAML: seo-cycle voice validate.", "voice", "high")
+        elif profile is None:
+            add_gap(advisory_gaps, "voice.profile",
+                    "Нет профиля голоса бренда: создай seo-cycle voice init --write и заполни, как пишет бренд.", "voice", "medium")
+        else:
+            for row in brand_voice.unanswered_fields(profile):
+                add_gap(advisory_gaps, f"voice.{row['field']}", row["question"], "voice", "medium")
+        voice_required = [f"voice.{dotted}" for dotted, _question in brand_voice.REQUIRED_FIELDS]
+        advisory_categories["voice"] = {**category("voice", voice_required, advisory_gaps), "advisory": True}
+
     evidence = {
         "project_intake": "seo/project-intake.yaml",
         "tool_stack": "seo/setup/tool-stack-report.md",
@@ -407,7 +453,7 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
         "context_pack": "seo/setup/context-pack.md",
     }
     missing_fields = [gap["field"] for gap in gaps]
-    questionnaire = build_questionnaire(gaps)
+    questionnaire = build_questionnaire(gaps + advisory_gaps)
     return {
         "version": 1,
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
@@ -423,10 +469,13 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
             "required": total_required,
             "missing": total_missing,
             "critical": sum(1 for gap in gaps if gap["severity"] == "high"),
+            "advisory_missing": len(advisory_gaps),
         },
-        "categories": categories,
+        "categories": {**categories, **advisory_categories},
         "missing_fields": missing_fields,
+        "advisory_fields": [gap["field"] for gap in advisory_gaps],
         "gaps": gaps,
+        "advisory_gaps": advisory_gaps,
         "recommended_questions": [gap["question"] for gap in gaps],
         "questionnaire": questionnaire,
         "signals": {
@@ -466,7 +515,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "| --- | --- | --- | --- |",
     ]
     for name, row in report.get("categories", {}).items():
-        lines.append(f"| {name} | {row.get('status')} | {row.get('missing_count')} | {row.get('required_count')} |")
+        label = f"{name} (advisory)" if row.get("advisory") else name
+        lines.append(f"| {label} | {row.get('status')} | {row.get('missing_count')} | {row.get('required_count')} |")
 
     lines.extend(["", "## Missing Fields"])
     if report.get("gaps"):
@@ -474,6 +524,12 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.append(f"- `{gap['field']}` ({gap['severity']}): {gap['question']}")
     else:
         lines.append("- none")
+
+    advisory = report.get("advisory_gaps") or []
+    if advisory:
+        lines.extend(["", "## Advisory (не блокирует стадию, но попадёт в schema/тексты)"])
+        for gap in advisory:
+            lines.append(f"- `{gap['field']}` ({gap['severity']}): {gap['question']}")
 
     lines.extend(["", "## Setup Questionnaire"])
     questionnaire = report.get("questionnaire", {})

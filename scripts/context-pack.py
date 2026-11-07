@@ -29,6 +29,7 @@ from seo_cycle_core.config import (
     require_section,
     skill_root,
 )
+from seo_cycle_core import brand_voice
 from seo_cycle_core.context import build_context_manifest
 
 
@@ -228,7 +229,32 @@ def read_order(project_root: pathlib.Path, cfg: dict[str, Any], route: dict[str,
     route_first = []
     if isinstance(route.get("context_contract"), dict):
         route_first = [rel_display(project_root, pathlib.Path(path)) for path in route["context_contract"].get("read_first", [])]
-    return unique(explicit + route_first)
+    return unique(voice_first(project_root, cfg, route)[0] + explicit + route_first)
+
+
+WRITING_TASKS = {"content_writing", "content_refresh", "content_plan"}
+
+
+def voice_first(project_root: pathlib.Path, cfg: dict[str, Any], route: dict[str, Any]) -> tuple[list[str], str | None]:
+    """3.1.0: for writing tasks the brand voice profile and its examples go
+    first. A broken profile never breaks the pack — it is named in a note."""
+    if route.get("task_type") not in WRITING_TASKS:
+        return [], None
+    profile, error = brand_voice.load_profile(cfg, project_root, strict=False)
+    path = brand_voice.profile_path(cfg, project_root)
+    if error:
+        return [], f"профиль голоса не прочитан: {error} — seo-cycle voice validate"
+    if profile is None:
+        if brand_voice.settings(cfg)["enabled"] and not path.exists():
+            return [], "профиля голоса нет — seo-cycle voice init --write"
+        return [], None
+    first = [rel_display(project_root, path)]
+    examples = profile.get("examples") if isinstance(profile.get("examples"), dict) else {}
+    for key in ("good", "bad"):
+        for item in examples.get(key) or [] if isinstance(examples.get(key), list) else []:
+            if isinstance(item, str) and item.strip():
+                first.append(rel_display(project_root, project_root / item.strip()))
+    return first, None
 
 
 def excluded_raw_artifacts() -> list[str]:
@@ -340,6 +366,7 @@ def build_pack(cfg_path: pathlib.Path, task: str, max_chars: int, refresh_route:
             "load_only": route_contract.get("load_only", ["distillates/top-N summaries", "specific URLs or rows needed for this task"]),
         },
         "read_order": read_order_list,
+        "brand_voice_note": voice_first(project_root, cfg, route)[1],
         "do_not_load_raw": do_not_load_raw,
         "excluded_raw_artifacts": excluded_raw_artifacts(),
         "usage": {
@@ -404,6 +431,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "## Read First",
     ]
     lines.extend(f"- `{path}`" for path in report.get("read_order", []))
+    if report.get("brand_voice_note"):
+        lines.append(f"- ⚠ {report['brand_voice_note']}")
 
     lines.extend(
         [

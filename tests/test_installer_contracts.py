@@ -14,8 +14,12 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "helpers"))
+from root_guard import skip_if_root  # noqa: E402
 
 try:
     import yaml
@@ -1310,6 +1314,8 @@ class UpgradeAllPartialFailureReportedTest(InstallerFixture):
         ext.chmod(0o500)
         self.addCleanup(lambda: ext.chmod(0o700))
 
+    @skip_if_root
+
     def test_one_project_failing_is_reported_not_silently_swallowed(self) -> None:
         self._break_project_b_mkdir()
         proc = self.run_install("--upgrade-all", "--pin", "v1.0.0")
@@ -1324,6 +1330,8 @@ class UpgradeAllPartialFailureReportedTest(InstallerFixture):
             "СМЕШАННОМ", combined,
             f"должен быть явный отчёт о смешанном состоянии портфеля — {combined!r}",
         )
+
+    @skip_if_root
 
     def test_symlink_break_on_clean_installer_reports_failure_and_keeps_lock_link_consistent(self) -> None:
         """Round-2 gate finding: the two mutation-revert tests below prove
@@ -1385,6 +1393,8 @@ class UpgradeAllPartialFailureReportedTest(InstallerFixture):
             ["bash", str(mutated_path), *args],
             env=full_env, capture_output=True, text=True,
         )
+
+    @skip_if_root
 
     def test_reverting_all_isolation_kills_the_whole_run_silently(self) -> None:
         """Mutation #1, isolating ONE thing: remove the isolation wrapper

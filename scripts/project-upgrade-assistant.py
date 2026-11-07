@@ -29,6 +29,16 @@ CONFIG_SEARCH_PATHS = [
 
 FEATURES: list[dict[str, Any]] = [
     {
+        "id": "brand_voice_profile",
+        "title": "Brand voice, writing methods and image types profile (3.1.0)",
+        "policy_keys": ["brand_voice_profile"],
+        "artifacts": ["seo/brand/voice.yaml"],
+        "question": "Create seo/brand/voice.yaml so the brief, the context pack and the draft gate use the brand voice, page-type methods and image types?",
+        "default_answer": "yes",
+        "command": "seo-cycle voice init --write && seo-cycle voice validate",
+        "notes": "Values move over from tone.*, images.*, project.*; template examples are not copied. Existing profile is never overwritten without --force.",
+    },
+    {
         "id": "codex_first_runtime",
         "title": "Codex-first runtime and search routing",
         "policy_keys": [],

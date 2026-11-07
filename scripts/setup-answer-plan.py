@@ -133,6 +133,11 @@ def target_path_for(field: str) -> str:
     }
     if field in mapping:
         return mapping[field]
+    if field.startswith("placeholders."):
+        return field.removeprefix("placeholders.")
+    if field.startswith("voice."):
+        key = field.removeprefix("voice.")
+        return "seo/brand/voice.yaml" if key in ("profile", "profile_invalid") else f"seo/brand/voice.yaml: {key}"
     return field
 
 

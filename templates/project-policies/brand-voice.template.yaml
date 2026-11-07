@@ -1,0 +1,163 @@
+# =============================================================================
+# Профиль голоса бренда, методов письма и изображений — seo/brand/voice.yaml
+# =============================================================================
+# Создан командой `seo-cycle voice init --write` (значения перенесены из
+# seo-cycle.yaml: tone.*, images.*, project.brand_name_*, locale.language).
+# Заполни пустые поля — `seo-cycle voice validate` покажет, что осталось.
+#
+# Куда попадает:
+#   - бриф копирайтера (page-outline-v3 → copywriter-ready/<slug>.md, раздел
+#     «Голос бренда и метод»; outline JSON → ключ brand_voice);
+#   - context pack для задач «написать/переписать текст» (читается первым);
+#   - гейт черновика (`seo-cycle loop draft`): запрещённые слова, обращение
+#     на «вы»/«ты», длина предложений, типографика, обязательные картинки.
+# Подробно: docs/brand-voice.md. Выключить профиль: brand_voice.enabled: false
+# в seo-cycle.yaml. Строгость проверок: brand_voice.enforce: warn | error.
+version: 1
+language: __LANGUAGE__            # ru | en | … — язык текстов и брифа
+
+# --- Кто мы и для кого пишем ---------------------------------------------------
+identity:
+  brand_name: __BRAND_NAME__       # как бренд пишется в текстах
+  who_we_are: ""                   # 1–2 предложения: чем занимаемся, чем отличаемся
+  positioning: ""                  # за что нас выбирают (факты, не эпитеты)
+  # Для кого пишем; задача и боли — из реальных обращений. Формат:
+  #   - name: "Частный застройщик"
+  #     task: "утеплить каркасный дом своими руками"
+  #     pains: ["боится переплатить", "не понимает, какая плотность нужна"]
+  audiences: __AUDIENCES__
+
+# --- Голос ------------------------------------------------------------------------
+voice:
+  summary: __VOICE_SUMMARY__       # 1–3 предложения: как звучим
+  # Пары «это / а не это» — самый понятный модели формат:
+  #   - be: "конкретный: цифры, размеры, сроки"
+  #     not: "общие слова «качественный», «широкий выбор»"
+  attributes: __STYLE_ATTRIBUTES__
+  formality: __FORMALITY__         # 1 — разговорный … 5 — официальный
+  address: __ADDRESS__             # vy (на «вы») | ty (на «ты») | you (EN) | impersonal (без обращения)
+  person: we                       # we (от лица компании «мы») | brand (по имени бренда) | impersonal
+  humor: none                      # none | light
+  emoji: false
+
+# --- Лексика --------------------------------------------------------------------
+lexicon:
+  preferred: {}                    # как НЕ пишем → как пишем: {"минвата": "минеральная вата"}
+  forbidden: []                    # слова, которых не должно быть в текстах (стоп-слова — в tone.stop_words_extra)
+  forbidden_regex: []              # то же регулярками
+  brand_mentions:
+    max_per_1000_words: 4          # чаще — уже реклама, а не текст
+  competitors: dont_name           # dont_name | neutral | compare_fairly
+
+# --- Стиль ----------------------------------------------------------------------
+style:
+  sentence_max_words: 25           # длиннее — разбить
+  long_sentence_share: 0.2         # предупреждать, если таких предложений больше этой доли
+  paragraph_max_sentences: 5
+  typography:
+    quotes: "«»"                   # «» | "" | any
+    dash: "—"                      # — (длинное тире между словами) | any
+    yo: preserve                   # preserve (пишем «ё») | any
+  numbers: digits                  # digits (цифрами: 5 мм) | words | any
+
+# --- Методы письма по типам страниц -------------------------------------------------
+# Порядок блоков страницы. Типы: article, category, product, landing,
+# comparison, howto, tool (seo_cycle_core/page_types.py распознаёт их из
+# page_type outline: Guide → article, Category → category, …).
+methods:
+  default: article
+  cta:
+    style: soft                    # soft (после того как читатель понял) | direct
+    max_per_page: 2
+  page_types:
+    article:
+      structure: [answer_first, key_takeaways, sections_with_proof, faq, conclusion_next_step]
+      notes: "Ответ на вопрос — в первых 2–3 предложениях; каждое утверждение с цифрой — со ссылкой на источник."
+    category:
+      structure: [short_answer_intro, selection_criteria, use_cases, faq, soft_cta]
+      notes: "Как выбрать внутри раздела: критерии и для каких задач что подходит."
+    product:
+      structure: [what_it_is, key_specs, where_to_use, limitations, faq]
+      notes: "Только проверенные характеристики из карточки/документации производителя."
+    landing:
+      structure: [problem, solution, proof, offer, cta]
+      notes: "Доказательства — кейсы, сроки, цифры; без обещаний без подтверждения."
+    comparison:
+      structure: [verdict_first, criteria_table, per_option, who_should_choose_what, faq]
+      notes: "Честно называем ограничения каждого варианта."
+    howto:
+      structure: [result_first, tools_and_materials, steps, common_mistakes, faq]
+      notes: "Шаги нумерованные, по одному действию в шаге."
+    tool:
+      structure: [tool_first, how_it_works, limits_and_privacy, faq]
+      notes: "Сначала сам инструмент, потом объяснение."
+  aliases: {}                      # свой тип → один из выше: {"Обзор": comparison}
+
+# --- Авторы и экспертиза (E-E-A-T) ---------------------------------------------------
+authors: []                        # [{name: "…", role: "…", proof_url: "https://…"}] — только реальные люди
+first_person_allowed: false        # true — можно писать от первого лица эксперта (нужен автор с proof_url)
+
+# --- Изображения ----------------------------------------------------------------
+visuals:
+  style: __VISUAL_STYLE__          # общий стиль: clean_topical_photo | illustration | …
+  palette:
+    primary: __PALETTE_PRIMARY__
+    secondary: __PALETTE_SECONDARY__
+    accent: __PALETTE_ACCENT__
+    avoid: __PALETTE_AVOID__
+  # Тип картинки в черновике — title markdown-картинки: ![alt](file.webp "hero").
+  # Подпись — следующая строка курсивом (*…*) или <figcaption>.
+  types:
+    hero:
+      source: photo                # photo | stock | generated | screenshot | catalog | html_table | diagram
+      style: ""                    # что в кадре и как: «товар в интерьере, дневной свет»
+      text_on_image: false
+      ratio: __HERO_RATIO__
+      caption: optional            # required | optional | none
+    inline_photo:
+      source: photo
+      style: ""
+      text_on_image: __TEXT_ON_IMAGE__
+      ratio: __INLINE_RATIO__
+      caption: __INLINE_CAPTION__
+      min_per_page: __INLINE_MIN__
+    diagram:
+      source: generated
+      style: "схема в фирменной палитре, подписи крупным шрифтом"
+      text_on_image: true
+      ratio: "16:9"
+      caption: required
+    comparison_table:
+      source: html_table           # таблицей в тексте, а не картинкой
+      caption: optional
+    product:
+      source: catalog
+      style: "товар на тематическом фоне, без коллажей"
+      text_on_image: false
+      ratio: "1:1"
+      caption: optional
+    screenshot:
+      source: screenshot
+      caption: required
+    og:
+      source: generated
+      text_on_image: true
+      ratio: __OG_RATIO__
+      caption: none
+    icon:
+      source: generated
+      ratio: __ICON_RATIO__
+      caption: none
+  per_page_type:                   # какие типы обязательны на странице
+    article: [hero, inline_photo]
+    howto: [hero, inline_photo, diagram]
+    comparison: [hero, comparison_table]
+    category: [hero]
+    product: [product]
+    landing: [hero]
+
+# --- Примеры и обязательные фразы ---------------------------------------------------
+examples:
+  good: []                         # пути к фрагментам «так мы пишем»: seo/brand/examples/good-1.md
+  bad: []                          # «так не пишем» — с пометкой, что не так
+disclaimers: []                    # обязательные оговорки (юридические, медицинские, о ценах)

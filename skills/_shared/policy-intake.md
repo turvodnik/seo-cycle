@@ -8,6 +8,7 @@
 - `seo/seo-data-collection-map.md` — разрешённые источники данных, AI visibility checks, ecommerce/product sources, политика tracking/tag.
 - `seo/access-setup-runbook.md` — подключённые аккаунты, пропущенные платные сервисы, API notes, операционные ограничения.
 - `seo/ai-visibility-prompts.csv` — стартовая очередь AI visibility запросов и evidence-полей для Google AI/Bing Copilot/Perplexity/OpenAI/Claude/Gemini/DeepSeek.
+- `seo/brand/voice.yaml` — профиль голоса бренда: обращение, лексика, стиль, метод письма для типа страницы, типы изображений; читать перед любым текстом (`seo-cycle voice show --page-type <тип>`).
 - `seo/tool-budget.yaml` — лимиты токенов, paid API, LLM, подписок, кэша и stop-условия по источникам.
 - `seo/tool-stack.generated.yaml` и `seo/setup/tool-stack-report.md` — рекомендуемый стек Google/Yandex/Bing/Microsoft/NLP/AI/merchant/local/ads/tracking под страну, бизнес, бюджет и policy; создаётся `scripts/tool-stack-recommender.py --write`.
 - `seo/growth-roadmap.generated.yaml` и `seo/setup/growth-roadmap.md` — top-N приоритетов по technical/search evidence/ecommerce/local/content/entities/AI visibility/CRO/automation; создаётся `scripts/growth-roadmap.py --write`.

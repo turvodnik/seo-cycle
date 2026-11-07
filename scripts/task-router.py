@@ -18,6 +18,7 @@ import sys
 from typing import Any
 
 from seo_cycle_core.config import config_section, find_config, load_config, load_yaml, policy_path, project_root_for, require_section, skill_root
+from seo_cycle_core import brand_voice
 from seo_cycle_core.context import build_context_manifest
 from seo_cycle_core.subprocesses import run_json
 
@@ -91,6 +92,16 @@ TASKS: dict[str, dict[str, Any]] = {
         "safe_actions": ["cache_check", "source_resolution", "distillate_merge"],
         "approval": ["paid_api_run", "browser_mass_collection"],
         "automation": "monthly_keyword_refresh",
+    },
+    # 3.1.0: writing a page (draft/copy) — before content_plan, so a tie
+    # («написать статью»: «напис» vs «стать») resolves to writing.
+    "content_writing": {
+        "keywords": ["напис", "напиш", "черновик", "текст", "копирайт", "описани", "draft", "write", "copywrit"],
+        "phases": ["phase6_writing"],
+        "sources": ["neuronwriter", "perplexity", "llm_cli", "google_search_console"],
+        "safe_actions": ["content_brief", "stop_words_check", "fact_check", "draft_quality_gate"],
+        "approval": ["paid_api_run", "publishing"],
+        "automation": "none",
     },
     "content_plan": {
         "keywords": ["content plan", "brief", "контент", "бриф", "план", "темы", "стать"],
@@ -175,6 +186,21 @@ TASKS: dict[str, dict[str, Any]] = {
 }
 
 
+WRITING_TASKS = {"content_writing", "content_refresh", "content_plan"}
+
+
+def keyword_matches(keyword: str, normalized_task: str) -> bool:
+    """A keyword matches only at the start of a word (3.1.0).
+
+    Plain substring matching sent «описание категории» to `ai_visibility`
+    (the keyword «ии» inside «категории»), «rewrite» to anything holding
+    «write» and «контекст» to «текст». Keywords are stems/prefixes
+    («перепис», «стать»), so the match stays open on the right.
+    """
+    pattern = r"(?<![\w])" + re.escape(keyword.lower())
+    return re.search(pattern, normalized_task) is not None
+
+
 def classify_task(task: str, explicit: str | None) -> str:
     if explicit:
         if explicit not in TASKS:
@@ -186,7 +212,7 @@ def classify_task(task: str, explicit: str | None) -> str:
     for task_type, meta in TASKS.items():
         score = 0
         for keyword in meta["keywords"]:
-            if keyword.lower() in normalized:
+            if keyword_matches(keyword, normalized):
                 score += 2 if len(keyword) > 4 else 1
         scores[task_type] = score
     best = max(scores, key=scores.get)
@@ -338,6 +364,11 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
     if task_type in {"content_plan", "entity_audit", "content_refresh", "ai_visibility"}:
         read_first.append(str(policy_path(cfg, project_root, "ai_visibility_prompts", "seo/ai-visibility-prompts.csv")))
         read_first.append(str(policy_path(cfg, project_root, "google_nlp_policy", "seo/entities/google-nlp-policy.yaml")))
+    if task_type in WRITING_TASKS:
+        # 3.1.0: the brand voice profile is the first thing a writer reads.
+        voice = brand_voice.profile_path(cfg, project_root)
+        if brand_voice.settings(cfg)["enabled"] and voice.exists():
+            read_first.insert(0, str(voice))
 
     do_not_load_raw = [
         "large CSV exports",

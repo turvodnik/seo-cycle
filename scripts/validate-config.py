@@ -27,6 +27,7 @@ import argparse, os, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from seo_cycle_core.config import config_section, load_yaml_any, numeric  # noqa: E402
 from seo_cycle_core.engines import engine_names  # noqa: E402
+from seo_cycle_core import brand_voice  # noqa: E402
 
 
 CONFIG_SEARCH_PATHS = [
@@ -243,6 +244,25 @@ def rel_project_path(project_root: pathlib.Path, raw_path: str) -> pathlib.Path:
     if not path.is_absolute():
         path = project_root / path
     return path
+
+
+def check_brand_voice(cfg: dict, project_root: pathlib.Path, errors: list, warnings: list):
+    """3.1.0: the brand voice profile, only when its file exists.
+
+    Structural/type errors are errors — the draft gate refuses a broken
+    profile (rc 2). Unanswered fields are NOT warnings here: a fresh profile
+    from the wizard must leave `validate` clean; they are asked by
+    setup-gap-audit (advisory) and `seo-cycle voice validate`.
+    """
+    profile, error = brand_voice.load_profile(cfg, project_root, strict=False)
+    shown = brand_voice.display_path(project_root, brand_voice.profile_path(cfg, project_root))
+    if error:
+        errors.append(f"профиль голоса {shown} не читается: {error}")
+        return
+    if profile is None:
+        return
+    for problem in brand_voice.validate_profile(profile):
+        errors.append(f"профиль голоса {shown}: {problem}")
 
 
 def check_project_policies(cfg: dict, env: dict, project_root: pathlib.Path, checklist: list, warnings: list):
@@ -722,6 +742,7 @@ def main():
     check_publishing(cfg, env, checklist, warnings)
     check_images(cfg, env, project_root, checklist, warnings)
     check_project_policies(cfg, env, project_root, checklist, warnings)
+    check_brand_voice(cfg, project_root, errors, warnings)
     check_governance(cfg, project_root, checklist, warnings)
     check_content_rules(cfg, project_root, warnings)
     check_artifacts(cfg, project_root, warnings)
