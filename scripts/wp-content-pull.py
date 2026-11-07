@@ -13,19 +13,17 @@ Output: seo/content-mirror/sync-report.md/json (+latest) with --write.
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
 import pathlib
 import sys
-import urllib.error
-import urllib.request
 from typing import Any
 
 from seo_cycle_core.config import config_section, find_config, load_config, project_root_for, require_section
 from seo_cycle_core.logging_setup import setup_logging
 from seo_cycle_core.mirror import apply_pull, html_to_text, make_record, render_sync_markdown, sync_output_paths
 from seo_cycle_core.reports import write_report_bundle
+from seo_cycle_core.wordpress import WPClient, WPError, credentials
 
 log = setup_logging("wp-content-pull")
 
@@ -35,30 +33,10 @@ FIELDS = "id,slug,link,status,modified,title,content"
 
 
 def rest_fetch(base_url: str, content_type: str, max_pages: int) -> list[dict[str, Any]]:
-    headers = {"User-Agent": "seo-cycle wp-content-pull", "Accept": "application/json"}
-    user = os.environ.get("WP_USER", "")
-    password = os.environ.get("WP_APP_PASSWORD", "")
-    if user and password:
-        token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
-        headers["Authorization"] = f"Basic {token}"
-    items: list[dict[str, Any]] = []
-    for page in range(1, max_pages + 1):
-        url = (f"{base_url.rstrip('/')}/wp-json/wp/v2/{content_type}"
-               f"?per_page=100&page={page}&status=publish&_fields={FIELDS}")
-        req = urllib.request.Request(url, headers=headers)
-        try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
-                batch = json.loads(resp.read().decode("utf-8"))
-                total_pages = int(resp.headers.get("X-WP-TotalPages", "1") or "1")
-        except urllib.error.HTTPError as exc:
-            if exc.code == 400 and page > 1:  # past the last page
-                break
-            raise
-        if not isinstance(batch, list) or not batch:
-            break
-        items.extend(batch)
-        if page >= total_pages:
-            break
+    """Read-only paginated GET (3.2.0: through seo_cycle_core.wordpress.WPClient)."""
+    creds = credentials()
+    client = WPClient(base_url, creds["user"], creds["app_password"], timeout=90)
+    items = client.list_items(content_type, status="publish", fields=FIELDS, max_pages=max_pages)
     log.info("pulled %s %s", len(items), content_type)
     return items
 
@@ -126,7 +104,7 @@ def main() -> int:
                     record = normalize_item(item, content_type)
                     if record:
                         records.append(record)
-        except (urllib.error.URLError, json.JSONDecodeError, OSError) as exc:
+        except (WPError, json.JSONDecodeError, OSError) as exc:
             print(f"ERROR: WP REST pull failed: {exc}", file=sys.stderr)
             return 1
     else:
