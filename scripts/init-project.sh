@@ -359,6 +359,12 @@ copy_policy_template "$POLICY_TEMPLATE_DIR/tool-budget.template.yaml" "seo/tool-
 copy_policy_template "$POLICY_TEMPLATE_DIR/automation-policy.template.yaml" "seo/automation-policy.yaml"
 copy_policy_template "$POLICY_TEMPLATE_DIR/project-intake.template.yaml" "seo/project-intake.yaml"
 
+# 3.1.0: профиль голоса бренда, методов письма и изображений (seo/brand/voice.yaml)
+# из шаблона и только что созданного seo-cycle.yaml. Готовый профиль не трогается;
+# ошибка не роняет мастер (set -e) — профиль можно создать позже: seo-cycle voice init --write
+python3 "$SKILL_ROOT/scripts/brand-voice.py" --config "$TARGET" init --write \
+    || echo "⚠ профиль голоса не создан — позже: seo-cycle voice init --write"
+
 ensure_validation_artifact_roots() {
     mkdir -p seo/research/perplexity/results seo/cycles blog categories
     if [ ! -f "seo/publish-log.csv" ]; then

@@ -9,7 +9,7 @@ description: Контент-план (hub-and-spoke, KPI-90d) и написан�
 
 ## Контракт модуля
 
-- **Входы:** `04-entity-maps/*`, `page-outline-v3` брифы (`copywriter-ready/*.md`), RAG-контекст
+- **Входы:** `04-entity-maps/*`, `page-outline-v3` брифы (`copywriter-ready/*.md` — с разделом «Голос бренда и метод»), профиль голоса `seo/brand/voice.yaml`, RAG-контекст
 - **Конвейер:** `_state.json` цикла (`scripts/cycle-state.py`) — предыдущая фаза `done`; **standalone:** state нет → `seo-cycle cycle init --topic "<тема>"`, работай по этому файлу, state обнови на выходе.
 - **Выходы:** `05-content-plan.md`; `06-drafts/*.publish.md` (+ `fact_check_log` frontmatter)
 - **Gate:** `seo-cycle loop draft <draft.md> --outline <outline.json>` — exit 0. Гейт сам находит `seo-cycle.yaml` от каталога черновика и блокирует (error): стоп-слова (`quality_gates.stop_words_check`), нет `fact_check_log` (`quality_gates.fact_check_log_present`), картинка без alt (`images.alt.required`), inline-картинка без подписи (`images.captions.inline_required`), объём ниже `quality_gates.word_count_min`, битый frontmatter, выдуманная экспертиза от первого лица (EN/RU). Предупреждает: мало inline-картинок, внутренних ссылок, локальных сигналов, неполный/спорный fact_check_log. Отключается только флагом в конфиге, не обходом гейта
@@ -44,7 +44,7 @@ description: Контент-план (hub-and-spoke, KPI-90d) и написан�
 **Перед написанием:** запроси накопленный контекст из локального RAG — `seo-cycle rag query "<primary keyword>" --top-k 5 --source-type source_pack --source-type distillate` (цитаты и факты из проверенных source packs; `--global` для пересечений с другими проектами). Брифы с подмешанными пассажами: `page-outline-v3.py --rag`.
 
 **Универсальные правила (config-driven):**
-- Tone of voice — из `tone.*` config
+- Голос бренда, метод письма для типа страницы и типы изображений — из профиля `seo/brand/voice.yaml` (`seo-cycle voice show --page-type <тип>`; нет профиля — `seo-cycle voice init --write`, описание `docs/brand-voice.md`). Пиши в его обращении («вы»/«ты»), его терминами (`lexicon.preferred`), без `lexicon.forbidden`, в порядке блоков `methods.page_types.<тип>.structure`, с обязательными картинками `visuals.per_page_type` (тип — title картинки: `![alt](file.webp "hero")`, подпись — следующая строка курсивом). Первое лицо эксперта — только если в профиле есть автор с `proof_url` и `first_person_allowed: true`
 - Stop-words check — если `quality_gates.stop_words_check.enabled`
 - AEO абзац в первые 400 символов — если `content_rules.aeo.enabled`
 - Stock-first — если `content_rules.stock_first.enabled`

@@ -91,6 +91,7 @@ TARGETS: dict[str, dict[str, Any]] = {
             "image_missing_alt / image_missing_caption: describe what the image shows and which entity; caption = the next line in italics or <figcaption>; decorative images get the \"decorative\" type.",
             "word_count_below_min / internal_links_below_min / local_signals_below_min: extend with substance from the brief and the research package, not filler.",
             "fact_check_* findings are evidence-class: fix them only with real checked sources recorded in the fact_check_log frontmatter; rephrase or drop disputed claims.",
+            "voice_* / visual_required_missing findings: re-read the brand voice profile (summary.brand_voice_profile in the gate report, usually seo/brand/voice.yaml) — address, preferred and forbidden terms, sentence length, typography, required image types — and rewrite in that voice; `seo-cycle voice show --page-type <type>` prints the brief block.",
         ],
     },
 }

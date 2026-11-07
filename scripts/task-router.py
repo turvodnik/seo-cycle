@@ -18,6 +18,7 @@ import sys
 from typing import Any
 
 from seo_cycle_core.config import config_section, find_config, load_config, load_yaml, policy_path, project_root_for, require_section, skill_root
+from seo_cycle_core import brand_voice
 from seo_cycle_core.context import build_context_manifest
 from seo_cycle_core.subprocesses import run_json
 
@@ -91,6 +92,16 @@ TASKS: dict[str, dict[str, Any]] = {
         "safe_actions": ["cache_check", "source_resolution", "distillate_merge"],
         "approval": ["paid_api_run", "browser_mass_collection"],
         "automation": "monthly_keyword_refresh",
+    },
+    # 3.1.0: writing a page (draft/copy) — before content_plan, so a tie
+    # («написать статью»: «напис» vs «стать») resolves to writing.
+    "content_writing": {
+        "keywords": ["напис", "напиш", "черновик", "текст", "копирайт", "описани", "draft", "write", "copywrit"],
+        "phases": ["phase6_writing"],
+        "sources": ["neuronwriter", "perplexity", "llm_cli", "google_search_console"],
+        "safe_actions": ["content_brief", "stop_words_check", "fact_check", "draft_quality_gate"],
+        "approval": ["paid_api_run", "publishing"],
+        "automation": "none",
     },
     "content_plan": {
         "keywords": ["content plan", "brief", "контент", "бриф", "план", "темы", "стать"],
@@ -173,6 +184,9 @@ TASKS: dict[str, dict[str, Any]] = {
         "automation": "review_all",
     },
 }
+
+
+WRITING_TASKS = {"content_writing", "content_refresh", "content_plan"}
 
 
 def keyword_matches(keyword: str, normalized_task: str) -> bool:
@@ -350,6 +364,11 @@ def build_route(cfg_path: pathlib.Path, task: str, explicit_type: str | None = N
     if task_type in {"content_plan", "entity_audit", "content_refresh", "ai_visibility"}:
         read_first.append(str(policy_path(cfg, project_root, "ai_visibility_prompts", "seo/ai-visibility-prompts.csv")))
         read_first.append(str(policy_path(cfg, project_root, "google_nlp_policy", "seo/entities/google-nlp-policy.yaml")))
+    if task_type in WRITING_TASKS:
+        # 3.1.0: the brand voice profile is the first thing a writer reads.
+        voice = brand_voice.profile_path(cfg, project_root)
+        if brand_voice.settings(cfg)["enabled"] and voice.exists():
+            read_first.insert(0, str(voice))
 
     do_not_load_raw = [
         "large CSV exports",

@@ -23,7 +23,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-FILES = ("seo-cycle.yaml", ".env.example", "seo/project-intake.yaml", "seo/tool-budget.yaml")
+FILES = ("seo-cycle.yaml", ".env.example", "seo/project-intake.yaml", "seo/tool-budget.yaml", "seo/brand/voice.yaml")
 
 
 def make_writable(path: pathlib.Path) -> None:

@@ -20,6 +20,7 @@ import sys
 from typing import Any
 
 from seo_cycle_core.config import require_section, coerce_float, load_config
+from seo_cycle_core import brand_voice
 from seo_cycle_core.placeholders import checked_paths, find_placeholders
 
 
@@ -205,6 +206,14 @@ def question_meta(field: str) -> dict[str, str]:
             "answer_format": "run_or_policy",
             "target_file": "seo/automation-policy.yaml; seo/automations/automation-recommendations.md",
             "follow_up_command": "seo-cycle run script automation-recommender --write && seo-cycle control-plane --write",
+        }
+    if field.startswith("voice."):
+        key = field.removeprefix("voice.")
+        return {
+            "answer_format": "text_or_list",
+            "target_file": f"seo/brand/voice.yaml ({key})" if key not in ("profile", "profile_invalid") else "seo/brand/voice.yaml",
+            "follow_up_command": "seo-cycle voice init --write && seo-cycle voice validate"
+            if key == "profile" else "seo-cycle voice validate",
         }
     if field.startswith("placeholders."):
         return {
@@ -421,6 +430,19 @@ def build_report(cfg_path: pathlib.Path) -> dict[str, Any]:
     advisory_categories = {
         "placeholders": {**category("placeholders", checked_paths(cfg), advisory_gaps), "advisory": True},
     }
+    if brand_voice.settings(cfg)["enabled"]:
+        profile, profile_error = brand_voice.load_profile(cfg, project_root, strict=False)
+        if profile_error:
+            add_gap(advisory_gaps, "voice.profile_invalid",
+                    f"Профиль голоса не читается ({profile_error}) — почини YAML: seo-cycle voice validate.", "voice", "high")
+        elif profile is None:
+            add_gap(advisory_gaps, "voice.profile",
+                    "Нет профиля голоса бренда: создай seo-cycle voice init --write и заполни, как пишет бренд.", "voice", "medium")
+        else:
+            for row in brand_voice.unanswered_fields(profile):
+                add_gap(advisory_gaps, f"voice.{row['field']}", row["question"], "voice", "medium")
+        voice_required = [f"voice.{dotted}" for dotted, _question in brand_voice.REQUIRED_FIELDS]
+        advisory_categories["voice"] = {**category("voice", voice_required, advisory_gaps), "advisory": True}
 
     evidence = {
         "project_intake": "seo/project-intake.yaml",

@@ -228,6 +228,21 @@ class SafeYamlTest(unittest.TestCase):
         # <project>/seo/research-package before <project>/.claude/
         self.assertEqual(find_project_config(deep).name, "seo-cycle.yaml")
 
+    def test_project_root_for_nested_configs(self) -> None:
+        from seo_cycle_core.config import project_root_for
+
+        project = self.tmp / "shop"
+        (project / ".claude").mkdir(parents=True)
+        self.assertEqual(project_root_for(project / ".claude" / "seo-cycle.yaml"), project)
+        (project / "seo").mkdir()
+        self.assertEqual(project_root_for(project / "seo" / "seo-cycle.yaml"), project)
+        self.assertEqual(project_root_for(project / "seo-cycle.yaml"), project)
+        self.assertEqual(project_root_for(project / ".seo-cycle.yaml"), project)
+        # a project folder that is itself named «seo» and already has its seo/ tree
+        named_seo = self.tmp / "seo"
+        (named_seo / "seo").mkdir(parents=True)
+        self.assertEqual(project_root_for(named_seo / "seo-cycle.yaml"), named_seo)
+
 
 if __name__ == "__main__":
     unittest.main()

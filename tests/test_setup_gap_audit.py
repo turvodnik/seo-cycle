@@ -140,6 +140,27 @@ class SetupGapAuditTest(unittest.TestCase):
         markdown = (cfg_path.parent / "seo" / "setup" / "setup-gap-audit.md").read_text(encoding="utf-8")
         self.assertIn("placeholders (advisory)", markdown)
 
+    def test_brand_voice_profile_gaps_are_advisory(self) -> None:
+        cfg_path = self.make_project(country="RU", project_type="ecommerce")
+        without = self.run_gap_audit(cfg_path)
+        self.assertIn("voice.profile", without["advisory_fields"])
+        self.assertTrue(without["categories"]["voice"]["advisory"])
+        row = next(r for r in without["questionnaire"]["rows"] if r["field"] == "voice.profile")
+        self.assertIn("seo-cycle voice init --write", row["follow_up_command"])
+
+        subprocess.run([sys.executable, str(ROOT / "scripts" / "brand-voice.py"), "init", "--write"],
+                       cwd=cfg_path.parent, check=True, text=True, capture_output=True)
+        with_profile = self.run_gap_audit(cfg_path)
+        fields = set(with_profile["advisory_fields"])
+        self.assertNotIn("voice.profile", fields)
+        self.assertIn("voice.voice.summary", fields)
+        self.assertIn("voice.identity.who_we_are", fields)
+        self.assertEqual(with_profile["summary"]["missing"], without["summary"]["missing"])
+
+        (cfg_path.parent / "seo" / "brand" / "voice.yaml").write_text("voice: [oops\n", encoding="utf-8")
+        broken = self.run_gap_audit(cfg_path)
+        self.assertIn("voice.profile_invalid", broken["advisory_fields"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

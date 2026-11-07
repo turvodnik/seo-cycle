@@ -47,6 +47,15 @@ class KeywordMatchTest(unittest.TestCase):
             with self.subTest(task=task):
                 self.assertEqual(router.classify_task(task, None), expected)
 
+    def test_writing_tasks_route_to_content_writing(self) -> None:
+        for task in ("написать статью про выбор минваты", "подготовь черновик лендинга", "описание категории",
+                     "write an article about mineral wool", "текст для главной"):
+            with self.subTest(task=task):
+                self.assertEqual(router.classify_task(task, None), "content_writing")
+        self.assertEqual(router.classify_task("контент-план статей на квартал", None), "content_plan")
+        self.assertNotEqual(router.classify_task("rewrite the article", None), "content_writing")
+        self.assertNotEqual(router.classify_task("контекст проекта и роботс", None), "content_writing")
+
     def test_explicit_type_wins(self) -> None:
         self.assertEqual(router.classify_task("что угодно", "publishing"), "publishing")
 

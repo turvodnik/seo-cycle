@@ -35,7 +35,8 @@ from research_package_repair_core import (
     normalize_url,
     print_report,
 )
-from seo_cycle_core.config import find_project_config, load_yaml
+from seo_cycle_core import brand_voice
+from seo_cycle_core.config import find_project_config, load_yaml, project_root_for
 from seo_cycle_core.draft_checks import run_config_checks
 from seo_cycle_core.frontmatter import split_frontmatter
 from seo_cycle_core.page_types import normalize_page_type
@@ -170,9 +171,18 @@ def resolve_config(draft_path: pathlib.Path, explicit: pathlib.Path | None) -> t
     return path, load_yaml(path)
 
 
-def page_type_of(outline: dict[str, Any], frontmatter: dict[str, Any]) -> str:
+def raw_page_type(outline: dict[str, Any], frontmatter: dict[str, Any]) -> Any:
     page = outline.get("page") if isinstance(outline.get("page"), dict) else {}
-    return normalize_page_type(frontmatter.get("page_type") or page.get("page_type"))
+    return frontmatter.get("page_type") or page.get("page_type")
+
+
+def page_type_of(outline: dict[str, Any], frontmatter: dict[str, Any]) -> str:
+    return normalize_page_type(raw_page_type(outline, frontmatter))
+
+
+def real_expert_in_brief(outline: dict[str, Any]) -> bool:
+    guard = outline.get("eeat_guard") if isinstance(outline.get("eeat_guard"), dict) else {}
+    return guard.get("expert_author_mode") == "real_expert_allowed"
 
 
 def build_report(
@@ -218,14 +228,27 @@ def build_report(
                 }
             )
     if FIRST_PERSON_EXPERTISE.search(text):
-        findings.append(
-            {
-                "id": "unsafe_first_person_expertise",
-                "severity": "error",
-                "location": str(draft_path),
-                "message": "Draft uses first-person expert/client claims; require real author evidence or rewrite in neutral voice.",
-            }
-        )
+        if real_expert_in_brief(outline):
+            # 3.1.0: the brief was generated with a real, proven author
+            # (`--expert-author`, or a profile author with proof_url and
+            # first_person_allowed) — first person is the approved voice.
+            findings.append(
+                {
+                    "id": "unsafe_first_person_expertise",
+                    "severity": "info",
+                    "location": str(draft_path),
+                    "message": "First-person expertise is allowed: the brief names a real expert author (eeat_guard.expert_author_mode).",
+                }
+            )
+        else:
+            findings.append(
+                {
+                    "id": "unsafe_first_person_expertise",
+                    "severity": "error",
+                    "location": str(draft_path),
+                    "message": "Draft uses first-person expert/client claims; require real author evidence or rewrite in neutral voice.",
+                }
+            )
     for url in outline.get("internal_links") or []:
         normalized = normalize_url(url)
         if normalized and normalized not in links:
@@ -270,10 +293,27 @@ def build_report(
         )
     checks_run: list[str] = []
     skipped: list[dict[str, str]] = []
+    voice_profile: str | None = None
     if cfg:
         result = run_config_checks(text, front, cfg, page_type, str(draft_path))
         findings.extend(result.findings)
         checks_run, skipped = result.checks_run, result.skipped
+        assert cfg_path is not None
+        project_root = project_root_for(cfg_path)
+        # strict: a broken profile file exits 2 with one ERROR line (load_yaml)
+        profile, _error = brand_voice.load_profile(cfg, project_root, strict=True)
+        if profile is not None:
+            problems = brand_voice.validate_profile(profile)
+            if problems:
+                raise CallError(f"профиль голоса с ошибками ({len(problems)}): {problems[0]} — seo-cycle voice validate")
+            findings.extend(
+                brand_voice.check_draft(
+                    text, profile, page_type=raw_page_type(outline, front.data) or page_type,
+                    frontmatter=front.data, cfg=cfg, location=str(draft_path), already_checked=set(checks_run),
+                )
+            )
+            checks_run.append("brand_voice")
+            voice_profile = brand_voice.display_path(project_root, brand_voice.profile_path(cfg, project_root))
     else:
         skipped.append({"check": "project_rules", "reason": "seo-cycle.yaml не найден или пуст — проверяется только структура"})
     if public_handoff:
@@ -302,6 +342,7 @@ def build_report(
             "config": str(cfg_path) if cfg_path and cfg else None,
             "checks_run": checks_run,
             "skipped_checks": skipped,
+            "brand_voice_profile": voice_profile,
         },
         "outputs": {
             "json": str(draft_path.with_suffix(".draft-quality-gate.json")),

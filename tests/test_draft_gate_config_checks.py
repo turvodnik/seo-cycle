@@ -217,6 +217,55 @@ class DraftGateProjectRulesTest(unittest.TestCase):
         rc, report, _ = self.gate("# Текст\n\nМы доставляем по городу за день. Source: https://example.com\n")
         self.assertNotIn("unsafe_first_person_expertise", self.ids(report))
 
+    def make_profile(self) -> pathlib.Path:
+        proc = subprocess.run([sys.executable, str(SCRIPTS / "brand-voice.py"), "init", "--write"],
+                              cwd=self.tmp, text=True, capture_output=True, check=False)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        profile = self.tmp / "seo" / "brand" / "voice.yaml"
+        text = profile.read_text(encoding="utf-8")
+        profile.write_text(text.replace("  preferred: {}", '  preferred: {"минвата": "минеральная вата"}'), encoding="utf-8")
+        return profile
+
+    def test_brand_voice_profile_is_checked_by_the_gate(self) -> None:
+        self.make_profile()
+        text = clean_draft().replace("Ссылки по теме:", "Если ты берёшь минвата - смотри ссылки по теме:")
+        rc, report, stderr = self.gate(text)
+        ids = self.ids(report)
+        self.assertIn("voice_address_mismatch", ids, stderr)
+        self.assertIn("voice_preferred_term", ids)
+        self.assertIn("voice_typography_dash", ids)
+        self.assertIn("brand_voice", report["summary"]["checks_run"])
+        self.assertEqual(report["summary"]["brand_voice_profile"], "seo/brand/voice.yaml")
+        self.assertEqual(rc, 0)  # voice findings are warnings with enforce: warn
+        self.cfg["brand_voice"]["enforce"] = "error"
+        self.write_config()
+        rc, report, _ = self.gate(text)
+        self.assertEqual(rc, 1)
+        self.cfg["brand_voice"]["enabled"] = False
+        self.write_config()
+        _, report, _ = self.gate(text)
+        self.assertNotIn("voice_address_mismatch", self.ids(report))
+
+    def test_broken_voice_profile_is_a_config_error(self) -> None:
+        profile = self.make_profile()
+        profile.write_text("voice:\n  address: sir\n", encoding="utf-8")
+        rc, _, stderr = self.gate(clean_draft())
+        self.assertEqual(rc, 2)
+        self.assertIn("профиль голоса с ошибками", stderr)
+        profile.write_text("voice: [oops\n", encoding="utf-8")
+        rc, _, stderr = self.gate(clean_draft())
+        self.assertEqual(rc, 2)
+        self.assertNotIn("Traceback", stderr)
+
+    def test_real_expert_in_brief_allows_first_person(self) -> None:
+        shutil.rmtree(self.cfg_path.parent)
+        self.outline.write_text(json.dumps({"sections": [], "internal_links": [], "faq": [],
+                                            "eeat_guard": {"expert_author_mode": "real_expert_allowed"}}), encoding="utf-8")
+        rc, report, _ = self.gate("# Текст\n\nПо моему опыту, плиту 50 мм ставят в два слоя. Source: https://example.com\n")
+        self.assertEqual(rc, 0)
+        finding = next(f for f in report["findings"] if f["id"] == "unsafe_first_person_expertise")
+        self.assertEqual(finding["severity"], "info")
+
     def test_loop_hands_project_rule_findings_to_the_model(self) -> None:
         draft = self.drafts / "loop.publish.md"
         draft.write_text(BAD_DRAFT, encoding="utf-8")

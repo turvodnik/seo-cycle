@@ -119,8 +119,8 @@ rewrite_plan_status: pending_approval | approved | in_progress | published
 Далее workflow в `seo-refresh-rescuer`:
 
 1. Approval gate `deindex_rewrite` с этим diagnosis
-2. После approve — делегировать в `seo-content-writer` с конкретным rewrite plan (из раздела 3)
-3. Прогон QA gates (как обычно)
+2. После approve — делегировать в `seo-content-writer` с конкретным rewrite plan (из раздела 3) и профилем голоса проекта (`seo/brand/voice.yaml`, `seo-cycle voice show --page-type <тип>`): переписанный текст звучит как бренд, а не как модель по умолчанию
+3. Прогон QA gates (как обычно: `seo-cycle loop draft` — правила проекта и профиль голоса проверяются там же)
 4. Publish обновлённой версии
 5. Post-publish checklist (раздел 5) — выполнить руками или через GSC API
 

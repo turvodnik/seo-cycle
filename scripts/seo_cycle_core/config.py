@@ -248,11 +248,23 @@ def find_project_config(start: pathlib.Path) -> pathlib.Path | None:
 
 
 def project_root_for(cfg_path: pathlib.Path) -> pathlib.Path:
-    if cfg_path.name in (".seo-cycle.yaml", "seo-cycle.yaml"):
-        return cfg_path.parent
-    if "/seo/" in str(cfg_path) or "/.claude/" in str(cfg_path):
-        return cfg_path.parent.parent
-    return cfg_path.parent
+    """The project root of a config found at one of `CONFIG_SEARCH_PATHS`.
+
+    3.1.0: the name check used to come first, so `.claude/seo-cycle.yaml` and
+    `seo/seo-cycle.yaml` (both named `seo-cycle.yaml`) returned the
+    sub-directory itself as the root and every relative artifact path landed
+    under `.claude/seo/…` / `seo/seo/…`; the nested branch below was dead.
+    `.claude/` is never a project root. For `seo/` the directory is the root
+    only when it already holds its own `seo/` artifacts tree (a project whose
+    folder happens to be named «seo»); otherwise it is `<root>/seo/`.
+    """
+    parent = cfg_path.parent
+    if cfg_path.name == "seo-cycle.yaml":
+        if parent.name == ".claude":
+            return parent.parent
+        if parent.name == "seo" and not (parent / "seo").is_dir():
+            return parent.parent
+    return parent
 
 
 def package_project_root(package_dir: pathlib.Path) -> pathlib.Path:
