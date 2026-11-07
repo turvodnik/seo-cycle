@@ -1042,8 +1042,13 @@ sources:
 # Эта секция используется только если есть CMS-интеграция.
 # Для блогов на статике (Next.js, Hugo) можно убрать или оставить пустой.
 publishing:
-  enabled: false                 # включить после WP_APP_PASSWORD и approval на публикацию
+  enabled: false                 # включить после WP_APP_PASSWORD; `seo-cycle publish <черновик> --live`
   cms: wordpress
+  # `seo-cycle publish` (scripts/wp-publish.py, 3.2.0): публикует только черновик,
+  # прошедший гейт; без --live — только план.
+  default_status: publish        # publish | draft | pending | private
+  require_approval: false        # true — для --live нужен одобренный тикет content_publish (--ticket)
+  verify_after_publish: true     # проверить живую страницу: alt, подписи, заголовок
 
   # Environment variables — WordPress REST API is the primary publishing/admin
   # channel. Never store credentials directly in yaml.

@@ -4,6 +4,37 @@
 
 _пусто_
 
+## [3.2.0] — 2026-11-07
+
+Публикация в ядре: проверенный гейтом черновик уходит в WordPress одной
+командой. Третий пункт плана из разбора 3.0.1 (`docs/history/review-2026-11.md`).
+
+### Для оператора — что изменилось
+
+- **`seo-cycle publish <черновик> --outline <outline> --live` публикует в WordPress.** Сначала гейт черновика — с error-находками публикация отказывает и советует `seo-cycle loop draft`. Без `--live` — только план (что уйдёт, create или update, какие картинки, какая SEO-мета), ничего не отправляется. С `--live`: картинки уходят в медиатеку один раз, пост создаётся или обновляется тот же (повторный запуск не плодит дублей), SEO-заголовок и описание — в Yoast / Rank Math / SEOPress по `publishing.seo_plugin`, в конец — блок «Источники» из `fact_check_log`. После публикации команда открывает живую страницу и проверяет alt, подписи и заголовок (код 3, если тема или оптимизатор их срезали), пишет строку в `seo/publish-log.csv` и `wp_id`/`wp_url` во frontmatter черновика. Ключи — `seo-cycle auth login wordpress`.
+- Статус по умолчанию — сразу `publish` (`publishing.default_status`). Строгий режим: `publishing.require_approval: true` — для `--live` нужен одобренный тикет `content_publish` (`--ticket`). Публикация включается только `publishing.enabled: true`.
+- `wp-content-pull` работает через общий REST-клиент ядра; поведение прежнее, ошибки WordPress — одной понятной строкой («проверь Application Password», «REST API недоступен»).
+
+### Подробности
+
+#### Публикация
+
+- `scripts/seo_cycle_core/markdown_html.py` (новый): черновик markdown → HTML поста без внешних зависимостей — заголовки (H1 = заголовок поста), абзацы, **жирный**/*курсив*/`код`, ссылки, списки, таблицы, цитаты, блоки кода, сырой HTML как есть; картинки → `<figure>` с `<figcaption>` из строки курсивом под картинкой (та же конвенция, что в гейте), `hero` — обложка поста, а не картинка в тексте, `decorative` — `alt=""`, первая inline-картинка без `loading="lazy"`.
+- `scripts/seo_cycle_core/wordpress.py` (новый): `WPClient` — Application Password, список с пагинацией, поиск по slug в любом статусе, create/update, загрузка медиа с alt/caption, получение публичной страницы; SEO-мета Yoast / Rank Math / SEOPress; `WPError` с понятной строкой вместо трассировки. `scripts/wp-content-pull.py` переведён на него.
+
+- `scripts/wp-publish.py` (новый) → `seo-cycle publish` (группа «Контент»): гейт (`draft-quality-gate.build_report` с тем же конфигом) → план (`<черновик>.publish-plan.json`) → `--live`: проверки `publishing.enabled`, ключей, тикета (`approval-gate list --status approved --type content_publish`); медиа с кэшем sha256 (`seo/publish/media-cache.json`); id поста: `wp_id` во frontmatter → publish-log по пути черновика → поиск по slug; отчёт `<черновик>.publish-report.json|md`; незаписанная SEO-мета (поле не открыто в REST) — предупреждение. Картинка, файла которой нет, останавливает публикацию до первого запроса. Коды: 0 / 1 (отказ, ошибка WP) / 2 (вызов, конфиг, ключи) / 3 (проверка живой страницы).
+- `config/project.template.yaml` `publishing`: `default_status: publish`, `require_approval: false`, `verify_after_publish: true`. `validate-config`: допустимые значения; чек-лист ключей ведёт в Keychain (`seo-cycle auth login wordpress`), а не в `.env`.
+- `skills/seo-publishing/SKILL.md`: Phase 7 для WordPress — `seo-cycle publish`; проектные `publish_skills` остаются для своих типов.
+
+#### Docs
+
+- GUIDE §7.5 и шпаргалка §10 (RU + EN), README — `seo-cycle publish`.
+
+#### Tests
+
+- `tests/test_wp_publish.py` — CLI против фейкового WordPress: план без запросов, отказ гейта, create → update того же поста без повторной загрузки картинок, поиск по slug, черновик без проверки страницы, незаписанная мета, срезанные alt/подписи → код 3, нет ключей / неверный пароль / публикация выключена, нет файла картинки, тикет pending → approved, `07-published.md`. `test_cli_dispatch`: 54 команды.
+- `tests/helpers/fake_wordpress.py` — локальный фейковый WordPress (127.0.0.1) для тестов; `tests/test_wordpress_core.py`, `tests/test_markdown_html.py`.
+
 ## [3.1.0] — 2026-11-06
 
 Гейт черновика начинает проверять то, что всегда обещала документация, а у

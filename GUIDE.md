@@ -448,7 +448,8 @@ CloakBrowser/CloakMCP и другие stealth/anti-bot инструменты н
 |---|---|
 | `img-generate.sh` | Генерация изображения (RUNTIME-aware: codex exec / нативный image-skill); в claude-режиме обязателен `--live` (расход кредитов, T-069) |
 | `wp-photo-image.py` | Детерминированное фото: локальный файл/URL → crop по `images.aspect_ratios.*` → WebP → WordPress upload через SSH/WP-CLI → alt/caption/featured |
-| (в проекте) `wp-*-publish.py` | Публикация постов/категорий/страниц |
+| `wp-publish.py` (`seo-cycle publish`) | Публикация черновика в WordPress через REST + Application Password (3.2.0): сначала гейт черновика (error = отказ), без `--live` — только план; с `--live` — картинки в медиатеку (один раз), пост create/update по `wp_id`/publish-log/slug, SEO-мета Yoast/Rank Math/SEOPress, блок «Источники», проверка живой страницы (alt, подписи, заголовок), строка в `publish-log`, `wp_id` во frontmatter. Статус — `publishing.default_status` (publish); `publishing.require_approval: true` требует тикет `content_publish` |
+| (в проекте) `wp-*-publish.py` | Свои публикаторы проекта (категории, ACF, Bricks) — `publishing.publish_skills` |
 
 Image gate: настройки берутся из `images.*` в `seo-cycle.yaml`: `workflow`, `source_policy`, `visual_style`, `aspect_ratios`, `output`, `captions`, `alt`, `lazy_loading`, `upload`. Для photo-first workflow используй `wp-photo-image.py`, а не ручную нарезку. Inline images должны быть чистыми тематическими фото/визуалами в стиле проекта. Не добавляй видимый текст на изображение (SEO/AEO/GEO, схемы, подписи, описания товаров, дисклеймеры каталога), если `images.allow_visible_text=false`, и не делай товарные карточки/коллажи основным визуалом без явного запроса. У каждого недекоративного изображения должен быть `alt` до публикации: featured, inline, OG/schema, product/category visuals. Inline image также должен иметь короткий редакционный caption, если `images.captions.inline_required=true`. Alt и caption описывают видимый объект и сущность страницы естественно, без набивки ключами и без служебных объяснений. После публикации проверь публичный HTML и браузерный screenshot: `<img>` без `alt`, inline image без обязательного caption, запрещённый текст на/под изображением или lazy-load плейсхолдер вместо first-screen фото = blocker/exception в логе. Если оптимизатор подменяет первое/above-the-fold inline image на плейсхолдер, исключи только это критичное изображение из lazy-load (`skip-lazy`/`data-no-lazy` или CMS-аналог) и перепроверь. Остальные inline images ниже первого экрана оставляй lazy-loaded.
 
@@ -581,6 +582,10 @@ python3 serpstat-audit.py --action basic-info --report-id 123456 --write
 python3 labrika-source-pack.py --export-file labrika.md --write
 python3 labrika-health.py --write
 python3 technical-site-audit.py --write
+
+# Публикация
+seo-cycle publish draft.publish.md --outline outline.json          # план: что уйдёт в WordPress
+seo-cycle publish draft.publish.md --outline outline.json --live   # опубликовать (гейт → WP → проверка)
 
 # Голос бренда / методы письма / изображения
 seo-cycle voice init --write                      # профиль seo/brand/voice.yaml из шаблона и конфига
@@ -1022,7 +1027,8 @@ Mandatory rule: a full cycle's semantic collection and Entity Map are not comple
 |---|---|
 | `img-generate.sh` | Image generation (RUNTIME-aware: codex exec / native image-skill); claude mode requires `--live` (spends credits, T-069) |
 | `wp-photo-image.py` | Deterministic photo pipeline: local file/URL → crop by `images.aspect_ratios.*` → WebP → WordPress upload through SSH/WP-CLI → alt/caption/featured |
-| (project) `wp-*-publish.py` | Publish posts/categories/pages |
+| `wp-publish.py` (`seo-cycle publish`) | Publish a draft to WordPress via REST + Application Password (3.2.0): the draft gate first (an error refuses), a plan without `--live`; with `--live` — images to the media library (once), create/update by `wp_id`/publish-log/slug, Yoast/Rank Math/SEOPress meta, a Sources block, live-page verification (alt, captions, title), a `publish-log` row, `wp_id` in the frontmatter. Status — `publishing.default_status` (publish); `publishing.require_approval: true` needs a `content_publish` ticket |
+| (project) `wp-*-publish.py` | Project-specific publishers (categories, ACF, Bricks) — `publishing.publish_skills` |
 
 Image gate: settings come from `images.*` in `seo-cycle.yaml`: `workflow`, `source_policy`, `visual_style`, `aspect_ratios`, `output`, `captions`, `alt`, `lazy_loading`, `upload`. For photo-first workflow, use `wp-photo-image.py` instead of manual cropping. Inline images should be clean topical photos/visuals that match the project's style. Do not add visible text to the image (SEO/AEO/GEO, process diagrams, labels, product descriptions, catalog disclaimers) when `images.allow_visible_text=false`, and do not make product-card collages the main visual unless explicitly requested. Every non-decorative image must have `alt` before publication: featured, inline, OG/schema, product/category visuals. Inline images must also have a short editorial caption when `images.captions.inline_required=true`. Alt text and captions should describe the visible object and page entity naturally, without keyword stuffing or process/meta explanations. After publication, verify public HTML and a browser screenshot: `<img>` without `alt`, an inline image without required caption, forbidden visible text on/under an image, or a lazy-load placeholder instead of the first-screen photo is a blocker/exception in the log. If an optimizer rewrites the first/above-the-fold inline image to a placeholder, exclude only that critical image from lazy-load (`skip-lazy`/`data-no-lazy` or CMS equivalent) and re-check. Keep lower inline images lazy-loaded.
 
@@ -1130,6 +1136,10 @@ python3 serpstat-audit.py --action basic-info --report-id 123456 --write
 python3 labrika-source-pack.py --export-file labrika.md --write
 python3 labrika-health.py --write
 python3 technical-site-audit.py --write
+
+# Publishing
+seo-cycle publish draft.publish.md --outline outline.json
+seo-cycle publish draft.publish.md --outline outline.json --live
 
 # Brand voice / writing methods / images
 seo-cycle voice init --write
