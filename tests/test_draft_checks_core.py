@@ -185,6 +185,60 @@ class DraftChecksHelpersTest(unittest.TestCase):
         self.assertEqual(dc._domain({"project": {"domain": 42}}), "")
 
 
+class RunConfigChecksTest(unittest.TestCase):
+    """run_config_checks in-process (the gate CLI tests run it as a subprocess)."""
+
+    def cfg(self) -> dict:
+        import copy
+
+        from seo_cycle_core.config import load_yaml
+
+        cfg = copy.deepcopy(load_yaml(ROOT / "config" / "project.template.yaml"))
+        cfg["project"]["domain"] = "shop.test"
+        cfg["content_rules"]["local_signals"]["examples"] = ["Казань"]
+        return cfg
+
+    def run_checks(self, text: str, cfg: dict, page_type: str = "article") -> dc.CheckResult:
+        return dc.run_config_checks(text, split_frontmatter(text), cfg, page_type, "d.md")
+
+    def test_bad_draft(self) -> None:
+        text = ("---\nfeatured_image: /a.webp\nfact_check_log:\n  - claim: x\n    verdict: спорно\n---\n"
+                "# Т\n\nЛучший выбор, лучший сервис.\n\n![](/b.webp)\n\n![фото](/c.webp)\n")
+        result = self.run_checks(text, self.cfg())
+        ids = [f["id"] for f in result.findings]
+        self.assertEqual(ids.count("stop_words_found"), 1)  # one finding per distinct word
+        self.assertIn("(строки 9)", next(f for f in result.findings if f["id"] == "stop_words_found")["message"])
+        for expected in ("fact_check_log_incomplete", "fact_check_claim_disputed", "image_missing_alt",
+                         "image_generic_alt", "image_missing_caption", "word_count_below_min",
+                         "internal_links_below_min", "local_signals_below_min"):
+            self.assertIn(expected, ids)
+        self.assertEqual(sum(1 for i in ids if i == "image_missing_alt"), 2)  # body image + featured_image
+        self.assertIn("local_signals", result.checks_run)
+
+    def test_page_type_scopes_article_only_rules(self) -> None:
+        result = self.run_checks("# Т\n\nТекст.\n", self.cfg(), page_type="category")
+        self.assertNotIn("inline_images_min", result.checks_run)
+        self.assertNotIn("internal_links_min", result.checks_run)
+        words = next(f for f in result.findings if f["id"] == "word_count_below_min")
+        self.assertIn("category", words["message"])
+
+    def test_bad_shapes_do_not_crash(self) -> None:
+        cfg = {"quality_gates": {"stop_words_check": "yes", "word_count_min": {"enabled": True, "blog_post": "много"}},
+               "images": None, "content_rules": {"local_signals": {"min_per_page": 2, "examples": "Москва"}}}
+        result = self.run_checks("# Т\n\nлучший\n", cfg)
+        self.assertEqual(result.findings, [])
+        self.assertEqual(self.run_checks("# Т\n", {}).checks_run, [])
+
+    def test_fail_on_match_false_and_stop_word_cap(self) -> None:
+        cfg = self.cfg()
+        cfg["quality_gates"]["stop_words_check"]["fail_on_match"] = False
+        cfg["tone"]["stop_words_extra"] = [f"слово{i}" for i in range(60)]
+        text = "# Т\n\n" + " ".join(f"слово{i}" for i in range(60)) + "\n"
+        stop = [f for f in self.run_checks(text, cfg).findings if f["id"] == "stop_words_found"]
+        self.assertEqual(len(stop), dc.MAX_STOP_WORD_FINDINGS)
+        self.assertEqual({f["severity"] for f in stop}, {"warning"})
+
+
 class SafeYamlTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="safe-yaml-"))

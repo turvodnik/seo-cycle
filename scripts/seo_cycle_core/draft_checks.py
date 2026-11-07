@@ -83,8 +83,9 @@ def _enabled(cfg: dict[str, Any], dotted: str) -> bool:
 
 
 def _lines(numbers: list[int], limit: int = 8) -> str:
-    shown = ", ".join(str(n) for n in numbers[:limit])
-    return shown + (f" и ещё {len(numbers) - limit}" if len(numbers) > limit else "")
+    unique = sorted(set(numbers))
+    shown = ", ".join(str(n) for n in unique[:limit])
+    return shown + (f" и ещё {len(unique) - limit}" if len(unique) > limit else "")
 
 
 def strip_markup(text: str) -> str:

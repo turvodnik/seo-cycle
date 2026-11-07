@@ -438,8 +438,9 @@ def _finding(fid: str, severity: str, message: str, location: str) -> dict[str, 
 
 
 def _lines(numbers: list[int], limit: int = 8) -> str:
-    shown = ", ".join(str(n) for n in numbers[:limit])
-    return shown + (f" и ещё {len(numbers) - limit}" if len(numbers) > limit else "")
+    unique = sorted(set(numbers))
+    shown = ", ".join(str(n) for n in unique[:limit])
+    return shown + (f" и ещё {len(unique) - limit}" if len(unique) > limit else "")
 
 
 def _prose_lines(text: str) -> list[tuple[int, str]]:
