@@ -20,6 +20,7 @@ _пусто_
 
 ### Для оператора — что изменилось
 
+- **Профиль голоса бренда, методов письма и изображений — заранее, на каждый проект.** `seo-cycle voice init --write` создаёт `seo/brand/voice.yaml`: кто мы и для кого пишем, голос в парах «это / а не это», обращение на «вы»/«ты», лексика (как не пишем → как пишем, запрещённые слова), длина предложений, кавычки и тире, порядок блоков для каждого типа страницы (статья, категория, товар, лендинг, сравнение, инструкция, инструмент), реальные авторы, типы изображений (обложка, inline-фото, схема, таблица сравнения, товар, скриншот, OG, иконка) с источником, стилем, пропорцией и правилом подписи. Значения переносятся из `tone.*`, `images.*`, `project.*`; примеры из шаблона — нет. `seo-cycle voice validate` показывает, что заполнить; `voice show` — как блок увидит копирайтер; `voice check` проверяет черновик; `voice extract-prompt --from <тексты>` готовит запрос модели, чтобы вывести голос из уже опубликованных текстов. Описание — `docs/brand-voice.md`.
 - Гейт черновика пишет, где именно проблема: «Стоп-слово «лучший» (строки 6, 14)», «Изображения без alt (строки 10)», «В тексте 29 слов, для типа «blog_post» нужно не меньше 1500». Демо-города из шаблона («Мытищи») он не требует — такие правила видны в `summary.skipped_checks`.
 - `check-stop-words.py` показывает правильный номер строки: раньше после frontmatter или блока кода номера съезжали вверх, а `---` в тексте или апостроф («It's») прятали целые абзацы от проверки.
 - `access-key-assistant` больше не советует класть ключи в `.env`: каждый шаг говорит «в Keychain» (`seo-cycle auth set <ИМЯ>` / `seo-cycle auth login <провайдер>`), как требует 3.0.0. Две противоречащие записи про Яндекс.Директ сведены в одну.
@@ -46,6 +47,13 @@ _пусто_
 - `scripts/seo_cycle_core/stop_words.py` (новый): паттерны и поиск вынесены из `check-stop-words.py`; игнорируемые участки забиваются пробелами на месте (строки и колонки сохраняются), frontmatter — только в начале файла, кавычки — в пределах строки, `'` — не внутри слова, совпадения встроенного паттерна и `tone.stop_words_extra` не дублируются.
 - `scripts/seo_cycle_core/loop.py`: `fact_check_log_missing`, `fact_check_log_incomplete`, `fact_check_claim_disputed` — класс evidence; инструкции модели для draft называют новые находки и как их чинить. `scripts/loop-runner.py` передаёт гейту `--config` с уже найденным путём.
 
+#### Профиль голоса и визуала
+
+- `templates/project-policies/brand-voice.template.yaml` (схема v1): `identity`, `voice`, `lexicon`, `style`, `methods` (структуры по типам страниц, `aliases`, `cta`), `authors` + `first_person_allowed`, `visuals` (`types`, `per_page_type`, `palette`), `examples`, `disclaimers`; комментарии к каждому полю.
+- `scripts/seo_cycle_core/brand_voice.py` (новый): `load_profile()` (активен, только если файл есть и `brand_voice.enabled` не `false`; неявного фолбэка из `tone.*` нет), `validate_profile()` (только структура и типы), `unanswered_fields()`, `method_for()`, `visuals_for()`, `brief_block()` + `render_brief_markdown()` (ru/en), `check_draft()`, `render_init()`. Подстановка в шаблон — `json.dumps(..., ensure_ascii=False)`: комментарии шаблона сохраняются, эмодзи не превращаются в одиночные суррогаты.
+- `scripts/brand-voice.py` (новый) → команда `seo-cycle voice` (группа «Контент»): `init [--write] [--force]` (готовый профиль без `--force` не трогает — rc 0 и «ℹ»), `validate`, `show`, `check`, `extract-prompt`. `--help` работает без проекта.
+- `config/project.template.yaml`: `policy_files.brand_voice_profile: seo/brand/voice.yaml`; секция `brand_voice: {enabled, enforce: warn, require_review: false}`; у `tone:` — пояснение, что голос теперь в профиле, а `tone.stop_words_extra` остаётся источником стоп-слов.
+
 #### Шаблон без данных клиента и примерные значения
 
 - `seo_cycle_core/placeholders.py`: `find_placeholders(cfg)` сравнивает курируемые пути (`project.*`, `business_profile.*`, `industry.*`, `content_rules.local_signals.examples`, `tone.description`) со значениями из самого `config/project.template.yaml` и с дефолтами мастера (`MyProject`, `example.com`); списки — по пересечению. `setup-gap-audit` кладёт находки в `advisory_gaps`/`advisory_fields`/`summary.advisory_missing` и в анкету, не трогая `summary.missing`, `missing_fields` и score — по ним journey решает, закрыта ли стадия 1. `setup-answer-plan` сопоставляет поле `placeholders.<путь>` с `<путь>` в `seo-cycle.yaml`.
@@ -53,11 +61,13 @@ _пусто_
 
 #### Docs
 
+- `docs/brand-voice.md` — профиль голоса: схема, команды, конвенция изображений в черновике, строгость проверок (RU + EN). GUIDE §7.4 — строка `brand-voice.py` и раздел «Профиль голоса бренда» (RU + EN), шпаргалка §10.
 - `docs/history/review-2026-11.md` — разбор состояния 3.0.1: оценки по областям, доказательства, блокеры результата и план.
 
 #### Tests
 
 - `tests/helpers/root_guard.py` (`skip_if_root`): шесть тестов на отказ доступа к файлам (`chmod 000`, каталог только для чтения) пропускаются под root — root обходит права, и в контейнерах/на VPS они падали ложно. В CI (не root) они по-прежнему выполняются.
+- `tests/test_brand_voice.py` — ядро профиля (прямой импорт: init из конфига, эмодзи, validate, методы и визуалы, бриф ru/en, проверки черновика, `enforce`, `require_review`) и CLI `seo-cycle voice` (help без проекта, init/повтор/force, validate, show, check, extract-prompt, битый и выключенный профиль). `tests/test_cli_dispatch.py`: команд 53.
 - `tests/test_draft_gate_config_checks.py` (реальный CLI в временном проекте: каждое правило срабатывает, выключается флагом, без конфига — прежнее поведение, битый конфиг/frontmatter, русская «экспертиза», `loop draft` → exit 3 с находками и классом evidence), `tests/test_draft_checks_core.py` (прямой импорт: стоп-слова, frontmatter, типы страниц, картинки, счётчики, безопасный YAML, поиск конфига).
 - `tests/test_placeholders.py` (прямой импорт), `test_setup_gap_audit` (advisory-категория не меняет `summary.missing` и score), `test_project_journey::AdvisoryGapsDoNotBlockSetupTest`.
 - `tests/test_task_router.py` — сопоставление с начала слова и стабильность прежних маршрутов; `tests/test_upgrade_access_assistants.py` — уникальность ключей `ACCESS_CATALOG` и отсутствие советов хранить секреты в `.env`.

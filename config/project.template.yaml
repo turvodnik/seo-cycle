@@ -351,6 +351,9 @@ policy_files:
   technical_mcp_health_json: seo/technical/technical-mcp-health.json
   latest_technical_mcp_health: seo/technical/latest-technical-mcp-health.md
   latest_technical_mcp_health_json: seo/technical/latest-technical-mcp-health.json
+  # Профиль голоса бренда, методов письма и изображений (3.1.0):
+  # `seo-cycle voice init --write`, описание — docs/brand-voice.md.
+  brand_voice_profile: seo/brand/voice.yaml
 
 # -----------------------------------------------------------------------------
 # 3b. Governance — лимиты токенов, денег, подписок и автоматизаций
@@ -819,6 +822,16 @@ business_profile:
 # -----------------------------------------------------------------------------
 # 6. Tone of voice — как пишем
 # -----------------------------------------------------------------------------
+# С 3.1.0 голос бренда, методы письма по типам страниц и типы изображений
+# живут в профиле seo/brand/voice.yaml (policy_files.brand_voice_profile):
+# `seo-cycle voice init --write` переносит туда значения отсюда. Профиль
+# попадает в бриф копирайтера, в context pack задач на написание и в гейт
+# черновика. Секция tone ниже остаётся источником стоп-слов
+# (stop_words_extra / stop_words_regex_extra) и legacy-описанием.
+brand_voice:
+  enabled: true                 # false — профиль не используется нигде
+  enforce: warn                 # warn | error — строгость проверок голоса в гейте черновика
+  require_review: false         # true — гейт ждёт voice_review: {verdict: pass} во frontmatter
 tone:
   formal_level: 2               # 1=very informal, 5=very formal
   style_keywords:

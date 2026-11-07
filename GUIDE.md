@@ -439,6 +439,9 @@ CloakBrowser/CloakMCP и другие stealth/anti-bot инструменты н
 | `roi-calc.py` | Воронка и ROI/CAC/ДРР по каналам — «конечный результат» в деньгах | `python3 roi-calc.py funnel.csv --margin 0.3` | таблица каналов + вердикт «что окупается / нужна ли реклама» |
 | `programmatic-template-gen.py` | Программатик-страницы (город×категория) | `python3 programmatic-template-gen.py ...` | шаблоны страниц |
 | `validate-entities.py` | Проверка реестра сущностей | `python3 validate-entities.py` | кросс-ссылки/ошибки |
+| `brand-voice.py` (`seo-cycle voice`) | Профиль голоса бренда, методов письма и изображений проекта: init из шаблона и `seo-cycle.yaml`, validate, show (блок брифа), check черновика, extract-prompt (вывести голос из опубликованных текстов) | `seo-cycle voice init --write` | `seo/brand/voice.yaml`; отчёт проверки черновика |
+
+**Профиль голоса бренда (3.1.0).** Как бренд пишет — заранее, один файл на проект: `seo/brand/voice.yaml` (`policy_files.brand_voice_profile`). Внутри: кто мы и для кого пишем; голос в парах «это / а не это»; формальность; обращение на «вы»/«ты»/без обращения; лексика (как не пишем → как пишем, запрещённые слова); стиль (длина предложений и абзацев, кавычки «», тире —); порядок блоков для каждого типа страницы (article, category, product, landing, comparison, howto, tool); реальные авторы (только с ними разрешено первое лицо эксперта); типы изображений — hero, inline_photo, diagram, comparison_table, product, screenshot, og, icon — с источником, стилем, пропорцией, текстом на картинке, подписью и минимумом на странице, и какие типы обязательны для типа страницы. Профиль попадает в бриф копирайтера (`page-outline-v3`), первым — в context pack задач на написание и в гейт черновика. Строгость — `brand_voice.enforce: warn | error` в конфиге. Подробно: `docs/brand-voice.md`.
 
 ### 7.5 Публикация (CMS)
 | Скрипт | Что делает |
@@ -578,6 +581,11 @@ python3 serpstat-audit.py --action basic-info --report-id 123456 --write
 python3 labrika-source-pack.py --export-file labrika.md --write
 python3 labrika-health.py --write
 python3 technical-site-audit.py --write
+
+# Голос бренда / методы письма / изображения
+seo-cycle voice init --write                      # профиль seo/brand/voice.yaml из шаблона и конфига
+seo-cycle voice validate                          # что заполнить
+seo-cycle voice check draft.md                    # черновик по профилю
 
 # E-E-A-T / качество
 python3 check-stop-words.py draft.md
@@ -1005,6 +1013,9 @@ Mandatory rule: a full cycle's semantic collection and Entity Map are not comple
 | `roi-calc.py` | Funnel & ROI/CAC/DRR per channel — the bottom-line result in money | `python3 roi-calc.py funnel.csv --margin 0.3` | per-channel table + verdict "what pays off / is ads needed" |
 | `programmatic-template-gen.py` | Programmatic pages (city×category) | `python3 programmatic-template-gen.py ...` | page templates |
 | `validate-entities.py` | Entity registry check | `python3 validate-entities.py` | cross-links/errors |
+| `brand-voice.py` (`seo-cycle voice`) | The project's brand voice, writing methods and image types profile: init from the template and `seo-cycle.yaml`, validate, show (brief block), check a draft, extract-prompt (derive the voice from published texts) | `seo-cycle voice init --write` | `seo/brand/voice.yaml`; draft check report |
+
+**Brand voice profile (3.1.0).** How the brand writes, set up front in one file per project: `seo/brand/voice.yaml` (`policy_files.brand_voice_profile`). It holds identity and audiences; voice attributes as be/not pairs; formality; formal/informal/impersonal address; lexicon (preferred and forbidden terms); style (sentence and paragraph length, «» quotes, — dashes); the block order per page type (article, category, product, landing, comparison, howto, tool); real authors (the only way to allow an expert first person); image types — hero, inline_photo, diagram, comparison_table, product, screenshot, og, icon — with source, style, ratio, on-image text, caption and per-page minimum, plus which types each page type requires. The profile reaches the copywriter brief (`page-outline-v3`), the context pack of writing tasks (read first) and the draft gate. Strictness — `brand_voice.enforce: warn | error`. Details: `docs/brand-voice.md`.
 
 ### 7.5 Publishing (CMS)
 | Script | What |
@@ -1119,6 +1130,11 @@ python3 serpstat-audit.py --action basic-info --report-id 123456 --write
 python3 labrika-source-pack.py --export-file labrika.md --write
 python3 labrika-health.py --write
 python3 technical-site-audit.py --write
+
+# Brand voice / writing methods / images
+seo-cycle voice init --write
+seo-cycle voice validate
+seo-cycle voice check draft.md
 
 # E-E-A-T / quality
 python3 check-stop-words.py draft.md

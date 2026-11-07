@@ -36,7 +36,7 @@ from seo_cycle_cli import (  # noqa: E402
 # `test_help_lists_all_commands` below, this does NOT derive the expected set
 # from COMMANDS itself, so deleting one entry from COMMANDS makes this go red
 # instead of quietly passing (acceptance criterion 5, negative control).
-EXPECTED_COMMAND_COUNT = 52
+EXPECTED_COMMAND_COUNT = 53
 
 
 class CliTableTest(unittest.TestCase):
